@@ -1,0 +1,24 @@
+# HF/6-31G*/RHF/GRADIENT of H2O
+# For Closed-Shell systems we use RHF, when we use RHF, we have to choose multiplicity=1.
+# Since this is a HF calculation, we have to set method=hf and to perform gradient calculation we
+# have to set runtype=grad. Because this is a HF calculation, we dont need [tdhf] section.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g(d)
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[properties]
+grad=0
+

@@ -1,0 +1,21 @@
+# HF/6-31G*/UHF/ENERGY of H2O
+# For Open-Shell systems we use UHF, when we use UHF, we have to choose multiplicity=3.
+# Since this is a HF calculation, we have to set method=hf.
+# Because this is a HF calculation, we dont need [tdhf] section.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g(d)
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+type=uhf
+multiplicity=3
+

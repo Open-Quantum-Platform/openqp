@@ -1,0 +1,25 @@
+# DFT/6-31G*/BHHLYP/UHF/ENERGY of H2O
+# For Open-Shell systems we use UHF, when we use UHF, we have to choose multiplicity=3. 
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation, 
+# we dont need [tdhf] section. 
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g(d)
+functional=bhhlyp
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=uhf
+
+[dftgrid]
+rad_type=becke
+
