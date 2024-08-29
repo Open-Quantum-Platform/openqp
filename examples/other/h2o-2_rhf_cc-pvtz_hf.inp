@@ -1,0 +1,35 @@
+[input]
+system=
+  8        0.447604201      0.612029479     -0.202683075
+ 1       -0.449170155      0.780027039     -0.457558173
+ 1        0.980626115      0.986327433     -0.890562004
+ 8        0.437604201      3.598029479     -1.202683075
+ 1       -0.439170155      3.780027039     -1.457558173
+ 1        0.970626115      3.986327433     -1.890562004
+charge=0
+method=hf
+basis=cc-pVTZ
+runtype=grad
+functional=
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rhf
+maxit=30
+maxdiis=5
+multiplicity=1
+conv=1.0e-8
+save_molden=False
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[properties]
+grad=0
+

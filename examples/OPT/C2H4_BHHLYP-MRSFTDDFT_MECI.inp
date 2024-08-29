@@ -1,0 +1,33 @@
+[input]
+system=
+ C          -1.6699351346837055       0.1537249235528157      -1.5459803491111643
+ C          -1.8079415266835852      -0.0386075716896284      -0.1602069788110266
+ H          -2.6609567768367581       0.2572290722092156      -2.0290359598415040
+ H          -1.2898503996116444      -0.7568524635289917      -2.0470428696820342
+ H          -1.3096398768036397       0.6557118321425524       0.5396052278505126
+ H          -2.3820842951209360      -0.7983813277099963       0.4308517619153288
+runtype=meci
+functional=bhhlyp
+charge=0
+method=tdhf
+basis=6-31g(d)
+
+[scf]
+type=rohf
+maxit=50
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=5
+
+[optimize]
+optimizer=bfgs
+maxit=50
+istate=1
+jstate=2
+energy_shift=1e-5
+energy_gap=1e-4
+rmsd_grad=5e-4
+max_grad=1e-3
+

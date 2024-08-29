@@ -1,0 +1,34 @@
+[input]
+system=
+ C       -1.795088763      0.000123456     -1.451300047
+ C       -1.795088763      0.000006782     -0.121142047
+ H       -1.814929585      0.922236408     -2.025683763
+ H       -1.788852366     -0.923335017     -2.024225748
+ H       -1.807520960      0.923298955      0.451740825
+ H       -1.790072549     -0.927319218      0.445324378
+runtype=mep
+functional=bhhlyp
+charge=0
+method=tdhf
+basis=6-31g(d)
+
+[scf]
+type=rohf
+maxit=50
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=5
+
+[optimize]
+optimizer=bfgs
+maxit=100
+mep_maxit=2
+istate=2
+energy_shift=1e-3
+step_size=0.1
+step_tol=0.01
+rmsd_grad=3e-3
+max_grad=5e-3
+

@@ -1,0 +1,92 @@
+image: qchemlab.knu.ac.kr:5050/open-quantum-package/modules/ci-ubuntu:latest
+
+stages:
+ - build
+ - test
+ - format
+ - install
+
+.only-default: &only-default
+  only:
+    - main
+    - master
+    - merge_requests
+    - tags
+    - pushes
+
+build:
+  <<: *only-default
+  stage: build
+  cache:
+    paths:
+      - external/nlopt
+      - external/libxc
+      - external/libint
+      - external/libtagarray
+      - external/fprettify
+      - objdir/external
+  script:
+    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DLINALG_LIB_INT64=OFF -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
+    - cmake --build objdir --parallel 4 --target install
+
+  artifacts:
+    paths:
+      - lib/
+      - include/
+      - share/
+      - basis_sets/
+      - pyoqp/
+      - objdir/
+      - external/
+
+test:
+  <<: *only-default
+  stage: test
+  script:
+    - export OPENQP_ROOT=$CI_PROJECT_DIR
+    - export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
+    - cd pyoqp
+    - pip install .
+    - cd $OPENQP_ROOT
+    - openqp --run_tests other
+  artifacts:
+    paths:
+      - openqp_test_tmp*/test_report.txt
+    when: always
+
+format:
+  stage: format
+  only:
+    - merge_requests
+  cache:
+    paths:
+      - external/nlopt
+      - external/libxc
+      - external/libint
+      - external/libtagarray
+      - external/fprettify
+      - objdir/external
+    policy: pull
+  script:
+    - black pyoqp
+    - cmake --build objdir --parallel 4 -- format
+    - cmake --build objdir --parallel 4
+    - cd objdir
+    - ln -s ../pyoqp/src oqp
+    - ctest --verbose
+    - git commit -am "Reformat source code in CI" && git push || true
+
+install:
+  <<: *only-default
+  cache:
+    paths:
+      - external/nlopt
+      - external/libxc
+      - external/libint
+      - external/libtagarray
+      - external/fprettify
+      - objdir/external
+    policy: pull
+  stage: install
+  script:
+    - cmake --build objdir --parallel 4 -- install
