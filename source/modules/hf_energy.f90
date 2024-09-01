@@ -60,10 +60,8 @@ contains
     nsh2 = (basis%nshell**2+basis%nshell)/2
 
     ! clean data
-    call infos%dat%remove_records((/ character(len=80) :: OQP_XINTS, OQP_FOCK_A, OQP_FOCK_B /))
+    call infos%dat%remove_records((/ character(len=80) :: OQP_FOCK_A, OQP_FOCK_B /))
 
-    call infos%dat%reserve_data(OQP_XINTS, TA_TYPE_REAL64, nsh2, comment=OQP_XINTS_comment)
-    call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_XINTS)
     call infos%dat%reserve_data(OQP_FOCK_A, TA_TYPE_REAL64, nbf2, comment=OQP_FOCK_A_comment)
     call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_FOCK_A)
 

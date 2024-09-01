@@ -53,7 +53,7 @@ class Molecule:
             'OQP::FOCK_A', 'OQP::FOCK_B',
             'OQP::E_MO_A', 'OQP::E_MO_B',
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
-            'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::XINTS', 'OQP::WAO',
+            'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',

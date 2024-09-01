@@ -31,17 +31,11 @@ module int2_compute
   public int2_fock_data_t
   public int2_rhf_data_t
   public int2_urohf_data_t
-  public schwdn
-  public schwd2n
+  public ints_exchange
 
 !###############################################################################
 
-!  The memory for temporary integral savings
-!  nangm = 2L+1 for L angular momentum
-  integer, parameter :: nangm = 28, maxg = nangm**4
-
   type eri_data_t
-    integer :: len_int
     logical :: attenuated_ints = .false.
     integer :: ids(4)
     integer :: flips(4)
@@ -94,7 +88,7 @@ module int2_compute
     integer :: nthreads = 1
     integer :: nfocks = 1
     real(kind=dp), allocatable :: f(:,:,:)
-    real(kind=dp), allocatable :: dsh(:)
+    real(kind=dp), allocatable :: dsh(:,:)
     real(kind=dp) :: max_den = 1.0d0
     real(kind=dp), pointer :: d(:,:) => null()
   contains
@@ -126,14 +120,14 @@ module int2_compute
 
     type(basis_set), pointer :: basis
     type(atomic_structure), pointer :: atoms
-    real(kind=dp), contiguous, pointer :: xints(:)
+    real(kind=dp), allocatable :: schwarz_ints_regular(:,:)
+    real(kind=dp), allocatable :: schwarz_ints_attenuated(:,:)
+    real(kind=dp), contiguous, pointer :: schwarz_ints(:,:) => null()
 
     logical :: schwarz = .true.
     integer :: buf_size = 50000
 
     integer :: skipped = 0
-
-    integer :: mx_int_dim = 1
 
     type(int2_cutoffs_t) :: cutoffs
     type(int2_pair_storage) :: ppairs
@@ -151,8 +145,6 @@ module int2_compute
     procedure, public, pass :: run => int2_run
     procedure, public, pass :: run_generic => int2_twoei
     procedure, public, pass :: run_cam => int2_run_cam
-
-    procedure, pass :: exchng => int2_compute_t_exchng
   end type
 
 !###############################################################################
@@ -206,7 +198,8 @@ contains
     call this%ppairs%clean()
     this%basis => null()
     this%atoms => null()
-    this%xints => null()
+    if (allocated(this%schwarz_ints_regular)) deallocate(this%schwarz_ints_regular)
+    if (allocated(this%schwarz_ints_attenuated)) deallocate(this%schwarz_ints_attenuated)
     this%skipped = 0
   end subroutine
 
@@ -229,20 +222,14 @@ contains
     real(kind=dp) :: cutoff
     real(kind=dp), parameter :: ec1 = 1.0d-02, ec2 = 1.0d-04
     real(kind=dp), parameter :: cx1 = 25.0d+00
-    integer :: lmax, mxlen
     integer(4) :: status
 
     this%basis => basis
     this%atoms => infos%atoms
-    call tagarray_get_data(infos%dat, OQP_XINTS, this%xints, status)
-    call check_status(status, module_name, subroutine_name, OQP_XINTS)
+    allocate(this%schwarz_ints_regular(basis%nshell,basis%nshell), source=0d0)
     this%skipped = 0
 
     call basis%init_shell_centers()
-
-    lmax = maxval(basis%am)
-    lmax = min(lmax, 4)
-    this%mx_int_dim = max(4, (lmax*lmax+3*lmax+2)/2)
 
     cutoff = infos%control%int2e_cutoff
     call this%cutoffs%set(cutoff, ec1*cutoff, ec2*cutoff, cx1*log(10.0d0))
@@ -259,7 +246,7 @@ contains
   subroutine int2_compute_t_set_screening(this)
     implicit none
     class(int2_compute_t), intent(inout) :: this
-    call this%exchng()
+    call ints_exchange(this%basis, this%schwarz_ints_regular)
   end subroutine int2_compute_t_set_screening
 
 !###############################################################################
@@ -358,11 +345,12 @@ contains
     use int2e_libint, ONLY: libint2_init_eri, libint2_cleanup_eri
     use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT
     use types, only: information
+    use constants, only: NUM_CART_BF
 !$  use omp_lib
 
     implicit none
 
-    class(int2_compute_t), intent(inout) :: this
+    class(int2_compute_t), target, intent(inout) :: this
     class(int2_compute_data_t), intent(inout) :: int2_consumer
 
     integer :: i, j, k, l
@@ -370,7 +358,6 @@ contains
     integer :: flips(4)
     integer :: nint
     real(kind=dp) :: test
-    integer, parameter :: lmax_vals(0:*) = [1, 4, 6, 10, 15, 21, 28]
 
     integer :: nshell
 
@@ -391,6 +378,19 @@ contains
     integer :: ok
 
     nshell = this%basis%nshell
+
+    ! preparations for screening
+    if (this%schwarz) then
+      if (this%attenuated) then
+        if (.not.allocated(this%schwarz_ints_attenuated)) then
+          allocate(this%schwarz_ints_attenuated, mold=this%schwarz_ints_regular)
+          call ints_exchange(this%basis, this%schwarz_ints_attenuated, this%mu**2)
+        end if
+        this%schwarz_ints => this%schwarz_ints_attenuated
+      else
+        this%schwarz_ints => this%schwarz_ints_regular
+      end if
+    end if
 
     omp = .false.
 !$  omp = .true.
@@ -436,9 +436,8 @@ contains
 !$omp barrier
 
     allocate(eri_data)
-    allocate(eri_data%ints(maxg), source=0.0d0)
+    allocate(eri_data%ints(NUM_CART_BF(lmax)**4), source=0.0d0)
     allocate(eri_data%gdat)
-    eri_data%len_int = this%mx_int_dim
 
     eri_data%attenuated_ints = this%attenuated
     eri_data%mu2 = this%mu**2
@@ -458,7 +457,7 @@ contains
       do j = 1, i
 
         if (this%schwarz) then
-          test = int2_consumer%screen_ij(this%xints, i, j)
+          test = int2_consumer%screen_ij(this%schwarz_ints, i, j)
           if (test < this%cutoffs%integral_cutoff) then
             nschwz = nschwz + i*(i-1)/2+j
             cycle
@@ -475,7 +474,7 @@ contains
 
 !$          if (oflag) tim1 = omp_get_wtime()
             if (this%schwarz) then
-              test = int2_consumer%screen_ijkl(this%xints, i, j, k, l)
+              test = int2_consumer%screen_ijkl(this%schwarz_ints, i, j, k, l)
               if (test < this%cutoffs%integral_cutoff) then
                 nschwz = nschwz+1
                 cycle
@@ -532,50 +531,12 @@ contains
   end subroutine int2_twoei
 
 !###############################################################################
-
-  real(kind=dp) function schwdn(dsh, ish, jsh, ksh, lsh)
-
-    implicit none
-
-    real(kind=dp), intent(in) :: dsh(*)
-    integer, intent(in) :: ish, jsh, ksh, lsh
-
-    integer :: ij, ik, ill, kl, jk, jl
-
-!      ----- FIND MAXIMUM DENSITY CONTRIBUTION TO THIS SHELL SET -----
-!      -DSH- IS THE DENSITY MATRIX ALREADY COMPRESSED TO SHELLS
-
-    ij = ish*(ish-1)/2+jsh
-    ik = ish*(ish-1)/2+ksh
-    ill = ish*(ish-1)/2+lsh
-    kl = ksh*(ksh-1)/2+lsh
-    jk = jsh*(jsh-1)/2+ksh
-    jl = jsh*(jsh-1)/2+lsh
-    if (jsh < ksh) jk = ksh*(ksh-1)/2+jsh
-    if (jsh < lsh) jl = lsh*(lsh-1)/2+jsh
-    schwdn = max(4*dsh(ij), 4*dsh(kl), &
-                 dsh(jl), dsh(jk), dsh(ill), dsh(ik))
-  end function schwdn
-
-!###############################################################################
-
-  real(kind=dp) function schwd2n(dsh, i, j, k, l)
-
-    implicit none
-
-    real(kind=dp), intent(in) :: dsh(:,:)
-    integer, intent(in) :: i, j, k, l
-
-    schwd2n = max(4*dsh(i,j), 4*dsh(k,l), dsh(j,l), dsh(j,k), dsh(i,l), dsh(i,k))
-  end function schwd2n
-
-!###############################################################################
 !###############################################################################
 
   function int2_compute_data_t_screen_ij(this, xints, i, j) result(res)
     implicit none
     class(int2_compute_data_t), intent(in) :: this
-    real(kind=dp), intent(in) :: xints(:)
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
     real(kind=dp) :: res
     integer, intent(in) :: i, j
     res = 1
@@ -591,7 +552,7 @@ contains
   function int2_compute_data_t_screen_ijkl(this, xints, i, j, k, l) result(res)
     implicit none
     class(int2_compute_data_t), intent(in) :: this
-    real(kind=dp), intent(in) :: xints(:)
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
     real(kind=dp) :: res
     integer, intent(in) :: i, j, k, l
     res = 1
@@ -610,13 +571,11 @@ contains
   function int2_fock_data_t_screen_ij(this, xints, i, j) result(res)
     implicit none
     class(int2_fock_data_t), intent(in) :: this
-    real(kind=dp), intent(in) :: xints(:)
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
     real(kind=dp) :: res
     integer, intent(in) :: i, j
     integer :: ij
-    res = 1
-    ij = (i*i-i)/2 + j
-    res = res * xints(ij) * this%max_den
+    res = xints(i,j) * this%max_den
   end function int2_fock_data_t_screen_ij
 
 !###############################################################################
@@ -624,15 +583,14 @@ contains
   function int2_fock_data_t_screen_ijkl(this, xints, i, j, k, l) result(res)
     implicit none
     class(int2_fock_data_t), intent(in) :: this
-    real(kind=dp), intent(in) :: xints(:)
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
     real(kind=dp) :: res
     integer, intent(in) :: i, j, k, l
     integer :: ij, kl
-    res = 1
-    ij = (i*i-i)/2 + j
-    kl = (k*k-k)/2 + l
-    res = res * xints(ij)*xints(kl)
-    if (allocated(this%dsh)) res = res * schwdn(this%dsh, i, j, k, l)
+    res = xints(i,j)*xints(k,l)
+    if (allocated(this%dsh)) then
+      res = res * max(4*this%dsh(i,j), 4*this%dsh(k,l), this%dsh(j,l), this%dsh(j,k), this%dsh(i,l), this%dsh(i,k))
+    end if
   end function int2_fock_data_t_screen_ijkl
 
 !###############################################################################
@@ -650,10 +608,10 @@ contains
     use basis_tools, only: basis_set
     implicit none
     type(basis_set), intent(in) :: basis             !< Basis set information
-    real(kind=dp), intent(out) :: shell_density(:)   !< Shell density matrix
+    real(kind=dp), intent(out) :: shell_density(:,:) !< Density matrix compressed to shells
     real(kind=dp), intent(in) :: density_matrix(:,:) !< Density matrix in AO basis
 
-    integer :: ij_index, num_electrons, shell_i, shell_j, i, j, ij
+    integer :: shell_i, shell_j, i, j, ij
     integer :: mini, maxi, minj, maxj, fock_index
     real(kind=dp) :: dmax
 
@@ -662,8 +620,6 @@ contains
 
     ! Loop over each Fock matrix
     do fock_index = 1, ubound(density_matrix,2)
-      ij_index = 0
-      num_electrons = 0
 
       ! Loop over shells
       do shell_i = 1, basis%nshell
@@ -674,20 +630,26 @@ contains
         do shell_j = 1, shell_i
           minj = basis%ao_offset(shell_j)
           maxj = minj + basis%naos(shell_j) - 1
-          ij_index = ij_index+1
           dmax = 0.0d0
 
           ! Loop over basis functions within shells
           do i = mini, maxi
             if (shell_i == shell_j) maxj = i
             do j = minj, maxj
-              ij = (i - num_electrons)*(i-num_electrons - 1)/2 + j - num_electrons
+              ij = i*(i-1)/2 + j
               dmax = max(abs(density_matrix(ij,fock_index)), dmax)
             end do
           end do
 
-          shell_density(ij_index) = max(dmax, shell_density(ij_index))
+          shell_density(shell_i, shell_j) = max(dmax, shell_density(shell_i, shell_j))
         end do
+      end do
+    end do
+
+    ! Symmetrize
+    do shell_i = 1, basis%nshell
+      do shell_j = shell_i+1, basis%nshell
+        shell_density(shell_i, shell_j) = shell_density(shell_j, shell_i)
       end do
     end do
   end subroutine shlden
@@ -720,7 +682,7 @@ contains
     eri_data%nbf = (eri_data%am+1)*(eri_data%am+2)/2
 
     rotspd = max_am <= 2
-    libint = .not.rotspd.and.libint2_active
+    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints
     rys = .not.rotspd.and..not.libint
 
     if (rotspd) then
@@ -855,11 +817,11 @@ contains
     nsh = basis%nshell
 
     if (allocated(this%dsh)) then
-        if (size(this%dsh) /= nsh*(nsh+1)/2) deallocate(this%dsh)
+        if (size(this%dsh) /= nsh*nsh) deallocate(this%dsh)
     end if
 
     if (.not.allocated(this%dsh)) then
-        allocate(this%dsh(nsh*(nsh+1)/2), source=0.0d0)
+        allocate(this%dsh(nsh,nsh), source=0.0d0)
     else
         this%dsh = 0
     end if
@@ -1060,19 +1022,21 @@ contains
 
 !###############################################################################
 
-  subroutine int2_compute_t_exchng(this)
-    use int2e_rotaxis, only: &
-      genr22
-    use int2e_libint, ONLY: libint2_init_eri, libint2_cleanup_eri
+  subroutine ints_exchange(basis, schwarz_ints, mu2)
+    use int2e_rotaxis, only: genr22
+    use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
     use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_libint, only: libint_t, libint2_active
     use int2e_rys, only: int2_rys_compute
     use types, only: information
+    use constants, only: NUM_CART_BF
     use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT,  c_f_pointer
 
     implicit none
 
-    class(int2_compute_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: schwarz_ints(:,:)
+    real(kind=dp), optional, intent(in) :: mu2
 
     real(kind=dp), parameter :: &
       ic_exchng  = 1.0d-15, &
@@ -1080,70 +1044,80 @@ contains
       ei2_exchng = 1.0d-17, &
       cux_exchng = 50.0
 
-    integer, parameter :: lmax_vals(0:*) = [1, 4, 6, 10, 15, 21, 28]
     integer :: flips(4)
     integer :: shell_ids(4)
     integer :: nbf(4)
     integer :: lmax
-    integer :: ijij, ish, jsh
-    integer :: i, j, ijn, jmax, nn
-    integer :: mini, maxi, minj
+    integer :: ish, jsh
+    integer :: i, j, jmax
     integer :: am(4), max_am
     integer :: ok
     logical :: rotspd, libint, zero_shq, rys
-    real(kind=dp) :: icsv, ei1sv, ei2sv, cuxsv
-    real(kind=dp) :: val, vmax
+    logical :: attenuated
+    real(kind=dp) :: vmax
     real(kind=dp), allocatable, target :: ints(:)
     real(kind=dp), pointer :: pints(:,:,:,:)
     type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t) :: gdat
+    type(int2_cutoffs_t) :: cutoffs
+    type(int2_pair_storage) :: ppairs
 
-    lmax = maxval(this%basis%am)
+    attenuated = present(mu2)
+
+    lmax = maxval(basis%am)
     if (lmax < 0 .or. lmax > 6) call show_message("Basis set agular momentum exceeds max. supported", WITH_ABORT)
 
-
 !   Set very tight cutoff
-    call this%cutoffs%get(icsv, ei1sv, ei2sv, cuxsv)
-    call this%cutoffs%set(ic_exchng, ei1_exchng, ei2_exchng, cux_exchng)
+    call cutoffs%set(ic_exchng, ei1_exchng, ei2_exchng, cux_exchng)
 
     if (libint2_active) then
-        allocate(erieval(this%basis%mxcontr**4))
+        allocate(erieval(basis%mxcontr**4))
         call libint2_init_eri(erieval, int(4, C_INT), C_NULL_PTR)
     end if
-    allocate(ints(maxg), source=0.0d0)
-    call gdat%init(lmax, this%cutoffs, ok)
+    allocate(ints(NUM_CART_BF(lmax)**4), source=0.0d0)
+    call gdat%init(lmax, cutoffs, ok)
 
-    ijij = 0
-    do ish = 1, this%basis%nshell
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+
+    do ish = 1, basis%nshell
       do jsh = 1, ish
-        ijij = ijij+1
         shell_ids = [ish, jsh, ish, jsh]
 
-        am = this%basis%am(shell_ids)
+        am = basis%am(shell_ids)
         max_am = maxval(am)
 
         rotspd = max_am <= 2
-        libint = .not.rotspd.and.libint2_active
+        libint = .not.rotspd.and.libint2_active.and..not.attenuated
         rys = .not.rotspd.and..not.libint
         if (rotspd) then
-          call genr22(this%basis, this%ppairs, ints, shell_ids, flips, this%cutoffs)
+          if (attenuated) then
+            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
+          else
+            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs)
+          end if
           nbf = am(flips)
           nbf = (nbf+1)*(nbf+2)/2
           vmax = maxval(abs(ints(1:product(nbf))))
         else if (libint) then
           nbf = am(flips)
-          call libint_compute_eri(this%basis, this%ppairs, this%cutoffs, shell_ids, 0, erieval, flips, zero_shq)
+          call libint_compute_eri(basis, ppairs, cutoffs, shell_ids, 0, erieval, flips, zero_shq)
           call c_f_pointer(erieval(1)%targets(1), pints, shape=nbf([4,3,2,1]))
           vmax = maxval(abs(pints))
         else if (rys) then
-          call gdat%set_ids(this%basis, shell_ids)
-          call int2_rys_compute(ints, gdat, this%ppairs, zero_shq)
+          call gdat%set_ids(basis, shell_ids)
+          if (attenuated) then
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)
+          else
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq)
+          end if
           nbf = gdat%nbf
           pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
           call normalize_ints(nbf, gdat%am, pints)
           vmax = maxval(abs(pints))
         end if
-        this%xints(ijij) = sqrt(vmax)
+        schwarz_ints(ish, jsh) = sqrt(vmax)
+        schwarz_ints(jsh, ish) = sqrt(vmax)
       end do
     end do
 
@@ -1152,8 +1126,7 @@ contains
         deallocate(erieval)
     end if
     call gdat%clean()
-    call this%cutoffs%set(icsv, ei1sv, ei2sv, cuxsv)
-  end subroutine int2_compute_t_exchng
+  end subroutine ints_exchange
 
 !###############################################################################
 

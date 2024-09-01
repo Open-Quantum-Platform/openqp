@@ -73,7 +73,7 @@ contains
 
       allocate(this%apb(nbf, nbf, this%nfocks, nthreads), &
                this%amb(nbf, nbf, this%nfocks, nthreads), &
-               this%dsh(nsh*(nsh+1)/2), &
+               this%dsh(nsh,nsh), &
                source=0.0d0)
     end if
 
@@ -297,22 +297,21 @@ contains
     implicit none
 
     type(basis_set), intent(in) :: basis
-    real(kind=dp), intent(out) :: dsh(:)
+    real(kind=dp), intent(out) :: dsh(:,:)
     real(kind=dp), intent(in), dimension(:,:,:) :: da
 
-    integer :: ijsh, ish, jsh, maxi, maxj, mini, &
+    integer :: ish, jsh, maxi, maxj, mini, &
                minj
 
 !   RHF
-    ijsh = 0
     do ish = 1, basis%nshell
       mini = basis%ao_offset(ish)
       maxi = mini + basis%naos(ish) - 1
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj + basis%naos(jsh) - 1
-        ijsh = ijsh+1
-        dsh(ijsh) = maxval(abs(da(minj:maxj,mini:maxi,:)))
+        dsh(ish,jsh) = maxval(abs(da(minj:maxj,mini:maxi,:)))
+        dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
   end subroutine shltd
@@ -919,7 +918,7 @@ contains
         allocate(this%hmm(nbf, nbf, this%nspin, this%nm, nthreads),  &
                  source=0.0d0)
 
-      allocate(this%dsh(nsh*(nsh+1)/2), source=0.0d0)
+      allocate(this%dsh(nsh,nsh), source=0.0d0)
     end if
 
     call this%init_screen(basis)
@@ -1139,24 +1138,22 @@ contains
     implicit none
 
     type(basis_set), intent(in) :: basis
-    real(kind=dp), intent(out) :: dsh(:)
+    real(kind=dp), intent(out) :: dsh(:,:)
     real(kind=dp), intent(in), dimension(:,:,:,:) :: d
 
-    integer :: ijsh, ish, jsh, maxi, maxj, mini, &
-               minj
+    integer :: ish, jsh, maxi, maxj, mini, minj
     real(kind=dp) :: mxv
 
 !   RHF
-    ijsh = 0
     do ish = 1, basis%nshell
       mini = basis%ao_offset(ish)
       maxi = mini + basis%naos(ish)-1
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj + basis%naos(jsh) - 1
-        ijsh = ijsh+1
         mxv = maxval(abs(d(minj:maxj,mini:maxi,:,:)))
-        dsh(ijsh) = max(dsh(ijsh), mxv)
+        dsh(ish,jsh) = max(dsh(ish,jsh), mxv)
+        dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
   end subroutine shlrpagrd
