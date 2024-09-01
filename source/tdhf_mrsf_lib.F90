@@ -46,7 +46,7 @@ contains
       if (allocated(this%dsh)) deallocate(this%dsh)
 
       allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), &
-               this%dsh(nsh*(nsh+1)/2), &
+               this%dsh(nsh,nsh), &
                source=0.0d0)
     end if
 
@@ -114,22 +114,20 @@ contains
     implicit none
 
     type(basis_set), intent(in) :: basis
-    real(kind=dp), intent(out) :: dsh(:)
+    real(kind=dp), intent(out) :: dsh(:,:)
     real(kind=dp), intent(in), dimension(:,:,:) :: da
 
-    integer :: ijsh, ish, jsh, maxi, maxj, mini, &
-               minj
+    integer :: ish, jsh, maxi, maxj, mini, minj
 
     ! RHF
-    ijsh = 0
     do ish = 1, basis%nshell
       mini = basis%ao_offset(ish)
       maxi = mini + basis%naos(ish)-1
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        ijsh = ijsh+1
-        dsh(ijsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
 

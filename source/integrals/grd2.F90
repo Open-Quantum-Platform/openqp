@@ -8,7 +8,7 @@ module grd2
   use basis_tools, only: basis_set
   use grd2_rys, only: grd2_int_data_t, grd2_rys_compute
   use constants, only: BAS_MXANG
-  use int2_compute, only: int2_compute_data_t
+  use int2_compute, only: int2_compute_data_t, ints_exchange
 
 !###############################################################################
 
@@ -149,6 +149,7 @@ contains
     real(kind=dp), intent(inout) :: de(:,:)
 
     real(dp), dimension(:), allocatable :: dab
+    real(dp), allocatable :: schwarz_ints(:,:)
 
     real(kind=dp) :: emu2
 
@@ -167,7 +168,6 @@ contains
     type(int2_cutoffs_t) :: cutoffs
 
     ! tagarray
-    real(kind=dp), contiguous, pointer :: Xints(:)
     integer(4) :: status
 
     if (gcomp%attenuated) then
@@ -195,9 +195,13 @@ contains
     call ppairs%alloc(basis, cutoffs)
     call ppairs%compute(basis, cutoffs)
 
-    ! load Xints
-    call tagarray_get_data(infos%dat, OQP_XINTS, Xints, status)
-    call check_status(status, module_name, subroutine_name, OQP_XINTS)
+    ! integrals for screening
+    allocate(schwarz_ints(basis%nshell, basis%nshell))
+    if (gcomp%attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
 
 !   Initialize the integral block counters to zero
     skip1 = 0
@@ -242,7 +246,7 @@ contains
             kl = k*(k-1)/2+l
             if (ppairs%ppid(1,kl)==0) cycle
 
-            gmax = Xints(ij)*Xints(kl)
+            gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
 
 !           Coarse screening, on just the integral value
             if (gmax<cutoff) then
