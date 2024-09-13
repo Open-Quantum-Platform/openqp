@@ -11,6 +11,7 @@ module basis_tools
   use atomic_structure_m, only: atomic_structure
   use constants, only: BAS_MXANG, ANGULAR_LABEL, NUM_CART_BF, cart_X, cart_Y, cart_Z
   use io_constants, only: IW
+  use parallel, only: par_env_t
 
   implicit none
 
@@ -59,7 +60,9 @@ module basis_tools
 
     procedure :: set_screening => comp_basis_mxdists
 
+    procedure, pass(basis) :: basis_broadcast
     procedure, pass(basis) :: bf_label
+
   end type
 
   private
@@ -1232,5 +1235,66 @@ contains
     end do
     if (i > mxloop) res = 0
   end function
+
+  subroutine basis_broadcast(basis, comm, usempi)
+    use iso_c_binding, only: c_bool
+    class(basis_set), intent(inout) :: basis
+    type(par_env_t) :: pe
+    integer, parameter :: int32 = selected_int_kind(9)
+    integer(kind=int32) :: comm
+    integer :: length
+    integer :: i, j
+    logical(c_bool), intent(in) :: usempi
+    ! Initialize MPI
+    call pe%init(comm, usempi)
+
+    length = 1
+
+    ! Broadcast the scalar integers
+    call pe%bcast(basis%nshell, length)
+    call pe%bcast(basis%nprim, length)
+
+    call pe%bcast(basis%nbf, length)
+
+    call pe%bcast(basis%mxcontr, length)
+
+    call pe%bcast(basis%mxam, length)
+
+    if ( pe%rank /= 0) then
+      ! Allocate arrays based on the received sizes (on all processes)
+      if (.not. allocated(basis%ex)) allocate(basis%ex(basis%nprim))
+      if (.not. allocated(basis%cc)) allocate(basis%cc(basis%nprim))
+      if (.not. allocated(basis%bfnrm)) allocate(basis%bfnrm(basis%nbf))
+      if (.not. allocated(basis%g_offset)) allocate(basis%g_offset(basis%nshell))
+      if (.not. allocated(basis%origin)) allocate(basis%origin(basis%nshell))
+      if (.not. allocated(basis%am)) allocate(basis%am(basis%nshell))
+      if (.not. allocated(basis%ncontr)) allocate(basis%ncontr(basis%nshell))
+      if (.not. allocated(basis%ao_offset)) allocate(basis%ao_offset(basis%nshell))
+      if (.not. allocated(basis%naos)) allocate(basis%naos(basis%nshell))
+      if (.not. allocated(basis%at_mx_dist2)) allocate(basis%at_mx_dist2(basis%nbf))
+      if (.not. allocated(basis%prim_mx_dist2)) allocate(basis%prim_mx_dist2(basis%nprim))
+      if (.not. allocated(basis%shell_mx_dist2)) allocate(basis%shell_mx_dist2(basis%nshell))
+      if (.not. allocated(basis%shell_centers)) allocate(basis%shell_centers(basis%nshell, 3))
+    endif
+
+    ! Broadcast the arrays
+    call pe%bcast(basis%ex, basis%nprim)
+    call pe%bcast(basis%cc, basis%nprim)
+    call pe%bcast(basis%bfnrm, basis%nbf)
+
+    call pe%bcast(basis%g_offset, basis%nshell)
+
+    call pe%bcast(basis%origin, basis%nshell)
+
+    call pe%bcast(basis%am, basis%nshell)
+
+    call pe%bcast(basis%ncontr, basis%nshell)
+
+    call pe%bcast(basis%ao_offset, basis%nshell)
+
+
+    call pe%bcast(basis%naos, basis%nshell)
+
+  end subroutine basis_broadcast
 
 end module

@@ -138,6 +138,7 @@ contains
     use mod_dft_molgrid, only: dft_grid_t
     use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
     use oqp_tagarray_driver
+    use parallel, only: par_env_t
 
     implicit none
 
@@ -156,7 +157,7 @@ contains
     real(kind=dp) :: cutoff, cutoff2, dabcut
     real(kind=dp) :: dabmax, gmax
     real(kind=dp) :: zbig
-    integer :: numint, i, ij, skip1, skip2
+    integer :: numint, i, ij, skip1, skip2, mpi_ij
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
 
@@ -169,6 +170,9 @@ contains
 
     ! tagarray
     integer(4) :: status
+
+    type(par_env_t) :: pe
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     if (gcomp%attenuated) then
       emu2 = gcomp%mu**2
@@ -222,7 +226,7 @@ contains
 
 !$omp parallel &
 !$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok) &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij) &
 !$omp   reduction(+:skip1, skip2, numint, de)
 
      allocate(dab(maxnbf**4))
@@ -230,11 +234,18 @@ contains
     call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
 
 !$omp barrier
+    if (infos%mpiinfo%usempi) then
+       mpi_ij = 0
+    end if
 
     do i = 1, basis%nshell
       do j = 1, i
         ij = i*(i-1)/2+j
         if (ppairs%ppid(1,ij)==0) cycle
+        if (infos%mpiinfo%usempi) then
+           mpi_ij=mpi_ij+1
+           if (mod(mpi_ij, pe%size) /= pe%rank) cycle
+        end if
 
 !$omp do schedule(dynamic,4) collapse(2)
         do k = 1, i
@@ -289,6 +300,10 @@ contains
     call gdat%clean()
 !$omp end parallel
 
+    call pe%allreduce(skip1, 1)
+    call pe%allreduce(skip2, 1)
+    call pe%allreduce(numint, 1)
+    call pe%allreduce(de, size(de))
 !   Finish up the final gradient
 !   Project rotational contaminant from gradients
 !   call dfinal(1)

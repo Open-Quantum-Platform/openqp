@@ -11,6 +11,7 @@ module int2_compute
     int2_cutoffs_t, &
     int2_pair_storage
   use messages, only: show_message, WITH_ABORT
+  use parallel, only: par_env_t
 
   implicit none
 
@@ -69,6 +70,7 @@ module int2_compute
     integer :: cur_pass = 1
     real(kind=dp) :: scale_coulomb = 1.0d0
     real(kind=dp) :: scale_exchange = 1.0d0
+    type(par_env_t) :: pe
   contains
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure(int2_compute_data_parallel_start), deferred, pass :: parallel_start
@@ -135,6 +137,7 @@ module int2_compute
     logical :: attenuated = .false.
     real(kind=dp) :: mu = 1.0d99
 
+    type(par_env_t) :: pe
   contains
 
     private
@@ -234,6 +237,7 @@ contains
     cutoff = infos%control%int2e_cutoff
     call this%cutoffs%set(cutoff, ec1*cutoff, ec2*cutoff, cx1*log(10.0d0))
 
+    call this%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     if (libint2_active) call libint_static_init
 
     call this%ppairs%alloc(basis, this%cutoffs)
@@ -353,9 +357,8 @@ contains
     class(int2_compute_t), target, intent(inout) :: this
     class(int2_compute_data_t), intent(inout) :: int2_consumer
 
-    integer :: i, j, k, l
+    integer :: i, j, k, l, ij
     integer :: lmax
-    integer :: flips(4)
     integer :: nint
     real(kind=dp) :: test
 
@@ -378,6 +381,7 @@ contains
     integer :: ok
 
     nshell = this%basis%nshell
+
 
     ! preparations for screening
     if (this%schwarz) then
@@ -404,8 +408,7 @@ contains
 
 !$omp parallel &
 !$omp   private( &
-!$omp   i, j, k, l, jork, &
-!$omp   flips, &
+!$omp   i, j, k, l, ij, jork, &
 !$omp   tim0, tim1, tim2, tim3, tim4, ithread,   &
 !$omp   test, &
 !$omp   int2_storage, &
@@ -452,9 +455,15 @@ contains
     int2_storage%thread_id = ithread + 1
 
 !$omp barrier
-
+    if (this%pe%size>1) then
+      ij= 0
+    end if
     do i = this%basis%nshell, 1, -1
       do j = 1, i
+        if (this%pe%size>1) then
+          ij = ij +1
+          if (mod(ij, this%pe%size) /= this%pe%rank) cycle
+        end if
 
         if (this%schwarz) then
           test = int2_consumer%screen_ij(this%schwarz_ints, i, j)
@@ -523,7 +532,7 @@ contains
 
     deallocate(eri_data)
 !$omp end parallel
-
+    call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()
 
     this%skipped = nschwz
@@ -596,8 +605,8 @@ contains
 !###############################################################################
 !> @brief Computes the shell density matrix from the given density matrix and basis set.
 !>
-!> @details This subroutine calculates the shell density matrix `shell_density` 
-!>          by determining the maximum density values for each shell pair from 
+!> @details This subroutine calculates the shell density matrix `shell_density`
+!>          by determining the maximum density values for each shell pair from
 !>          the provided density matrix `density_matrix` and the basis set information.
 !>
 !> @param[out] shell_density  The computed shell density matrix.
@@ -891,11 +900,19 @@ contains
 !###############################################################################
 
   subroutine int2_fock_data_t_parallel_stop(this)
+
     implicit none
     class(int2_fock_data_t), intent(inout) :: this
+
+    call this%pe%barrier()
     if (this%cur_pass /= this%num_passes) return
-    if (this%nthreads == 1) return
-    this%f(:,:,lbound(this%f,2)) = sum(this%f, dim=size(shape(this%f)))
+    if (this%nthreads /= 1) then
+      this%f(:,:,lbound(this%f,3)) = sum(this%f, dim=size(shape(this%f)))
+    end if
+
+    call this%pe%allreduce(this%f(:,:,1), &
+                         size(this%f(:,:,1)))
+    call this%pe%barrier()
     this%nthreads = 1
   end subroutine
 

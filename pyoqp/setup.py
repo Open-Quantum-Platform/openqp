@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="PyOQP",
+    name="PyOpenQP",
     version="1.0",
     author="Jingbai Li",
     author_email="lijingbai@zspu.edu.cn",
@@ -19,6 +19,7 @@ setup(
         'libdlfind>=0.0.3',
         # 'dftd4>=3.5.0',
         'cffi>=1.16.0',
+        'mpi4py>=4.0.0',
     ],
     extras_require={
     },

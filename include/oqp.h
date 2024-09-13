@@ -14,6 +14,7 @@ typedef struct oqp_handle_t {
     struct dft_parameters *dft;
     struct tddft_parameters *tddft;
     struct control_parameters *control;
+    struct mpi_communicator *mpiinfo;
 } oqp_handle_t;
 
 struct Cstring{
@@ -122,6 +123,12 @@ struct control_parameters {
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
+};
+
+struct mpi_communicator {
+        int32_t comm;
+        bool debug_mode;
+        bool usempi;
 };
 
 oqp_handle_t *oqp_init();

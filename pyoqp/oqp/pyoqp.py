@@ -17,8 +17,7 @@ from oqp.library.runfunc import (
    compute_energy, compute_grad, compute_nac, compute_soc, compute_geom,
    compute_nacme, compute_properties, compute_hess, compute_thermo
 )
-
-
+from oqp.utils.mpi_utils import MPIManager
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -51,16 +50,18 @@ class Runner:
         signal(SIGINT, SIG_DFL)
 
         if os.path.exists(log):
-            os.remove(log)
+            try:
+                os.remove(log)
+                print(f"Removed log file: {log}")
+            except Exception as e:
+                pass
 
-        # Initialize mol
-        if input_dict:
-            if isinstance(input_dict, dict):
-                self.mol = Molecule(project, input_file, log, silent=silent).from_dict(input_dict)
-        else:
-            self.mol = Molecule(project, input_file, log, silent=silent).from_file(input_file)
+        signal(SIGINT, SIG_DFL)
 
-        # Check input values
+        self.mpi_manager = MPIManager()
+        # initialize mol
+        self.mol = Molecule(project, input_file, log, silent=silent).load_config(input_file)
+        # check input values
         check_input_values(self.mol.config)
 
         # Reload mol if possible
@@ -68,6 +69,7 @@ class Runner:
 
         # Attach the starting time to mol
         self.mol.start_time = start_time
+
 
         dump_log(self.mol, title='', section='start')
 
@@ -162,15 +164,18 @@ class Runner:
         """
         Run tests and check results against reference data (json).
         """
-        message, diff = self.mol.check_ref()
-
+        if self.mpi_manager.rank == 0:
+            message, diff = self.mol.check_ref()
+        else:
+            message = None
+            diff = None
         return message, diff
-
 
 def main():
     """
     Main function to handle command-line arguments and run OQP.
     """
+    mpi_manager = MPIManager()
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
@@ -186,19 +191,30 @@ def main():
         report, status = run_tests(args.run_tests)
         print(report)
         sys.exit(status)
-
     if not args.input:
         parser.print_help()
         sys.exit(1)
+    if mpi_manager.rank == 0:
+        input_file = os.path.abspath(args.input)
+        if not os.path.exists(input_file):
+            print(f'\n   PyOQP input file {input_file} not found\n')
+            sys.exit(1)
 
-    input_file = os.path.abspath(args.input)
-    if not os.path.exists(input_file):
-        print(f'\n   PyOQP input file {input_file} not found\n')
-        sys.exit(1)
+        input_path = os.path.dirname(input_file)
+        project_name = os.path.basename(input_file).replace('.inp', '')
 
-    input_path = os.path.dirname(input_file)
-    project_name = os.path.basename(input_file).replace('.inp', '')
-    log = f'{input_path}/{project_name}.log'
+        log = f'{input_path}/{project_name}.log'
+    else:
+        input_file = None
+        input_path = None
+        project_name = None
+        if os.name == 'nt':  # Windows
+            log = 'NUL'
+        else :
+            log = '/dev/null'
+    input_file = mpi_manager.bcast(input_file)
+    input_path = mpi_manager.bcast(input_path)
+    project_name = mpi_manager.bcast(project_name)
 
     silent = 1 if args.silent else 0
 
@@ -211,6 +227,7 @@ def main():
     # Run OQP
     oqp_runner.run()
     oqp_runner.results()
+    mpi_manager.finalize_mpi()
 
 
 def run_tests(test_path):
@@ -224,10 +241,11 @@ def run_tests(test_path):
         str: Test report.
     """
     from oqp.utils.oqp_tester import OQPTester
+    mpi_manager = MPIManager()
     tester = OQPTester(base_test_dir=None,
                        output_dir='openqp_test_tmp',
                        total_cpus=None,
-                       omp_threads=4)
+                       omp_threads=4, mpi_manager=mpi_manager)
     return tester.run(test_path), tester.status
 
 

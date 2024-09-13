@@ -10,6 +10,6 @@ def set_basis(mol):
 
     oqp.apply_basis(mol)
 
-    if mol.control.basis_set_issue:
+    if mol.data["basis_set_issue"]:
         dump_log(mol, title='PyOQP: basis set is not set properly', section='end')
         exit()

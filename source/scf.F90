@@ -450,11 +450,22 @@ contains
         endif
 
   !     Calculate new orbitals and density.
-        call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
-        if (scf_type == scf_uhf .and. nelec_b /= 0) then
-  !        Only UHF has beta orbitals.
-           call get_ab_initio_orbital(pfock(:,2),mo_b,mo_energy_b,qmat)
+  !
+        if (int2_driver%pe%rank == 0) then
+           call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
+
+           if (scf_type == scf_uhf .and. nelec_b /= 0) then
+     !        Only UHF has beta orbitals.
+               call get_ab_initio_orbital(pfock(:,2),mo_b,mo_energy_b,qmat)
+           end if
         end if
+        if (scf_type == scf_uhf .and. nelec_b /= 0) then
+            call int2_driver%pe%bcast(mo_b, size(mo_b))
+            call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
+        end if
+        call int2_driver%pe%bcast(mo_a, size(mo_a))
+        call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
+
   !     MOM option works for RHF and ROHF
         if (do_mom .and. diis_error.lt.infos%control%mom_switch) do_mom_flag=.true.
         if (do_mom .and. do_mom_flag .and. .not. step_0_mom) then
@@ -468,7 +479,12 @@ contains
         step_0_mom = .false.
 
   !     New density matrix in AO basis using MO.
-        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        if (int2_driver%pe%rank == 0) then
+           call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        end if
+        call int2_driver%pe%bcast(pdmat, size(pdmat))
+
+  !
 
   !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
@@ -501,6 +517,15 @@ contains
        write(iw,"(' DFT: total electron density = ',F20.10)") totele
        write(iw,"(' DFT: number of electrons    = ',I9,/)") nelec
      end if
+  !
+     if (scf_type == scf_uhf .and. nelec_b /= 0) then
+         call int2_driver%pe%bcast(mo_b, size(mo_b))
+         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
+     end if
+
+     call int2_driver%pe%bcast(mo_a, size(mo_a))
+     call int2_driver%pe%bcast(pdmat, size(pdmat))
+     call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
 
      select case (scf_type)
      case (scf_rhf)

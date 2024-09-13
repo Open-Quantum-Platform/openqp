@@ -30,6 +30,7 @@ contains
     use printing, only: print_module_info
     use oqp_tagarray_driver
     use iso_c_binding, only: c_char
+    use parallel, only: par_env_t
 
     implicit none
 
@@ -42,7 +43,8 @@ contains
     type(basis_set) :: huckel_basis
     character(len=:), allocatable :: basis_file
     logical :: err
-
+    integer , parameter :: root = 0
+    type(par_env_t) :: pe
   ! tagarray
     real(kind=dp), contiguous, pointer :: &
       Smat(:), &
@@ -59,6 +61,7 @@ contains
   ! Section of Tagarray for the log filename
   ! We are getting lot file name from Python via tagarray
   !
+
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
     call tagarray_get_data(infos%dat, OQP_hbasis_filename, basis_filename)
     allocate(character(ubound(basis_filename,1)) :: basis_file)
@@ -77,9 +80,16 @@ contains
   ! Readings
   ! load basis set
     basis => infos%basis
-    call huckel_basis%from_file(basis_file, infos%atoms, err)
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    if (pe%rank == root) then
+      call huckel_basis%from_file(basis_file, infos%atoms, err)
+    end if
+
   ! Checking error of basis set reading..
     infos%control%basis_set_issue = err
+    call pe%bcast(infos%control%basis_set_issue, 1)
+
     basis%atoms => infos%atoms
   !  Allocate H, S ,T and D matrices
     nbf = basis%nbf
@@ -119,19 +129,35 @@ contains
     end if
 
   ! Calculate Huckel MO
-    call huckel_guess(Smat, MO_A, infos, basis, huckel_basis)
+    if (pe%rank == root) then
+      call huckel_guess(Smat, MO_A, infos, basis, huckel_basis)
+    endif
   !  For ROHF/UHF
     if (INFOS%control%scftype >= 2) MO_B = MO_A
   !
   ! Calculate Density Matrix
+    if (pe%rank == root) then
   ! RHF
-    if (INFOS%control%scftype == 1) then
-      call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=basis)
+      if (infos%control%scftype == 1) then
+        call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=basis)
   ! ROHF/UHF
+      else
+        call get_ab_initio_density(Dmat_A, MO_A, Dmat_B, MO_B, infos, basis)
+      endif
+    endif
+    ! Broadcast MO and density matrices to all processes
+    call pe%bcast(MO_A, nbf*nbf)
+    if (infos%control%scftype >= 2) then
+      call pe%bcast(MO_B, nbf*nbf)
+    endif
+    ! Broadcast the density matrices to all processes
+    if (infos%control%scftype == 1) then
+      call pe%bcast(Dmat_A, nbf2)
     else
-      call get_ab_initio_density(Dmat_A, MO_A, Dmat_B, MO_B, infos, basis)
-    end if
-  !
+      call pe%bcast(Dmat_A, nbf2)
+      call pe%bcast(Dmat_B, nbf2)
+    endif
+    call pe%barrier()
     write (iw, '(/x,a,/)') '...... End of initial orbital guess ......'
     call measure_time(print_total=1, log_unit=iw)
     close(iw)
