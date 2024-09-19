@@ -71,6 +71,7 @@ contains
     write(iw, '(10x,   "*   Dr. Konstantin Komarov                                *")')
     write(iw, '(10x,   "*   Mr. Igor Gerasimov                                    *")')
     write(iw, '(10x,   "*   Dr. Hiroya Nakata                                     *")')
+    write(iw, '(10x,   "*   Dr. Mohsen Mazaherifar                                *")')
     write(iw, '(10x,   "*                                                         *")')
     write(iw, '(10x,   "*   In 2024, Prof. Jingbai Li at Hoffmann Institute of    *")')
     write(iw, '(10x,   "*   Advanced Materials began developing PyOQP.            *")')

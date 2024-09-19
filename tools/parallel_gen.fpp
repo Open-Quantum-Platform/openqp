@@ -105,81 +105,77 @@ contains
 #endif
   end subroutine par_env_t_barrier
 !##################################
-  subroutine get_hostnames(self, unique_hostnames)
+  subroutine get_hostnames(self, node_info_str)
     implicit none
-    character(len=:), allocatable, intent(inout) :: unique_hostnames
+
+    character(len=:), allocatable, intent(inout) :: node_info_str
     class(par_env_t), intent(inout) :: self
+    integer(PARALLEL_INT), PARAMETER :: max_host_print = 4
 #ifdef ENABLE_MPI
-    character(len=MPI_MAX_PROCESSOR_NAME) :: processor_name
-    character(len=MPI_MAX_PROCESSOR_NAME), allocatable :: all_processor_names(:)
-    integer(PARALLEL_INT) :: i, j, unique_count, ierr, name_len
-    logical :: is_duplicate
+    integer(PARALLEL_INT) :: node_comm, local_rank, node_root_comm, ierr
+    integer(PARALLEL_INT) :: num_nodes
+    character(len=MPI_MAX_PROCESSOR_NAME) :: hostname
+    integer(PARALLEL_INT) :: node_info_len
+    character(len=MPI_MAX_PROCESSOR_NAME), allocatable :: gathered_node_names(:)
+    integer :: i
+    character(len=32) :: num_nodes_str
 #endif
-    integer(PARALLEL_INT) :: total_length, root
-    total_length = 28
-    root = 0
+    integer(PARALLEL_INT) :: name_len
+    name_len = 28
 #ifndef ENABLE_MPI
-    allocate(character(len=total_length) :: unique_hostnames)
-    call hostnm(unique_hostnames)
+    allocate(character(len=name_len) :: node_info_str)
+    call hostnm(node_info_str)
 #else
     if(self%use_mpi) then
-      call MPI_Get_processor_name(processor_name, name_len, ierr)
-
-      if (self%rank == 0) then
-        allocate(character(len=MPI_MAX_PROCESSOR_NAME) :: all_processor_names(self%size))
+      call MPI_Comm_split_type(self%comm, MPI_COMM_TYPE_SHARED, int(0, kind=PARALLEL_INT), MPI_INFO_NULL, node_comm, ierr)
+      call MPI_Comm_rank(node_comm, local_rank, ierr)
+      call MPI_Comm_split(self%comm, int(merge(0, 1, local_rank == 0), kind=PARALLEL_INT), self%rank, node_root_comm, ierr)
+      if (local_rank == 0) then
+        call MPI_Comm_size(node_root_comm, num_nodes, ierr)
       end if
 
-      call MPI_Gather(processor_name, MPI_MAX_PROCESSOR_NAME, MPI_CHARACTER, &
-                      all_processor_names, MPI_MAX_PROCESSOR_NAME, MPI_CHARACTER, &
-                      root, self%comm, ierr)
+      call MPI_Bcast(num_nodes, int(1, kind=PARALLEL_INT), MPI_INTEGER, int(0, kind=PARALLEL_INT), self%comm, ierr)
+      call MPI_Get_processor_name(hostname, name_len, ierr)
+      if (local_rank == 0 .and. num_nodes <= max_host_print) then
+        allocate(gathered_node_names(num_nodes))
+        call MPI_Gather(hostname, MPI_MAX_PROCESSOR_NAME, MPI_CHARACTER, gathered_node_names, MPI_MAX_PROCESSOR_NAME, MPI_CHARACTER,&
+                        int(0, kind=PARALLEL_INT) , node_root_comm, ierr)
+      end if
 
       if (self%rank == 0) then
-        unique_count = 0
-        total_length = 0
-        do i = 1, self%size
-          is_duplicate = .false.
-          do j = 1, unique_count
-            if (trim(all_processor_names(i)) == trim(all_processor_names(j))) then
-              is_duplicate = .true.
-              exit
-            end if
+        if (num_nodes > max_host_print) then
+          write(num_nodes_str, '(I0)') num_nodes
+          node_info_str = "Number of nodes " // trim(num_nodes_str)
+        else
+          node_info_str = ''
+          do i = 1, num_nodes
+            node_info_str = trim(node_info_str) // trim(gathered_node_names(i)) // ', '
           end do
-
-          if (.not. is_duplicate) then
-            unique_count = unique_count + 1
-            all_processor_names(unique_count) = all_processor_names(i)
-            total_length = total_length + len_trim(all_processor_names(i)) + 1
-          end if
-        end do
-
-        allocate(character(len=total_length) :: unique_hostnames)
-        unique_hostnames = ''
-
-        do i = 1, unique_count
-          if (len_trim(unique_hostnames) > 0) then
-            unique_hostnames = trim(unique_hostnames) // ',' // trim(adjustl(all_processor_names(i)))
-          else
-            unique_hostnames = trim(adjustl(all_processor_names(i)))
-          end if
-        end do
-
-        deallocate(all_processor_names)
+          node_info_str = node_info_str(1:len_trim(node_info_str)-1)
+        end if
       end if
 
-      call MPI_Bcast(total_length,int(1, kind=PARALLEL_INT), MPI_INTEGER, root, self%comm, ierr)
-
+      if (self%rank == 0) then
+        node_info_len = len_trim(node_info_str)
+      endif
+      call MPI_Bcast(node_info_len, int(1, kind=PARALLEL_INT), MPI_INTEGER, int(0, kind=PARALLEL_INT), self%comm, ierr)
       if (self%rank /= 0) then
-        allocate(character(len=total_length) :: unique_hostnames)
+        allocate(character(len=node_info_len) :: node_info_str)
       end if
-      call MPI_Bcast(unique_hostnames, total_length, MPI_CHARACTER, root, self%comm, ierr)
+      call MPI_Bcast(node_info_str, node_info_len, MPI_CHARACTER, int(0, kind=PARALLEL_INT), self%comm, ierr)
+
+      if (local_rank == 0 .and. num_nodes <= max_host_print) then
+        deallocate(gathered_node_names)
+        call MPI_Comm_free(node_root_comm, ierr)
+      end if
+      call MPI_Comm_free(node_comm, ierr)
 
     else
-      allocate(character(len=total_length) :: unique_hostnames)
-      call hostnm(unique_hostnames)
+      allocate(character(len=name_len) :: node_info_str)
+      call hostnm(node_info_str)
     endif
 #endif
   end subroutine get_hostnames
-
 !##################################
 #:for type_name, mpi_type, kind, rank in buffer_types
   subroutine par_env_t_bcast_${type_name}$(self, buffer, length, root)
