@@ -96,8 +96,12 @@ contains
   subroutine parallel_stop(self)
     implicit none
     class(xc_consumer_tdg_t), intent(inout) :: self
-    if (ubound(self%bfGrad,3) <= 1) return
-    self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+
+    if (ubound(self%bfGrad,3) /= 1) then
+      self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+    end if
+    call self%pe%allreduce(self%bfGrad(:,:,1), &
+              size(self%bfGrad(:,:,1)))
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -982,6 +986,8 @@ contains
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
 
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
     call run_xc(xc_opts, dat, basis)
 
     ! Scale densities back
@@ -1125,6 +1131,8 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     call run_xc(xc_opts, dat, basis)
 
