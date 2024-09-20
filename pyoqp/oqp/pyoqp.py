@@ -15,9 +15,11 @@ from oqp.utils.input_checker import check_input_values
 from oqp.molecule import Molecule
 from oqp.library.runfunc import (
    compute_energy, compute_grad, compute_nac, compute_soc, compute_geom,
-   compute_nacme, compute_properties, compute_hess, compute_thermo
+   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo
 )
 from oqp.utils.mpi_utils import MPIManager
+
+
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -34,7 +36,7 @@ class Runner:
     """
 
     def __init__(self, project=None, input_file=None, log=None,
-                 input_dict=None, silent=0):
+                 input_dict=None, silent=0, usempi=True):
         """
         Initialize the OQP Runner.
 
@@ -44,24 +46,41 @@ class Runner:
             log (str): Path to the log file.
             input_dict (dict): Dictionary containing input parameters.
             silent (int): Flag to run in silent mode (0 or 1).
+            usempi (bool): Flag to enable MPI functions
         """
         start_time = time.time()
 
-        signal(SIGINT, SIG_DFL)
-
-        if os.path.exists(log):
-            try:
-                os.remove(log)
-                print(f"Removed log file: {log}")
-            except Exception as e:
-                pass
+        # Define the mapping of run types to their respective functions
+        self.run_func = {
+            'energy': compute_energy,
+            'grad': compute_grad,
+            'nac': compute_nac,
+            'nacme': compute_nacme,
+            'soc': compute_soc,
+            'optimize': compute_geom,
+            'meci': compute_geom,
+            'mecp': compute_geom,
+            'mep': compute_geom,
+            'ts': compute_geom,
+            'hess': compute_hess,
+            'thermo': compute_thermo,
+            'prop': compute_properties,
+            'data': compute_data,
+        }
 
         signal(SIGINT, SIG_DFL)
 
         self.mpi_manager = MPIManager()
+
         # initialize mol
-        self.mol = Molecule(project, input_file, log, silent=silent).load_config(input_file)
-        # check input values
+        self.mol = Molecule(project, input_file, log, silent=silent)
+        self.mol.usempi = usempi
+        if input_dict:
+            self.mol.load_config(input_dict)
+        else:
+            self.mol.load_config(input_file)
+
+        # check input values set default omp_num_threads
         check_input_values(self.mol.config)
 
         # Reload mol if possible
@@ -69,7 +88,6 @@ class Runner:
 
         # Attach the starting time to mol
         self.mol.start_time = start_time
-
 
         dump_log(self.mol, title='', section='start')
 
@@ -92,29 +110,12 @@ class Runner:
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
 
-        # Define the mapping of run types to their respective functions
-        run_func = {
-            'energy': compute_energy,
-            'grad': compute_grad,
-            'nac': compute_nac,
-            'nacme': compute_nacme,
-            'soc': compute_soc,
-            'optimize': compute_geom,
-            'meci': compute_geom,
-            'mecp': compute_geom,
-            'mep': compute_geom,
-            'ts': compute_geom,
-            'hess': compute_hess,
-            'thermo': compute_thermo,
-            'prop': compute_properties,
-        }
-
         # Turn off convergence check for test
         if test_mod:
             self.mol.config['tests']['exception'] = True
 
         # Run calculations
-        run_func[run_type](self.mol)
+        self.run_func[run_type](self.mol)
 
         dump_log(self.mol, title='', section='end')
 
@@ -175,7 +176,6 @@ def main():
     """
     Main function to handle command-line arguments and run OQP.
     """
-    mpi_manager = MPIManager()
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
@@ -185,6 +185,7 @@ def main():
                              '  all    - Run all tests in examples\n'
                              '  other  - Run tests in examples/other')
     parser.add_argument('--silent', action='store_true', help='run silently')
+    parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
     args = parser.parse_args()
 
     if args.run_tests:
@@ -194,27 +195,26 @@ def main():
     if not args.input:
         parser.print_help()
         sys.exit(1)
-    if mpi_manager.rank == 0:
-        input_file = os.path.abspath(args.input)
-        if not os.path.exists(input_file):
-            print(f'\n   PyOQP input file {input_file} not found\n')
-            sys.exit(1)
 
-        input_path = os.path.dirname(input_file)
-        project_name = os.path.basename(input_file).replace('.inp', '')
+    input_file = os.path.abspath(args.input)
+    if not os.path.exists(input_file):
+        print(f'\n   PyOQP input file {input_file} not found\n')
+        sys.exit(1)
 
-        log = f'{input_path}/{project_name}.log'
-    else:
-        input_file = None
-        input_path = None
-        project_name = None
-        if os.name == 'nt':  # Windows
-            log = 'NUL'
-        else :
-            log = '/dev/null'
-    input_file = mpi_manager.bcast(input_file)
-    input_path = mpi_manager.bcast(input_path)
-    project_name = mpi_manager.bcast(project_name)
+    input_path = os.path.dirname(input_file)
+    project_name = os.path.basename(input_file).replace('.inp', '')
+    log = f'{input_path}/{project_name}.log'
+
+    usempi = True if not args.nompi else False
+    mpi_manager = MPIManager()
+    if usempi:
+        input_file = mpi_manager.bcast(input_file)
+        project_name = mpi_manager.bcast(project_name)
+        if mpi_manager.rank != 0:
+            if os.name == 'nt':  # Windows
+                log = 'NUL'
+            else:
+                log = '/dev/null'
 
     silent = 1 if args.silent else 0
 
@@ -222,7 +222,9 @@ def main():
     oqp_runner = Runner(project=project_name,
                         input_file=input_file,
                         log=log,
-                        silent=silent)
+                        silent=silent,
+                        usempi=usempi,
+                        )
 
     # Run OQP
     oqp_runner.run()

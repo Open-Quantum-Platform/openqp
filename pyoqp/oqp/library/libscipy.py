@@ -255,6 +255,7 @@ class ConstrainOpt(Optimizer):
         self.pre_energy = energy
         self.pre_coord = coordinates.copy()
         dump_data(
+            self.mol,
             (self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad, radius, distance),
             title='CONS_SPHERE',
             fpath=self.mol.log_path,
@@ -472,11 +473,12 @@ class MECIOpt(Optimizer):
         # store energy and coordinates
         self.pre_energy = f
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms,
-                   coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df_1, max_df_1),
-                  title='MECI',
-                  fpath=self.mol.log_path,
-                  )
+        dump_data(
+            self.mol,
+            (self.itr, self.atoms, coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df_1, max_df_1),
+            title='MECI',
+            fpath=self.mol.log_path,
+        )
 
         return f, df
 
@@ -564,11 +566,12 @@ class MECIOpt(Optimizer):
         # store energy and coordinates
         self.pre_energy = f
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms,
-                   coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df, max_df),
-                  title='MECI',
-                  fpath=self.mol.log_path,
-                  )
+        dump_data(
+            self.mol,
+            (self.itr, self.atoms, coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df, max_df),
+            title='MECI',
+            fpath=self.mol.log_path,
+        )
 
         return f, df
 
@@ -718,11 +721,12 @@ class MECPOpt(Optimizer):
         # store energy and coordinates
         self.pre_energy = f
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms,
-                   coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df2, max_df2),
-                  title='MECP',
-                  fpath=self.mol.log_path,
-                  )
+        dump_data(
+            self.mol,
+            (self.itr, self.atoms, coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_df2, max_df2),
+            title='MECP',
+            fpath=self.mol.log_path,
+        )
 
         return f, df
 
@@ -815,8 +819,9 @@ class StateSpecificOpt(Optimizer):
         # store energy and coordinates
         self.pre_energy = energy
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad),
-                  title='OPTIMIZATION', fpath=self.mol.log_path)
+        dump_data(
+            self.mol, (self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad),
+            title='OPTIMIZATION', fpath=self.mol.log_path)
 
         return energy, grad
 
@@ -863,8 +868,10 @@ class MEP:
         self.mep_energies.append(self.optimizer.last_energy)
 
         if self.mep_itr == 1:
-            dump_data((0, self.atoms, self.optimizer.init_xyz, self.optimizer.init_energy, self.optimizer.init_energy),
-                      title='MEP', fpath=self.mol.log_path)
+            dump_data(self.mol,
+                      (0, self.atoms, self.optimizer.init_xyz, self.optimizer.init_energy, self.optimizer.init_energy),
+                      title='MEP',
+                      fpath=self.mol.log_path)
             de = self.optimizer.init_energy - self.optimizer.last_energy
         else:
             de = self.mep_energies[-2] - self.mep_energies[-1]
@@ -881,6 +888,7 @@ class MEP:
 
         dump_log(self.mol, title='MEP Convergence %s' % self.mep_itr, section='mep', info=results)
         dump_data(
+            self.mol,
             (self.mep_itr, self.atoms, self.optimizer.last_xyz, self.optimizer.last_energy, de),
             title='MEP',
             fpath=self.mol.log_path,
