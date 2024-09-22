@@ -4,11 +4,13 @@ import oqp
 import copy
 import time
 import shutil
+import platform
 import subprocess
 import multiprocessing
 import numpy as np
 from numpy import linalg as la
-
+from oqp.molecule import Molecule
+from oqp.utils.mpi_utils import MPIManager, MPIPool
 
 try:
     from dftd4.interface import DampingParam, DispersionModel
@@ -33,6 +35,7 @@ class Calculator:
         self.export = mol.config['properties']['export']
         self.export_title = mol.config['properties']['title']
         self.exception = mol.config['tests']['exception']
+        self.mpi_manager = MPIManager()
 
 
 class LastStep(Calculator):
@@ -113,7 +116,7 @@ class LastStep(Calculator):
 
         # export data
         if self.export:
-            dump_data((self.mol.energies, self.export_title), title='ENERGY', fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.energies, self.export_title), title='ENERGY', fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -135,7 +138,7 @@ class LastStep(Calculator):
 
         # export data
         if self.export:
-            dump_data((self.mol.grads, self.export_title, grad_list), title='GRADIENT', fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list), title='GRADIENT', fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -243,10 +246,10 @@ class SinglePoint(Calculator):
             functional = 'hf'
         basis = self.basis.replace('*', 's')
         if self.mol.idx != 1:
-            guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s_%s.molden' % (
+            guess_file = self.mol.input_file.replace('.inp', '_%s_%s_%s_%s_%s.molden' % (
                 self.mol.idx, cal_type, scf_type, functional, basis))
         else:
-            guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s.molden' % (
+            guess_file = self.mol.input_file.replace('.inp', '_%s_%s_%s_%s.molden' % (
                 cal_type, scf_type, functional, basis))
 
         return guess_file
@@ -493,7 +496,7 @@ class Hessian(Calculator):
                 self.mol.inertia = inertia
 
                 self.mol.save_freqs(self.state)
-                dump_data((self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
+                dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
 
                 # save mol
                 if self.save_mol:
@@ -534,7 +537,7 @@ class Hessian(Calculator):
         # prepare grad calculations
         self.mol.save_data()
         atoms = self.mol.get_atoms()
-        guess_file = self.mol.log.replace('.log', '.json')
+        guess_file = self.mol.input_file.replace('.inp', '.json')
         variables_wrapper = [
             {
                 'idx': idx,
@@ -550,26 +553,36 @@ class Hessian(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        dump_log(self.mol, title='', section='num_hess', info=[self.state, ndim, dx, self.restart])
-
         ## adjust multiprocessing if necessary
-        ncpu = np.amin([ndim, nproc])
+        if self.mpi_manager.use_mpi:
+            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
+            pool = MPIPool(processes=ncpu)
+        else:
+            ncpu = np.amin([ndim, nproc])
+            pool = multiprocessing.Pool(processes=ncpu)
+
+        dump_log(self.mol,
+                 title='',
+                 section='num_hess',
+                 info=[self.state, ndim, dx, self.restart, len(variables_wrapper), ncpu, os.environ['OMP_NUM_THREADS']]
+                 )
 
         ## start multiprocessing
         grads = [[] for _ in range(ndim)]
         flags = []
-        pool = multiprocessing.Pool(processes=ncpu)
         n = 0
         for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
-            n += 1
-            idx, grad, flag, timing = val
-            grads[idx] = grad
-            flags.append(flag)
-            dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
-            dump_data((n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+            if self.mpi_manager.rank == 0:
+                n += 1
+                idx, grad, flag, timing = val
+                grads[idx] = grad
+                flags.append(flag)
+                dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
+                dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
 
         pool.close()
 
+        grads = self.mpi_manager.bcast(grads)
         # compute hessian
         forward = np.array(grads[0:ncoord])
         backward = np.array(grads[ncoord:])
@@ -579,13 +592,16 @@ class Hessian(Calculator):
         hessian = (hessian + hessian.T) / 2
 
         # delete scratch folder
-        if 'failed' not in flags and self.clean:
+        if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
             shutil.rmtree(dir_hess)
 
         return hessian, flags
 
 def grad_wrapper(key_dict):
     start_time = time.time()
+    rank = MPIManager().rank
+    threads = os.environ['OMP_NUM_THREADS']
+    host = platform.node()
     # unpack variables
     idx = key_dict['idx']
     atoms = key_dict['atoms']
@@ -601,6 +617,7 @@ def grad_wrapper(key_dict):
     inp = f'{dir_hess}/{project_name}.{idx}.tmp.inp'
     xyz = f'{dir_hess}/{project_name}.{idx}.tmp.xyz'
     dat = f'{dir_hess}/{project_name}.{idx}.grad_{state}'
+    log = f'{dir_hess}/{project_name}.{idx}.tmp.log'
 
     # attempt to read computed data
     if restart and os.path.exists(dat):
@@ -613,15 +630,16 @@ def grad_wrapper(key_dict):
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
-        config['guess']['continue_geom'] = 'False'
+        config['guess']['continue_geom'] = 'false'
         config['properties']['grad'] = config['hess']['state']
-        config['properties']['export'] = True
+        config['properties']['export'] = 'True'
         config['properties']['title'] = f'{project_name}.{idx}'
         config['hess']['temperature'] = ','.join([str(x) for x in config['hess']['temperature']])
-        config['tests']['exception'] = False
+        config['tests']['exception'] = 'false'
+
         # save config
         input_xyz = write_xyz(atoms, coord, [idx])
-        input_file = write_config(config)
+        input_file, input_dict = write_config(config)
 
         with open(xyz, 'w') as out:
             out.write(input_xyz)
@@ -629,9 +647,27 @@ def grad_wrapper(key_dict):
         with open(inp, 'w') as out:
             out.write(input_file)
 
-        # run pyoqp externally
-        subprocess.run(['openqp', inp, '--silent'])
-
+        if not MPIManager().use_mpi:
+            # run grad calculation externally
+            subprocess.run(['openqp', inp, '--silent'])
+        else:
+            # run grad calculation internally
+            start_time = time.time()
+            mol = Molecule(project_name, inp, log, silent=1)
+            mol.usempi = False
+            mol.load_config(input_dict)
+            mol.load_data()
+            mol.start_time = start_time
+            dump_log(mol, title='', section='start')
+            mol.data["OQP::log_filename"] = log
+            oqp.oqp_banner(mol)
+            oqp.library.set_basis(mol)
+            oqp.library.ints_1e(mol)
+            oqp.library.guess(mol)
+            SinglePoint(mol).energy()
+            Gradient(mol).gradient()
+            LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+            dump_log(mol, title='', section='end')
     try:
         grad = np.loadtxt(dat).reshape(-1)
 
@@ -641,7 +677,7 @@ def grad_wrapper(key_dict):
 
     end_time = time.time()
 
-    return idx, grad, status, (start_time, end_time)
+    return idx, grad, status, (start_time, end_time, rank, threads, host)
 
 
 class BasisOverlap(Calculator):
@@ -860,8 +896,8 @@ class NACME(BasisOverlap):
 
         # export data
         if self.export:
-            dump_data((nac_matrix, self.export_title), title='NACME', fpath=self.mol.log_path)
-            dump_data((dc_matrix, self.export_title), title='DCME', fpath=self.mol.log_path)
+            dump_data(self.mol, (nac_matrix, self.export_title), title='NACME', fpath=self.mol.log_path)
+            dump_data(self.mol, (dc_matrix, self.export_title), title='DCME', fpath=self.mol.log_path)
 
         return dc_matrix, nac_matrix
 
@@ -905,7 +941,7 @@ class NAC(Calculator):
 
             # export data
             if self.export:
-                dump_data((self.mol, nacv, self.export_title), title='NACV', fpath=self.mol.log_path)
+                dump_data(self.mol, (self.mol, nacv, self.export_title), title='NACV', fpath=self.mol.log_path)
 
         dump_log(self.mol, title='PyOQP: NAC Vector (h_ij)', section='nacv', info=nacv)
         dump_log(self.mol, title='PyOQP: DC Vector (d_ij)', section='dcv', info=dcv)
@@ -932,7 +968,7 @@ class NAC(Calculator):
                          section='bp',
                          info=(g1, g2, h, x, y, sx, sy, pitch, tilt, peak, bifu)
                          )
-                dump_data((self.mol, g1, g2, h, x, y, i, j), title='BP', fpath=self.mol.log_path)
+                dump_data(self.mol, (self.mol, g1, g2, h, x, y, i, j), title='BP', fpath=self.mol.log_path)
 
     @staticmethod
     def compute_bp(h, g1, g2):
@@ -990,7 +1026,7 @@ class NAC(Calculator):
         # prepare grad calculations
         self.mol.save_data()
         atoms = self.mol.get_atoms()
-        guess_file = self.mol.log.replace('.log', '.json')
+        guess_file = self.mol.input_file.replace('.inp', '.json')
         variables_wrapper = [
             {
                 'idx': idx,
@@ -1007,26 +1043,36 @@ class NAC(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        dump_log(self.mol, title='', section='num_nacv', info=[ndim, dx, self.restart])
-
         ## adjust multiprocessing if necessary
-        ncpu = np.amin([ndim, nproc])
+        if self.mpi_manager.use_mpi:
+            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
+            pool = MPIPool(processes=ncpu)
+        else:
+            ncpu = np.amin([ndim, nproc])
+            pool = multiprocessing.Pool(processes=ncpu)
+
+        dump_log(self.mol,
+                 title='',
+                 section='num_nacv',
+                 info=[ndim, dx, self.restart, len(variables_wrapper), ncpu, os.environ['OMP_NUM_THREADS']]
+                 )
 
         ## start multiprocessing
         dcm = [[] for _ in range(ndim)]
         flags = []
-        pool = multiprocessing.Pool(processes=ncpu)
         n = 0
         for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
-            n += 1
-            idx, dcme, flag, timing = val
-            dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
-            flags.append(flag)
-            dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
-            dump_data((n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+            if self.mpi_manager.rank == 0:
+                n += 1
+                idx, dcme, flag, timing = val
+                dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
+                flags.append(flag)
+                dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
+                dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
 
         pool.close()
 
+        dcm = self.mpi_manager.bcast(dcm)
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
@@ -1043,7 +1089,7 @@ class NAC(Calculator):
         nacv = nacm.T.reshape((self.nstate, self.nstate, self.natom, 3))
 
         # delete scratch folder
-        if 'failed' not in flags and self.clean:
+        if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
             shutil.rmtree(dir_nacv)
 
         return nacv, dcv, flags
@@ -1051,6 +1097,9 @@ class NAC(Calculator):
 
 def nacme_wrapper(key_dict):
     start_time = time.time()
+    rank = MPIManager().rank
+    threads = os.environ['OMP_NUM_THREADS']
+    host = platform.node()
     # unpack variables
     idx = key_dict['idx']
     dx = key_dict['dx']
@@ -1067,6 +1116,7 @@ def nacme_wrapper(key_dict):
     inp = f'{dir_nacv}/{project_name}.{idx}.tmp.inp'
     xyz = f'{dir_nacv}/{project_name}.{idx}.tmp.xyz'
     dat = f'{dir_nacv}/{project_name}.{idx}.dcme'
+    log = f'{dir_nacv}/{project_name}.{idx}.tmp.log'
 
     # attempt to read computed data
     if restart and os.path.exists(dat):
@@ -1080,15 +1130,15 @@ def nacme_wrapper(key_dict):
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
         config['guess']['file2'] = guess_file
-        config['guess']['continue_geom'] = 'False'
-        config['properties']['export'] = True
+        config['guess']['continue_geom'] = 'false'
+        config['properties']['export'] = 'true'
         config['properties']['title'] = f'{project_name}.{idx}'
-        config['nac']['dt'] = dx
-        config['tests']['exception'] = False
+        config['nac']['dt'] = str(dx)
+        config['tests']['exception'] = 'false'
 
         # save config
         input_xyz = write_xyz(atoms, coord, [idx])
-        input_file = write_config(config)
+        input_file, input_dict = write_config(config)
 
         with open(xyz, 'w') as out:
             out.write(input_xyz)
@@ -1096,8 +1146,30 @@ def nacme_wrapper(key_dict):
         with open(inp, 'w') as out:
             out.write(input_file)
 
-        # run pyoqp externally
-        subprocess.run(['openqp', inp, '--silent'])
+        if not MPIManager().use_mpi:
+            # run nac calculation externally
+            subprocess.run(['openqp', inp, '--silent'])
+        else:
+            # run nac calculation internally
+            start_time = time.time()
+            mol = Molecule(project_name, inp, log, silent=1)
+            mol.usempi = False
+            mol.load_config(input_dict)
+            mol.load_data()
+            mol.start_time = start_time
+            dump_log(mol, title='', section='start')
+            mol.data["OQP::log_filename"] = log
+            oqp.oqp_banner(mol)
+            oqp.library.set_basis(mol)
+            oqp.library.ints_1e(mol)
+            oqp.library.guess(mol)
+            sp = SinglePoint(mol)
+            ref_energy = sp.reference()
+            BasisOverlap(mol).overlap()
+            sp.excitation(ref_energy)
+            LastStep(mol).compute(mol)
+            NACME(mol).nacme()
+            dump_log(mol, title='', section='end')
 
     try:
         dcme = np.loadtxt(dat).reshape(-1)
@@ -1108,7 +1180,7 @@ def nacme_wrapper(key_dict):
 
     end_time = time.time()
 
-    return idx, dcme, status, (start_time, end_time)
+    return idx, dcme, status, (start_time, end_time, rank, threads, host)
 
 
 class SCFnotConverged(Exception):

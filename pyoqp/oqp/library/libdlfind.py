@@ -148,7 +148,8 @@ class DLFindMin(DLFinder):
         # store energy and coordinates
         self.pre_energy = energy
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad),
+        dump_data(self.mol,
+                  (self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad),
                   title='OPTIMIZATION', fpath=self.mol.log_path)
 
         return energy, grad.reshape((self.natom, 3))
@@ -233,7 +234,8 @@ class DLFindMECI(DLFinder):
         # store energy and coordinates
         self.pre_energy = sum_e
         self.pre_coord = coordinates.copy()
-        dump_data((self.itr, self.atoms, coordinates, sum_e, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, 0, 0),
+        dump_data(self.mol,
+                  (self.itr, self.atoms, coordinates, sum_e, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, 0, 0),
                   title='MECI', fpath=self.mol.log_path)
 
         return (energy_1, energy_2), (grad_1.reshape((self.natom, 3)), grad_2.reshape((self.natom, 3)))

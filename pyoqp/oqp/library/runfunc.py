@@ -162,6 +162,34 @@ def compute_properties(mol):
     else:
         pass
 
+def compute_data(mol):
+    # prepare guess orbital
+    prep_guess(mol)
+
+    # compute reference energy
+    SinglePoint(mol).energy()
+
+    # compute gradient
+    Gradient(mol).gradient()
+
+    # compute dftd4
+    LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+
+    # compute nac or nacme
+    nac_type = mol.config['properties']['nac']
+    if nac_type == 'nac':
+        NAC(mol).nac()
+    else:
+        pass
+
+    # compute soc
+    soc_type = mol.config['properties']['soc']
+    if soc_type:
+        pass
+    else:
+        pass
+
+
 def get_optimizer(mol):
     runtype = mol.config['input']['runtype']
     lib = mol.config['optimize']['lib']
