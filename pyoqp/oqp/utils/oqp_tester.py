@@ -134,10 +134,13 @@ class OQPTester:
 
         start_time = time.perf_counter()
         try:
+            usempi = True if self.mpi_manager.use_mpi > 0 else False
+
             runner = Runner(project=project,
                             input_file=input_file,
                             log=log_file,
-                            silent=1)
+                            silent=1,
+                            usempi=usempi)
             runner.run(test_mod=True)
             if self.mpi_manager.rank == 0:
                 message, diff = runner.test()
