@@ -205,8 +205,9 @@ def main():
     project_name = os.path.basename(input_file).replace('.inp', '')
     log = f'{input_path}/{project_name}.log'
 
-    usempi = True if not args.nompi else False
     mpi_manager = MPIManager()
+    usempi = True if not args.nompi and mpi_manager.use_mpi > 0 else False
+
     if usempi:
         input_file = mpi_manager.bcast(input_file)
         project_name = mpi_manager.bcast(project_name)

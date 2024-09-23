@@ -7,7 +7,7 @@ import numpy as np
 from oqp.molden.moldenwriter import write_frequency
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR
-from oqp.utils.mpi_utils import MPIManager, mpi_dump
+from oqp.utils.mpi_utils import mpi_dump
 
 
 def try_basis(basis, path=None, fallback='6-31g'):

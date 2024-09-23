@@ -131,13 +131,6 @@ def mpi_update_attr(func):
             self.data = self.mpi_manager.bcast(self.data)
     return wrapper
 
-def mpi_write(func):
-    # mpi decorator to write files
-    def wrapper(self, *args):
-        if self.mpi_manager.rank == 0 or not self.usempi:
-            func(self, *args)
-    return wrapper
-
 def mpi_dump(func):
     # mpi decorator to write logs
     def wrapper(mol, *args, **kwargs):
