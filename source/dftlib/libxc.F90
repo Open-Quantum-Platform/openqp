@@ -342,6 +342,16 @@ contains
       call functional%add_functional(XC_HYB_GGA_XC_B1LYP, 1.00_fp, hfex=HFEX)
     case ("BHHLYP")
       call functional%add_functional(XC_HYB_GGA_XC_BHANDHLYP, 1.00_fp, hfex=HFEX)
+    case ("STG1X")
+      tddft_params%spc_coco = 0.5_fp
+      tddft_params%spc_ovov = 0.5_fp
+      tddft_params%spc_coov = 0.5_fp
+      call functional%add_functional(XC_HYB_GGA_XC_BHANDHLYP, 1.00_fp, hfex=HFEX) 
+      hfex=0.85
+      write(*,fmt='(3a)') "STG1X = B(0.15)HF(0.85)-LYP functional"
+      write(*,fmt='(3a)') "[3] Y. Horbatenko, S. Lee, M. Filatov, and C. H. Choi, ", &
+            "J. Phys. Chem. A, 123, 7991-8000 (2019); ", &
+            "DOI: 10.1021/acs.jpca.9b07556"
     case ("B3LYP")
       call show_message("B3LYP functional has different meanings,")
       call show_message("so that it can not be run using LibXC interface.")
