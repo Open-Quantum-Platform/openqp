@@ -27,22 +27,19 @@ Open Quantum Platform (OpenQP) is a quantum chemical platform featuring cutting-
 
 - **GCC, G++, Gfortran**: Version >= 8
 - **CMake**: Version >= 3.25
-- **cffi**
+- **cffi**: Perform pip install cffi
 - **ninja** (optional)
+- **MPI Library**: OpenMPI For MPI Support. Consult detailed documentation for other MPI libraries
 
 #### Download the Source Files
 
-```bash
-git clone ssh://git@github.com:Open-Quantum-Platform/openqp.git
-```
-or
 ```bash
 git clone https://github.com/Open-Quantum-Platform/openqp.git
 ```
 
 #### Compile
 
-#### With Ninja and OpenMP
+##### OpenMP Support
 
 ```bash
 cd openqp
@@ -52,17 +49,26 @@ cd pyoqp
 pip install .
 ```
 
-#### Without Ninja and OpenMP
+##### OpenMP and MPI Support
 
 ```bash
 cd openqp
-cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF
+cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
+ninja -C build install
+cd pyoqp
+pip install .
+```
+
+##### OpenMP and MPI Support using make
+
+```bash
+cd openqp
+cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
 make -C build install
 cd pyoqp
 pip install .
 ```
 
-- Use `-DENABLE_OPENMP=OFF` for a sequential run.
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
 - Use `-DLINALG_LIB_INT64=OFF` to ensure compatibility with third-party software like libdlfind compiled with 32-bit BLAS.
 
@@ -89,8 +95,16 @@ openqp --run_tests all     # Run all tests from all folders in examples
 
 #### Run
 
+For OpenMP or sequential run:
+
 ```bash
 openqp any_example_file.inp
+```
+
+For OpenMP and MPI run:
+
+```bash
+mpirun -np number_of_mpi openqp any_example_file.inp
 ```
 
 ### Detailed Documentation
@@ -115,7 +129,7 @@ If you use OpenQP in your research, please cite the following papers:
 - **Jingbai Li**, Hoffmann Institute of Advanced Materials, China, [lijingbai2009@gmail.com](mailto:lijingbai2009@gmail.com)
 - **Igor Gerasimov**, [i.s.ger@yandex.ru](mailto:i.s.ger@yandex.ru)
 - **Hiroya Nakata**, Fukui Institute for Fundamental Chemistry, Japan, [nakata.hiro07@gmail.com](mailto:nakata.hiro07@gmail.com)
-
+- **Mohsen Mazaherifar**, Kyungpook National University, South Korea, [moh.mazaheri@gmail.com](mailto:moh.mazaheri@gmail.com)
 ### Legal Notice
 
 See the separate LICENSE file.

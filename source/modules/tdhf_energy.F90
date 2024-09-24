@@ -280,21 +280,21 @@ contains
     select case (ierr)
     case (-1)
       write(*,'(/,2X,"TD-DFT energies NOT CONVERGED after ",I4," iterations"/)') mxiter
-      infos%mol_energy%Davidson_converged=.false. 
+      infos%mol_energy%Davidson_converged=.false.
 !      call show_message("Aborting. Try to increase maxit or check your system.", WITH_ABORT)
     case (0)
       write(*,'(/,2X,"TD-DFT energies converged in ",I4," iterations"/)') iter
       infos%mol_energy%Davidson_converged=.true.
     case (1)
       write(*,'(/,2X,"..something is wrong.. nvec = mxvec")')
-      infos%mol_energy%Davidson_converged=.false. 
+      infos%mol_energy%Davidson_converged=.false.
     case (2)
       write(*,'(/,2x,"..something is wrong..  nvec > mxvec")')
       write(*,'(3x,"nvec/mxvec =",I4,"/",I4)') nvec, mxvec
-      infos%mol_energy%Davidson_converged=.false. 
+      infos%mol_energy%Davidson_converged=.false.
     case (3)
       write(*,'(/,2x,"..something is wrong.. No vectors were added")')
-      infos%mol_energy%Davidson_converged=.false. 
+      infos%mol_energy%Davidson_converged=.false.
     end select
 
     call get_td_transition_dipole(basis, dip, mo_a, vro, vlo, nstates, nocc)

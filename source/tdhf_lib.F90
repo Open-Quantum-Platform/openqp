@@ -89,13 +89,18 @@ contains
     integer :: flast, amblast, nbf, i
     class(int2_td_data_t), intent(inout) :: this
     if (this%cur_pass /= this%num_passes) return
-    flast  = size(shape(this%apb ))
+    flast  = size(shape(this%apb))
     amblast = size(shape(this%amb))
     nbf = ubound(this%amb, 1)
     if (this%nthreads /= 1) then
-      this%apb(:,:,:,lbound(this%apb,  flast )) = sum(this%apb,  dim=flast)
+      this%apb(:,:,:,lbound(this%apb, flast)) = sum(this%apb, dim=flast)
       this%amb(:,:,:,lbound(this%amb, amblast)) = sum(this%amb, dim=amblast)
     end if
+    call this%pe%allreduce(this%apb(:,:,:,1), &
+                       size(this%apb(:,:,:,1)))
+    call this%pe%allreduce(this%amb(:,:,:,1), &
+                         size(this%amb(:,:,:,1)))
+
     do i = lbound(this%apb,3), ubound(this%apb,3)
       call symmetrize_matrix(this%apb(:,:,i,1), nbf)
     end do
@@ -931,6 +936,7 @@ contains
     implicit none
     integer :: plast, tlast, mlast, nbf
     class(int2_rpagrd_data_t), intent(inout) :: this
+
     if (this%cur_pass /= this%num_passes) return
     plast = size(shape(this%hpp))
     tlast = size(shape(this%hpt))
@@ -943,6 +949,13 @@ contains
       if (this%nm > 0) this%hmm(:,:,:,:,lbound(this%hmm, mlast )) = sum(this%hmm, dim=mlast)
       this%nthreads = 1
     end if
+    if (this%np > 0) call this%pe%allreduce(this%hpp(:,:,:,:,1),&
+            size(this%hpp(:,:,:,:,1)))
+    if (this%nt > 0) call this%pe%allreduce(this%hpt(:,:,:,:,1),&
+            size(this%hpt(:,:,:,:,1)))
+    if (this%nm > 0) call this%pe%allreduce(this%hmm(:,:,:,:,1),&
+            size(this%hmm(:,:,:,:,1)))
+
 
     if (this%cur_pass == this%num_passes) then
       if (this%np > 0) call symmetrize_matrices(this%hpp, nbf, this%np*this%nspin)

@@ -50,8 +50,12 @@ contains
   subroutine parallel_stop(self)
     implicit none
     class(xc_consumer_grad_t), intent(inout) :: self
-    if (ubound(self%bfGrad,3) <= 1) return
-    self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+    if (ubound(self%bfGrad,3) /= 1) then
+      self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+    end if
+
+    call self%pe%allreduce(self%bfGrad(:,:,1), &
+              size(self%bfGrad(:,:,1)))
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -249,6 +253,8 @@ contains
     xc_opts%wfBeta => db2
     xc_opts%dft_threshold = dft_threshold
     xc_opts%molGrid => molGrid
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     call run_xc(xc_opts, dat, basis)
 

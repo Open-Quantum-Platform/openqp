@@ -32,6 +32,7 @@ module c_interop
     type(c_ptr) :: dft
     type(c_ptr) :: tddft
     type(c_ptr) :: control
+    type(c_ptr) :: mpiinfo
   end type
 
 contains
@@ -102,6 +103,7 @@ contains
     c_handle%dft         = c_loc(inf%dft)
     c_handle%control     = c_loc(inf%control)
     c_handle%tddft       = c_loc(inf%tddft)
+    c_handle%mpiinfo     = c_loc(inf%mpiinfo)
     if (allocated(inf%atoms%xyz)) then
         c_handle%xyz  = c_loc(inf%atoms%xyz)
         c_handle%qn   = c_loc(inf%atoms%zn)

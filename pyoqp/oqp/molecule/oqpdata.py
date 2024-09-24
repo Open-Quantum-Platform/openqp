@@ -296,6 +296,10 @@ class OQPData:
         if key in dir(self._data.mol_energy):
             return getattr(self._data.mol_energy, key)
 
+        if key in dir(self._data.mpiinfo):
+            return getattr(self._data.mpiinfo, key)
+        if key in dir(self._data.control):
+            return getattr(self._data.control, key)
         code = bytes(key, 'ascii')
         req = ffi.new('char []', code)
         type_id = ffi.new('int32_t *')
@@ -333,6 +337,9 @@ class OQPData:
 
         if key in dir(self._data.mol_energy):
             self._data.mol_energy[key] = value
+
+        if key in dir(self._data.mpiinfo):
+            setattr(self._data.mpiinfo, key, value)
 
         if isinstance(value, np.ndarray):
             _value = value

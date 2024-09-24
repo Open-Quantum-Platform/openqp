@@ -8,6 +8,7 @@ module mod_dft_gridint
   use mod_dft_molgrid, only: dft_grid_t
   use functionals, only: functional_t
   use oqp_linalg
+  use parallel, only: par_env_t
   implicit none
 
 !###############################################################################
@@ -53,6 +54,7 @@ module mod_dft_gridint
     real(kind=fp) :: N_elec
     real(kind=fp) :: E_kin
     real(kind=fp) :: G_total(3)
+    type(par_env_t) :: pe
   contains
     procedure(xc_consumer_parallel_start), deferred, pass :: parallel_start
     procedure(xc_consumer_parallel_stop), deferred, pass :: parallel_stop
@@ -2118,6 +2120,7 @@ contains
   subroutine run_xc(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
+
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
     type(xc_options_t), intent(in) :: xc_opts
@@ -2127,7 +2130,6 @@ contains
 
     logical :: skip
 
-    integer :: me, nproc
 
     real(KIND=fp) :: exc, totgradxyz(3), totele, totkin
     real(KIND=fp) :: dftthr, wcutoff
@@ -2145,8 +2147,7 @@ contains
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
 
-    nproc = 1
-    me = 0
+
 
     next = -1
     myjob = -1
@@ -2179,7 +2180,7 @@ contains
     myThread = 1
 !$  numThreads = omp_get_num_threads()
 !$  myThread = omp_get_thread_num()+1
-    chunkSize = max(1, xc_opts%molGrid%nSlices/(nproc*4))
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
     if (chunkSize/numThreads > 40) then
       chunkSize = 40*numThreads
     end if
@@ -2194,7 +2195,7 @@ contains
     done = .false.
 
     do iChunk = 1, xc_opts%molGrid%nSlices, chunkSize
-       if (mod(iChunk/chunkSize, nproc) /= me) cycle
+      if (mod(iChunk/chunkSize, xc_dat%pe%size) /= xc_dat%pe%rank) cycle
 
 !$omp do schedule(dynamic)
       slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
@@ -2239,6 +2240,10 @@ contains
 !$omp end parallel
 
     call xc_dat%parallel_stop()
+    call xc_dat%pe%allreduce(exc, 1)
+    call xc_dat%pe%allreduce(totele, 1)
+    call xc_dat%pe%allreduce(totkin, 1)
+    call xc_dat%pe%allreduce(totgradxyz, 1)
 
     xc_dat%E_xc = exc
     xc_dat%N_elec = totele

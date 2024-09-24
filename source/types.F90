@@ -7,6 +7,7 @@ module types
   use tagarray, only: container_t
   use functionals, only: functional_t
   use atomic_structure_m, only: atomic_structure
+  use parallel, only: MPI_COMM_NULL
   use basis_tools, only: basis_set
 
   implicit none
@@ -106,9 +107,9 @@ module types
     real(c_double) :: diis_reset_conv = 0.005_dp     !< Convergency criteria of DIIS reset
     real(c_double) :: diis_method_threshold = 2.0_dp !< DIIS threshold for switching DIIS method
     integer(c_int64_t) :: diis_type = 5              !< 1: none, 2: cdiis, 3: ediis, 4: adiis, 5: vdiis
-    real(c_double) :: vdiis_cdiis_switch = 0.3_dp    !< The threshold for selecting cdiis 
-    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< The threshold for setting vshift = 0 
-    real(c_double) :: vshift_cdiis_switch = 0.3_dp   !< The threshold for selecting cdiis for vshift 
+    real(c_double) :: vdiis_cdiis_switch = 0.3_dp    !< The threshold for selecting cdiis
+    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< The threshold for setting vshift = 0
+    real(c_double) :: vshift_cdiis_switch = 0.3_dp   !< The threshold for selecting cdiis for vshift
     real(c_double) :: vshift = 0.0_dp                !< Virtual orbital shift for ROHF
     logical(c_bool) :: mom = .false.                 ! Maximum Overlap Method for SCF Convergency
     real(c_double) :: mom_switch = 0.003_dp          ! Turn on criteria of DIIS error
@@ -144,6 +145,13 @@ module types
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
   end type tddft_parameters
 
+  type, public, bind(c) :: mpi_communicator
+    integer(c_int) :: comm = MPI_COMM_NULL       !< MPI communicator
+    logical(c_bool) :: debug_mode = .false.
+    logical(c_bool) :: usempi = .false.
+  end type mpi_communicator
+
+
   type, public :: information
     type(molecule) :: mol_prop
     type(energy_results) :: mol_energy
@@ -155,12 +163,13 @@ module types
     type(container_t) :: dat
     type(basis_set) :: basis
     character(len=:), allocatable :: log_filename
+    type(mpi_communicator) :: mpiinfo
   contains
     generic :: set_atoms => set_atoms_arr, set_atoms_atm
     procedure, pass :: set_atoms_arr => info_set_atoms_arr
     procedure, pass :: set_atoms_atm => info_set_atoms_atm
   end type information
-  
+
 contains
 
   function info_set_atoms_arr(this, natoms, x, y, z, q, mass) result(ok)

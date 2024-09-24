@@ -2,7 +2,8 @@
 
 import os
 import platform
-
+from oqp.utils.mpi_utils import MPIManager
+MPIManager()
 # we must import dftd4 ffi lib before oqp to load library correctly
 try:
     import dftd4.interface

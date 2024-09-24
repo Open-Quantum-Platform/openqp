@@ -26,8 +26,10 @@ contains
     use strings, only: fstring
     use oqp_tagarray_driver
     use iso_c_binding, only: c_char
+    use parallel, only: par_env_t
     implicit none
     type(information), intent(inout) :: infos
+    type(par_env_t) :: pe
     character(len=:), allocatable :: basis_file
     integer :: iw, i
     logical :: err
@@ -56,10 +58,14 @@ contains
     write(iw,'(  22X,"MODULE: apply_basis ")')
     write(iw,'(  22X,"Setting up basis set information")')
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
-
-    call infos%basis%from_file(basis_file, infos%atoms, err)
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (pe%rank == 0) then
+      call infos%basis%from_file(basis_file, infos%atoms, err)
+      infos%control%basis_set_issue = err
+    endif
   ! Checking error of basis set reading..
-    infos%control%basis_set_issue = err
+    call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    call pe%bcast(infos%control%basis_set_issue, 1)
 
     write(iw,'(/5X,"Basis Sets options"/&
                   &5X,18("-")/&

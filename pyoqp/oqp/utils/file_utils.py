@@ -7,7 +7,7 @@ import numpy as np
 from oqp.molden.moldenwriter import write_frequency
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR
-
+from oqp.utils.mpi_utils import MPIManager
 
 def try_basis(basis, path=None, fallback='6-31g'):
     """try various basis file locations and return the matching one"""
@@ -572,6 +572,8 @@ def dump_log(mol, title=None, section=None, info=None):
 
 def dump_data(data, title=None, fpath='.'):
     # function to write data in specific logs
+    mpi_manager = MPIManager()
+    if mpi_manager.rank != 0: return
     if title == 'ENERGY':
         energies, title = data
         filename = 'energies'

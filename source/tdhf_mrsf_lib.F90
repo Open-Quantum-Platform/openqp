@@ -71,6 +71,8 @@ contains
       this%f3(:,:,:,:,lbound(this%f3, f3last)) = sum(this%f3, dim=f3last)
     end if
 
+    call this%pe%allreduce(this%f3(:,:,:,:,1), &
+              size(this%f3(:,:,:,:,1)))
     this%nthreads = 1
 
   end subroutine
