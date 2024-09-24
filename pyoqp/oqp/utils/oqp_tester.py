@@ -18,7 +18,6 @@ from datetime import datetime
 
 from oqp.pyoqp import Runner
 
-
 class OQPTester:
     """
     A class for running OQP tests and generating reports.
@@ -40,7 +39,7 @@ class OQPTester:
                  output_dir: str = None,
                  total_cpus: int = None,
                  omp_threads: int = None,
-                 ):
+                 mpi_manager = None):
         """
         Initialize the OQPTester.
 
@@ -57,6 +56,7 @@ class OQPTester:
 
         self.base_test_dir = base_test_dir or os.path.join(oqp_root,
                                                            'examples')
+        self.mpi_manager = mpi_manager
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.output_dir = os.path.abspath(f"{output_dir}_{timestamp}")
 #       self.output_dir = os.path.abspath(f"{output_dir}")
@@ -65,7 +65,7 @@ class OQPTester:
         self.omp_threads = omp_threads if omp_threads is not None \
             else self.total_cpus
 
-        self.max_workers = max(1, self.total_cpus // self.omp_threads)
+        self.max_workers = self.calculate_max_workers()
         self.results: List[Dict[str, Any]] = []
         self.report_file = os.path.join(self.output_dir, 'test_report.txt')
         self.start_time = None
@@ -74,9 +74,15 @@ class OQPTester:
 
         os.environ['OMP_NUM_THREADS'] = str(self.omp_threads)
 
+    def calculate_max_workers(self):
+        if self.mpi_manager.use_mpi:
+            return 1
+        return max(1, self.total_cpus // self.omp_threads)
+
     def log(self, message: str):
         """Simple logging function to stdout."""
-        print(f"[OQPTester] {message}")
+        if self.mpi_manager.rank == 0 :
+            print(f"[OQPTester] {message}")
 
     def get_git_commit_info(self):
         try:
@@ -108,7 +114,12 @@ class OQPTester:
             Dict[str, Any]: Dictionary containing test results.
         """
         project = os.path.splitext(os.path.basename(input_file))[0]
-        log_file = os.path.join(self.output_dir, f"{project}.log")
+        if self.mpi_manager.rank == 0:
+            log_file = os.path.join(self.output_dir, f"{project}.log")
+        elif os.name == 'nt':
+            log_file = 'NUL'
+        else :
+            log_file = '/dev/null'
 
         self.log(f"Running test for {project}")
 
@@ -128,9 +139,10 @@ class OQPTester:
                             log=log_file,
                             silent=1)
             runner.run(test_mod=True)
-            message, diff = runner.test()
-            result["status"] = "PASSED" if round(diff, 4) == 0 else "FAILED"
-            result["message"] = message
+            if self.mpi_manager.rank == 0:
+                message, diff = runner.test()
+                result["status"] = "PASSED" if round(diff, 4) == 0 else "FAILED"
+                result["message"] = message
         except Exception as err:
             self.log(f"Error in test {project}: {str(err)}")
             result["status"] = "ERROR"
@@ -147,21 +159,28 @@ class OQPTester:
             test_path (str): Path to test directory or specific input file.
                              Use 'all' to run all tests in the base directory.
         """
+
         self.start_time = time.perf_counter()
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+        if self.mpi_manager.rank == 0:
+            if not os.path.exists(self.output_dir):
+                 os.makedirs(self.output_dir)
 
         input_files = self._get_input_files(test_path)
         if not input_files:
             return
 
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_file = {
-                executor.submit(self.run_single_test, input_file): input_file
-                for input_file in input_files
-            }
-            for future in as_completed(future_to_file):
-                self.results.append(future.result())
+        if self.mpi_manager.use_mpi:
+            for input_file in input_files:
+                result = self.run_single_test(input_file)
+                self.results.append(result)
+        else:
+            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_file = {
+                    executor.submit(self.run_single_test, input_file): input_file
+                    for input_file in input_files
+                }
+                for future in as_completed(future_to_file):
+                    self.results.append(future.result())
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
@@ -223,8 +242,7 @@ Passed: {passed}
 Failed: {failed}
 Errors: {errors}
 
-Total CPUs: {self.total_cpus}
-OMP threads per test: {self.omp_threads}
+Total CPUs: MPI Processors = {self.mpi_manager.size}, OpenMp Threads = {self.omp_threads}
 Max parallel tests: {self.max_workers}
 
 Total execution time: {self.format_time(total_time)}
@@ -265,7 +283,9 @@ Total execution time: {self.format_time(total_time)}
             os.remove(self.report_file)
 
         self.run_tests(test_path)
-        report = self.generate_report()
-        self.log("OpenQP tests completed")
-
-        return report
+        if self.mpi_manager.rank == 0:
+            report = self.generate_report()
+            self.log("OpenQP tests completed")
+            return report
+        else :
+            return 1

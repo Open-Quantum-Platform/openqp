@@ -27,10 +27,13 @@ contains
 !$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver
     use iso_c_binding, only: c_char
+    use parallel, only: par_env_t
     implicit none
     type(information), intent(inout) :: infos
     integer :: iw, CPU_core, i
-    character(len=28) :: cdate, hostname
+    character(len=28) :: cdate
+    character(len=:), allocatable :: hostnames
+    type(par_env_t) :: pe
 
   ! Section of Tagarray for the log filename
   ! We are getting lot file name from Python via tagarray
@@ -46,6 +49,8 @@ contains
     do i = 1, ubound(log_filename,1)
        infos%log_filename(i:i) = log_filename(i)
     end do
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
 
     open (newunit=iw, file=infos%log_filename, position="append")
 
@@ -66,6 +71,7 @@ contains
     write(iw, '(10x,   "*   Dr. Konstantin Komarov                                *")')
     write(iw, '(10x,   "*   Mr. Igor Gerasimov                                    *")')
     write(iw, '(10x,   "*   Dr. Hiroya Nakata                                     *")')
+    write(iw, '(10x,   "*   Dr. Mohsen Mazaherifar                                *")')
     write(iw, '(10x,   "*                                                         *")')
     write(iw, '(10x,   "*   In 2024, Prof. Jingbai Li at Hoffmann Institute of    *")')
     write(iw, '(10x,   "*   Advanced Materials began developing PyOQP.            *")')
@@ -73,12 +79,17 @@ contains
     write(iw, '(10x,   "***********************************************************")')
 
     call fdate(cdate)
-    call hostnm(hostname)
+    call pe%get_hostnames(hostnames)
     CPU_core = 1
   !$  CPU_core = omp_get_max_threads()
 
-    write(iw,'(/20x,A,"Job starts at ",A/,22x," on the host of ",A/,22x," with ",I4," CPU cores.")') ' ', cdate, hostname, CPU_core
-
+    if (pe%use_mpi) then
+        write(iw, '(/20x,A,"Job Details:",/,22x,"Start Time: ",A,/,22x,"Host List: ",A,/,22x,"Resources Allocated:",/,24x,"OpenMP Threads: ",I4,/,24x,"MPI Processors: ",I4)') &
+                  ' ', cdate, hostnames, CPU_core, pe%size
+    else
+        write(iw, '(/20x,A,"Job Details:",/,22x,"Start Time: ",A,/,22x,"Host: ",A,/,22x,"Resources Allocated:",/,24x,"OpenMP Threads: ",I4)') &
+                  ' ', cdate, hostnames, CPU_core
+    endif
     close (iw)
 
   end subroutine oqp_banner

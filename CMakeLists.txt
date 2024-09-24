@@ -8,6 +8,14 @@ set(CMAKE_Fortran_STANDARD 2003)
 
 include(FortranCInterface)
 
+option(ENABLE_MPI "Enable MPI support" OFF)
+
+if(ENABLE_MPI)
+    find_package(MPI REQUIRED)
+    include_directories(${MPI_Fortran_INCLUDE_PATH})
+    message(STATUS "MPI support is enabled.")
+endif()
+
 option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 
 option(BUILD_TESTING     "Enable some simple tests"          ON)

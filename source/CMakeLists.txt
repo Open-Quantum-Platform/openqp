@@ -27,7 +27,9 @@ set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(ENABLE_OPENMP)
   target_link_libraries(oqp OpenMP::OpenMP_Fortran OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
 endif()
-
+if(ENABLE_MPI)
+    target_compile_definitions(oqp PRIVATE ENABLE_MPI)
+endif()
 target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libxc/src/libxc-build-${CMAKE_Fortran_COMPILER_ID})
 
 if(USE_LIBINT)

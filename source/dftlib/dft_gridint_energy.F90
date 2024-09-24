@@ -56,10 +56,17 @@ contains
   subroutine parallel_stop(self)
     implicit none
     class(xc_consumer_ks_t), intent(inout) :: self
-    if (ubound(self%fa2,2) <= 1) return
-    self%fa2(:,lbound(self%fa2,2)) = sum(self%fa2, dim=size(shape(self%fa2)))
+    if (ubound(self%fa2,2) /= 1 ) then
+      self%fa2(:,lbound(self%fa2,2)) = sum(self%fa2, dim=size(shape(self%fa2)))
+    end if
+    call self%pe%allreduce(self%fa2(:,1), &
+              size(self%fa2(:,1)))
     if (allocated(self%fb2)) then
-      self%fb2(:,lbound(self%fb2,2)) = sum(self%fb2, dim=size(shape(self%fb2)))
+      if (ubound(self%fa2,2) /= 1 ) then
+        self%fb2(:,lbound(self%fb2,2)) = sum(self%fb2, dim=size(shape(self%fb2)))
+      end if
+      call self%pe%allreduce(self%fb2(:,1), &
+                size(self%fb2(:,1)))
     end if
   end subroutine
 
@@ -331,6 +338,8 @@ contains
     xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
     ! skip ao_prune_grid if it is pruned grid (SG1)
     if(infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     call run_xc(xc_opts, dat, basis)
 

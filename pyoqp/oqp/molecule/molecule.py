@@ -8,8 +8,8 @@ import oqp
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.molden.moldenwriter import MoldenWriter
 from .oqpdata import OQPData, OQP_CONFIG_SCHEMA
-
-
+from oqp.utils.mpi_utils import MPIManager
+from oqp import ffi
 class Molecule:
     """
     OQP molecule representation in python
@@ -36,7 +36,7 @@ class Molecule:
         self.project_name = project_name
         self.input_file = input_file
         self.log = log
-        self.log_path = os.path.dirname(log)
+        self.log_path = os.path.dirname(input_file)
 
         self.energies = None
         self.grads = None
@@ -61,6 +61,7 @@ class Molecule:
 
         self.start_time = None
         self.back_door = None
+        self.mpi_manager = MPIManager()
 
     def get_atoms(self):
         """
@@ -183,6 +184,7 @@ class Molecule:
         Modify coordinates in memory
         """
         coordinates = coordinates.reshape((-1, 3))
+        coordinates = self.mpi_manager.bcast(coordinates)
         natom = self.data['natom']
         coord = np.frombuffer(
             oqp.ffi.buffer(self.xyz, 3 * natom * oqp.ffi.sizeof("double")),
@@ -221,43 +223,46 @@ class Molecule:
         """Deallocate oqp data object"""
         self.data = None
 
-    def from_file(self, filename):
-        """Read calculation parameters from the input config file"""
-        parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA,
-                                 allow_no_value=True)
-        parser.read(filename)
 
-        if self.silent != 1:
-            parser.print_config()
+    def load_config(self, input_source):
+        """
+        Load calculation parameters from a file or a dictionary based on the input type.
 
-        self.config = parser.validate()
+        :param input_source: filename (str) or config dictionary (dict)
+        """
+        self.mpi_manager.set_mpi_comm(self.data)
+
+        if self.mpi_manager.rank == 0:
+            parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
+
+            # Determine the type of the input source and process accordingly
+            if isinstance(input_source, str):  # Assuming input is a filename
+                parser.read(input_source)
+            elif isinstance(input_source, dict):  # Assuming input is a dictionary
+                parser.load_dict(input_source)
+            else:
+                raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
+
+            # Print configuration if not in silent mode
+            if not self.silent:
+                parser.print_config()
+
+            # Validate the configuration and apply it
+            self.config = parser.validate()
+        else:
+            parser = None
+            self.config = None
+        # Broadcast the validated configuration to all ranks
+        self.config = self.mpi_manager.bcast(self.config)
+
+        # Apply the configuration to the data handler
         self.data.apply_config(self.config)
-
+        self.mpi_manager.barrier()
+        # Extract relevant data from the data handler
         self.xyz = self.data._data.xyz
         self.elem = self.data._data.qn
         self.mass = self.data._data.mass
         self.mol_energy = self.data._data.mol_energy
-        self.control = self.data._data.control
-
-        return self
-
-    def from_dict(self, input_dict):
-        """Load calculation parameters from the dict"""
-        parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA,
-                                 allow_no_value=True)
-        parser.load_dict(input_dict)
-
-        if self.silent != 1:
-            parser.print_config()
-
-        self.config = parser.validate()
-        self.data.apply_config(self.config)
-
-        self.xyz = self.data._data.xyz
-        self.elem = self.data._data.qn
-        self.mass = self.data._data.mass
-        self.mol_energy = self.data._data.mol_energy
-        self.control = self.data._data.control
 
         return self
 

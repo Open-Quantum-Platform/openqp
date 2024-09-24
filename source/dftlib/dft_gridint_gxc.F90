@@ -369,6 +369,8 @@ contains
     dat%da => dx
     dat%nMtx = nMtx
 
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
     call run_xc(xc_opts, dat, basis)
 
     deallocate (d2)
