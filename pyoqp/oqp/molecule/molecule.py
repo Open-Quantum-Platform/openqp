@@ -9,7 +9,7 @@ from oqp.utils.input_parser import OQPConfigParser
 from oqp.molden.moldenwriter import MoldenWriter
 from .oqpdata import OQPData, OQP_CONFIG_SCHEMA
 from oqp.utils.mpi_utils import MPIManager
-from oqp.utils.mpi_utils import mpi_get_attr, mpi_write
+from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 class Molecule:
     """
@@ -266,7 +266,7 @@ class Molecule:
 
         return self
 
-    @mpi_write
+    @mpi_dump
     def write_molden(self, filename):
         """Write calculation results in Molden format"""
 
@@ -323,7 +323,7 @@ class Molecule:
 
         return log_c
 
-    @mpi_write
+    @mpi_dump
     def save_data(self):
         """
         Save mol data and computed results to json
@@ -339,7 +339,7 @@ class Molecule:
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
 
-    @mpi_write
+    @mpi_dump
     def save_freqs(self, state):
         jsonfile = self.input_file.replace('.inp', '.hess.json')
         data = {
