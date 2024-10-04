@@ -99,7 +99,16 @@ class Runner:
             test_mod (bool): Flag to run in test mode.
         """
         # Set up logfile
-        self.mol.data["OQP::log_filename"] = self.mol.log
+
+        if self.mpi_manager.rank != 0:
+            if os.name == 'nt':  # Windows
+                log = 'NUL'
+            else:
+                log = '/dev/null'
+        else:
+            log = self.mol.log
+
+        self.mol.data["OQP::log_filename"] = log
 
         # Set up banner
         oqp.oqp_banner(self.mol)
@@ -211,11 +220,7 @@ def main():
     if usempi:
         input_file = mpi_manager.bcast(input_file)
         project_name = mpi_manager.bcast(project_name)
-        if mpi_manager.rank != 0:
-            if os.name == 'nt':  # Windows
-                log = 'NUL'
-            else:
-                log = '/dev/null'
+        log = mpi_manager.bcast(log)
 
     silent = 1 if args.silent else 0
 

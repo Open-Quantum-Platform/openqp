@@ -39,7 +39,7 @@ class Molecule:
         self.project_name = project_name
         self.input_file = input_file
         self.log = log
-        self.log_path = os.path.dirname(input_file)
+        self.log_path = os.path.dirname(log)
         self.energies = None
         self.grads = None
         self.dcm = []  # Nstate, Nstate
@@ -329,10 +329,9 @@ class Molecule:
         Save mol data and computed results to json
         """
         if self.idx != 1:
-            jsonfile = self.input_file.replace('.inp', f'_{self.idx}.json')
+            jsonfile = self.log.replace('.log', f'_{self.idx}.json')
         else:
-            jsonfile = self.input_file.replace('.inp', '.json')
-
+            jsonfile = self.log.replace('.log', '.json')
         data = self.get_data()
         data.update(self.get_results())
 
@@ -341,7 +340,7 @@ class Molecule:
 
     @mpi_dump
     def save_freqs(self, state):
-        jsonfile = self.input_file.replace('.inp', '.hess.json')
+        jsonfile = self.log.replace('.log', '.hess.json')
         data = {
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
@@ -391,7 +390,7 @@ class Molecule:
                 continue
 
     def read_freqs(self):
-        jsonfile = self.input_file.replace('.inp', '.hess.json')
+        jsonfile = self.log.replace('.log', '.hess.json')
 
         if not os.path.exists(jsonfile):
             exit(f'hess file {jsonfile} does not exist')
