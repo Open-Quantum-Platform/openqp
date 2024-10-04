@@ -15,6 +15,11 @@ try:
 except KeyError:
     exit('\nPyQOP: cannot find environment variable $OPENQP_ROOT\n')
 
+try:
+    int(os.environ['OMP_NUM_THREADS'])
+except (KeyError, ValueError):
+    os.environ['OMP_NUM_THREADS'] = '1'
+
 
 def _oqp_wrapper(func):
     """Decorator for OQP library functions"""

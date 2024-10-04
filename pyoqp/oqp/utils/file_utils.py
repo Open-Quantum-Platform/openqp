@@ -7,7 +7,8 @@ import numpy as np
 from oqp.molden.moldenwriter import write_frequency
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR
-from oqp.utils.mpi_utils import MPIManager
+from oqp.utils.mpi_utils import mpi_dump
+
 
 def try_basis(basis, path=None, fallback='6-31g'):
     """try various basis file locations and return the matching one"""
@@ -54,8 +55,8 @@ def how_long(start, end):
         int(((walltime % 86400) % 3600) % 60))
     return walltime
 
-
-def dump_log(mol, title=None, section=None, info=None):
+@mpi_dump
+def dump_log(mol, title=None, section=None, info=None, must_print=False):
     # function to write information to main log
     logfile = mol.log
     method = mol.config['input']['method']
@@ -396,19 +397,23 @@ def dump_log(mol, title=None, section=None, info=None):
         )
 
     if section == 'num_nacv':
-        ndim, dx, restart = info
+        ndim, dx, restart, jobs, nproc, threads = info
         loginfo = """
    PyOQP nac type                  %14s
    PyOQP number of displacements       %14s
    PyOQP size of displacements         %14s
    PyOQP calculation restart           %14s
-
-""" % ('numerical', ndim, dx, restart)
+   PyOQP number of nacme               %14s
+   PyOQP number of processes           %14s
+   PyOQP number of threads             %14s
+   
+""" % ('numerical', ndim, dx, restart, jobs, nproc, threads)
 
     if section == 'nacv_worker':
         order, idx, flag, timing = info
-        start, end = timing
-        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec\n'
+        start, end, rank, threads, host = timing
+        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
+                  f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'nacv':
         atoms = mol.get_atoms()
@@ -452,20 +457,24 @@ def dump_log(mol, title=None, section=None, info=None):
 """ % hess_file
 
     if section == 'num_hess':
-        state, ndim, dx, restart = info
+        state, ndim, dx, restart, jobs, nproc, threads = info
         loginfo = """
    PyOQP hessian type                  %14s
    PyOQP hessian follow state          %14s
    PyOQP number of displacements       %14s
    PyOQP size of displacements         %14s
    PyOQP calculation restart           %14s
+   PyOQP number of grad                %14s
+   PyOQP number of processes           %14s
+   PyOQP number of threads             %14s
 
-""" % ('numerical', state, ndim, dx, restart)
+""" % ('numerical', state, ndim, dx, restart, jobs, nproc, threads)
 
     if section == 'hess_worker':
         order, idx, flag, timing = info
-        start, end = timing
-        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec\n'
+        start, end, rank, threads, host = timing
+        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
+                  f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
         for n, f in enumerate(info):
@@ -569,11 +578,9 @@ def dump_log(mol, title=None, section=None, info=None):
     with open(logfile, mode) as out:
         out.write(loginfo)
 
-
-def dump_data(data, title=None, fpath='.'):
+@mpi_dump
+def dump_data(mol, data, title=None, fpath='.'):
     # function to write data in specific logs
-    mpi_manager = MPIManager()
-    if mpi_manager.rank != 0: return
     if title == 'ENERGY':
         energies, title = data
         filename = 'energies'
@@ -766,36 +773,36 @@ def dump_data(data, title=None, fpath='.'):
 
     if title == 'NUM_NACV':
         order, idx, norm, timing = data
-        start, end = timing
+        start, end, rank, threads, node = timing
 
         if order == 1:
             mode = 'w'
-            status = """%8s %8s %16s %16s
-------------------------------------------------------------
-%8s %8s %16.8f %16d
-""" % ('Step', 'Index', 'Norm', 'Time', order, idx, norm, end - start)
+            status = """%8s %8s %8s %8s %8s %16s %16s
+----------------------------------------------------------------------------------
+%8s %8s %8s %8s %8s %16d %16.8f
+""" % ('Step', 'Index', 'Rank', 'Threads', 'Node', 'Time', 'Norm', order, idx, rank, threads, node, end - start, norm)
 
         else:
             mode = 'a'
-            status = '%8s %8s %16.8f %16d\n' % (order, idx, norm, end - start)
+            status = '%8s %8s %8s %8s %8s %16d %16.8f\n' % (order, idx, rank, threads, node, end - start, norm)
 
         with open(f'{fpath}/nacv.status', mode) as out:
             out.write(status)
 
     if title == 'NUM_HESS':
         order, idx, norm, timing = data
-        start, end = timing
+        start, end, rank, threads, node = timing
 
         if order == 1:
             mode = 'w'
-            status = """%8s %8s %16s %16s
-------------------------------------------------------------
-%8s %8s %16.8f %16d
-""" % ('Step', 'Index', 'Norm', 'Time', order, idx, norm, end - start)
+            status = """%8s %8s %8s %8s %8s %16s %16s
+----------------------------------------------------------------------------------
+%8s %8s %8s %8s %8s %16d %16.8f
+""" % ('Step', 'Index', 'Rank', 'Threads', 'Node', 'Time', 'Norm', order, idx, rank, threads, node, end - start, norm)
 
         else:
             mode = 'a'
-            status = '%8s %8s %16.8f %16d\n' % (order, idx, norm, end - start)
+            status = '%8s %8s %8s %8s %8s %16d %16.8f\n' % (order, idx, rank, threads, node, end - start, norm)
 
         with open(f'{fpath}/hess.status', mode) as out:
             out.write(status)
@@ -840,12 +847,13 @@ def write_grad(atoms, grad):
 
 def write_config(config):
     input_file = ''
-
+    input_dict = {}
     for section in config.keys():
         if section == 'test':
             continue
 
         input_file += f'[{section}]\n'
+        input_dict[section] = {}
         for key, value in config[section].items():
             if not value:
                 continue
@@ -861,9 +869,11 @@ def write_config(config):
                     continue
 
             input_file += f'{key}={value}\n'
+            input_dict[section][key] = str(value)
+
         input_file += '\n'
 
-    return input_file
+    return input_file, input_dict
 
 
 DL_FIND_PARAMS = {

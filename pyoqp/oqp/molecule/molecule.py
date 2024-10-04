@@ -9,6 +9,7 @@ from oqp.utils.input_parser import OQPConfigParser
 from oqp.molden.moldenwriter import MoldenWriter
 from .oqpdata import OQPData, OQP_CONFIG_SCHEMA
 from oqp.utils.mpi_utils import MPIManager
+from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 class Molecule:
     """
@@ -17,6 +18,8 @@ class Molecule:
 
     def __init__(self, project_name, input_file, log,
                  xyz=None, elem=None, mass=None, charge=0, mult=1, silent=0, idx=1):
+        self.mpi_manager = MPIManager()
+        self.usempi = True
         self.silent = silent
         self.idx = idx
 
@@ -36,8 +39,7 @@ class Molecule:
         self.project_name = project_name
         self.input_file = input_file
         self.log = log
-        self.log_path = os.path.dirname(input_file)
-
+        self.log_path = os.path.dirname(log)
         self.energies = None
         self.grads = None
         self.dcm = []  # Nstate, Nstate
@@ -61,7 +63,6 @@ class Molecule:
 
         self.start_time = None
         self.back_door = None
-        self.mpi_manager = MPIManager()
 
     def get_atoms(self):
         """
@@ -179,12 +180,16 @@ class Molecule:
 
         return data
 
+    @mpi_get_attr
+    def get_coord(self, coordinates):
+        return coordinates
+
     def update_system(self, coordinates):
         """
         Modify coordinates in memory
         """
+        coordinates = self.get_coord(coordinates)
         coordinates = coordinates.reshape((-1, 3))
-        coordinates = self.mpi_manager.bcast(coordinates)
         natom = self.data['natom']
         coord = np.frombuffer(
             oqp.ffi.buffer(self.xyz, 3 * natom * oqp.ffi.sizeof("double")),
@@ -223,42 +228,37 @@ class Molecule:
         """Deallocate oqp data object"""
         self.data = None
 
+    @mpi_get_attr
+    def get_config(self, input_source):
+        parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
+
+        # Determine the type of the input source and process accordingly
+        if isinstance(input_source, str):  # Assuming input is a filename
+            parser.read(input_source)
+        elif isinstance(input_source, dict):  # Assuming input is a dictionary
+            parser.load_dict(input_source)
+        else:
+            raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
+
+        # Print configuration if not in silent mode
+        if not self.silent:
+            parser.print_config()
+
+        # Validate the configuration and apply it
+        config = parser.validate()
+
+        return config
 
     def load_config(self, input_source):
         """
         Load calculation parameters from a file or a dictionary based on the input type.
 
-        :param input_source: filename (str) or config dictionary (dict)
+        input_source: filename (str) or config dictionary (dict)
         """
         self.mpi_manager.set_mpi_comm(self.data)
-
-        if self.mpi_manager.rank == 0:
-            parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
-
-            # Determine the type of the input source and process accordingly
-            if isinstance(input_source, str):  # Assuming input is a filename
-                parser.read(input_source)
-            elif isinstance(input_source, dict):  # Assuming input is a dictionary
-                parser.load_dict(input_source)
-            else:
-                raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
-
-            # Print configuration if not in silent mode
-            if not self.silent:
-                parser.print_config()
-
-            # Validate the configuration and apply it
-            self.config = parser.validate()
-        else:
-            parser = None
-            self.config = None
-        # Broadcast the validated configuration to all ranks
-        self.config = self.mpi_manager.bcast(self.config)
-
-        # Apply the configuration to the data handler
+        self.config = self.get_config(input_source)
         self.data.apply_config(self.config)
-        self.mpi_manager.barrier()
-        # Extract relevant data from the data handler
+        self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
         self.elem = self.data._data.qn
         self.mass = self.data._data.mass
@@ -266,6 +266,7 @@ class Molecule:
 
         return self
 
+    @mpi_dump
     def write_molden(self, filename):
         """Write calculation results in Molden format"""
 
@@ -322,6 +323,7 @@ class Molecule:
 
         return log_c
 
+    @mpi_dump
     def save_data(self):
         """
         Save mol data and computed results to json
@@ -330,13 +332,13 @@ class Molecule:
             jsonfile = self.log.replace('.log', f'_{self.idx}.json')
         else:
             jsonfile = self.log.replace('.log', '.json')
-
         data = self.get_data()
         data.update(self.get_results())
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
 
+    @mpi_dump
     def save_freqs(self, state):
         jsonfile = self.log.replace('.log', '.hess.json')
         data = {

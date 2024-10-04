@@ -2,6 +2,8 @@
 
 import os
 import multiprocessing
+from oqp.utils.mpi_utils import MPIManager
+
 
 def check_input_values(config):
     runtype = config['input']['runtype']
@@ -21,10 +23,12 @@ def check_input_values(config):
         'hess': check_hess_input,
         'nacme': check_nacme_input,
         'prop': skip_check,
+        'data': skip_check,
     }
 
     info = f'\nPyOQP checking input\n\n[input] runtype={runtype}'
     check_func[runtype](config, info)
+
 
 def skip_check(config, info):
     pass
@@ -192,11 +196,8 @@ def check_nac_input(config, info):
     td = config['tdhf']['type']
     nproc = config['nac']['nproc']
     ncpu = multiprocessing.cpu_count()
-
-    try:
-        omp = int(os.environ['OMP_NUM_THREADS'])
-    except KeyError:
-        omp = 0
+    mpi = MPIManager().size
+    omp = int(os.environ['OMP_NUM_THREADS'])
 
     info += f'\n[input] method={method}'
 
@@ -206,18 +207,18 @@ def check_nac_input(config, info):
     if method == 'tdhf' and td != 'mrsf':
         exit(f'{info}\nPyOQP: tdhf cannot compute nac for non-mrsf calculations\n')
 
-        info += f'\n[hess] nproc={nproc}'
-
-    if omp > 0 and omp*nproc > ncpu:
+    if MPIManager().use_mpi:
+        info += f'\nMPI process={mpi}'
         info += f'\nOMP_NUM_THREADS={omp}'
-        exit(f'{info}\nPyOQP: nac requested {nproc * omp} cpu, exceeding available {ncpu} cpus')
-
-    if omp == 0 and nproc > 1:
-        info += f'\nOMP_NUM_THREADS not set, using all threads'
-        exit(f'{info}\nPyOQP: nac requested {nproc * ncpu}, exceeding available {ncpu} cpus')
+        print(f'{info}\nPyOQP: nac requested {mpi * omp} cpus! {ncpu} available on a single node')
+    else:
+        info += f'\n[nac] nproc={nproc}'
+        info += f'\nOMP_NUM_THREADS={omp}'
+        print(f'{info}\nPyOQP: nac requested {nproc * omp} cpus! {ncpu} available')
 
     if nproc < 1:
-        exit(f'{info}\nPyOQP: nac requested {nproc} process is illegal ')
+        exit(f'{info}\nPyOQP: nac requested {nproc} process is illegal')
+
 
 def check_soc_input(config, info):
     not_available('soc', info)
@@ -234,11 +235,8 @@ def check_hess_input(config, info):
     nproc = config['hess']['nproc']
     restart = config['hess']['restart']
     ncpu = multiprocessing.cpu_count()
-
-    try:
-        omp = int(os.environ['OMP_NUM_THREADS'])
-    except KeyError:
-        omp = 0
+    mpi = MPIManager().size
+    omp = int(os.environ['OMP_NUM_THREADS'])
 
     info += f'\n[input] method={method}'
     info += f'\n[hess] state={state}'
@@ -250,18 +248,17 @@ def check_hess_input(config, info):
         exit(f'{info}\nPyOQP: tdhf cannot compute hessian for state = 0 \n')
 
     if restart != 'read':
-        info += f'\n[hess] nproc={nproc}'
-
-        if omp > 0 and omp*nproc > ncpu:
+        if MPIManager().use_mpi:
+            info += f'\nMPI process={mpi}'
             info += f'\nOMP_NUM_THREADS={omp}'
-            exit(f'{info}\nPyOQP: hessian requested {nproc * omp} cpu, exceeding available {ncpu} cpus')
-
-        if omp == 0 and nproc > 1:
-            info += f'\nOMP_NUM_THREADS not set, using all threads'
-            exit(f'{info}\nPyOQP: hessian requested {nproc * ncpu}, exceeding available {ncpu} cpus')
+            print(f'{info}\nPyOQP: hessian requested {mpi * omp} cpus! {ncpu} available on a single node')
+        else:
+            info += f'\n[hess] nproc={nproc}'
+            info += f'\nOMP_NUM_THREADS={omp}'
+            print(f'{info}\nPyOQP: hessian requested {nproc * omp} cpus! {ncpu} available')
 
         if nproc < 1:
-            exit(f'{info}\nPyOQP: hessian requested {nproc} process is illegal ')
+            exit(f'{info}\nPyOQP: hessian requested {nproc} process is illegal')
 
 
 def check_nacme_input(config, info):
