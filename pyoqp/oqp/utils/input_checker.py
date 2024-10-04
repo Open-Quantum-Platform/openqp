@@ -193,8 +193,6 @@ def check_nac_input(config, info):
     check_energy_input(config, info)
     check_energy_input(config, info)
     method = config['input']['method']
-    save = config['guess']['save_mol']
-    nac_type = config['nac']['type']
     td = config['tdhf']['type']
     nproc = config['nac']['nproc']
     ncpu = multiprocessing.cpu_count()
@@ -202,9 +200,6 @@ def check_nac_input(config, info):
     omp = int(os.environ['OMP_NUM_THREADS'])
 
     info += f'\n[input] method={method}'
-
-    if nac_type == 'numerical' and not save:
-        exit(f'{info}\nPyOQP: numerical nac requires [guess]save_mol=True\n')
 
     if method == 'hf':
         exit(f'{info}\nPyOQP: scf cannot compute nac for hf calculations\n')
@@ -236,8 +231,6 @@ def check_neb_input(config, info):
 def check_hess_input(config, info):
     check_energy_input(config, info)
     method = config['input']['method']
-    save = config['guess']['save_mol']
-    hess_type = config['hess']['type']
     state = config['hess']['state']
     nproc = config['hess']['nproc']
     restart = config['hess']['restart']
@@ -246,12 +239,7 @@ def check_hess_input(config, info):
     omp = int(os.environ['OMP_NUM_THREADS'])
 
     info += f'\n[input] method={method}'
-    info += f'\n[guess] save_mol={save}'
-    info += f'\n[hess] type={hess_type}'
     info += f'\n[hess] state={state}'
-
-    if hess_type == 'numerical' and not save:
-        exit(f'{info}\nPyOQP: numerical hess requires [guess]save_mol=True\n')
 
     if method == 'hf' and state > 0:
         exit(f'{info}\nPyOQP: scf cannot compute hessian for state > 0\n')

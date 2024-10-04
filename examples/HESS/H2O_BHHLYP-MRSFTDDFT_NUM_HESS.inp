@@ -9,9 +9,6 @@ basis=6-31g(d)
 runtype=hess
 method=tdhf
 
-[guess]
-save_mol=True
-
 [scf]
 type=rohf
 multiplicity=3
