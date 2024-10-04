@@ -6,6 +6,7 @@ Open Quantum Platform (OpenQP) is a quantum chemical platform featuring cutting-
 ### Key Features
 
 - **Autonomous Modules of Quantum Chemistry Theories for Easy Interoperability**
+- **Flexible prototyping through a Python wrapper, PyOQP**
 - **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
 - **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
