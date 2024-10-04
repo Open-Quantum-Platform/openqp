@@ -246,10 +246,10 @@ class SinglePoint(Calculator):
             functional = 'hf'
         basis = self.basis.replace('*', 's')
         if self.mol.idx != 1:
-            guess_file = self.mol.input_file.replace('.inp', '_%s_%s_%s_%s_%s.molden' % (
+            guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s_%s.molden' % (
                 self.mol.idx, cal_type, scf_type, functional, basis))
         else:
-            guess_file = self.mol.input_file.replace('.inp', '_%s_%s_%s_%s.molden' % (
+            guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s.molden' % (
                 cal_type, scf_type, functional, basis))
 
         return guess_file
@@ -536,8 +536,9 @@ class Hessian(Calculator):
 
         # prepare grad calculations
         self.mol.save_data()
+        self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
-        guess_file = self.mol.input_file.replace('.inp', '.json')
+        guess_file = self.mol.log.replace('.log', '.json')
         variables_wrapper = [
             {
                 'idx': idx,
@@ -1025,8 +1026,9 @@ class NAC(Calculator):
 
         # prepare grad calculations
         self.mol.save_data()
+        self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
-        guess_file = self.mol.input_file.replace('.inp', '.json')
+        guess_file = self.mol.log.replace('.log', '.json')
         variables_wrapper = [
             {
                 'idx': idx,

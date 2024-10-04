@@ -113,20 +113,22 @@ class OQPTester:
         Returns:
             Dict[str, Any]: Dictionary containing test results.
         """
-        project = os.path.splitext(os.path.basename(input_file))[0]
-        if self.mpi_manager.rank == 0:
-            log_file = os.path.join(self.output_dir, f"{project}.log")
-        elif os.name == 'nt':
-            log_file = 'NUL'
-        else :
-            log_file = '/dev/null'
+        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        log = os.path.join(self.output_dir, f"{project_name}.log")
 
-        self.log(f"Running test for {project}")
+        usempi = True if self.mpi_manager.use_mpi > 0 else False
+
+        if usempi:
+            input_file = self.mpi_manager.bcast(input_file)
+            project_name = self.mpi_manager.bcast(project_name)
+            log = self.mpi_manager.bcast(log)
+
+        self.log(f"Running test for {project_name}")
 
         result = {
-            "project": project,
+            "project": project_name,
             "input_file": input_file,
-            "log_file": log_file,
+            "log_file": log,
             "status": "UNKNOWN",
             "message": "",
             "execution_time": 0
@@ -134,11 +136,9 @@ class OQPTester:
 
         start_time = time.perf_counter()
         try:
-            usempi = True if self.mpi_manager.use_mpi > 0 else False
-
-            runner = Runner(project=project,
+            runner = Runner(project=project_name,
                             input_file=input_file,
-                            log=log_file,
+                            log=log,
                             silent=1,
                             usempi=usempi)
             runner.run(test_mod=True)
@@ -147,7 +147,7 @@ class OQPTester:
                 result["status"] = "PASSED" if round(diff, 4) == 0 else "FAILED"
                 result["message"] = message
         except Exception as err:
-            self.log(f"Error in test {project}: {str(err)}")
+            self.log(f"Error in test {project_name}: {str(err)}")
             result["status"] = "ERROR"
             result["message"] = f"PyOQP error: {type(err).__name__}"
 

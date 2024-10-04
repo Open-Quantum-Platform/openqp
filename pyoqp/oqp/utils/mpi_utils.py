@@ -136,4 +136,5 @@ def mpi_dump(func):
     def wrapper(mol, *args, **kwargs):
         if MPIManager().rank == 0 or not mol.usempi:
             func(mol, *args, **kwargs)
+
     return wrapper
