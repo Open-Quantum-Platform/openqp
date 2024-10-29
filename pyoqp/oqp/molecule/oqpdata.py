@@ -341,6 +341,9 @@ class OQPData:
         if key in dir(self._data.mpiinfo):
             setattr(self._data.mpiinfo, key, value)
 
+        if key in dir(self._data.elshell):
+            setattr(self._data.elshell, key, value)
+
         if isinstance(value, np.ndarray):
             _value = value
         elif isinstance(value, str):

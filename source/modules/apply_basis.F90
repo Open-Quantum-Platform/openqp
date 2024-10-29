@@ -25,7 +25,7 @@ contains
     use atomic_structure_m, only: atomic_structure
     use strings, only: fstring
     use oqp_tagarray_driver
-    use iso_c_binding, only: c_char
+    use iso_c_binding, only: c_char, c_f_pointer, c_double
     use parallel, only: par_env_t
     implicit none
     type(information), intent(inout) :: infos
@@ -33,6 +33,8 @@ contains
     character(len=:), allocatable :: basis_file
     integer :: iw, i
     logical :: err
+    real(c_double), pointer :: expo_array(:)
+    real(c_double), pointer :: coef_array(:)
   !
   ! Section of Tagarray for the basis filename
   ! We are getting basis file name from Python via tagarray
@@ -76,6 +78,14 @@ contains
                     trim(basis_file), &
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
+    PRINT *, "infos%elshell%num_expo", infos%elshell%num_expo
+    PRINT *, "infos%elshell%id", infos%elshell%id
+    PRINT *, "infos%elshell%ang_mom", infos%elshell%ang_mom
+    call c_f_pointer(infos%elshell%expo, expo_array, [infos%elshell%num_expo])
+    PRINT *, "expo", expo_array
+    call c_f_pointer(infos%elshell%coef, coef_array, [infos%elshell%num_expo])
+    PRINT *, "coef", coef_array
+
 
     close (iw)
 
