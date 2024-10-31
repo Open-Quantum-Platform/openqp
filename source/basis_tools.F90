@@ -1259,7 +1259,14 @@ contains
     call pe%bcast(basis%mxcontr, length)
 
     call pe%bcast(basis%mxam, length)
-
+  if (pe%rank == 0) then
+    print *, "Basis Data After Broadcast:"
+    print *, "Number of shells (nshell): ", basis%nshell
+    print *, "Number of primitives (nprim): ", basis%nprim
+    print *, "Number of basis functions (nbf): ", basis%nbf
+    print *, "Maximum contractions (mxcontr): ", basis%mxcontr
+    print *, "Maximum angular momentum (mxam): ", basis%mxam
+  end if
     if ( pe%rank /= 0) then
       ! Allocate arrays based on the received sizes (on all processes)
       if (.not. allocated(basis%ex)) allocate(basis%ex(basis%nprim))
@@ -1294,7 +1301,21 @@ contains
 
 
     call pe%bcast(basis%naos, basis%nshell)
-
+  if (pe%rank == 0) then
+    print *, "Exponents (ex):", basis%ex
+    print *, "Contraction coefficients (cc):", basis%cc
+    print *, "Basis function norms (bfnrm):", basis%bfnrm
+    print *, "Gaussian offsets (g_offset):", basis%g_offset
+    print *, "Origins (origin):", basis%origin
+    print *, "Angular momentum (am):", basis%am
+    print *, "Number of contractions (ncontr):", basis%ncontr
+    print *, "AO offsets (ao_offset):", basis%ao_offset
+    print *, "Number of AOs per shell (naos):", basis%naos
+    print *, "Atomic max distance squared (at_mx_dist2):", basis%at_mx_dist2
+    print *, "Primitive max distance squared (prim_mx_dist2):", basis%prim_mx_dist2
+    print *, "Shell max distance squared (shell_mx_dist2):", basis%shell_mx_dist2
+    print *, "Shell centers (shell_centers):", basis%shell_centers
+  end if
   end subroutine basis_broadcast
 
 end module

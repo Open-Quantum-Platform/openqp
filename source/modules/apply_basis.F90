@@ -25,16 +25,15 @@ contains
     use atomic_structure_m, only: atomic_structure
     use strings, only: fstring
     use oqp_tagarray_driver
-    use iso_c_binding, only: c_char, c_f_pointer, c_double
+    use iso_c_binding, only: c_char
     use parallel, only: par_env_t
+    use basis_api, only: map_shell2basis_set
     implicit none
     type(information), intent(inout) :: infos
     type(par_env_t) :: pe
     character(len=:), allocatable :: basis_file
     integer :: iw, i
     logical :: err
-    real(c_double), pointer :: expo_array(:)
-    real(c_double), pointer :: coef_array(:)
   !
   ! Section of Tagarray for the basis filename
   ! We are getting basis file name from Python via tagarray
@@ -61,11 +60,13 @@ contains
     write(iw,'(  22X,"Setting up basis set information")')
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    if (pe%rank == 0) then
-      call infos%basis%from_file(basis_file, infos%atoms, err)
-      infos%control%basis_set_issue = err
-    endif
+    call map_shell2basis_set(infos%basis)
+!    if (pe%rank == 0) then
+!      call infos%basis%from_file(basis_file, infos%atoms, err)
+!      infos%control%basis_set_issue = err
+!    endif
   ! Checking error of basis set reading..
+  print *, "No"
     call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call pe%bcast(infos%control%basis_set_issue, 1)
 
@@ -78,14 +79,6 @@ contains
                     trim(basis_file), &
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
-    PRINT *, "infos%elshell%num_expo", infos%elshell%num_expo
-    PRINT *, "infos%elshell%id", infos%elshell%id
-    PRINT *, "infos%elshell%ang_mom", infos%elshell%ang_mom
-    call c_f_pointer(infos%elshell%expo, expo_array, [infos%elshell%num_expo])
-    PRINT *, "expo", expo_array
-    call c_f_pointer(infos%elshell%coef, coef_array, [infos%elshell%num_expo])
-    PRINT *, "coef", coef_array
-
 
     close (iw)
 

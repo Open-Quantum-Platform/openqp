@@ -160,7 +160,7 @@ void oqp_banner(struct oqp_handle_t *inf);
 void apply_basis(struct oqp_handle_t *inf);
 
 void append_shell(struct oqp_handle_t *inf);
-void print_all_shells();
+//void print_all_shells();
 
 void int1e(struct oqp_handle_t *inf);
 
