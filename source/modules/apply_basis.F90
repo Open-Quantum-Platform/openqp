@@ -40,19 +40,19 @@ contains
   !
     character(len=1,kind=c_char), contiguous, pointer :: basis_filename(:)
     character(len=*), parameter :: subroutine_name = "oqp_apply_basis"
-    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
-          OQP_basis_filename /)
-    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
-    call tagarray_get_data(infos%dat, OQP_basis_filename, basis_filename)
-    allocate(character(ubound(basis_filename,1)) :: basis_file)
-    do i = 1, ubound(basis_filename,1)
-       basis_file(i:i) = basis_filename(i)
-    end do
-
-  ! Files open
-  ! 3. LOG: Write: Main output file
-  ! 5. BAS: read: Basis set library (internally)
-
+!    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
+!          OQP_basis_filename /)
+!    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
+!    call tagarray_get_data(infos%dat, OQP_basis_filename, basis_filename)
+!    allocate(character(ubound(basis_filename,1)) :: basis_file)
+!    do i = 1, ubound(basis_filename,1)
+!       basis_file(i:i) = basis_filename(i)
+!    end do
+!
+!  ! Files open
+!  ! 3. LOG: Write: Main output file
+!  ! 5. BAS: read: Basis set library (internally)
+!
     open (newunit=iw, file=infos%log_filename, position="append")
    !
     write(iw,'(/,20x,"++++++++++++++++++++++++++++++++++++++++")')
@@ -76,7 +76,7 @@ contains
                   &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
                   &5X,"Number of Basis Set functions  =",I8/&
                   &5X,"Maximum Angluar Momentum =",I8/)') &
-                    trim(basis_file), &
+!                    trim(basis_file), &
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
 

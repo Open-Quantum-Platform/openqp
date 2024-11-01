@@ -180,6 +180,7 @@ contains
         end do
         call basis%set_bfnorms()
         call basis%normalize_primitives()
+!        call basis%init_shell_centers()
 
 
     end subroutine map_shell2basis_set
