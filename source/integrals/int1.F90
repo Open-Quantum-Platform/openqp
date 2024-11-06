@@ -45,6 +45,7 @@ module int1
 
     private
     public omp_hst
+    public omp_qmmm
     public multipole_integrals
     public electrostatic_potential
     public basis_overlap
@@ -172,6 +173,59 @@ contains
           call print_sym_labeled(z,nbf,basis)
        end if
     end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Driver for conventional ESP QM/MM integrals on a grid around QM atoms
+!
+!> @details  Compute one electron integrals and core Hamiltonian,
+!>  - V is evaluated by Gauss-Rys quadrature, then \f$ h = T+V \f$
+!>  Also, do \f$ L_z \f$ integrals for atoms and linear cases.
+!>  Also, do FMO ESP integrals if needed.
+!>  This subroutine is capable to do integrals in parallel using
+!>  both OpenMP and MPI. It it helpful when running large FMO jobs.
+!
+!> @note Based on `HSANDT` subroutine from file `INT1.SRC`
+!
+!> @author Miquel Huix-Rotllant
+!
+!   REVISION HISTORY:
+!> @date _Jul, 2024_ Initial release
+!>
+!> @param[in]       i       QM center index
+!> @param[in]       ttt     ESP integral weight
+!> @param[in,out]   chg_op  one-electron ESP atomic charge operator in packet format
+ subroutine omp_qmmm(basis, i, coord, ttt, chg_op, nat, logtol)
+
+    use precision, only: dp
+    use basis_tools, only: basis_set
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), ttt(:,:)
+    real(real64), contiguous, intent(inout) :: chg_op(:)
+    real(real64), optional, intent(in) :: logtol
+    integer, intent(in) :: i, nat
+    real(real64) :: tol
+
+    integer :: l1, l2
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = log(10.0_dp)*20
+    end if
+
+!   Exclude 1e potential in ESDIM, because density is used,
+!   not point charges
+
+    l1 = basis%nbf
+    l2 = l1*(l1+1)/2
+
+    chg_op(:)=0
+    call nuc_ints(basis, coord, ttt(i,:), chg_op(:), tol)
+    call bas_norm_matrix(chg_op(:), basis%bfnrm, l1)
 
  end subroutine
 
@@ -726,7 +780,7 @@ contains
 
     call cntp%alloc(basis)
 
-!   I shell
+!  I shell
     do ii = basis%nshell, 1, -1
 
         call shi%fetch_by_id(basis, ii)
@@ -1009,6 +1063,39 @@ contains
 
     DO ig = 1, cntp%numpairs
         CALL comp_kin_ovl_int1_prim(cntp, ig, dokinetic, sblk, tblk)
+    END DO
+
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of Coulomb 1e integrals
+!> @param[in]       cntp        shell pair data
+!> @param[in]       xyz         coordinates of particles
+!> @param[in]       c           charges of particles
+!> @param[in]       nat         number of particles
+!> @param[in]       chgtol      cut-off for charge
+!> @param[inout]    blk         block of 1e Coulomb integrals
+!
+!> @author   Miquel Huix-Rotllant
+!
+!     REVISION HISTORY:
+!> @date _Jul, 2024_ Initial release
+!
+ SUBROUTINE int1_coul_xyz_u(cntp, xyz, c, blk)
+!dir$ attributes inline :: int1_coulxyz_u
+    TYPE(shpair_t), INTENT(IN) :: cntp
+    REAL(REAL64), CONTIGUOUS, INTENT(IN) :: xyz(:)
+    REAL(REAL64), INTENT(IN) :: c
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:)
+
+    INTEGER :: ig
+
+!dir$ assume_aligned blk : 64
+
+!   Interaction with point charge
+    DO ig = 1, cntp%numpairs
+        CALL comp_coulomb_int1_prim(cntp, ig, xyz, -c, blk)
     END DO
 
  END SUBROUTINE

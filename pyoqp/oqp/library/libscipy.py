@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sc
 from oqp.library.single_point import SinglePoint, Gradient, LastStep
 from oqp.utils.file_utils import dump_log, dump_data
-
+import oqp.utils.qmmm as qmmm
 
 class Optimizer:
     """
@@ -925,3 +925,124 @@ def ReLU(x, y):
         return x
     else:
         return 0
+
+class QMMMOpt(Optimizer):
+    """
+    OQP QM/MM optimization class
+
+    """
+
+    def __init__(self, mol):
+        super().__init__(mol)
+        self.mol = mol
+        self.metrics['radius'] = 0
+        self.metrics['distance'] = 0
+        self.metrics['step_size'] = self.step_size
+        self.metrics['step_tol'] = self.step_tol
+        self.ref_coord,self.mass,self.natom,self.atoms = qmmm.openmm_info()
+        self.pre_coord = self.ref_coord
+        self.tmass = np.sum(self.mass)
+        self.init_energy = 0
+        self.last_energy = 0
+        self.init_xyz = None
+        self.last_xyz = None
+        self.last_radius = 0
+        self.opt_status = 0
+        self.message = 'not converged'
+
+        if not self.mol.config['input']['qmmm_flag']:
+           exit(f"QM/MM optimizations require an active qmmm_flag")
+
+    def one_step(self, coordinates):
+        # add iteration
+        self.itr += 1
+
+        dump_log(self.mol, title='PyOQP: QM/MM Geometry Optimization Step %s' % self.itr)
+
+
+        # update coordinates
+        qmmm.openmm_update_system(coordinates)
+        current_xyz=coordinates.reshape((-1,3))
+#       for i in qmmm.qm_atoms:
+#           coordinates_qm=np.append(coordinates_qm,current_xyz[i][0])
+#           coordinates_qm=np.append(coordinates_qm,current_xyz[i][1])
+#           coordinates_qm=np.append(coordinates_qm,current_xyz[i][2])
+
+        num_atoms, x, y, z, q, mass = qmmm.openmm_system()
+        coordinates_qm=np.array(x + y + z).reshape((3, num_atoms)).T.reshape(-1)
+
+        self.mol.update_system(coordinates_qm)
+
+        # compute 1e integral
+        if self.itr == 1:
+            do_init_scf = True
+        else:
+            do_init_scf = self.init_scf
+            oqp.library.ints_1e(self.mol)
+
+        # compute energy
+        energies = self.sp.energy(do_init_scf=do_init_scf)
+
+        # compute QM/MM gradient
+        current_xyz = self.mol.get_system().reshape((-1, 3))
+        gradient_qm,gradient_mm=qmmm.openmm_gradient(current_xyz,self.mol.data["OQP::partial_charges"])
+        self.mol.data["OQP::mm_gradient"]=np.transpose(gradient_qm).tolist()
+
+        self.grad.grads = [self.istate]
+        grads = self.grad.gradient()
+        self.mol.energies = energies
+        self.mol.grads = grads
+
+        qmmm.gradient_qmmm=qmmm.form_gradient_qmmm(grads,gradient_mm)
+
+        # flatten data
+        energy = energies[self.istate]
+        grad = qmmm.gradient_qmmm.reshape(-1)
+
+        # evaluate metrics
+        de = energy - self.pre_energy
+        rmsd_step = np.mean((coordinates - self.pre_coord) ** 2) ** 0.5
+        max_step = np.amax(np.abs(coordinates - self.pre_coord))
+        rmsd_grad = np.mean(grad ** 2) ** 0.5
+        max_grad = np.amax(np.abs(grad))
+        self.metrics['itr'] = self.itr
+        self.metrics['de'] = de
+        self.metrics['rmsd_step'] = rmsd_step
+        self.metrics['max_step'] = max_step
+        self.metrics['rmsd_grad'] = rmsd_grad
+        self.metrics['max_grad'] = max_grad
+
+        # store energy and coordinates
+        self.pre_energy = energy
+        self.pre_coord = coordinates.copy()
+        dump_data((self.itr, self.atoms, coordinates, energy, de, rmsd_step, max_step, rmsd_grad, max_grad),
+                  title='QM/MM OPTIMIZATION', fpath=self.mol.log_path)
+
+        return energy, grad
+
+    def check_convergence(self):
+        # write convergence to log
+        dump_log(
+            self.mol, title='Geometry Optimization Convergence %s' % self.itr,
+            section='QM/MM', info=self.metrics
+        )
+
+        if np.abs(self.metrics['de']) <= self.energy_shift and \
+                self.metrics['rmsd_step'] <= self.rmsd_step and \
+                self.metrics['max_step'] <= self.rmsd_step and \
+                self.metrics['rmsd_grad'] <= self.rmsd_grad and \
+                self.metrics['max_grad'] <= self.max_grad and \
+                self.metrics['radius'] > self.step_tol:
+            dump_log(self.mol, title='PyOQP: Geometry Optimization Has Converged')
+            self.opt_status = 1
+            self.message = 'converged'
+            raise StopIteration
+
+        else:
+            if self.itr == self.maxit:
+                dump_log(self.mol,
+                         title='PyOQP: Geometry Optimization Has Not Converged. Reached The Maximum Iteration')
+                raise StopIteration
+
+
+

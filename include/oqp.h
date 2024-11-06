@@ -77,7 +77,7 @@ struct dft_parameters {
     bool dft_wt_der;
 };
 
- struct tddft_parameters {
+struct tddft_parameters {
     int64_t nstate;
     int64_t target_state;
     int64_t maxvec;
@@ -123,6 +123,7 @@ struct control_parameters {
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
+    bool     qmmm_flag;
 };
 
 struct mpi_communicator {

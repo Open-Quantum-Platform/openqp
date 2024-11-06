@@ -5,6 +5,7 @@ import numpy as np
 from oqp import ffi, lib
 from oqp.periodic_table import MASSES, SYMBOL_MAP
 from oqp.utils.constants import ANGSTROM_TO_BOHR
+import oqp.utils.qmmm as qmmm
 
 
 def sarray(strng):
@@ -44,6 +45,12 @@ def path(strng):
 
 
 OQP_CONFIG_SCHEMA = {
+    'qmmm': {
+        'forcefield': {'type': sarray, 'default': 'amber14.xml,amber14/tip3p.xml'},
+        'nonbondedmethod': {'type': str, 'default': 'NoCutoff'},
+        'constraints': {'type': str, 'default': 'None'},
+        'rigidwater': {'type': bool, 'default': 'False'},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': ''},
@@ -53,6 +60,7 @@ OQP_CONFIG_SCHEMA = {
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
+        'qmmm_flag': {'type': bool, 'default': 'False'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -205,6 +213,7 @@ class OQPData:
             "functional": "set_dft_functional",
             "system": "set_system",
             "system2": "set_system2",
+            "qmmm_flag": "set_qmmm_flag",
         },
         "guess": {
         },
@@ -259,6 +268,12 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
+        },
+        "qmmm": {
+            "forcefield": "set_qmmm_forcefield",
+            "nonbondedmethod": "set_qmmm_nonbondedmethod",
+            "constraints": "set_qmmm_constraints",
+            "rigidwater": "set_qmmm_rigidwater",
         },
     }
     _typemap = [np.void,
@@ -448,6 +463,26 @@ class OQPData:
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
+
+    def set_qmmm_flag(self, qmmm_flag):
+        """Handle QM/MM calculation type"""
+        self._data.control.qmmm_flag=qmmm_flag
+
+    def set_qmmm_forcefield(self, forcefield):
+        """Handle QM/MM calculation forcefield"""
+        qmmm.force_field = forcefield
+
+    def set_qmmm_rigidwater(self, rigidwater):
+        """Handle QM/MM calculation rigidWater"""
+        qmmm.rigidWater = rigidwater
+
+    def set_qmmm_nonbondedmethod(self, nonbondedmethod):
+        """Handle QM/MM calculation nonbondedMethod"""
+        qmmm.nonbondedMethod = nonbondedmethod
+
+    def set_qmmm_constraints(self, constraints):
+        """Handle QM/MM calculation constraints"""
+        qmmm.contraints = constraints
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
@@ -699,8 +734,10 @@ def compute_alpha_beta_electrons(n_e, mult):
 
 
 def read_system(system):
-    system = system.split("\n")
-    if system[0]:
+    system0 = system
+    system = system.split()
+    """Set up atomic data"""
+    if system[0].lower().endswith('.xyz'):
         if not os.path.exists(system[0]):
             raise FileNotFoundError("XYZ file %s is not found!" % system[0])
 
@@ -709,22 +746,57 @@ def read_system(system):
 
         num_atoms = int(system[0])
         system = system[2: 2 + num_atoms]
+        atoms = []
+        for i, line in enumerate(system):
+            line = line.split()
+            if len(line) >= 4:
+                atoms.append(line[0: 4])
+            else:
+                print(f"{system[i]} is not valid line for atom configuration!")
+
+        q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
+        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+    elif system[0].lower().endswith('.pdb'):
+
+        if not os.path.exists(system[0]):
+            raise FileNotFoundError("PDB file %s is not found!" % system[0])
+        qmmm.pdb_file=system[0]
+
+        atom_list = []
+        for i in system[1:]:
+           if i.find('-') != -1:
+              start, end = map(int, i.split('-'))
+              atom_list.extend(list(range(start, end + 1)))
+           else:
+              atom_list.append(int(i))
+
+        if len(atom_list) != len(set(atom_list)):
+           raise ValueError("Repeated entries in QM atom list")
+
+        if any(value < 0 for value in atom_list):
+           raise ValueError("Negative indexes are not allowed in QM atom list")
+
+        qmmm.qm_atoms,qmmm.pdb0,qmmm.forcefield0,qmmm.system0=qmmm.openmm_init(atom_list=atom_list)
+        num_atoms, x, y, z, q, mass = qmmm.openmm_system()
     else:
+        system = system0.split("\n")
         system = system[1:]
         num_atoms = len(system)
+        atoms = []
+        for i, line in enumerate(system):
+            line = line.split()
+            if len(line) >= 4:
+                atoms.append(line[0: 4])
+            else:
+                print(f"{system[i]} is not valid line for atom configuration!")
 
-    atoms = []
-    for i, line in enumerate(system):
-        line = line.split()
-        if len(line) >= 4:
-            atoms.append(line[0: 4])
-        else:
-            print(f"{system[i]} is not valid line for atom configuration!")
-
-    q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
-    x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+        q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
+        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass

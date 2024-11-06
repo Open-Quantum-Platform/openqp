@@ -149,6 +149,7 @@ contains
     use constants, only: tol_int
     use grd1, only: eijden, grad_nn, grad_ee_overlap, &
             grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
+    use qmmm_mod, only: grad_esp_qmmm
 
     implicit none
 
@@ -210,6 +211,9 @@ contains
 
 !     Pulay force
       call grad_en_pulay(basis, xyz, zn, dens, grad, logtol=tol)
+
+!     QM/MM force
+      if(infos%control%qmmm_flag) call grad_esp_qmmm(infos, dens, grad,logtol=tol)
 
     end associate
 

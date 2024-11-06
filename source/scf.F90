@@ -31,6 +31,7 @@ contains
      use basis_tools, only: basis_set
      use scf_converger, only: scf_conv_result, scf_conv, &
              conv_cdiis, conv_ediis
+     use qmmm_mod, only: get_mm_energy,form_esp_charges,print_mm_energy
 
      implicit none
 
@@ -41,7 +42,7 @@ contains
      type(dft_grid_t), intent(in) :: molGrid
      integer :: i, ii, iter, nschwz, nbf, nbf_tri, nbf2, ok, maxit
      real(kind=dp) :: ehf, ehf1, nenergy, etot, diffe, e_old, psinrm, &
-                 scalefactor,vne, vnn, vee, vtot, virial, tkin
+                 scalefactor,vne, vnn, vee, vtot, virial, tkin, emm
      real(kind=dp), allocatable :: tempvec(:), lwrk(:), lwrk2(:)
      real(kind=dp), allocatable, target :: smat_full(:,:), pdmat(:,:), pfock(:,:), rohf_bak(:)
      real(kind=dp), allocatable, target :: dold(:,:), fold(:,:)
@@ -170,6 +171,9 @@ contains
        call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
        call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
      endif
+
+! Compute the (fixed) classical MM contribution to energy if QM/MM run (otherwise emm=0.0d0)
+     call get_mm_energy(infos,emm)
 
      allocate(smat_full(nbf,nbf), pdmat(nbf_tri,nfocks), pfock(nbf_tri,nfocks), &
               qmat(nbf,nbf), &
@@ -379,6 +383,9 @@ contains
           etot = etot + eexc
         end if
 
+!Adding MM energy
+        if(infos%control%qmmm_flag) etot = etot + emm
+
   !     Forming ROHF Fock by combing Alpha and Beta Focks.
         if (scf_type == scf_rohf) then
            rohf_bak = pfock(:,1)
@@ -544,6 +551,15 @@ contains
        mo_b = mo_a
        mo_energy_b = mo_energy_a
      end select
+
+  !  Construct ESPF partial charges and print MM energy in output (only done if QM/MM run)
+     select case (scf_type)
+     case (scf_rhf)
+       call form_esp_charges(infos,dmat_a,nbf)
+     case (scf_uhf,scf_rohf)
+       call form_esp_charges(infos,dmat_a+dmat_b,nbf)
+     end select
+     call print_mm_energy(infos)
 
   !  Print out the molecular orbitals
      call print_mo_range(basis, infos, mostart=1, moend=nbf)

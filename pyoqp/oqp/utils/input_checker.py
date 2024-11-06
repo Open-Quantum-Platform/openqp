@@ -2,6 +2,7 @@
 
 import os
 import multiprocessing
+import oqp.utils.qmmm as qmmm
 from oqp.utils.mpi_utils import MPIManager
 
 
@@ -22,6 +23,7 @@ def check_input_values(config):
         'neb': check_optimize_input,
         'hess': check_hess_input,
         'nacme': check_nacme_input,
+        'qmmm': check_qmmm_input,
         'prop': skip_check,
         'data': skip_check,
     }
@@ -263,3 +265,8 @@ def check_hess_input(config, info):
 
 def check_nacme_input(config, info):
     check_energy_input(config, info)
+
+def check_qmmm_input(config, info):
+    if not config['input']['qmmm_flag']:
+       exit(f'{info}\nPyOQP: QM/MM group reguires qmmm_flag=True in input group.')
+

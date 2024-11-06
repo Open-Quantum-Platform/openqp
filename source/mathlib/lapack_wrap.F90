@@ -85,6 +85,92 @@ contains
 
   end subroutine
 
+!MHR START
+!----------------------------------------------------------------------
+!> Compute the inverse of a real matrix using LAPACK routine dgetri.
+!! @param n       Size of the matrix.
+!! @param a       On entry, the matrix to be inverted. On exit, the inverted
+!matrix.
+!! @param lda     Leading dimension of the array `a`.
+!! @param ipiv    Integer array of size `n` containing pivot indices computed by
+!dgetrf.
+!! @param work    Workspace array of size `lwork`.
+!! @param lwork   Size of the workspace array.
+!! @param info    On exit, info = 0 for successful exit. If info = -i, the i-th
+!argument had an illegal value.
+subroutine oqp_dgetri_i64(n, a, lda, ipiv, work, lwork, info)
+    integer :: n, lda, ipiv(:), lwork, info
+    real(dp) :: a(lda,*), work(lwork)
+    integer(blas_int) :: n_, lda_, lwork_, info_
+    logical :: ok
+    ! Check arguments
+    if (ARG_CHECK) then
+        ok = .true.
+        ! Check if the size of n, lda, and lwork is within acceptable bounds
+        ok = ok .and. (n <= HUGE_BLAS_INT)
+        ok = ok .and. (lda <= HUGE_BLAS_INT)
+        ok = ok .and. (lwork <= HUGE_BLAS_INT)
+        ! If any of the arguments are invalid, display error message and abort
+        if (.not. ok) call show_message(ERRMSG, WITH_ABORT)
+    end if
+    ! Convert integer arguments to blas_int type
+    n_ = int(n, blas_int)
+    lda_ = int(lda, blas_int)
+    lwork_ = int(lwork, blas_int)
+    ! Call LAPACK routine dgetri to compute the inverse of the matrix
+    call dgetri(n_, a, lda_, ipiv, work, lwork_, info_)
+    ! Assign the output info_ to the info argument
+    info = info_
+end subroutine
+!> LU factorization of a general matrix using LAPACK routine dgetrf.
+!! This subroutine computes the LU factorization of a general M-by-N matrix A
+!using partial pivoting with row interchanges.
+!! The factorization has the form:
+!!     A = P * L * U
+!! where P is a permutation matrix, L is lower triangular with unit diagonal
+!elements (lower trapezoidal if m > n),
+!! and U is upper triangular (upper trapezoidal if m < n).
+!! This subroutine overwrites the input matrix A with its factors L and U.
+!! @param m       Number of rows in the matrix A.
+!! @param n       Number of columns in the matrix A.
+!! @param a       On entry, the matrix to be factorized. On exit, the factors L
+!and U.
+!! @param lda     Leading dimension of the array `a`, must be at least max(1,m).
+!! @param ipiv    Integer array of dimension at least min(m,n) containing the
+!pivot indices.
+!! @param info    On exit, info = 0 for successful exit. If info = -i, the i-th
+!argument had an illegal value.
+subroutine oqp_dgetrf_i64(m, n, a, lda, ipiv, info)
+    integer :: m, n, lda, ipiv(min(m,n)), info
+    real(dp) :: a(lda,*)
+    integer(blas_int) :: m_, n_, lda_, info_
+    integer(blas_int), allocatable :: ipiv_(:)
+    logical :: ok
+    ! Check arguments
+    if (ARG_CHECK) then
+        ok = .true.
+        ! Check if the size of m, n, and lda is within acceptable bounds
+        ok = ok .and. (m <= HUGE_BLAS_INT)
+        ok = ok .and. (n <= HUGE_BLAS_INT)
+        ok = ok .and. (lda <= HUGE_BLAS_INT)
+        ! If any of the arguments are invalid, display error message and abort
+        if (.not. ok) call show_message(ERRMSG, WITH_ABORT)
+    end if
+    ! Convert integer arguments to blas_int type
+    m_ = int(m, blas_int)
+    n_ = int(n, blas_int)
+    lda_ = int(lda, blas_int)
+    ! Allocate memory for 'ipiv_' and copy 'ipiv' to it
+    allocate(ipiv_(min(m_,n_)))
+    ipiv_ = int(ipiv, blas_int)
+    ! Call LAPACK routine dgetrf to perform LU factorization
+    call dgetrf(m_, n_, a, lda_, ipiv_, info_)
+    ! Assign the output info_ to the info argument
+    info = info_
+    ! Free allocated memory
+end subroutine oqp_dgetrf_i64
+!MHR END
+
 !----------------------------------------------------------------------
 
   subroutine oqp_dsysv_i64(uplo, n, nrhs, a, lda, ipiv, b, ldb, work, lwork, info)
@@ -288,48 +374,6 @@ contains
     info = info_
 
   end subroutine
-
-!----------------------------------------------------------------------
-
-!> Compute the inverse of a real matrix using LAPACK routine dgetri.
-!! @param n       Size of the matrix.
-!! @param a       On entry, the matrix to be inverted. On exit, the inverted matrix.
-!! @param lda     Leading dimension of the array `a`.
-!! @param ipiv    Integer array of size `n` containing pivot indices computed by dgetrf.
-!! @param work    Workspace array of size `lwork`.
-!! @param lwork   Size of the workspace array.
-!! @param info    On exit, info = 0 for successful exit. If info = -i, the i-th argument had an illegal value.
-subroutine oqp_dgetri_i64(n, a, lda, ipiv, work, lwork, info)
-    integer :: n, lda, ipiv(:), lwork, info
-    real(dp) :: a(lda,*), work(lwork)
-
-    integer(blas_int) :: n_, lda_, lwork_, info_
-    logical :: ok
-
-    ! Check arguments
-    if (ARG_CHECK) then
-        ok = .true.
-
-        ! Check if the size of n, lda, and lwork is within acceptable bounds
-        ok = ok .and. (n <= HUGE_BLAS_INT)
-        ok = ok .and. (lda <= HUGE_BLAS_INT)
-        ok = ok .and. (lwork <= HUGE_BLAS_INT)
-
-        ! If any of the arguments are invalid, display error message and abort
-        if (.not. ok) call show_message(ERRMSG, WITH_ABORT)
-    end if
-
-    ! Convert integer arguments to blas_int type
-    n_ = int(n, blas_int)
-    lda_ = int(lda, blas_int)
-    lwork_ = int(lwork, blas_int)
-
-    ! Call LAPACK routine dgetri to compute the inverse of the matrix
-    call dgetri(n_, a, lda_, ipiv, work, lwork_, info_)
-
-    ! Assign the output info_ to the info argument
-    info = info_
-end subroutine
 
 !----------------------------------------------------------------------
 

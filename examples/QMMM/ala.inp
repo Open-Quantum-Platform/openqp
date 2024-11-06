@@ -1,0 +1,19 @@
+[input]
+system=ala.pdb 9 10 17 18 19
+charge=0
+runtype=energy
+functional=bhhlyp
+basis=6-31gs
+method=hf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[dftgrid]
+rad_type=becke
+
