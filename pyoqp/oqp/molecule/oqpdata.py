@@ -46,7 +46,7 @@ def path(strng):
 
 OQP_CONFIG_SCHEMA = {
     'qmmm': {
-        'forcefield': {'type': sarray, 'default': 'amber14.xml,amber14/tip3p.xml'},
+        'forcefield': {'type': sarray, 'default': 'amber14-all.xml,amber14/tip3p.xml'},
         'nonbondedmethod': {'type': str, 'default': 'NoCutoff'},
         'constraints': {'type': str, 'default': 'None'},
         'rigidwater': {'type': bool, 'default': 'False'},
