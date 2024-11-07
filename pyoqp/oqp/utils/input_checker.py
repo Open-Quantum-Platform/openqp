@@ -16,7 +16,6 @@ def check_input_values(config):
         'bp': check_nac_input,
         'soc': check_soc_input,
         'optimize': check_optimize_input,
-        'md': check_md_input,
         'meci': check_optimize_input,
         'mecp': check_optimize_input,
         'mep': check_optimize_input,
@@ -38,9 +37,6 @@ def skip_check(config, info):
 
 def not_available(func_name, info):
     exit(f'{info}\nPyOQP: runtype {func_name} is not available yet\n')
-
-def check_md_input(config, info):
-    if not config['input']['qmmm_flag']: exit(f"MD is only available for QM/MM")
 
 def check_scf_input(config, info):
     scf_type = config['scf']['type']

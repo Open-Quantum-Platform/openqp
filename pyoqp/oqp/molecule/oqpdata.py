@@ -50,9 +50,6 @@ OQP_CONFIG_SCHEMA = {
         'nonbondedmethod': {'type': str, 'default': 'NoCutoff'},
         'constraints': {'type': str, 'default': 'None'},
         'rigidwater': {'type': bool, 'default': 'False'},
-        'nsteps': {'type': int, 'default': '1'},
-        'timestep': {'type': int, 'default': '1'},
-        'istate': {'type': int, 'default': '0'},
     },
     'input': {
         'charge': {'type': int, 'default': '0'},
@@ -277,9 +274,6 @@ class OQPData:
             "nonbondedmethod": "set_qmmm_nonbondedmethod",
             "constraints": "set_qmmm_constraints",
             "rigidwater": "set_qmmm_rigidwater",
-            "nsteps": "set_qmmm_nsteps",
-            "timestep": "set_qmmm_timestep",
-            "istate": "set_qmmm_istate",
         },
     }
     _typemap = [np.void,
@@ -489,18 +483,6 @@ class OQPData:
     def set_qmmm_constraints(self, constraints):
         """Handle QM/MM calculation constraints"""
         qmmm.contraints = constraints
-
-    def set_qmmm_nsteps(self, nsteps):
-        """Handle QM/MM calculation constraints"""
-        qmmm.nSteps = nsteps 
-
-    def set_qmmm_timestep(self, timestep):
-        """Handle QM/MM calculation constraints"""
-        qmmm.timeStep = timestep 
-
-    def set_qmmm_istate(self, istate):
-        """Handle QM/MM calculation istate"""
-        qmmm.istate = istate 
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""

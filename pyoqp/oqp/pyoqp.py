@@ -14,7 +14,7 @@ from oqp.utils.file_utils import dump_log
 from oqp.utils.input_checker import check_input_values
 from oqp.molecule import Molecule
 from oqp.library.runfunc import (
-   compute_energy, compute_grad, compute_nac, compute_soc, compute_geom, compute_md,
+   compute_energy, compute_grad, compute_nac, compute_soc, compute_geom,
    compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo
 )
 from oqp.utils.mpi_utils import MPIManager
@@ -61,7 +61,6 @@ class Runner:
             'meci': compute_geom,
             'mecp': compute_geom,
             'mep': compute_geom,
-            'md': compute_md,
             'ts': compute_geom,
             'hess': compute_hess,
             'thermo': compute_thermo,

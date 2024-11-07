@@ -11,10 +11,6 @@ nonbondedMethod = None
 constraints = None
 rigidWater = False
 
-nSteps = 1
-timeStep = 1
-istate = 0
-
 # List of QM atoms (defined in OQP)
 qm_atoms = np.array((),dtype=np.uint64)
 
