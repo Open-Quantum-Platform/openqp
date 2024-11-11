@@ -107,6 +107,19 @@ For OpenMP and MPI run:
 ```bash
 mpirun -np number_of_mpi openqp any_example_file.inp
 ```
+**Quick Start Guide for Using the OpenQP Docker Image**
+
+#### 1. Pull and Run Docker Image
+```bash
+docker pull openqp/openqp:new
+docker run -it -v /path/to/local/files:/data openqp/openqp:new 
+```
+
+#### 2. Running OpenQP
+Inside the container:
+```bash
+openqp /data/input_file.inp
+```
 
 ### Detailed Documentation
 
