@@ -791,8 +791,6 @@ def form_gradient_qmmm(gradient_qm,gradient_mm):
 
 # Form the final QM/MM gradient
    qmmm_gradient=np.zeros((num_real_particles,3),dtype=np.float64)
-#  for i in qm_atoms:
-#     qmmm_gradient[i,:]=gradient_qm[0,np.where(i == qm_atoms)[0][0],:]
    for i in range(num_real_particles):
       if i not in qm_atoms:
          qmmm_gradient[i,:]=gradient_mm[i,:]
