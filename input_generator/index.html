@@ -188,7 +188,7 @@
 
             <!-- System Name -->
             <label for="systemName">Project Name:</label>
-            <input type="text" id="systemName" placeholder="Enter system name (default: geo)" oninput="updateInputPreview()">
+            <input type="text" id="systemName" placeholder="Enter system name (default: geo)" oninput="updateInputPreview()" >
 
             <!-- Calculation Template Selection -->
             <label for="calcType">Calculation Template:</label>
@@ -1025,13 +1025,32 @@
 
         </div>
 
-            <!-- Right Panel: Real-Time Input Preview and Save Button -->
-            <div class="panel right-panel">
-                <h2>Generated Input</h2>
-                <textarea id="inputPreview" contenteditable="true">
-# OpenQP Input Preview
-                </textarea>
-                <button type="button" onclick="saveAndDownloadFiles()">Save Input & Geometry</button>
+        <!-- Right Panel: Real-Time Input Preview and Save Button -->
+        <div class="panel right-panel">
+            <h2>Generated Input</h2>
+            <textarea id="inputPreview" contenteditable="true">
+ # OpenQP Input Preview
+            </textarea>
+            <button type="button" onclick="saveAndDownloadFiles()">Save Input & Geometry</button>
+            <div style="margin-top: 1.5em;">
+                <h3>Useful Links</h3>
+                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                    <li style="margin-bottom: 0.5em;">
+                        <a href="https://github.com/Open-Quantum-Platform/openqp.git" target="_blank" style="color: #1d3557; text-decoration: none; font-weight: 500;">
+                            OpenQP Source Code
+                        </a>
+                    </li>
+                    <li style="margin-bottom: 0.5em;">
+                        <a href="https://github.com/Open-Quantum-Platform/openqp/wiki" target="_blank" style="color: #1d3557; text-decoration: none; font-weight: 500;">
+                            OpenQP Documentation Wiki
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://www.openqp.org/" target="_blank" style="color: #1d3557; text-decoration: none; font-weight: 500;">
+                            OpenQP Webpage
+                        </a>
+                    </li>
+                </ul>
             </div>
         </div>
 
@@ -1374,6 +1393,7 @@ max_grad=1e-3
 
                 reader.onload = function(event) {
                     geometryTextarea.value = event.target.result.trim();
+                    updateInputPreview(); 
                 };
 
                 reader.readAsText(file);
