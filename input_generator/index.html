@@ -12,160 +12,207 @@
         <title>OpenQP Input Generator</title>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-            body {
-                font-family: 'Roboto', sans-serif;
-                margin: 0;
-                height: 100vh;
-                display: flex;
-                flex-direction: column;
-                background: #ffffff;
-                color: #333333;
-            }
-    
-            header {
-                padding: 1.5em 2em;
-                background: linear-gradient(135deg, #2c3e50, #34495e);
-                color: #ffffff;
-                text-align: center;
-                border-bottom: 3px solid #bdc3c7;
-                box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-            }
-    
-            header h1 {
-                font-size: 2.5rem;
-                font-weight: 700;
-                margin: 0;
-                text-transform: uppercase;
-                letter-spacing: 0.08em;
-            }
-    
-            header p {
-                margin: 0.5em 0 0;
-                font-size: 1.1rem;
-                font-weight: 400;
-                opacity: 0.9;
-            }
-    
+        * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Source Sans Pro', Arial, sans-serif;
+            line-height: 1.6;
+            color: #2d3748;
+            background: #f4f5f7;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header Styles */
+        header {
+            background: #1a202c;
+            color: #ffffff;
+            text-align: center;
+            padding: 1rem 0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-bottom: 3px solid #2b6cb0;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        header p {
+            font-size: 1rem;
+            margin-top: 0.4rem;
+            opacity: 0.9;
+        }
+
+        /* Main Layout */
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            max-width: 1200px;
+            margin: 1.5rem auto;
+            padding: 0 1rem;
+        }
+
+        .panel {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            padding: 1rem 1.5rem;
+            min-width: 300px;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        /* Headings */
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #2b6cb0;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+        }
+
+        /* Form Elements */
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            background: #f7fafc;
+            color: #2d3748;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+            font-family: 'Courier New', monospace;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            border-color: #3182ce;
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.3);
+        }
+
+        /* Buttons */
+        button {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #ffffff;
+            background: #3182ce;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            background: #2b6cb0;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            background: #1e4e8c;
+            transform: translateY(0);
+        }
+
+        /* Preview Area */
+        #inputPreview {
+            background: #edf2f7;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #2d3748;
+            overflow-y: auto;
+            height: 250px;
+            white-space: pre-wrap;
+        }
+
+        /* Download Links */
+        #downloadLinks {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        #downloadLinks a {
+            padding: 0.75rem 1.25rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #ffffff;
+            background: #4c51bf;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        #downloadLinks a:hover {
+            background: #3c366b;
+            transform: translateY(-2px);
+        }
+
+        #downloadLinks a:active {
+            background: #2a2b4d;
+            transform: translateY(0);
+        }
+
+        /* Scrollbar Styling */
+        .panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .panel::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
+        }
+
+        .panel::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+        .panel::-webkit-scrollbar-track {
+            background: #f7fafc;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
             .container {
-                display: flex;
-                flex-grow: 1;
-                padding: 1.5em;
-                gap: 1.5em;
+                flex-direction: column;
+                gap: 1.5rem;
             }
-    
-            .panel {
-                flex: 1;
-                background: #fdfdfd;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 1.5em;
-                box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
-                overflow-y: auto;
-            }
-    
-            h2, h3 {
-                margin: 0;
-                padding-bottom: 0.8em;
+
+            header h1 {
                 font-size: 1.8rem;
-                font-weight: 700;
-                color: #2c3e50;
-                border-bottom: 2px solid #e0e0e0;
             }
-    
-            label {
-                margin-top: 1.2em;
-                font-size: 1rem;
-                font-weight: 500;
-                color: #34495e;
-            }
-    
-            textarea, select, input {
-                width: 100%;
-                margin-top: 0.5em;
-                padding: 0.8em;
-                font-size: 1rem;
-                border: 1px solid #bdc3c7;
-                border-radius: 5px;
-                background: #f8f9fa;
-                color: #333333;
-                box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.05);
-            }
-    
-            textarea {
-                resize: vertical;
-                height: 120px;
-            }
-    
-            button {
-                margin-top: 1.5em;
-                padding: 0.8em 2em;
-                font-size: 1rem;
-                font-weight: 500;
-                color: #ffffff;
-                background: linear-gradient(135deg, #2980b9, #3498db);
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: transform 0.2s, box-shadow 0.3s;
-                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-            }
-    
-            button:hover {
-                background: linear-gradient(135deg, #2575a8, #2980b9);
-                transform: translateY(-2px);
-                box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
-            }
-    
-            #inputPreview {
-                white-space: pre-wrap;
-                font-family: 'Courier New', monospace;
-                background: #f8f9fa;
-                padding: 1em;
-                border: 1px solid #bdc3c7;
-                border-radius: 5px;
-                height: 300px;
-                overflow-y: auto;
-                color: #333333;
-                box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.05);
-            }
-    
-            #downloadLinks {
-                display: flex;
-                gap: 1em;
-                flex-wrap: wrap;
-            }
-    
-            #downloadLinks a {
-                display: inline-block;
-                padding: 0.8em 1.5em;
-                font-size: 1rem;
-                background: linear-gradient(135deg, #27ae60, #2ecc71);
-                color: #ffffff;
-                text-decoration: none;
-                border-radius: 5px;
-                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-                transition: transform 0.2s, box-shadow 0.3s;
-                text-align: center;
-            }
-    
-            #downloadLinks a:hover {
-                background: linear-gradient(135deg, #219150, #27ae60);
-                transform: translateY(-2px);
-                box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
-            }
-    
-            .scrollable::-webkit-scrollbar {
-                width: 8px;
-            }
-    
-            .scrollable::-webkit-scrollbar-thumb {
-                background: #2980b9;
-                border-radius: 5px;
-            }
-    
-            .scrollable::-webkit-scrollbar-track {
-                background: #f4f6f9;
-            }
+        }
         </style>
     </head>
 <body>
@@ -1399,9 +1446,8 @@ max_grad=1e-3
                 reader.readAsText(file);
 
                 const fileNameWithoutExtension = file.name.replace(/\.xyz$/i, "");
-                if (!systemNameInput.value || systemNameInput.value === "geo") {
-                    systemNameInput.value = fileNameWithoutExtension;
-                }
+                systemNameInput.value = fileNameWithoutExtension;
+                updateInputPreview();
             }
         }
                 function saveAndDownloadFiles() {
