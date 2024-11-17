@@ -176,15 +176,19 @@
     <div class="container">
         <!-- Left Panel: Geometry Input and Options -->
         <div class="panel left-panel">
-            <h2>OpenQP Input Generator</h2>
+            <h2>Input Generator</h2>
 
-            <!-- Geometry Input -->
+        <!-- Geometry Input -->
             <label for="geometry">Molecular Geometry (XYZ format):</label>
-            <textarea id="geometry" rows="6" placeholder="Paste XYZ geometry here"></textarea>
+            <textarea id="geometry" rows="6" placeholder="Paste XYZ geometry here" oninput="updateInputPreview()"></textarea>
+            <label for="loadGeometry">Or Load XYZ File:</label>
+            <input type="file" id="loadGeometry" accept=".xyz" onchange="loadGeometryFromFile()" oninput="updateInputPreview()">
+
             
+
             <!-- System Name -->
-            <label for="systemName">System Name:</label>
-            <input type="text" id="systemName" placeholder="geo">
+            <label for="systemName">Project Name:</label>
+            <input type="text" id="systemName" placeholder="Enter system name (default: geo)" oninput="updateInputPreview()">
 
             <!-- Calculation Template Selection -->
             <label for="calcType">Calculation Template:</label>
@@ -203,13 +207,13 @@
                 <option value="mrsf-tddft_optimization">MRSF-TDDFT OPTIMIZATION</option> 
                 <option value="mrsf-tddft_mep_optimization">MRSF-TDDFT MEP OPTIMIZATION</option>
                 <option value="mrsf-tddft_meci_optimization">MRSF-TDDFT MECI OPTIMIZATION</option>
-                        </select>
+            </select>
 
             <!-- Calculation Options -->
             <h2>Options</h3>
             <label for="basisSearch">Basis Set:</label>
             <input type="text" id="basisSearch" placeholder="Search basis sets..." onkeyup="filterBasisOptions()">
-            <select id="basis" size="5" onclick="selectBasisOption()">
+            <select id="basis" size="5" onclick="selectBasisOption()" oninput="updateInputPreview()">
                 <option value="2zapa-nr">2zapa-nr</option>
                 <option value="2zapa-nr-cv">2zapa-nr-cv</option>
                 <option value="3-21g">3-21G</option>
@@ -633,7 +637,7 @@
 
             <label for="functionalSearch">Functional:</label>
             <input type="text" id="functionalSearch" placeholder="Search functionals..." onkeyup="filterFunctionalOptions()">
-            <select id="functional" size="5" onclick="selectFunctionalOption()">
+            <select id="functional" size="5" onclick="selectFunctionalOption()" oninput="updateInputPreview()">
                 <option value="hfex">HFEX</option>
                 <option value="slater">SLATER</option>
                 <option value="teter">TETER</option>
@@ -1010,43 +1014,45 @@
 
 
             <label for="charge">Charge:</label>
-            <input type="number" id="charge" value="0">
+            <input type="number" id="charge" value="0"  oninput="updateInputPreview()">
 
 
             <label for="multiplicity">Multiplicity:</label>
-            <input type="number" id="multiplicity" value="1">
+            <input type="number" id="multiplicity" value="1"  oninput="updateInputPreview()">
 
             <label for="nstate">NState (for TDHF calculations):</label>
-            <input type="number" id="nstate" value="3">
+            <input type="number" id="nstate" value="3"  oninput="updateInputPreview()">
 
-            <button type="button" onclick="updateInputPreview()">Generate Input</button>
-            <button type="button" onclick="downloadFiles()">Save Input & Geometry</button>
         </div>
 
-        <!-- Right Panel: Real-Time Input Preview -->
-        <div class="panel right-panel">
-            <h2>Generated Input</h2>
-            <textarea id="inputPreview" contenteditable="true">
+            <!-- Right Panel: Real-Time Input Preview and Save Button -->
+            <div class="panel right-panel">
+                <h2>Generated Input</h2>
+                <textarea id="inputPreview" contenteditable="true">
 # OpenQP Input Preview
-            </textarea>
-            <div id="downloadLinks">
-                <a id="downloadInputLink" href="#" download="input_file.txt">Download Input File</a>
-                <a id="downloadGeoLink" href="#" download="geo.xyz">Download Geometry File</a>
+                </textarea>
+                <button type="button" onclick="saveAndDownloadFiles()">Save Input & Geometry</button>
             </div>
         </div>
-    </div>
 
     <script>
-        function getInputTemplate(template) {
-            const systemName = document.getElementById("systemName").value || "geo";
-            const charge = document.getElementById("charge").value;
-            const basis = document.getElementById("basis").value;
-            const functional = document.getElementById("functional").value;
-            const multiplicity = document.getElementById("multiplicity").value;
-            const nstate = document.getElementById("nstate").value;
+        function updateInputPreview() {
+            const systemName = document.getElementById("systemName").value ||"Geo";
+            const geometry = document.getElementById("geometry").value.trim() || "# Geometry not provided";
+            const charge = document.getElementById("charge").value || "0";
+            const multiplicity = document.getElementById("multiplicity").value || "1";
+            const functional = document.getElementById("functional").value || "bhhlyp";
+            const basis = document.getElementById("basis").value || "6-31g(d)";
+            const calcType = document.getElementById("calcType").value || "dft_energy";
+            const nstate = document.getElementById("nstate").value || "1";
 
-            // Templates for each calculation type
-            switch(template) {
+            const inputTemplate = getInputTemplate(calcType, systemName, geometry, charge, multiplicity, functional, basis);
+            document.getElementById("inputPreview").value = inputTemplate.trim();
+        }
+
+        function getInputTemplate(calcType, systemName, geometry, charge, multiplicity, functional, basis, nstate) {
+            switch (calcType) {
+                    // Templates for each calculation type
                 case "dft_energy":
                     return `
 [input]
@@ -1356,32 +1362,53 @@ max_grad=1e-3
              }
         }
 
-        function updateInputPreview() {
-            const template = document.getElementById("calcType").value;
-            const inputContent = getInputTemplate(template).trim();
-            document.getElementById("inputPreview").value = inputContent;
-        }
 
-        function downloadFiles() {
-            // Download the input file
+        function loadGeometryFromFile() {
+            const fileInput = document.getElementById("loadGeometry");
+            const geometryTextarea = document.getElementById("geometry");
+            const systemNameInput = document.getElementById("systemName");
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function(event) {
+                    geometryTextarea.value = event.target.result.trim();
+                };
+
+                reader.readAsText(file);
+
+                const fileNameWithoutExtension = file.name.replace(/\.xyz$/i, "");
+                if (!systemNameInput.value || systemNameInput.value === "geo") {
+                    systemNameInput.value = fileNameWithoutExtension;
+                }
+            }
+        }
+                function saveAndDownloadFiles() {
             const systemName = document.getElementById("systemName").value || "geo";
+            
+            // Save and download input file
             const inputContent = document.getElementById("inputPreview").value;
             const inputBlob = new Blob([inputContent], { type: "text/plain" });
             const inputUrl = URL.createObjectURL(inputBlob);
-            const inputLink = document.getElementById("downloadInputLink");
+            const inputLink = document.createElement("a");
             inputLink.href = inputUrl;
-            inputLink.download = `${systemName}_input.txt`;
-            inputLink.style.display = "block";
+            inputLink.download = `${systemName}.inp`;
+            inputLink.click();
+            URL.revokeObjectURL(inputUrl);
 
-            // Download the geometry file
+            // Save and download geometry file
             const geometry = document.getElementById("geometry").value.trim();
             const geoBlob = new Blob([geometry], { type: "text/plain" });
             const geoUrl = URL.createObjectURL(geoBlob);
-            const geoLink = document.getElementById("downloadGeoLink");
+            const geoLink = document.createElement("a");
             geoLink.href = geoUrl;
             geoLink.download = `${systemName}.xyz`;
-            geoLink.style.display = "block";
+            geoLink.click();
+            URL.revokeObjectURL(geoUrl);
         }
+
+
         function filterBasisOptions() {
             const searchInput = document.getElementById("basisSearch").value.toLowerCase();
             const select = document.getElementById("basis");
