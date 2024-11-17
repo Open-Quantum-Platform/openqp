@@ -6,27 +6,173 @@
 -->
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenQP Input Generator</title>
-    <style>
-        body { font-family: Arial, sans-serif; display: flex; height: 100vh; margin: 0; background-color: #f0f4f8; color: #333; }
-        .container { display: flex; flex-direction: row; width: 100%; }
-        .panel { padding: 1em; overflow-y: auto; }
-        .left-panel { width: 50%; border-right: 2px solid #ddd; background-color: #fff; }
-        .right-panel { width: 50%; background-color: #f7f9fc; padding: 2em; }
-        h2, h3 { color: #2a3d5b; }
-        label { display: block; margin-top: 1em; font-weight: bold; }
-        textarea, select, input { width: 100%; margin-top: 0.5em; padding: 0.5em; font-size: 1em; }
-        button { margin-top: 1em; padding: 0.7em 1em; font-size: 1em; background-color: #2a3d5b; color: #fff; border: none; cursor: pointer; }
-        button:hover { background-color: #1e2d47; }
-        #inputPreview { white-space: pre-wrap; font-family: monospace; background-color: #e8eef5; padding: 1em; border-radius: 5px; height: 300px; resize: vertical; }
-        #downloadLinks { margin-top: 1em; }
-        #downloadLinks a { display: block; color: #2a3d5b; text-decoration: none; font-weight: bold; margin-top: 5px; }
-    </style>
-</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OpenQP Input Generator</title>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+            body {
+                font-family: 'Roboto', sans-serif;
+                margin: 0;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                background: #ffffff;
+                color: #333333;
+            }
+    
+            header {
+                padding: 1.5em 2em;
+                background: linear-gradient(135deg, #2c3e50, #34495e);
+                color: #ffffff;
+                text-align: center;
+                border-bottom: 3px solid #bdc3c7;
+                box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            }
+    
+            header h1 {
+                font-size: 2.5rem;
+                font-weight: 700;
+                margin: 0;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+            }
+    
+            header p {
+                margin: 0.5em 0 0;
+                font-size: 1.1rem;
+                font-weight: 400;
+                opacity: 0.9;
+            }
+    
+            .container {
+                display: flex;
+                flex-grow: 1;
+                padding: 1.5em;
+                gap: 1.5em;
+            }
+    
+            .panel {
+                flex: 1;
+                background: #fdfdfd;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 1.5em;
+                box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+                overflow-y: auto;
+            }
+    
+            h2, h3 {
+                margin: 0;
+                padding-bottom: 0.8em;
+                font-size: 1.8rem;
+                font-weight: 700;
+                color: #2c3e50;
+                border-bottom: 2px solid #e0e0e0;
+            }
+    
+            label {
+                margin-top: 1.2em;
+                font-size: 1rem;
+                font-weight: 500;
+                color: #34495e;
+            }
+    
+            textarea, select, input {
+                width: 100%;
+                margin-top: 0.5em;
+                padding: 0.8em;
+                font-size: 1rem;
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+                background: #f8f9fa;
+                color: #333333;
+                box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.05);
+            }
+    
+            textarea {
+                resize: vertical;
+                height: 120px;
+            }
+    
+            button {
+                margin-top: 1.5em;
+                padding: 0.8em 2em;
+                font-size: 1rem;
+                font-weight: 500;
+                color: #ffffff;
+                background: linear-gradient(135deg, #2980b9, #3498db);
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: transform 0.2s, box-shadow 0.3s;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            }
+    
+            button:hover {
+                background: linear-gradient(135deg, #2575a8, #2980b9);
+                transform: translateY(-2px);
+                box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
+            }
+    
+            #inputPreview {
+                white-space: pre-wrap;
+                font-family: 'Courier New', monospace;
+                background: #f8f9fa;
+                padding: 1em;
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+                height: 300px;
+                overflow-y: auto;
+                color: #333333;
+                box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.05);
+            }
+    
+            #downloadLinks {
+                display: flex;
+                gap: 1em;
+                flex-wrap: wrap;
+            }
+    
+            #downloadLinks a {
+                display: inline-block;
+                padding: 0.8em 1.5em;
+                font-size: 1rem;
+                background: linear-gradient(135deg, #27ae60, #2ecc71);
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 5px;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+                transition: transform 0.2s, box-shadow 0.3s;
+                text-align: center;
+            }
+    
+            #downloadLinks a:hover {
+                background: linear-gradient(135deg, #219150, #27ae60);
+                transform: translateY(-2px);
+                box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
+            }
+    
+            .scrollable::-webkit-scrollbar {
+                width: 8px;
+            }
+    
+            .scrollable::-webkit-scrollbar-thumb {
+                background: #2980b9;
+                border-radius: 5px;
+            }
+    
+            .scrollable::-webkit-scrollbar-track {
+                background: #f4f6f9;
+            }
+        </style>
+    </head>
 <body>
+    <header>
+        <h1>OpenQP Input Generator</h1>
+        <p>A professional tool for creating and managing OpenQP inputs</p>
+    </header>
     <div class="container">
         <!-- Left Panel: Geometry Input and Options -->
         <div class="panel left-panel">
