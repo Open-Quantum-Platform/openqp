@@ -117,6 +117,9 @@ mpirun -np number_of_mpi openqp any_example_file.inp
 For more in-depth information, visit:
 - [OpenQP Documentation](https://github.com/Open-Quantum-Platform/openqp/wiki)
 
+### Input Generator
+Easily create input files for OpenQP using our [Web-based Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/).
+
 ### Citing OpenQP
 If you use OpenQP in your research, please cite the following papers:
 
