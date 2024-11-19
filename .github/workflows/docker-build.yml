@@ -36,10 +36,10 @@ jobs:
             --platform linux/amd64 \
             --push \
             --tag openqp/openqp:v1.0 \
-            --tag alireza0027/openqp:$(date +'%Y%m%d') \
+            --tag openqp/openqp:$(date +'%Y%m%d') \
             .
 
       - name: Verify Docker Image
         run: |
           docker pull openqp/openqp:v1.0
-          docker inspect alireza0027/openqp:v1.0
+          docker inspect openqp/openqp:v1.0
