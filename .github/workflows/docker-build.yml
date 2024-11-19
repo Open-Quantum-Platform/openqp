@@ -36,7 +36,7 @@ jobs:
             --platform linux/amd64 \
             --push \
             --tag openqp/openqp:v1.0 \
-            --tag openqp/openqp:$(date +'%Y%m%d') \
+            --tag openqp/openqp:v1.0 \
             .
 
       - name: Verify Docker Image
