@@ -12,214 +12,231 @@
         <title>OpenQP Input Generator</title>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-/* Reset and Base Styles */
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
+            /* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-    body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Source Sans Pro', Arial, sans-serif;
-        line-height: 1.6;
-        color: #2d3748;
-        background: #f4f5f7;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-    /* Header Styles */
-    header {
-        background: #1a202c;
-        color: #ffffff;
-        text-align: center;
-        padding: 1rem 0;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        border-bottom: 3px solid #2b6cb0;
-    }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Source Sans Pro', Arial, sans-serif;
+    line-height: 1.6;
+    color: #2d3748;
+    background: #f4f5f7;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
 
-    header h1 {
-        font-size: 2rem;
-        font-weight: 600;
-        word-break: keep-all; /* Prevent text from breaking awkwardly */
-    }
+/* Header Styles */
+header {
+    background: #1a202c;
+    color: #ffffff;
+    text-align: center;
+    padding: 1rem 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-bottom: 3px solid #2b6cb0;
+}
 
-    header p {
-        font-size: 1rem;
-        margin-top: 0.4rem;
-        opacity: 0.9;
-    }
+header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    word-break: keep-all; /* Prevent text from breaking awkwardly */
+}
 
-    /* Main Layout */
+header p {
+    font-size: 1rem;
+    margin-top: 0.4rem;
+    opacity: 0.9;
+}
+
+/* Main Layout */
+.container {
+    display: flex;
+    flex-direction: column; /* Stack items vertically by default */
+    gap: 1.5rem;
+    width: 100%; /* Full width */
+    margin: auto;
+    padding: 1rem;
+    overflow-y: auto; /* Enable vertical scrolling */
+}
+
+.panel {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    padding: 1rem 1.5rem;
+    width: 100%; /* Ensure panels span full width */
+    max-width: 100%; /* Remove width restriction */
+    overflow-y: auto;
+}
+
+/* Headings */
+h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #2b6cb0;
+    border-bottom: 2px solid #edf2f7;
+    padding-bottom: 0.5rem;
+}
+
+h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: #4a5568;
+}
+
+/* Form Elements */
+label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+    color: #4a5568;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    background: #f7fafc;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    -webkit-appearance: none; /* Fixes issues with dropdowns and inputs in Safari */
+}
+
+textarea {
+    resize: vertical;
+    min-height: 150px;
+    font-family: 'Courier New', monospace;
+}
+
+input:focus, textarea:focus, select:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.3);
+}
+
+/* Buttons */
+button {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: #3182ce;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    -webkit-tap-highlight-color: transparent; /* Removes tap highlight in Safari */
+}
+
+button:hover {
+    background: #2b6cb0;
+    transform: translateY(-2px);
+}
+
+button:active {
+    background: #1e4e8c;
+    transform: translateY(0);
+}
+
+/* Preview Area */
+#inputPreview {
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #2d3748;
+    overflow-y: auto;
+    height: 500px;
+    white-space: pre-wrap;
+}
+
+/* Download Links */
+#downloadLinks {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+#downloadLinks a {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: #4c51bf;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+#downloadLinks a:hover {
+    background: #3c366b;
+    transform: translateY(-2px);
+}
+
+#downloadLinks a:active {
+    background: #2a2b4d;
+    transform: translateY(0);
+}
+
+/* Scrollbar Styling */
+.panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.panel::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 4px;
+}
+
+.panel::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+}
+
+.panel::-webkit-scrollbar-track {
+    background: #f7fafc;
+}
+
+/* Responsive Adjustments */
+@media (min-width: 768px) {
     .container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        max-width: 1200px;
-        margin: 1.5rem auto;
-        padding: 0 1rem;
+        flex-direction: row; /* Arrange panels side-by-side for larger screens */
     }
 
     .panel {
-        flex: 1;
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        padding: 1rem 1.5rem;
-        min-width: 300px;
-        overflow-y: auto;
-        max-height: 600px;
+        max-width: calc(50% - 1rem); /* Divide space evenly on large screens */
     }
+}
+.viewer-section {
+    margin-bottom: 2em;
+    padding: 1em;
+    background: #fff;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
 
-    /* Headings */
-    h2 {
-        font-size: 1.5rem;
-        margin-bottom: 1rem;
-        color: #2b6cb0;
-        border-bottom: 2px solid #edf2f7;
-        padding-bottom: 0.5rem;
-    }
-
-    h3 {
-        font-size: 1.25rem;
-        margin-bottom: 0.5rem;
-        color: #4a5568;
-    }
-
-    /* Form Elements */
-    label {
-        display: block;
-        margin-bottom: 0.4rem;
-        font-weight: 600;
-        color: #4a5568;
-    }
-
-    input, textarea, select {
-        width: 100%;
-        padding: 0.75rem;
-        font-size: 0.9rem;
-        border: 1px solid #cbd5e0;
-        border-radius: 6px;
-        background: #f7fafc;
-        color: #2d3748;
-        margin-bottom: 1rem;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        -webkit-appearance: none; /* Fixes issues with dropdowns and inputs in Safari */
-    }
-
-    textarea {
-        resize: vertical;
-        min-height: 150px;
-        font-family: 'Courier New', monospace;
-    }
-
-    input:focus, textarea:focus, select:focus {
-        border-color: #3182ce;
-        box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.3);
-    }
-
-    /* Buttons */
-    button {
-        display: inline-block;
-        padding: 0.75rem 1.5rem;
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #ffffff;
-        background: #3182ce;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: background-color 0.2s ease, transform 0.2s ease;
-        -webkit-tap-highlight-color: transparent; /* Removes tap highlight in Safari */
-    }
-
-    button:hover {
-        background: #2b6cb0;
-        transform: translateY(-2px);
-    }
-
-    button:active {
-        background: #1e4e8c;
-        transform: translateY(0);
-    }
-
-    /* Preview Area */
-    #inputPreview {
-        background: #edf2f7;
-        border: 1px solid #cbd5e0;
-        border-radius: 8px;
-        padding: 1rem;
-        font-family: 'Courier New', monospace;
-        font-size: 0.9rem;
-        color: #2d3748;
-        overflow-y: auto;
-        height: 250px;
-        white-space: pre-wrap;
-    }
-
-    /* Download Links */
-    #downloadLinks {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin-top: 1rem;
-    }
-
-    #downloadLinks a {
-        padding: 0.75rem 1.25rem;
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #ffffff;
-        background: #4c51bf;
-        text-decoration: none;
-        border-radius: 6px;
-        transition: background-color 0.2s ease, transform 0.2s ease;
-    }
-
-    #downloadLinks a:hover {
-        background: #3c366b;
-        transform: translateY(-2px);
-    }
-
-    #downloadLinks a:active {
-        background: #2a2b4d;
-        transform: translateY(0);
-    }
-
-    /* Scrollbar Styling */
-    .panel::-webkit-scrollbar {
-        width: 8px;
-    }
-
-    .panel::-webkit-scrollbar-thumb {
-        background: #cbd5e0;
-        border-radius: 4px;
-    }
-
-    .panel::-webkit-scrollbar-thumb:hover {
-        background: #a0aec0;
-    }
-
-    .panel::-webkit-scrollbar-track {
-        background: #f7fafc;
-    }
-
-    /* Responsive Adjustments */
-    @media (max-width: 768px) {
-        .container {
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        header h1 {
-            font-size: 1.8rem;
-        }
-    }
+#viewer {
+    width: 100%;
+    height: 300px;
+    position: relative;
+    background: #f8f9fa;
+}
 
         </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.3/3Dmol-min.js"></script>
     </head>
 <body>
     <header>
@@ -241,10 +258,10 @@
 
             <!-- System Name -->
             <label for="systemName">Project Name:</label>
-            <input type="text" id="systemName" placeholder="Enter system name (default: geo)" oninput="updateInputPreview()" >
+            <input type="text" id="systemName" placeholder="Enter Project Name (Default: geo)" oninput="updateInputPreview()" >
 
             <!-- Calculation Template Selection -->
-            <label for="calcType">Calculation Template:</label>
+            <label for="calcType">Calculation Type:</label>
             <select id="calcType" onchange="updateInputPreview()">
                 <option value="dft_energy">DFT ENERGY</option>
                 <option value="dft_gradient">DFT GRADIENT</option>
@@ -262,11 +279,13 @@
                 <option value="mrsf-tddft_meci_optimization">MRSF-TDDFT MECI OPTIMIZATION</option>
             </select>
 
+
+
             <!-- Calculation Options -->
             <h2>Options</h3>
             <label for="basisSearch">Basis Set:</label>
-            <input type="text" id="basisSearch" placeholder="Search basis sets..." onkeyup="filterBasisOptions()">
-            <select id="basis" size="5" onclick="selectBasisOption()" oninput="updateInputPreview()">
+            <input type="text" id="basisSearch" placeholder="Search basis sets..."  onfocus="showDropdown()" onkeyup="filterBasisOptions()">
+            <select id="basis" size="5" style="display: none;"  onclick="selectBasisOption()" onchange="updateInputPreview()">
                 <option value="2zapa-nr">2zapa-nr</option>
                 <option value="2zapa-nr-cv">2zapa-nr-cv</option>
                 <option value="3-21g">3-21G</option>
@@ -688,9 +707,10 @@
             <p id="selectedBasis">Selected Basis Set: None</p>
 
 
+
             <label for="functionalSearch">Functional:</label>
-            <input type="text" id="functionalSearch" placeholder="Search functionals..." onkeyup="filterFunctionalOptions()">
-            <select id="functional" size="5" onclick="selectFunctionalOption()" oninput="updateInputPreview()">
+            <input type="text" id="functionalSearch" placeholder="Search functionals..." onfocus="showFunctionalDropdown()" onkeyup="filterFunctionalOptions()">
+            <select id="functional" size="5" style="display: none;" onclick="selectFunctionalOption()" onchange="updateInputPreview()"> 
                 <option value="hfex">HFEX</option>
                 <option value="slater">SLATER</option>
                 <option value="teter">TETER</option>
@@ -1058,28 +1078,46 @@
                 <option value="m06-hf">M06-HF</option>
                 <option value="m06hf">M06HF</option>
                 <option value="m08-so">M08-SO</option>
-                <option value="bbhlyp">BHHLYP</option>
                 <option value="b3lypv1r">B3LYPV1R</option>
                 <option value="tunedcam">TUNEDCAM</option>
             </select>
             <p id="selectedFunctional">Selected Functional: None</p>
 
 
+            <div style="display: inline-block; margin-right: 10px;">
+                <label for="charge">Charge:</label>
+                <input type="number" id="charge" value="0" oninput="updateInputPreview()">
+            </div>
+            <div style="display: inline-block;">
+                <label for="multiplicity">Multiplicity:</label>
+                <input type="number" id="multiplicity" value="1" oninput="updateInputPreview()">
+            </div>
 
-            <label for="charge">Charge:</label>
-            <input type="number" id="charge" value="0"  oninput="updateInputPreview()">
 
-
-            <label for="multiplicity">Multiplicity:</label>
-            <input type="number" id="multiplicity" value="1"  oninput="updateInputPreview()">
-
-            <label for="nstate">NState (for TDHF calculations):</label>
+            <label for="nstate">Number of States for Response Theories:</label>
             <input type="number" id="nstate" value="3"  oninput="updateInputPreview()">
+
+            <div style="display: inline-block; margin-right: 10px;">
+                <label for="istate">Lower State for MECI Calculation:</label>
+                <input type="number" id="istate" value="1" oninput="updateInputPreview()">
+            </div>
+            <div style="display: inline-block;">
+                <label for="jstate">Upper State for MECI Calculation:</label>
+                <input type="number" id="jstate" value="2" oninput="updateInputPreview()">
+            </div>
+
+
 
         </div>
 
-        <!-- Right Panel: Real-Time Input Preview and Save Button -->
+        <!-- Right Panel: Molecule Viewer, Real-Time Input Preview and Save Button -->
         <div class="panel right-panel">
+            <!-- New Molecule Viewer Section -->
+            <div class="viewer-section">
+                <h2>Molecule Viewer</h2>
+                <div id="viewer"></div>
+            </div>
+
             <h2>Generated Input</h2>
             <textarea id="inputPreview" contenteditable="true">
  # OpenQP Input Preview
@@ -1106,23 +1144,33 @@
                 </ul>
             </div>
         </div>
-
     <script>
+        // Modified updateInputPreview function
         function updateInputPreview() {
-            const systemName = document.getElementById("systemName").value ||"Geo";
+            // Existing input gathering
+            const systemName = document.getElementById("systemName").value || "Geo";
             const geometry = document.getElementById("geometry").value.trim() || "# Geometry not provided";
             const charge = document.getElementById("charge").value || "0";
             const multiplicity = document.getElementById("multiplicity").value || "1";
             const functional = document.getElementById("functional").value || "bhhlyp";
             const basis = document.getElementById("basis").value || "6-31g(d)";
             const calcType = document.getElementById("calcType").value || "dft_energy";
-            const nstate = document.getElementById("nstate").value || "1";
+            const nstate = document.getElementById("nstate").value || "3";
+            const istate = document.getElementById("istate").value || "1";
+            const jstate = document.getElementById("jstate").value || "2";
 
-            const inputTemplate = getInputTemplate(calcType, systemName, geometry, charge, multiplicity, functional, basis);
+            // Update the input preview
+            const inputTemplate = getInputTemplate(calcType, systemName, geometry, charge, multiplicity, 
+                                                functional, basis, nstate, istate, jstate);
             document.getElementById("inputPreview").value = inputTemplate.trim();
+
+            // Update the 3D viewer with the geometry
+            if (geometry && geometry !== "# Geometry not provided") {
+                updateViewer(geometry);
+            }
         }
 
-        function getInputTemplate(calcType, systemName, geometry, charge, multiplicity, functional, basis, nstate) {
+        function getInputTemplate(calcType, systemName, geometry, charge, multiplicity, functional, basis, nstate, istate, jstate) {
             switch (calcType) {
                     // Templates for each calculation type
                 case "dft_energy":
@@ -1424,8 +1472,8 @@ nstate=${nstate}
 [optimize]
 optimizer=bfgs
 maxit=50
-istate=1
-jstate=2
+istate=${istate}
+jstate=${jstate}
 energy_shift=1e-5
 energy_gap=1e-4
 rmsd_grad=5e-4
@@ -1435,28 +1483,33 @@ max_grad=1e-3
         }
 
 
+        // Modified loadGeometryFromFile function
         function loadGeometryFromFile() {
             const fileInput = document.getElementById("loadGeometry");
             const geometryTextarea = document.getElementById("geometry");
             const systemNameInput = document.getElementById("systemName");
-
+            
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 const reader = new FileReader();
-
+                
                 reader.onload = function(event) {
-                    geometryTextarea.value = event.target.result.trim();
+                    const content = event.target.result.trim();
+                    geometryTextarea.value = content;
+                    
+                    // Update both the input preview and the viewer
+                    updateInputPreview();
+                    
+                    // Set system name from file name
+                    const fileNameWithoutExtension = file.name.replace(/\.xyz$/i, "");
+                    systemNameInput.value = fileNameWithoutExtension;
                     updateInputPreview(); 
                 };
-
+                
                 reader.readAsText(file);
-
-                const fileNameWithoutExtension = file.name.replace(/\.xyz$/i, "");
-                systemNameInput.value = fileNameWithoutExtension;
-                updateInputPreview();
             }
-        }
-                function saveAndDownloadFiles() {
+        } 
+        function saveAndDownloadFiles() {
             const systemName = document.getElementById("systemName").value || "geo";
             
             // Save and download input file
@@ -1480,7 +1533,10 @@ max_grad=1e-3
             URL.revokeObjectURL(geoUrl);
         }
 
-
+        function showDropdown() {
+            const dropdown = document.getElementById("basis");
+            dropdown.style.display = "block";
+        }
         function filterBasisOptions() {
             const searchInput = document.getElementById("basisSearch").value.toLowerCase();
             const select = document.getElementById("basis");
@@ -1497,28 +1553,70 @@ max_grad=1e-3
                 }
             }
         }
-
         function selectBasisOption() {
             const select = document.getElementById("basis");
-            const selectedValue = select.options[select.selectedIndex].text;
-
-            document.getElementById("selectedBasis").innerText = `Selected Basis Set: ${selectedValue}`;
+            if (select.selectedIndex !== -1) {
+                const selectedValue = select.options[select.selectedIndex].text;
+                document.getElementById("basisSearch").value = selectedValue;
+                document.getElementById("selectedBasis").innerText = `Selected Basis Set: ${selectedValue}`;
+                select.style.display = "none";
+            }
         }
+        function showFunctionalDropdown() {
+            const dropdown = document.getElementById("functional");
+            dropdown.style.display = "block";
+        }
+
         function filterFunctionalOptions() {
             const searchInput = document.getElementById("functionalSearch").value.toLowerCase();
             const select = document.getElementById("functional");
             const options = select.options;
+
             select.selectedIndex = -1;
-        for (let i = 0; i < options.length; i++) {
-            const optionText = options[i].text.toLowerCase();
-            options[i].style.display = optionText.includes(searchInput) ? "" : "none";
-        }
+
+            for (let i = 0; i < options.length; i++) {
+                const optionText = options[i].text.toLowerCase();
+                if (optionText.includes(searchInput)) {
+                    options[i].style.display = "";
+                } else {
+                    options[i].style.display = "none";
+                }
+            }
         }
 
         function selectFunctionalOption() {
             const select = document.getElementById("functional");
-            const selectedValue = select.options[select.selectedIndex].text;
-            document.getElementById("selectedFunctional").innerText = `Selected Functional: ${selectedValue}`;
+            if (select.selectedIndex !== -1) {
+                const selectedValue = select.options[select.selectedIndex].text;
+                document.getElementById("functionalSearch").value = selectedValue;
+                document.getElementById("selectedFunctional").innerText = `Selected Functional: ${selectedValue}`;
+                select.style.display = "none";
+            }
+        }
+        // Initialize the viewer when the document is ready
+        let viewer;
+        $(document).ready(function() {
+            viewer = $3Dmol.createViewer("viewer", {
+                backgroundColor: "white"
+            });
+            viewer.setStyle({}, {stick:{}});
+            viewer.zoomTo();
+            viewer.render();
+        });
+
+        // Function to update the 3D viewer
+        function updateViewer(xyzData) {
+            if (!xyzData || !viewer) return;
+            
+            try {
+                viewer.clear();
+                viewer.addModel(xyzData, "xyz");
+                viewer.setStyle({}, {stick:{radius: 0.1}, sphere:{radius: 0.3}});
+                viewer.zoomTo();
+                viewer.render();
+            } catch (error) {
+                console.warn("Failed to update molecule viewer:", error);
+            }
         }
         </script>
 </body>
