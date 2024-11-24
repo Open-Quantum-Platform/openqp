@@ -18,6 +18,7 @@ class OQPConfigParser(configparser.ConfigParser):
 
         processed_lines = []
         in_system = False
+        current_system = None
         system_coords = []
 
         for line in lines:
@@ -29,20 +30,27 @@ class OQPConfigParser(configparser.ConfigParser):
                 if in_system and system_coords:
                     processed_lines.append('\n'.join(system_coords))
                 in_system = False
+                current_system = None
                 processed_lines.append(line)
                 continue
 
-            if line.startswith('system='):
-                in_system = True
-                processed_lines.append(line)
-                continue
+            if line.startswith('system'):
+                if '=' in line:  
+                    if in_system and system_coords:
+                        processed_lines.append('\n'.join(system_coords))
+                        system_coords = []
+                    in_system = True
+                    current_system = line.split('=')[0].strip()
+                    processed_lines.append(line)
+                    continue
 
             if in_system:
-                if any(line.startswith(k + '=') for k in ['charge', 'runtype', 'basis', 'functional', 'method', 'system2','d4']):
+                if any(line.startswith(k + '=') for k in ['charge', 'runtype', 'basis', 'functional', 'method', 'd4']):
                     in_system = False
                     if system_coords:
                         processed_lines.append('\n'.join(system_coords))
                         system_coords = []
+                    current_system = None
                     processed_lines.append(line)
                 else:
                     if not line.startswith(' '):
