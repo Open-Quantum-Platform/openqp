@@ -1,21 +1,34 @@
 module basis_api
     use iso_c_binding, only: c_f_pointer, c_ptr, c_double
     use iso_fortran_env, only: real64
+    use libecpint_wrapper
     implicit none
 
-    type :: electron_shell
+    type, abstract :: base_shell
         integer :: id
         integer :: element_id
-        character(len=20) :: function_type
-        character(len=20) :: region
-        integer :: angular_momentum
         integer :: n_exponents
-        real, pointer :: exponents(:)   ! Pointer to an array of exponents
-        real, pointer :: coefficient(:) ! Pointer to an array of coefficients
-        type(electron_shell), pointer :: next => null()  ! Fortran pointer for linked list
+        real, pointer :: exponents(:)
+        real, pointer :: coefficient(:)
+    end type base_shell
+
+    type, extends(base_shell) :: electron_shell
+        integer :: angular_momentum
+        type(electron_shell), pointer :: next => null()
     end type electron_shell
 
-    type(electron_shell), pointer :: head => null()  ! Head of the linked list
+    type, extends(base_shell) :: ecpdata
+        integer :: n_angular_m
+        integer, pointer :: ecp_zn(:)
+        integer, pointer :: ecp_r_expo(:)
+        integer, pointer :: ecp_am(:)
+        real, pointer :: ecp_coord(:)
+!        type(ecpdata), pointer :: next => null()
+    end type ecpdata
+
+    type(electron_shell), pointer :: head => null()
+    type(ecpdata) :: ecp_head
+!    type(ecpdata), pointer :: ecp_head => null()
 
 contains
 
@@ -27,6 +40,98 @@ contains
         inf => oqp_handle_get_info(c_handle)
         call oqp_append_shell(inf)
     end subroutine append_shell_C
+
+    subroutine append_ecp_C(c_handle) bind(C, name="append_ecp")
+        use c_interop, only: oqp_handle_t, oqp_handle_get_info
+        use types, only: information
+        type(oqp_handle_t) :: c_handle
+        type(information), pointer :: inf
+        inf => oqp_handle_get_info(c_handle)
+        call oqp_append_ecp(inf)
+    end subroutine append_ecp_C
+
+    ! Append a new ECP  to the linked list
+    subroutine oqp_append_ecp(info)
+        use types, only: information
+        type(information), intent(in) :: info
+ !       type(ecpdata), pointer :: ecp_node, ecp_temp
+        real(c_double), pointer :: expo_ptr(:), coef_ptr(:), rexpo_ptr(:),&
+                am_ptr(:), coord_ptr(:)
+        integer(c_int) , pointer :: ecp_zn_ptr(:)
+        integer :: natm
+!        call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
+        print *, "info%mol_prop%natom", info%mol_prop%natom
+        natm = info%mol_prop%natom
+
+!        natm = get_number_atoms()
+        call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
+        print *, "ecp_zn_ptr", ecp_zn_ptr        
+        allocate(ecp_head%ecp_zn(natm))
+        ecp_head%ecp_zn = ecp_zn_ptr
+        print *,"segmentation", ecp_head%ecp_zn
+
+        if (info%elshell%element_id .EQ. 0) then
+            ecp_head%element_id = info%elshell%element_id
+            print *,"HIHIHIHI"
+            return
+        end if
+        call c_f_pointer(info%elshell%expo, expo_ptr, [info%elshell%num_expo])
+        call c_f_pointer(info%elshell%coef, coef_ptr, [info%elshell%num_expo])
+        call c_f_pointer(info%elshell%ecp_rex, rexpo_ptr, [info%elshell%num_expo])
+        call c_f_pointer(info%elshell%ecp_am, am_ptr, [info%elshell%ecp_nam])
+        call c_f_pointer(info%elshell%ecp_coord, coord_ptr, [3*info%elshell%element_id])
+!        call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
+
+        ecp_head%element_id = info%elshell%element_id
+        ecp_head%n_exponents = info%elshell%num_expo
+        ecp_head%n_angular_m = info%elshell%ecp_nam
+        allocate(ecp_head%exponents(info%elshell%num_expo))
+        allocate(ecp_head%coefficient(info%elshell%num_expo))
+        allocate(ecp_head%ecp_r_expo(info%elshell%num_expo))
+        allocate(ecp_head%ecp_am(info%elshell%ecp_nam))
+        allocate(ecp_head%ecp_coord(3 * info%elshell%element_id))
+!        allocate(ecp_head%ecp_zn(natm))
+        print *, "head%element_id", ecp_zn_ptr
+        ecp_head%exponents = expo_ptr
+        ecp_head%coefficient = coef_ptr
+        ecp_head%ecp_r_expo = rexpo_ptr
+        ecp_head%ecp_am = am_ptr
+        ecp_head%ecp_coord = coord_ptr
+        !ecp_head%ecp_zn = ecp_zn_ptr
+        print *,"aaaa", ecp_head%ecp_zn
+!        print *, "ecp_node%n_exponents",ecp_head%n_exponents
+!        print *, "ecp_node%ecp_am", ecp_head%ecp_am
+!        print *, "ecp_node%ecp_r_expo", ecp_head%ecp_r_expo
+!        allocate(ecp_node)
+!        ecp_node%id = info%elshell%id
+!        ecp_node%element_id = info%elshell%element_id
+!        ecp_node%n_exponents = info%elshell%num_expo
+!        ecp_node%n_angular_m = info%elshell%ecp_nam
+!        allocate(ecp_node%exponents(info%elshell%num_expo))
+!        allocate(ecp_node%coefficient(info%elshell%num_expo))
+!        allocate(ecp_node%ecp_r_expo(info%elshell%num_expo))
+!        allocate(ecp_node%ecp_am(info%elshell%ecp_nam))
+!        allocate(ecp_node%ecp_coord(3 * info%elshell%ecp_nam))
+!        ecp_node%exponents = expo_ptr
+!        ecp_node%coefficient = coef_ptr
+!        ecp_node%ecp_r_expo = rexpo_ptr
+!        ecp_node%ecp_am = am_ptr
+!        ecp_node%ecp_coord = coord_ptr
+!        print *, "ecp_node%n_exponents",ecp_node%n_exponents
+!        print *, "ecp_node%ecp_am", ecp_node%ecp_am
+!        print *, "ecp_node%ecp_r_expo", ecp_node%ecp_r_expo
+
+!        ecp_node%next => null()
+!        if (.not. associated(ecp_head)) then
+!            ecp_head => ecp_node
+!        else
+!            ecp_temp => ecp_head
+!            do while (associated(ecp_temp%next))
+!                ecp_temp => ecp_temp%next
+!            end do
+!            ecp_temp%next => ecp_node
+!        end if
+    end subroutine oqp_append_ecp
 
     ! Append a new electron shell to the linked list
     subroutine oqp_append_shell(info)
@@ -80,6 +185,22 @@ contains
         print *, "----------------------"
     end subroutine print_all_shells
 
+    function get_number_atoms() result(natm)
+        type(electron_shell), pointer :: temp
+        integer:: natm
+        temp => head
+        natm = 0
+        do while (associated(temp%next))
+            temp => temp%next
+        end do
+        if (associated(temp)) then
+            natm = temp%element_id
+        end if
+
+        nullify(temp)
+     end function get_number_atoms
+
+
     subroutine map_shell2basis_set(basis)
         use basis_tools, only: basis_set
         class(basis_set) ,intent(inout):: basis
@@ -96,6 +217,8 @@ contains
         nshell = 0
         nprim = 0  ! Initialize nprim
         ii = 0
+
+        print *, "map_shell"
 
         do while (associated(temp))
 
@@ -140,8 +263,6 @@ contains
 
         if (.not. allocated(ex)) allocate(ex(nprim))
 
-
-
         do while (associated(temp1))
             ii = ii + 1
             n2 = temp1%n_exponents
@@ -178,6 +299,12 @@ contains
             temp1 => temp1%next
 
         end do
+        if (.not. allocated(basis%ecp_zn_num)) allocate(basis%ecp_zn_num(maxval(basis%origin)))
+
+        basis%ecp_zn_num = ecp_head%ecp_zn 
+        print *, "ecp_head", basis%ecp_zn_num
+        print *, "ecp_head", maxval(basis%origin)
+
         call basis%set_bfnorms()
         call basis%normalize_primitives()
 !        call basis%init_shell_centers()

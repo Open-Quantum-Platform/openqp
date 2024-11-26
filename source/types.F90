@@ -156,19 +156,24 @@ module types
     integer(c_int) :: element_id = -1
     integer(c_int) :: num_expo = 0
     integer(c_int) :: ang_mom = 0
+    integer(c_int) :: ecp_nam = 0
     type(c_ptr) :: expo
     type(c_ptr) :: coef
+    type(c_ptr) :: ecp_am
+    type(c_ptr) :: ecp_rex
+    type(c_ptr) :: ecp_coord
+    type(c_ptr) :: ecp_zn
   end type electron_shell
 
-  type,public, bind(c) :: ecpdata
-    integer(c_int) :: element_id = -1
-    integer(c_int) :: num_am = 0
-    integer(c_int) :: num_exp = 0
-    type(c_ptr) :: ecp_am
-    type(c_ptr) :: ecp_rcc
-    type(c_ptr) :: ecp_ex
-    type(c_ptr) :: ecp_cc
-  end type ecpdata
+!  type,public, bind(c) :: ecpdata
+!    integer(c_int) :: element_id = -1
+!    integer(c_int) :: num_am = 0
+!    integer(c_int) :: num_exp = 0
+!    type(c_ptr) :: ecp_am
+!    type(c_ptr) :: ecp_rcc
+!    type(c_ptr) :: ecp_ex
+!    type(c_ptr) :: ecp_cc
+!  end type ecpdata
 
   type, public :: information
     type(molecule) :: mol_prop
@@ -183,7 +188,7 @@ module types
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
     type(electron_shell) :: elshell
-    type(ecpdata) :: ecp
+!    type(ecpdata) :: ecp
   contains
     generic :: set_atoms => set_atoms_arr, set_atoms_atm
     procedure, pass :: set_atoms_arr => info_set_atoms_arr

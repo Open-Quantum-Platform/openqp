@@ -77,6 +77,7 @@ contains
     use precision, only: dp
     use basis_tools, only: basis_set
     use printing, only: print_sym_labeled
+    use ecp_tool, only: add_ecpint
 
     type(basis_set), intent(in) :: basis
     real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
@@ -84,6 +85,7 @@ contains
     real(real64), contiguous, optional, intent(inout) :: z(:)
     real(real64), optional, intent(in) :: logtol
     logical, optional, intent(in) :: debug
+    integer :: ii
 
     real(real64) :: tol
     logical :: lzint, dbug
@@ -115,6 +117,8 @@ contains
     call kin_ovl_ints(s, t, basis, tol)
 
     call nuc_ints(basis, coord(:,:), zq, h, tol)
+    
+    call add_ecpint(basis,coord(:,:),h)
 
 !    IF (exterior%num_chg/=0) THEN
 !        SELECT CASE (pbc%method)
@@ -158,7 +162,11 @@ contains
 !   Form one electron Hamiltonian
 !   Hcore = Vne + Te
     h = h + t
-
+!    call add_ecpint(basis,coord(:,:),h)
+    do ii = 1 , nbf*(nbf+1)/2
+       print *, ii, h(ii)
+    end do
+    dbug = .True.
 !   Optional debug printout
     if (dbug) then
        write(iw,*) 'Overlap matrix (S)'

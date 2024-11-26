@@ -28,6 +28,7 @@ contains
     use iso_c_binding, only: c_char
     use parallel, only: par_env_t
     use basis_api, only: map_shell2basis_set
+!    use ecp_tool, only: add_ecpint 
     implicit none
     type(information), intent(inout) :: infos
     type(par_env_t) :: pe
@@ -67,19 +68,33 @@ contains
 !    endif
   ! Checking error of basis set reading..
   print *, "No"
+
     call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call pe%bcast(infos%control%basis_set_issue, 1)
+!    call add_ecpint(infos)
+    print *, "Basis Data After Broadcast:"
+    print *, "Number of shells (nshell): ", infos%basis%nshell
+    print *, "Number of primitives (nprim): ", infos%basis%nprim
+    print *, "Number of basis functions (nbf): ", infos%basis%nbf
+    print *, "Maximum contractions (mxcontr): ", infos%basis%mxcontr
+    print *, "Maximum angular momentum (mxam): ", infos%basis%mxam
 
+!    write(iw,'(/5X,"Basis Sets options"/&
+!                  &5X,18("-")/&
+!                  &5X,"Basis Set File: ",A/&
+!                  &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
+!                  &5X,"Number of Basis Set functions  =",I8/&
+!                  &5X,"Maximum Angluar Momentum =",I8/)') &
+!                    trim(basis_file), &
+!                    infos%basis%nshell, infos%basis%nprim, &
+!                    infos%basis%nbf, infos%basis%mxam
     write(iw,'(/5X,"Basis Sets options"/&
                   &5X,18("-")/&
-                  &5X,"Basis Set File: ",A/&
                   &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
                   &5X,"Number of Basis Set functions  =",I8/&
                   &5X,"Maximum Angluar Momentum =",I8/)') &
-!                    trim(basis_file), &
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
-
     close (iw)
 
   end subroutine oqp_apply_basis

@@ -33,6 +33,7 @@ contains
     use strings, only: Cstring, fstring
     use physical_constants, only: BOHR_TO_ANGSTROM
     use printing, only: print_module_info
+!    use ecp_tool, only: add_ecpint
 
     implicit none
 
@@ -73,7 +74,7 @@ contains
 
     do i = 1, size(basis%atoms%zn(:))
        write(iw,'(7x,i4,5x,f4.1,3(x,f15.9))') &
-               i, basis%atoms%zn(i), basis%atoms%xyz(1:3,i)*BOHR_TO_ANGSTROM
+               i, basis%atoms%zn(i)+int(basis%ecp_zn_num(i)), basis%atoms%xyz(1:3,i)*BOHR_TO_ANGSTROM
     end do
 
 !   Allocate H, S and T matrices
@@ -97,6 +98,7 @@ contains
 !   Compute conventional H, S, and T integrals
     tol = log(10.0d0)*tol_int
     call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn, hcore, smat, tmat, logtol=tol)
+!    call add_ecpint(basis, hcore)
 
     if (dbg) then
         write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')

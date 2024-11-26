@@ -12,8 +12,8 @@ add_subdirectory(dftlib)
 message(STATUS ${SOURCES})
 
 add_library(oqp ${SOURCES})
-add_dependencies(oqp libxc libtagarray)
-target_link_libraries(oqp xcf03 xc tagarray_f tagarray)
+add_dependencies(oqp libxc libtagarray libecpint)
+target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()
@@ -23,6 +23,12 @@ target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libtagarray/src/
 target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}/include/tagarray
                                       ${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}/include/tagarray
                                       ${CMAKE_SOURCE_DIR}/external/libtagarray/src/libtagarray/include)
+target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID})
+target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libecpint/install/lib64)
+#target_link_libraries(oqp ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}/libecpint.a)
+target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}/include
+                                      ${CMAKE_BINARY_DIR}/external/libecpint/install/include/libecpint
+			              ${CMAKE_BINARY_DIR}/external/libecpint/install/include)
 set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(ENABLE_OPENMP)
   target_link_libraries(oqp OpenMP::OpenMP_Fortran OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
@@ -31,7 +37,8 @@ if(ENABLE_MPI)
     target_compile_definitions(oqp PRIVATE ENABLE_MPI)
 endif()
 target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libxc/src/libxc-build-${CMAKE_Fortran_COMPILER_ID})
-
+set(WRAPPER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/wrapper/libecpint_wrapper.cpp)
+target_sources(oqp PRIVATE ${WRAPPER_SOURCES})
 if(USE_LIBINT)
   target_compile_definitions(oqp PRIVATE OQP_LIBINT_ENABLE)
   add_dependencies(oqp libint2)
