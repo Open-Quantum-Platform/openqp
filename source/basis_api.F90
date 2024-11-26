@@ -7,7 +7,7 @@ module basis_api
     type, abstract :: base_shell
         integer :: id
         integer :: element_id
-        integer :: n_exponents
+        integer, pointer :: n_exponents(:)
         real, pointer :: exponents(:)
         real, pointer :: coefficient(:)
     end type base_shell
@@ -54,44 +54,46 @@ contains
     subroutine oqp_append_ecp(info)
         use types, only: information
         type(information), intent(in) :: info
- !       type(ecpdata), pointer :: ecp_node, ecp_temp
         real(c_double), pointer :: expo_ptr(:), coef_ptr(:), rexpo_ptr(:),&
-                am_ptr(:), coord_ptr(:)
-        integer(c_int) , pointer :: ecp_zn_ptr(:)
-        integer :: natm
-!        call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
-        print *, "info%mol_prop%natom", info%mol_prop%natom
+                am_ptr(:), coord_ptr(:) 
+        integer(c_int) , pointer :: n_expo_ptr(:), ecp_zn_ptr(:)
+        integer :: natm, f_expo_len
         natm = info%mol_prop%natom
 
 !        natm = get_number_atoms()
         call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
-        print *, "ecp_zn_ptr", ecp_zn_ptr        
         allocate(ecp_head%ecp_zn(natm))
         ecp_head%ecp_zn = ecp_zn_ptr
-        print *,"segmentation", ecp_head%ecp_zn
 
         if (info%elshell%element_id .EQ. 0) then
             ecp_head%element_id = info%elshell%element_id
-            print *,"HIHIHIHI"
             return
         end if
-        call c_f_pointer(info%elshell%expo, expo_ptr, [info%elshell%num_expo])
-        call c_f_pointer(info%elshell%coef, coef_ptr, [info%elshell%num_expo])
-        call c_f_pointer(info%elshell%ecp_rex, rexpo_ptr, [info%elshell%num_expo])
+        call c_f_pointer(info%elshell%num_expo, n_expo_ptr, [info%elshell%element_id])
+
+        allocate(ecp_head%n_exponents(info%elshell%element_id))
+
+        ecp_head%n_exponents = n_expo_ptr
+        print *, "ecp_head%n_exponents",ecp_head%n_exponents
+        f_expo_len = sum(ecp_head%n_exponents)
+
+        call c_f_pointer(info%elshell%expo, expo_ptr, [f_expo_len])
+        call c_f_pointer(info%elshell%coef, coef_ptr, [f_expo_len])
+        call c_f_pointer(info%elshell%ecp_rex, rexpo_ptr, [f_expo_len])
         call c_f_pointer(info%elshell%ecp_am, am_ptr, [info%elshell%ecp_nam])
         call c_f_pointer(info%elshell%ecp_coord, coord_ptr, [3*info%elshell%element_id])
-!        call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
 
         ecp_head%element_id = info%elshell%element_id
-        ecp_head%n_exponents = info%elshell%num_expo
         ecp_head%n_angular_m = info%elshell%ecp_nam
-        allocate(ecp_head%exponents(info%elshell%num_expo))
-        allocate(ecp_head%coefficient(info%elshell%num_expo))
-        allocate(ecp_head%ecp_r_expo(info%elshell%num_expo))
+
+        print *, "f_expo_len",f_expo_len
+
+        allocate(ecp_head%exponents(f_expo_len))
+        allocate(ecp_head%coefficient(f_expo_len))
+        allocate(ecp_head%ecp_r_expo(f_expo_len))
         allocate(ecp_head%ecp_am(info%elshell%ecp_nam))
         allocate(ecp_head%ecp_coord(3 * info%elshell%element_id))
-!        allocate(ecp_head%ecp_zn(natm))
-        print *, "head%element_id", ecp_zn_ptr
+
         ecp_head%exponents = expo_ptr
         ecp_head%coefficient = coef_ptr
         ecp_head%ecp_r_expo = rexpo_ptr
@@ -139,17 +141,25 @@ contains
         type(information), intent(in) :: info
         type(electron_shell), pointer :: new_node, temp
         real(c_double), pointer :: expo_ptr(:), coef_ptr(:)
+        integer(c_int), pointer ::n_expo_ptr(:)
+        integer :: n_expo
         ! Map c_ptr fields from info to Fortran pointers
-        call c_f_pointer(info%elshell%expo, expo_ptr, [info%elshell%num_expo])
-        call c_f_pointer(info%elshell%coef, coef_ptr, [info%elshell%num_expo])
+
+        call c_f_pointer(info%elshell%num_expo, n_expo_ptr, [1])
+        n_expo = n_expo_ptr(1)
+        print *, "n_expo", n_expo, size(n_expo_ptr)
+
+        call c_f_pointer(info%elshell%expo, expo_ptr, [n_expo])
+        call c_f_pointer(info%elshell%coef, coef_ptr, [n_expo])
 
         allocate(new_node)
         new_node%id = info%elshell%id
         new_node%element_id = info%elshell%element_id
         new_node%angular_momentum = info%elshell%ang_mom
-        allocate(new_node%exponents(info%elshell%num_expo))
-        allocate(new_node%coefficient(info%elshell%num_expo))
-        new_node%n_exponents = info%elshell%num_expo
+        allocate(new_node%exponents(n_expo))
+        allocate(new_node%coefficient(n_expo))
+        allocate(new_node%n_exponents(1))
+        new_node%n_exponents = n_expo_ptr
         new_node%exponents = expo_ptr
         new_node%coefficient = coef_ptr
         new_node%next => null()
@@ -222,11 +232,11 @@ contains
 
         do while (associated(temp))
 
-            mxcontr = max(mxcontr, temp%n_exponents)
+            mxcontr = max(mxcontr, temp%n_exponents(1))
             mxam = max(mxam, temp%angular_momentum)
 
             nshell = temp%id
-            nprim = nprim + temp%n_exponents
+            nprim = nprim + temp%n_exponents(1)
 
             select case (temp%angular_momentum)
                 case (0)
@@ -265,7 +275,7 @@ contains
 
         do while (associated(temp1))
             ii = ii + 1
-            n2 = temp1%n_exponents
+            n2 = temp1%n_exponents(1)
             basis%ncontr(ii) = n2
 
             if (ii == 1) then
@@ -294,7 +304,7 @@ contains
                     basis%naos(ii) = 9
             end select
 
-            n1 = temp1%n_exponents
+            n1 = temp1%n_exponents(1)
 
             temp1 => temp1%next
 

@@ -154,9 +154,10 @@ module types
   type, public, bind(c) :: electron_shell
     integer(c_int) :: id = 0
     integer(c_int) :: element_id = -1
-    integer(c_int) :: num_expo = 0
+!    integer(c_int) :: num_expo = 0
     integer(c_int) :: ang_mom = 0
     integer(c_int) :: ecp_nam = 0
+    type(c_ptr) :: num_expo
     type(c_ptr) :: expo
     type(c_ptr) :: coef
     type(c_ptr) :: ecp_am

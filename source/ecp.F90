@@ -30,11 +30,13 @@ contains
         real(c_double), allocatable :: u_exps(:), u_coefs(:)
         integer(c_int), allocatable  :: u_ams(:), u_ns(:)
         integer(c_int),  allocatable :: u_lengths(:)
-        integer(c_int) :: num_ecps, num_gaussians, n_coord
+        integer(c_int) :: num_ecps, num_gaussians, n_coord, f_expo_len
 
         if (ecp_head%element_id .EQ. 0) then
             return
         end if
+
+        f_expo_len = sum(ecp_head%n_exponents) 
 
         num_gaussians = basis%nshell
         n_coord = num_gaussians*3
@@ -45,10 +47,10 @@ contains
         allocate(g_lengths(basis%nshell))
 
         allocate(u_coords(size(ecp_head%ecp_coord)))
-        allocate(u_exps(ecp_head%n_exponents))
-        allocate(u_coefs(ecp_head%n_exponents))
-        allocate(u_ams(ecp_head%n_exponents))
-        allocate(u_ns(ecp_head%n_exponents))
+        allocate(u_exps(f_expo_len))
+        allocate(u_coefs(f_expo_len))
+        allocate(u_ams(f_expo_len))
+        allocate(u_ns(f_expo_len))
         allocate(u_lengths(ecp_head%element_id))
 
         call libecp_g_coords(basis, coord ,g_coords)
@@ -60,13 +62,20 @@ contains
 
 
         num_ecps = int(size(ecp_head%ecp_coord)/3, kind =c_int)
-        u_coords =  real(ecp_head%ecp_coord, kind=c_double)
+!        u_coords =  real(ecp_head%ecp_coord, kind=c_double)
+        u_coords =(/ 0.0, 0.0, 0.0, 4.440856, 0.0,0.0/)
         u_exps =  real(ecp_head%exponents, kind=c_double)
         u_coefs =  real(ecp_head%coefficient, kind=c_double)
         u_ams =  int(ecp_head%ecp_am, kind=c_int)
         u_ns =  int(ecp_head%ecp_r_expo, kind=c_int)
-        u_lengths(1) = ecp_head%n_exponents
-
+        u_lengths = ecp_head%n_exponents
+print *, "num_ecps:", num_ecps
+print *, "u_coords:", u_coords
+print *, "u_exps:", u_exps
+print *, "u_coefs:", u_coefs
+print *, "u_ams:", u_ams
+print *, "u_ns:", u_ns
+print *, "u_lengths:", u_lengths
 
         integrator = init_integrator(num_gaussians, g_coords, g_exps, g_coefs,  &
                                 g_ams, g_lengths)

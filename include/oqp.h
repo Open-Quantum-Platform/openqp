@@ -136,9 +136,10 @@ struct mpi_communicator {
 struct electron_shell {
         int id;
 	int element_id;
-        int32_t num_expo;
+//        int32_t num_expo;
 	int32_t ang_mom;
 	int32_t ecp_nam;
+	int* num_expo;
 	double* expo;
 	double* coef;
         int* ecp_am;
