@@ -29,8 +29,8 @@ endif()
 set(NLOPT_PREFIX ${CMAKE_BINARY_DIR}/external/nlopt CACHE INTERNAL "NLOPT_PREFIX")
 ExternalProject_Add(nlopt
         PREFIX ${NLOPT_PREFIX}
-        URL https://github.com/stevengj/nlopt/archive/v2.7.1.tar.gz
-        URL_HASH SHA256=db88232fa5cef0ff6e39943fc63ab6074208831dc0031cf1545f6ecd31ae2a1a
+        URL https://github.com/stevengj/nlopt/archive/v2.9.1.tar.gz
+        URL_HASH SHA256=1e6c33f8cbdc4138d525f3326c231f14ed50d99345561e85285638c49b64ee93
         BINARY_DIR ${NLOPT_PREFIX}/build-${CMAKE_Fortran_COMPILER_ID}
         STAMP_DIR  ${NLOPT_PREFIX}/stamp-${CMAKE_Fortran_COMPILER_ID}
         BUILD_BYPRODUCTS ${NLOPT_PREFIX}/build-${CMAKE_Fortran_COMPILER_ID}/libnlopt.a
