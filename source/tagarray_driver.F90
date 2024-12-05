@@ -97,7 +97,17 @@ module oqp_tagarray_driver
   public :: ta_ok
 contains
 
-    function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
+  !>
+  !> @brief unpack record with tag `tag` and return its properties
+  !>
+  !> @param[inout] contains
+  !> @param[in]    tag       - tag
+  !> @param[out]   type_id   - type id
+  !> @param[out]   ndims     - number of dimensions
+  !> @param[out]   dims      - shape of data
+  !> @param[out]   data_size - size of single element in bytes
+  !>
+  function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
     type(c_ptr), intent(out) :: ptr
@@ -110,16 +120,16 @@ contains
     type(recordinfo_t) :: record_info
 
     ptr = c_null_ptr
-    record_info = container%get_record_info(tag)
-    res = container%get_status()
+    res = 0
+    if (container%contains(tag)) then
+      record_info = container%get(tag)
 
-    if (res == TA_OK) then
       ptr = record_info%data
-      res = product(record_info%dimensions(1:record_info%n_dimensions))
+      res = product(record_info%dims(1:record_info%ndims))
       if (present(type_id)) type_id = record_info%type_id
-      if (present(ndims  )) ndims   = record_info%n_dimensions
-      if (present(dims   )) dims    = record_info%dimensions
-      if (present(data_size   )) data_size    = record_info%data_length
+      if (present(ndims  )) ndims   = record_info%ndims
+      if (present(dims   )) dims    = record_info%dims
+      if (present(data_size)) data_size    = record_info%itemsize
     end if
 
   end function tagarray_get_cptr
@@ -132,15 +142,18 @@ contains
     character(len=*), intent(in) :: location
     logical, optional, intent(in) :: abort
     integer(c_int32_t), optional, intent(out) :: status
-    integer(c_int32_t) :: tag_id, status_
+    integer(c_int32_t) :: tag_id
     logical :: abort_
+    if (present(status)) status = TA_OK
     abort_ = WITHOUT_ABORT
     if (present(abort)) abort_ = abort
-    status_ = container%has_records(tags, tag_id)
-    if (status_ /= TA_OK) call show_message( &
-        location // ": " // get_status_message(status_, trim(tags(tag_id))), &
+    if (.not.container%contains(tags, tag_id)) then
+      call show_message( &
+        location // ": " // &
+          get_status_message(TA_CONTAINER_RECORD_NOT_FOUND, trim(tags(tag_id))), &
         abort_)
-    if (present(status)) status = status_
+      if (present(status)) status = TA_CONTAINER_RECORD_NOT_FOUND
+    end if
   end subroutine data_has_tags_location
   subroutine data_has_tags_ms(container, tags, modulename, subroutinename, abort, status)
     use messages, only: show_message, WITHOUT_ABORT
@@ -149,15 +162,18 @@ contains
     character(len=*), intent(in) :: modulename, subroutinename
     logical, optional, intent(in) :: abort
     integer(c_int32_t), optional, intent(out) :: status
-    integer(c_int32_t) :: tag_id, status_
+    integer(c_int32_t) :: tag_id
     logical :: abort_
+    if (present(status)) status = TA_OK
     abort_ = WITHOUT_ABORT
     if (present(abort)) abort_ = abort
-    status_ = container%has_records(tags, tag_id)
-    if (status_ /= TA_OK) call show_message( &
-        modulename // "::" // subroutinename // ": " // get_status_message(status_, trim(tags(tag_id))), &
+    if (.not.container%contains(tags, tag_id)) then
+      call show_message( &
+        modulename // "::" // subroutinename // ": " // &
+          get_status_message(TA_CONTAINER_RECORD_NOT_FOUND, trim(tags(tag_id))), &
         abort_)
-    if (present(status)) status = status_
+      if (present(status)) status = TA_CONTAINER_RECORD_NOT_FOUND
+    end if
   end subroutine data_has_tags_ms
   subroutine check_status(status, modulename, subroutinename, tag, abort)
     use messages, only: show_message, WITHOUT_ABORT
@@ -177,7 +193,7 @@ contains
     integer(8), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_val
   subroutine tagarray_get_data_int64_1d(container, tag, ptr, status)
@@ -186,7 +202,7 @@ contains
     integer(8), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_1d
   subroutine tagarray_get_data_int64_2d(container, tag, ptr, status)
@@ -195,7 +211,7 @@ contains
     integer(8), pointer :: ptr(:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_2d
   subroutine tagarray_get_data_int64_3d(container, tag, ptr, status)
@@ -204,7 +220,7 @@ contains
     integer(8), pointer :: ptr(:,:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_3d
   subroutine tagarray_get_data_real64_val(container, tag, ptr, status)
@@ -213,7 +229,7 @@ contains
     real(8), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_val
   subroutine tagarray_get_data_real64_1d(container, tag, ptr, status)
@@ -222,7 +238,7 @@ contains
     real(8), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_1d
   subroutine tagarray_get_data_real64_2d(container, tag, ptr, status)
@@ -231,7 +247,7 @@ contains
     real(8), pointer :: ptr(:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_2d
   subroutine tagarray_get_data_real64_3d(container, tag, ptr, status)
@@ -240,7 +256,7 @@ contains
     real(8), pointer :: ptr(:,:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_3d
 
@@ -250,7 +266,7 @@ contains
     character(len=*, kind=c_char), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_val
 
@@ -260,7 +276,7 @@ contains
     character(len=*, kind=c_char), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_1d
 end module oqp_tagarray_driver
