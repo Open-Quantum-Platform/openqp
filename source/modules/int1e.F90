@@ -21,6 +21,7 @@ contains
 !> @brief Calculate the basic H, S, and T 1e-integrals
   subroutine int1e(infos)
 
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use types, only: information
     use oqp_tagarray_driver
     use precision, only: dp
@@ -45,6 +46,7 @@ contains
     integer :: i, nbf, nat, nbf2
 
     ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       hcore(:), tmat(:), smat(:)
     character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
@@ -79,11 +81,11 @@ contains
 !   Allocate H, S and T matrices
     nbf2 = basis%nbf*(basis%nbf+1)/2
 
-    call infos%dat%remove_records(tags_general)
+    call infos%dat%erase(tags_general)
 
-    call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
-    call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)
-    call infos%dat%reserve_data(OQP_Hcore, TA_TYPE_REAL64, nbf2, comment=OQP_Hcore_comment)
+    stat = infos%dat%create(OQP_SM, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_SM_comment)
+    stat = infos%dat%create(OQP_TM, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_TM_comment)
+    stat = infos%dat%create(OQP_Hcore, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_Hcore_comment)
 
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)

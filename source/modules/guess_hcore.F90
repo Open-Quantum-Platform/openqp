@@ -16,6 +16,7 @@ contains
   end subroutine guess_hcore_C
 
   subroutine guess_hcore(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use precision, only: dp
     use types, only: information
     use io_constants, only: IW
@@ -41,6 +42,7 @@ contains
     type(basis_set), pointer :: basis
   !
   ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       Hcore(:), Smat(:), &
       dmat_a(:), mo_a(:,:), mo_energy_a(:), &
@@ -73,8 +75,8 @@ contains
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
     ! clean data
-    call infos%dat%remove_records(tags_alpha)
-    call infos%dat%remove_records(tags_beta)
+    call infos%dat%erase(tags_alpha)
+    call infos%dat%erase(tags_beta)
 
     ! load general data
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
@@ -82,9 +84,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
 
     ! allocate alpha
-    call infos%dat%reserve_data(OQP_DM_A, TA_TYPE_REAL64, nbf2, comment=OQP_DM_A_comment)
-    call infos%dat%reserve_data(OQP_E_MO_A, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_A_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_A, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_A_comment)
+    stat = infos%dat%create(OQP_DM_A, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_DM_A_comment)
+    stat = infos%dat%create(OQP_E_MO_A, TA_TYPE_REAL64, (/ nbf /), description=OQP_E_MO_A_comment)
+    stat = infos%dat%create(OQP_VEC_MO_A, TA_TYPE_REAL64, (/ nbf, nbf /), description=OQP_VEC_MO_A_comment)
 
     ! load alpha data
     call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
@@ -95,9 +97,9 @@ contains
   ! UHF/ROHF
     if (infos%control%scftype >= 2) then
       ! allocate beta
-      call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
-      call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
-      call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_B_comment)
+      stat = infos%dat%create(OQP_DM_B, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_DM_B_comment)
+      stat = infos%dat%create(OQP_E_MO_B, TA_TYPE_REAL64, (/ nbf /), description=OQP_E_MO_B_comment)
+      stat = infos%dat%create(OQP_VEC_MO_B, TA_TYPE_REAL64, (/ nbf, nbf /), description=OQP_VEC_MO_B_comment)
 
       ! load beta
       call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)

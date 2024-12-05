@@ -35,6 +35,7 @@ contains
 !>
   subroutine get_states_overlap(infos)
 
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use precision, only: dp
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -59,6 +60,7 @@ contains
     real(kind=dp), allocatable, target :: bvec(:,:), bvec_old(:,:)
 
     ! Tagarray
+    integer(c_int32_t) :: stat
     character(len=*), parameter :: tags_general(*) = (/ character(len=80) :: &
         OQP_td_bvec_mo_old, OQP_td_bvec_mo, OQP_overlap_mo /)
     character(len=*), parameter :: tags_alloc(*) = (/ character(len=80) :: &
@@ -83,13 +85,13 @@ contains
     ndtlf = infos%tddft%tlf
 
     ! Allocate data for outputing in python level
-    call infos%dat%remove_records(tags_alloc)
-    call infos%dat%reserve_data(OQP_td_states_phase, ta_type_real64, &
-          nstates, (/ nstates /), comment=OQP_td_states_phase_comment)
-    call infos%dat%reserve_data(OQP_td_states_overlap, ta_type_real64, &
-          nstates*nstates, (/ nstates, nstates /), comment=OQP_td_states_overlap_comment)
-    call infos%dat%reserve_data(OQP_nac, ta_type_real64, &
-          nstates*nstates, (/ nstates, nstates /), comment=OQP_nac_comment)
+    call infos%dat%erase(tags_alloc)
+    stat = infos%dat%create(OQP_td_states_phase, ta_type_real64, &
+          (/ nstates /), description=OQP_td_states_phase_comment)
+    stat = infos%dat%create(OQP_td_states_overlap, ta_type_real64, &
+          (/ nstates, nstates /), description=OQP_td_states_overlap_comment)
+    stat = infos%dat%create(OQP_nac, ta_type_real64, &
+          (/ nstates, nstates /), description=OQP_nac_comment)
 
     ! Load data from python level
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
