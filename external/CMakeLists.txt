@@ -71,8 +71,8 @@ ExternalProject_Add(libxc
 
 ExternalProject_Add(libtagarray
         PREFIX ${CMAKE_SOURCE_DIR}/external/libtagarray
-        URL https://github.com/foxtran/libtagarray/archive/refs/tags/v0.0.6.tar.gz
-        URL_HASH SHA256=9c844092f123276bb461e37e3451068c097b5a1fec9d65514ad3018baaeb2b32
+        URL https://github.com/foxtran/libtagarray/archive/refs/tags/v0.0.7.tar.gz
+        URL_HASH SHA256=d37a1cd16f2f46c27daa57f4997d5c2f684ad46c0ca3ea958a5e578e409e5094
 #        GIT_REPOSITORY https://github.com/foxtran/libtagarray.git
 #        GIT_TAG master
         BINARY_DIR ${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}
