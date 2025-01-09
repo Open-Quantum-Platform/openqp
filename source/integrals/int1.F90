@@ -117,7 +117,8 @@ contains
     call kin_ovl_ints(s, t, basis, tol)
 
     call nuc_ints(basis, coord(:,:), zq, h, tol)
-    
+
+!   Add effective core potential    
     call add_ecpint(basis,coord(:,:),h)
 
 !    IF (exterior%num_chg/=0) THEN
@@ -162,11 +163,7 @@ contains
 !   Form one electron Hamiltonian
 !   Hcore = Vne + Te
     h = h + t
-!    call add_ecpint(basis,coord(:,:),h)
-    do ii = 1 , nbf*(nbf+1)/2
-       print *, ii, h(ii)
-    end do
-    dbug = .True.
+
 !   Optional debug printout
     if (dbug) then
        write(iw,*) 'Overlap matrix (S)'

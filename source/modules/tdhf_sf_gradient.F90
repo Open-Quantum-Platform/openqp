@@ -185,7 +185,7 @@ contains
     use constants, only: tol_int
     use grd1, only: eijden, print_gradient, &
             grad_nn, grad_ee_overlap, &
-            grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
+            grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, grad_1e_ecp
 
     use mathlib, only: symmetrize_matrix
 
@@ -256,6 +256,9 @@ contains
 
 !     Pulay force
       call grad_en_pulay(basis, xyz, zn, dens, grad, logtol=tol)
+
+!     Effective core potential gradient
+      call grad_1e_ecp(basis, xyz, dens, grad, logtol=tol)
 
     end associate
 

@@ -1,6 +1,7 @@
 module basis_api
     use iso_c_binding, only: c_f_pointer, c_ptr, c_double
     use iso_fortran_env, only: real64
+    use physical_constants, only: UNITS_ANGSTROM
     use libecpint_wrapper
     implicit none
 
@@ -23,12 +24,10 @@ module basis_api
         integer, pointer :: ecp_r_expo(:)
         integer, pointer :: ecp_am(:)
         real, pointer :: ecp_coord(:)
-!        type(ecpdata), pointer :: next => null()
     end type ecpdata
 
     type(electron_shell), pointer :: head => null()
     type(ecpdata) :: ecp_head
-!    type(ecpdata), pointer :: ecp_head => null()
 
 contains
 
@@ -50,7 +49,6 @@ contains
         call oqp_append_ecp(inf)
     end subroutine append_ecp_C
 
-    ! Append a new ECP  to the linked list
     subroutine oqp_append_ecp(info)
         use types, only: information
         type(information), intent(in) :: info
@@ -60,7 +58,6 @@ contains
         integer :: natm, f_expo_len
         natm = info%mol_prop%natom
 
-!        natm = get_number_atoms()
         call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
         allocate(ecp_head%ecp_zn(natm))
         ecp_head%ecp_zn = ecp_zn_ptr
@@ -74,7 +71,7 @@ contains
         allocate(ecp_head%n_exponents(info%elshell%element_id))
 
         ecp_head%n_exponents = n_expo_ptr
-        print *, "ecp_head%n_exponents",ecp_head%n_exponents
+
         f_expo_len = sum(ecp_head%n_exponents)
 
         call c_f_pointer(info%elshell%expo, expo_ptr, [f_expo_len])
@@ -86,7 +83,6 @@ contains
         ecp_head%element_id = info%elshell%element_id
         ecp_head%n_angular_m = info%elshell%ecp_nam
 
-        print *, "f_expo_len",f_expo_len
 
         allocate(ecp_head%exponents(f_expo_len))
         allocate(ecp_head%coefficient(f_expo_len))
@@ -98,44 +94,9 @@ contains
         ecp_head%coefficient = coef_ptr
         ecp_head%ecp_r_expo = rexpo_ptr
         ecp_head%ecp_am = am_ptr
-        ecp_head%ecp_coord = coord_ptr
-        !ecp_head%ecp_zn = ecp_zn_ptr
-        print *,"aaaa", ecp_head%ecp_zn
-!        print *, "ecp_node%n_exponents",ecp_head%n_exponents
-!        print *, "ecp_node%ecp_am", ecp_head%ecp_am
-!        print *, "ecp_node%ecp_r_expo", ecp_head%ecp_r_expo
-!        allocate(ecp_node)
-!        ecp_node%id = info%elshell%id
-!        ecp_node%element_id = info%elshell%element_id
-!        ecp_node%n_exponents = info%elshell%num_expo
-!        ecp_node%n_angular_m = info%elshell%ecp_nam
-!        allocate(ecp_node%exponents(info%elshell%num_expo))
-!        allocate(ecp_node%coefficient(info%elshell%num_expo))
-!        allocate(ecp_node%ecp_r_expo(info%elshell%num_expo))
-!        allocate(ecp_node%ecp_am(info%elshell%ecp_nam))
-!        allocate(ecp_node%ecp_coord(3 * info%elshell%ecp_nam))
-!        ecp_node%exponents = expo_ptr
-!        ecp_node%coefficient = coef_ptr
-!        ecp_node%ecp_r_expo = rexpo_ptr
-!        ecp_node%ecp_am = am_ptr
-!        ecp_node%ecp_coord = coord_ptr
-!        print *, "ecp_node%n_exponents",ecp_node%n_exponents
-!        print *, "ecp_node%ecp_am", ecp_node%ecp_am
-!        print *, "ecp_node%ecp_r_expo", ecp_node%ecp_r_expo
-
-!        ecp_node%next => null()
-!        if (.not. associated(ecp_head)) then
-!            ecp_head => ecp_node
-!        else
-!            ecp_temp => ecp_head
-!            do while (associated(ecp_temp%next))
-!                ecp_temp => ecp_temp%next
-!            end do
-!            ecp_temp%next => ecp_node
-!        end if
+        ecp_head%ecp_coord = coord_ptr * UNITS_ANGSTROM
     end subroutine oqp_append_ecp
 
-    ! Append a new electron shell to the linked list
     subroutine oqp_append_shell(info)
         use types, only: information
         type(information), intent(in) :: info
@@ -143,11 +104,9 @@ contains
         real(c_double), pointer :: expo_ptr(:), coef_ptr(:)
         integer(c_int), pointer ::n_expo_ptr(:)
         integer :: n_expo
-        ! Map c_ptr fields from info to Fortran pointers
 
         call c_f_pointer(info%elshell%num_expo, n_expo_ptr, [1])
         n_expo = n_expo_ptr(1)
-        print *, "n_expo", n_expo, size(n_expo_ptr)
 
         call c_f_pointer(info%elshell%expo, expo_ptr, [n_expo])
         call c_f_pointer(info%elshell%coef, coef_ptr, [n_expo])
@@ -195,22 +154,6 @@ contains
         print *, "----------------------"
     end subroutine print_all_shells
 
-    function get_number_atoms() result(natm)
-        type(electron_shell), pointer :: temp
-        integer:: natm
-        temp => head
-        natm = 0
-        do while (associated(temp%next))
-            temp => temp%next
-        end do
-        if (associated(temp)) then
-            natm = temp%element_id
-        end if
-
-        nullify(temp)
-     end function get_number_atoms
-
-
     subroutine map_shell2basis_set(basis)
         use basis_tools, only: basis_set
         class(basis_set) ,intent(inout):: basis
@@ -228,7 +171,6 @@ contains
         nprim = 0  ! Initialize nprim
         ii = 0
 
-        print *, "map_shell"
 
         do while (associated(temp))
 
@@ -256,7 +198,7 @@ contains
         basis%nbf = nbf
         basis%nshell = nshell
         basis%nprim = nprim
-        ! Allocate arrays based on the received sizes (on all processes)
+
         if (.not. allocated(basis%ex)) allocate(basis%ex(nprim))
         if (.not. allocated(basis%cc)) allocate(basis%cc(nprim))
         if (.not. allocated(basis%bfnrm)) allocate(basis%bfnrm(nbf))
@@ -312,17 +254,12 @@ contains
         if (.not. allocated(basis%ecp_zn_num)) allocate(basis%ecp_zn_num(maxval(basis%origin)))
 
         basis%ecp_zn_num = ecp_head%ecp_zn 
-        print *, "ecp_head", basis%ecp_zn_num
-        print *, "ecp_head", maxval(basis%origin)
 
         call basis%set_bfnorms()
         call basis%normalize_primitives()
-!        call basis%init_shell_centers()
-
 
     end subroutine map_shell2basis_set
 
-    ! Delete all shells in the linked list
     subroutine delete_all_shells()
         type(electron_shell), pointer :: to_delete
 
@@ -333,7 +270,6 @@ contains
             deallocate(to_delete%coefficient)
             deallocate(to_delete)
         end do
-        print *, "All shells deleted."
     end subroutine delete_all_shells
 
 end module basis_api

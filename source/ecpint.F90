@@ -36,10 +36,11 @@ module libecpint_wrapper
             integer(c_int), dimension(*) :: u_ams, u_ns, u_lengths
         end subroutine set_ecp_basis
 
-        subroutine init_integrator_instance(integrator) &
+        subroutine init_integrator_instance(integrator, deriv_order) &
                    bind(c, name="init_integrator_instance")
-            use iso_c_binding, only : c_ptr
+            use iso_c_binding, only : c_int, c_ptr
             type(c_ptr), value :: integrator
+            integer(c_int), value :: deriv_order
         end subroutine init_integrator_instance
 
         function compute_integrals(integrator) bind(c, name="compute_integrals")
@@ -48,6 +49,13 @@ module libecpint_wrapper
             type(ecp_result) :: compute_integrals
             type(c_ptr), value :: integrator
         end function compute_integrals
+
+        function compute_first_derivs(integrator) bind(c, name="compute_first_derivs")
+            use iso_c_binding, only : c_ptr
+            use libecp_result
+            type(ecp_result) :: compute_first_derivs
+            type(c_ptr), value :: integrator
+        end function compute_first_derivs
 
         subroutine free_integrator(integrator) bind(c, name="free_integrator")
             use iso_c_binding, only : c_ptr

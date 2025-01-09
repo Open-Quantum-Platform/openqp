@@ -18,44 +18,8 @@ extern "C" {
         for (int i = 0; i < num_gaussians; i++) {
             total_length += g_lengths[i];
         }
-        printf("Number of Gaussians: %d\n", num_gaussians);
 
-
-        // Print the values in g_coords
-        printf("Gaussian coordinates:\n");
-        for (int i = 0; i < num_gaussians * 3; i++) {  // Assuming g_coords has 3 values per Gaussian (x, y, z)
-            printf("%f ", g_coords[i]);
-            if ((i + 1) % 3 == 0) printf("\n");  // New line after each coordinate triplet
-        }
-
-        // Print the values in g_exps
-        printf("Gaussian exponents:\n");
-        for (int i = 0; i < total_length; i++) {
-            printf("%f ", g_exps[i]);
-        }
-        printf("\n");
-
-        // Print the values in g_coefs
-        printf("Gaussian coefficients:\n");
-        for (int i = 0; i < total_length; i++) {
-            printf("%f ", g_coefs[i]);
-        }
-        printf("\n");
-
-        // Print the values in g_ams
-        printf("Angular momentum numbers:\n");
-        for (int i = 0; i < num_gaussians; i++) {
-            printf("%d ", g_ams[i]);
-        }
-        printf("\n");
-
-        // Print the values in g_lengths
-        printf("Lengths of Gaussian functions:\n");
-        for (int i = 0; i < num_gaussians; i++) {
-            printf("%d ", g_lengths[i]);
-        }
-        printf("\n");
-        libecpint::ECPIntegrator* factory = new libecpint::ECPIntegrator();
+	libecpint::ECPIntegrator* factory = new libecpint::ECPIntegrator();
         factory->set_gaussian_basis(num_gaussians, g_coords, g_exps, g_coefs, g_ams, g_lengths);
         return factory;
     }
@@ -67,9 +31,9 @@ extern "C" {
     }
 
     // Initialize integrator
-    void init_integrator_instance(void* integrator) {
+    void init_integrator_instance(void* integrator, int deriv_order) {
         libecpint::ECPIntegrator* factory = static_cast<libecpint::ECPIntegrator*>(integrator);
-        factory->init();
+        factory->init(deriv_order);
     }
 
     // Compute integrals and return result in a structure
@@ -79,27 +43,44 @@ extern "C" {
         std::shared_ptr<std::vector<double>> ints = factory->get_integrals();
         ResultArray result;
         result.size = ints->size();
-//	printf("%d ", result.size);
 
         result.data = new double[result.size];
         std::copy(ints->begin(), ints->end(), result.data);
-//        std::cout << "result.data contains:\n";
-//        for (size_t i = 0; i < 35; ++i) {
-//            for (size_t j = 0; j <= i; ++j){
-//                std::cout << result.data[i*35+j] << "  \n";
-//            }
-//        }
-//        std::cout << std::endl;
+        return result;
+    }
+
+    //Compute first derivs
+    ResultArray compute_first_derivs(void* integrator) {
+        libecpint::ECPIntegrator* factory = static_cast<libecpint::ECPIntegrator*>(integrator);
+        factory->compute_first_derivs();
+        std::vector<std::shared_ptr<std::vector<double>>> first_derivs = factory->get_first_derivs();
+
+        int total_size = 0;
+        for (const auto& vec : first_derivs) {
+            total_size += vec->size();
+        }
+
+        ResultArray result;
+        result.size = total_size;
+        result.data = new double[total_size];
+        int index = 0;
+        for (const auto& vec : first_derivs) {
+            std::copy(vec->begin(), vec->end(), result.data + index);
+            index += vec->size();
+        }
+
         return result;
     }
 
     // Clean up
     void free_integrator(void* integrator) {
         delete static_cast<libecpint::ECPIntegrator*>(integrator);
+	integrator = nullptr;
     }
 
     void free_result(ResultArray result) {
         delete[] result.data;
+	result.data = nullptr;
     }
 }
 

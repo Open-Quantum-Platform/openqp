@@ -42,7 +42,6 @@ def path(strng):
     """Convert string to Path"""
     return Path(strng)
 
-
 OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
@@ -205,6 +204,7 @@ class OQPData:
             "functional": "set_dft_functional",
             "system": "set_system",
             "system2": "set_system2",
+            "basis" : "get_basis_name",
         },
         "guess": {
         },
@@ -300,6 +300,8 @@ class OQPData:
             return getattr(self._data.mpiinfo, key)
         if key in dir(self._data.control):
             return getattr(self._data.control, key)
+        if key in dir(self._data.elshell):
+            return getattr(self._data.elshell, key)
         code = bytes(key, 'ascii')
         req = ffi.new('char []', code)
         type_id = ffi.new('int32_t *')
@@ -343,6 +345,7 @@ class OQPData:
 
         if key in dir(self._data.elshell):
             setattr(self._data.elshell, key, value)
+            return
 
         if isinstance(value, np.ndarray):
             _value = value
@@ -599,9 +602,12 @@ class OQPData:
 
     def set_system(self, system):
         """Set up atomic data"""
-        num_atoms, x, y, z, q, mass = read_system(system)
+        num_atoms, x, y, z, q, mass = self.read_system(system)
         self._data.mol_prop.natom = num_atoms
         lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)
+    def get_basis_name(self, basis):
+        self.basis_name = basis
+
 
     def set_system2(self, system):
         """Set up the second set of atomic data"""
@@ -682,6 +688,44 @@ class OQPData:
 
         return basis
 
+    def read_system(self, system):
+        system = system.split("\n")
+        if system[0]:
+            if not os.path.exists(system[0]):
+                raise FileNotFoundError("XYZ file %s is not found!" % system[0])
+
+            with open(system[0], 'r') as xyzfile:
+                system = xyzfile.read().splitlines()
+
+            num_atoms = int(system[0])
+            system = system[2: 2 + num_atoms]
+        else:
+            system = system[1:]
+            num_atoms = len(system)
+
+        atoms = []
+        basis_names = self.basis_name.split(',')
+
+        if len(basis_names) == 1:
+            basis_names = [basis_names[0]] * num_atoms
+
+        for i, line in enumerate(system):
+            line = line.split()
+            if len(line) >= 4:
+                atoms.append(line[0: 4])
+            else:
+                print(f"{system[i]} is not valid line for atom configuration!")
+        q=[]
+        for i in range(0, num_atoms):
+            q.append(float(SYMBOL_MAP[atoms[i][0]]) - float(ecp_electron(basis_names[i], atoms[i][0])))
+
+        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+
+
+        return num_atoms, x, y, z, q, mass
 
 def compute_alpha_beta_electrons(n_e, mult):
     """
@@ -700,35 +744,15 @@ def compute_alpha_beta_electrons(n_e, mult):
 
     return (n_a, n_b) if mult > 0 else (n_b, n_a)
 
+def ecp_electron(bsn,element):
 
-def read_system(system):
-    system = system.split("\n")
-    if system[0]:
-        if not os.path.exists(system[0]):
-            raise FileNotFoundError("XYZ file %s is not found!" % system[0])
-
-        with open(system[0], 'r') as xyzfile:
-            system = xyzfile.read().splitlines()
-
-        num_atoms = int(system[0])
-        system = system[2: 2 + num_atoms]
+    import basis_set_exchange as bse
+    bs_set = bse.get_basis(bsn, elements=element)
+#    print(bs_set)
+    if 'ecp_potentials' in bs_set['elements'][element]:
+        q_ecp= bs_set['elements'][element]['ecp_electrons']
     else:
-        system = system[1:]
-        num_atoms = len(system)
+        q_ecp = 0
+    return q_ecp
 
-    atoms = []
-    for i, line in enumerate(system):
-        line = line.split()
-        if len(line) >= 4:
-            atoms.append(line[0: 4])
-        else:
-            print(f"{system[i]} is not valid line for atom configuration!")
 
-    q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
-    x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    print("zzzzzzzzz",z)
-    mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
-
-    return num_atoms, x, y, z, q, mass

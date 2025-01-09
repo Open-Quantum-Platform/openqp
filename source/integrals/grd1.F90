@@ -16,7 +16,8 @@ module grd1
 
    use mod_shell_tools, only: shell_t, shpair_t
    use mathlib, only: unpack_matrix
-
+   use ecp_tool, only: add_ecpder,add_ecpint
+   !call add_ecpint(basis,infos%atoms%xyz,dede, 1)
    implicit none
 
    character(len=*), parameter :: module_name = "grd1"
@@ -31,6 +32,7 @@ module grd1
    public grad_ee_kinetic
    public grad_en_hellman_feynman
    public grad_en_pulay
+   public grad_1e_ecp
 
 contains
 
@@ -158,7 +160,7 @@ contains
 
     do i = 1, infos%mol_prop%natom
        write(iw,'(7X,I4,5X,F4.1,3X,3F15.9)') &
-               i,infos%atoms%zn(i), infos%atoms%grad(:,i)
+               i,infos%atoms%zn(i)+infos%basis%ecp_zn_num(i), infos%atoms%grad(:,i)
     end do
 
 !   Compute Maximum and RMS Gradient
@@ -785,5 +787,21 @@ atoms:      DO ic = 1, nat
   end subroutine grad_nn
 
 !-------------------------------------------------------------------------------
+
+!> @brief Effective core potential gradient
+  subroutine grad_1e_ecp(basis, coord, denab, de, logtol)
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), contiguous, intent(in) :: coord(:,:)
+
+    REAL(kind=dp) :: de(:,:)
+
+    REAL(kind=dp), optional :: logtol
+
+    call add_ecpder(basis, coord, denab, de)
+
+  end subroutine grad_1e_ecp
+
+  !-------------------------------------------------------------------------------
 
 end module grd1

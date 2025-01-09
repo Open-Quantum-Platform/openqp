@@ -148,7 +148,8 @@ contains
     use messages, only: show_message, WITH_ABORT
     use constants, only: tol_int
     use grd1, only: eijden, grad_nn, grad_ee_overlap, &
-            grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
+            grad_ee_kinetic, grad_en_hellman_feynman, &
+            grad_en_pulay, grad_1e_ecp
 
     implicit none
 
@@ -191,25 +192,35 @@ contains
 
 !     Nuclear repulsion force
       call grad_nn(infos%atoms)
+      print *, "Nuclear repulsion force", grad
 
 !     Obtain Lagrangian matrix (`dens`)
       call eijden(dens, nbf, infos)
 
 !     Overlap gradient
       call grad_ee_overlap(basis, dens, grad, logtol=tol)
+      print *, "Overlap gradient", grad
+
 
 !     Compute total density matrix, discard Lagrangian
       dens = dmat_a
       if (infos%control%scftype>=2) dens = dens + dmat_b
 
-!     Overlap gradient
+!     Kinetic gradient
       call grad_ee_kinetic(basis, dens, grad, logtol=tol)
+      print *, "Kinetic gradient", grad
 
 !     Hellmann-Feynman force
       call grad_en_hellman_feynman(basis, xyz, zn, dens, grad, logtol=tol)
+      print *, "Hellmann-Feynman force", grad
 
 !     Pulay force
       call grad_en_pulay(basis, xyz, zn, dens, grad, logtol=tol)
+      print *, "Pulay force", grad
+
+!     Effective core potential gradient
+      call grad_1e_ecp(basis, xyz, dens, grad, logtol=tol)
+      print *, "Effective core potential gradient", grad
 
     end associate
 

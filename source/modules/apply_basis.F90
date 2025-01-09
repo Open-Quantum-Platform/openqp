@@ -28,7 +28,7 @@ contains
     use iso_c_binding, only: c_char
     use parallel, only: par_env_t
     use basis_api, only: map_shell2basis_set
-!    use ecp_tool, only: add_ecpint 
+
     implicit none
     type(information), intent(inout) :: infos
     type(par_env_t) :: pe
@@ -41,14 +41,14 @@ contains
   !
     character(len=1,kind=c_char), contiguous, pointer :: basis_filename(:)
     character(len=*), parameter :: subroutine_name = "oqp_apply_basis"
-!    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
-!          OQP_basis_filename /)
-!    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
-!    call tagarray_get_data(infos%dat, OQP_basis_filename, basis_filename)
-!    allocate(character(ubound(basis_filename,1)) :: basis_file)
-!    do i = 1, ubound(basis_filename,1)
-!       basis_file(i:i) = basis_filename(i)
-!    end do
+    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
+          OQP_basis_filename /)
+    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_basis_filename, basis_filename)
+    allocate(character(ubound(basis_filename,1)) :: basis_file)
+    do i = 1, ubound(basis_filename,1)
+       basis_file(i:i) = basis_filename(i)
+    end do
 !
 !  ! Files open
 !  ! 3. LOG: Write: Main output file
@@ -61,23 +61,18 @@ contains
     write(iw,'(  22X,"Setting up basis set information")')
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    call map_shell2basis_set(infos%basis)
+    if (pe%rank == 0) then
+      call map_shell2basis_set(infos%basis)
+    end if
 !    if (pe%rank == 0) then
 !      call infos%basis%from_file(basis_file, infos%atoms, err)
 !      infos%control%basis_set_issue = err
 !    endif
   ! Checking error of basis set reading..
-  print *, "No"
 
     call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call pe%bcast(infos%control%basis_set_issue, 1)
 !    call add_ecpint(infos)
-    print *, "Basis Data After Broadcast:"
-    print *, "Number of shells (nshell): ", infos%basis%nshell
-    print *, "Number of primitives (nprim): ", infos%basis%nprim
-    print *, "Number of basis functions (nbf): ", infos%basis%nbf
-    print *, "Maximum contractions (mxcontr): ", infos%basis%mxcontr
-    print *, "Maximum angular momentum (mxam): ", infos%basis%mxam
 
 !    write(iw,'(/5X,"Basis Sets options"/&
 !                  &5X,18("-")/&
@@ -90,9 +85,11 @@ contains
 !                    infos%basis%nbf, infos%basis%mxam
     write(iw,'(/5X,"Basis Sets options"/&
                   &5X,18("-")/&
+                  &5X,"Basis Sets: ",A/&
                   &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
                   &5X,"Number of Basis Set functions  =",I8/&
                   &5X,"Maximum Angluar Momentum =",I8/)') &
+                    trim(basis_file), &
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
     close (iw)
