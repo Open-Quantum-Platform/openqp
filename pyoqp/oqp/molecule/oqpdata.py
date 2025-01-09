@@ -602,9 +602,32 @@ class OQPData:
 
     def set_system(self, system):
         """Set up atomic data"""
-        num_atoms, x, y, z, q, mass = self.read_system(system)
+        num_atoms, x, y, z, q, mass, atoms = read_system(system)
         self._data.mol_prop.natom = num_atoms
-        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)
+        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, self.ecp_electron(q), mass)
+
+    def ecp_electron(self, q):
+        """
+        Calculate the effective core potential (ECP)
+        electrons for a list of elements.
+        """
+
+        import basis_set_exchange as bse
+        q_ecp_list = []
+        basis_names = self.basis_name.split(',')
+        if len(basis_names) == 1:
+            basis_names = [basis_names[0]] * len(q)
+        for element in q:
+            bs_set = bse.get_basis(basis_names[q.index(element)], elements=str(int(element)))
+            if 'ecp_potentials' in bs_set['elements'][str(int(element))]:
+                q_ecp= bs_set['elements'][str(int(element))]['ecp_electrons']
+            else:
+                q_ecp = 0
+            q_ecp_list.append(q_ecp)
+        q_plus_ecp = [q_ecp - q_val for q_ecp, q_val in zip(q, q_ecp_list)]
+
+        return q_plus_ecp
+
     def get_basis_name(self, basis):
         self.basis_name = basis
 
@@ -688,44 +711,6 @@ class OQPData:
 
         return basis
 
-    def read_system(self, system):
-        system = system.split("\n")
-        if system[0]:
-            if not os.path.exists(system[0]):
-                raise FileNotFoundError("XYZ file %s is not found!" % system[0])
-
-            with open(system[0], 'r') as xyzfile:
-                system = xyzfile.read().splitlines()
-
-            num_atoms = int(system[0])
-            system = system[2: 2 + num_atoms]
-        else:
-            system = system[1:]
-            num_atoms = len(system)
-
-        atoms = []
-        basis_names = self.basis_name.split(',')
-
-        if len(basis_names) == 1:
-            basis_names = [basis_names[0]] * num_atoms
-
-        for i, line in enumerate(system):
-            line = line.split()
-            if len(line) >= 4:
-                atoms.append(line[0: 4])
-            else:
-                print(f"{system[i]} is not valid line for atom configuration!")
-        q=[]
-        for i in range(0, num_atoms):
-            q.append(float(SYMBOL_MAP[atoms[i][0]]) - float(ecp_electron(basis_names[i], atoms[i][0])))
-
-        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
-
-
-        return num_atoms, x, y, z, q, mass
 
 def compute_alpha_beta_electrons(n_e, mult):
     """
@@ -744,15 +729,36 @@ def compute_alpha_beta_electrons(n_e, mult):
 
     return (n_a, n_b) if mult > 0 else (n_b, n_a)
 
-def ecp_electron(bsn,element):
 
-    import basis_set_exchange as bse
-    bs_set = bse.get_basis(bsn, elements=element)
-#    print(bs_set)
-    if 'ecp_potentials' in bs_set['elements'][element]:
-        q_ecp= bs_set['elements'][element]['ecp_electrons']
+
+def read_system(system):
+    system = system.split("\n")
+    if system[0]:
+        if not os.path.exists(system[0]):
+            raise FileNotFoundError("XYZ file %s is not found!" % system[0])
+
+        with open(system[0], 'r') as xyzfile:
+            system = xyzfile.read().splitlines()
+
+        num_atoms = int(system[0])
+        system = system[2: 2 + num_atoms]
     else:
-        q_ecp = 0
-    return q_ecp
+        system = system[1:]
+        num_atoms = len(system)
 
+    atoms = []
+    for i, line in enumerate(system):
+        line = line.split()
+        if len(line) >= 4:
+            atoms.append(line[0: 4])
+        else:
+            print(f"{system[i]} is not valid line for atom configuration!")
+
+    q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
+    x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+    y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+    z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+    mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+
+    return num_atoms, x, y, z, q, mass, atoms
 
