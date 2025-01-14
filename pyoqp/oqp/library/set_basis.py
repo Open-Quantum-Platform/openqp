@@ -5,6 +5,7 @@ from oqp.utils.file_utils import try_basis, dump_log
 import numpy as np
 from oqp import ffi
 import basis_set_exchange as bse
+import json
 
 class BasisData:
     def __init__(self, mol):
@@ -28,7 +29,9 @@ class BasisData:
     def get_basis_data(self, elements, basis_name='STO-3G',el_index=0):
 
         shells_data = []
-        basis = bse.get_basis(basis_name, elements=elements)
+#        basis = bse.get_basis(basis_name, elements=elements)
+        basis = self.read_basis_fmt(basis_name, elements)
+        print(basis)
 
         for shell in basis['elements'][str(elements)]['electron_shells']:
             ang_ii = 0
@@ -84,6 +87,8 @@ class BasisData:
     def get_basislist(self):
 
         self.basis_names = self.mol.config["input"]["basis"].split(',')
+
+        print(self.basis_names)
 
         if len(self.basis_names) == 1:
             self.basis_names = [self.basis_names[0]] * self.num_atoms
@@ -156,12 +161,42 @@ class BasisData:
 
         self.set_ecp_data()
 
+    def read_basis_fmt(self, url: str, elements: str) -> dict:
+        """
+        Reads and returns the 'elements' dictionary from a basis set specification.
 
+        :param url: A string indicating either a local file path ('file:/path/...').
+        :param basis_name: Optional name of the basis set, used by bse.get_basis if not a local file.
+        :param elements:
+        :return: Dictionary of basis data of element.
+        """
+#        url = "file:631g.json"
+        print(url, elements)
+        if url.startswith("file:"):
+            file_path = url[len("file:"):]
+
+            if file_path.endswith('.json'):
+                with open(file_path, "r") as f:
+                    basis_data = json.load(f)
+            else:
+                try:
+                    basis_data = bse.read_formatted_basis_file(file_path)
+                except Exception as e:
+                    raise ValueError(f"Could not read basis file '{file_path}': {e}")
+
+            if 'elements' in basis_data:
+                return basis_data
+            else:
+                raise KeyError(f"No 'elements' key found in basis data for '{file_path}'")
+        else:
+            basis_data = bse.get_basis(url, elements=elements)
+            return basis_data
 
 
 def set_basis(mol):
     """Set up basis set for the molecule"""
     basis_file = mol.config["input"]["basis"]
+    print(basis_file)
     mol.data["OQP::basis_filename"] = basis_file
 #    print(mol.config["input"])
 

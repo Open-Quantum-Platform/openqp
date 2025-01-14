@@ -18,36 +18,34 @@ subroutine add_ecpint(basis, coord, hcore)
     real(real64), contiguous, intent(inout) :: hcore(:)
     type(c_ptr) :: integrator
     type(ecp_result) :: result_ptr
-    real(c_double), pointer :: result1(:)
-    real(c_double), dimension(:), allocatable :: result2
+    real(c_double), pointer :: libecp_res(:)
     integer :: i, j, c
     integer(c_int) :: driv_order
 
-    ! Early exit if no ECP data is present
     if (ecp_head%element_id == 0) then
         return
     end if
     driv_order = 0
 
-    ! Use the set_integrator function to initialize the integrator
     call set_integrator(integrator, basis, coord, driv_order)
 
     result_ptr = compute_integrals(integrator)
-    call c_f_pointer(result_ptr%data, result1, [result_ptr%size])
+    call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
 
-    call transform_matrix(result1, basis, result2)
+
+    call transform_matrix(basis, libecp_res)
 
     c = 0
     do i = 1, basis%nbf
         do j = 1, i
             c = c + 1
-            hcore(c) = result2((i - 1) * basis%nbf + j) + hcore(c)
+            hcore(c) = libecp_res((i - 1) * basis%nbf + j) + hcore(c)
         end do
     end do
 
     result_ptr%data = c_null_ptr
     result_ptr%size = 0
-    nullify(result1)
+    nullify(libecp_res)
 
     call free_integrator(integrator)
     call free_result(result_ptr)
@@ -63,13 +61,13 @@ subroutine add_ecpder(basis, coord, denab, de)
 
     type(ecp_result) :: result_ptr
     type(c_ptr) :: integrator
-    real(c_double), pointer :: result1(:)
+    real(c_double), pointer :: libecp_res(:)
+    real(real64), allocatable :: res_x(:), res_y(:), res_z(:)
     real(real64), allocatable :: deloc(:,:)
-    integer :: i, j, c, n, natm
+    integer :: i, j, c, n, natm, prim
     integer :: tri_size, full_size
     integer(c_int) :: driv_order
 
-    ! Early exit if no ECP data is present
     if (ecp_head%element_id == 0) then
         return
     end if
@@ -77,48 +75,54 @@ subroutine add_ecpder(basis, coord, denab, de)
 
     tri_size = basis%nbf * (basis%nbf + 1) / 2
     full_size = basis%nbf * basis%nbf
+
+    allocate(res_x(full_size))
+    allocate(res_y(full_size))
+    allocate(res_z(full_size))
+
     natm = size(coord, dim=2)
 
     allocate(deloc(3, natm))
     deloc = 0
 
-    ! Use the set_integrator function to initialize the integrator
     call set_integrator(integrator, basis, coord, driv_order)
 
     result_ptr = compute_first_derivs(integrator)
 
-    call c_f_pointer(result_ptr%data, result1, [result_ptr%size])
+    call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
 
-    ! Compute derivatives
-    do i = 1, basis%nbf
-        do j = 1, basis%nbf
-            do n = 1, natm
-                if (i <= j) then
-                    c = j * (j - 1) / 2 + i
-                else
-                    c = i * (i - 1) / 2 + j
-                end if
-
-                deloc(1, n) = deloc(1, n) + &
-                        result1(full_size * (3 * n - 3) + (i - 1) * basis%nbf + j) * denab(c)
-                deloc(2, n) = deloc(2, n) + &
-                        result1(full_size * (3 * n - 2) + (i - 1) * basis%nbf + j) * denab(c)
-                deloc(3, n) = deloc(3, n) + &
-                        result1(full_size * (3 * n - 1) + (i - 1) * basis%nbf + j) * denab(c)
-
-            end do
-        end do
-    end do
 
     do n = 1, natm
-        de(1, n) = de(1, n) + deloc(1, n)
-        de(2, n) = de(2, n) + deloc(2, n)
-        de(3, n) = de(3, n) + deloc(3, n)
+        res_x = libecp_res(full_size * (3 * n - 3)+1:full_size * (3 * n - 2))
+        res_y = libecp_res(full_size * (3 * n - 2)+1:full_size * (3 * n - 1))
+        res_z = libecp_res(full_size * (3 * n - 1)+1:full_size * (3 * n))
+        call transform_matrix(basis, res_x)
+        call transform_matrix(basis, res_y)
+        call transform_matrix(basis, res_z)
+
+        do j = 1, basis%nbf
+            do i = 1, j
+                c = j * (j - 1) / 2 + i
+
+                if (i == j) then
+                    prim = 1
+                else
+                    prim = 2
+                end if
+
+                deloc(1, n) = deloc(1, n) + prim * res_x((i - 1) * basis%nbf + j) * denab(c)
+                deloc(2, n) = deloc(2, n) + prim * res_y((i - 1) * basis%nbf + j) * denab(c)
+                deloc(3, n) = deloc(3, n) + prim * res_z((i - 1) * basis%nbf + j) * denab(c)
+            end do
+        end do
+
     end do
+
+    de(:, 1:natm) = de(:, 1:natm) + deloc(:, 1:natm)
 
     result_ptr%data = c_null_ptr
     result_ptr%size = 0
-    nullify(result1)
+    nullify(libecp_res)
 
     call free_integrator(integrator)
     call free_result(result_ptr)
@@ -126,13 +130,11 @@ subroutine add_ecpder(basis, coord, denab, de)
 end subroutine add_ecpder
 
     subroutine set_integrator(integrator, basis, coord, deriv_order)
-    
-        ! Input arguments
+
         real(c_double), intent(in), contiguous :: coord(:,:)
         type(basis_set), intent(in) :: basis
         integer(c_int), intent(in) :: deriv_order
-    
-        ! Local variables
+
         type(c_ptr) :: integrator
         real(c_double), allocatable :: g_coords(:), g_exps(:), g_coefs(:)
         integer(c_int), allocatable :: g_ams(:), g_lengths(:)
@@ -140,33 +142,30 @@ end subroutine add_ecpder
         integer(c_int), allocatable :: u_ams(:), u_ns(:), u_lengths(:)
         integer(c_int) :: num_ecps, num_gaussians, n_coord, f_expo_len
         integer :: tri_size, full_size, natm
-    
-    
-        ! Compute sizes and allocate memory
+
+
         tri_size = basis%nbf * (basis%nbf + 1) / 2
         full_size = basis%nbf * basis%nbf
-    
+
         f_expo_len = sum(ecp_head%n_exponents)
         natm = size(coord, dim=2)
-    
+
         num_gaussians = basis%nshell
         n_coord = num_gaussians * 3
-    
+
         allocate(g_coords(n_coord), g_exps(basis%nprim), g_coefs(basis%nprim))
         allocate(g_ams(basis%nshell), g_lengths(basis%nshell))
-    
+
         allocate(u_coords(size(ecp_head%ecp_coord)), u_exps(f_expo_len))
         allocate(u_coefs(f_expo_len), u_ams(f_expo_len))
         allocate(u_ns(f_expo_len), u_lengths(ecp_head%element_id))
-    
-        ! Initialize Gaussian basis data
+
         call libecp_g_coords(basis, coord, g_coords)
         g_exps = real(basis%ex, kind=c_double)
         g_coefs = real(basis%cc, kind=c_double)
         g_ams = int(basis%am, kind=c_int)
         g_lengths = int(basis%ncontr, kind=c_int)
-    
-        ! Initialize ECP data
+
         num_ecps = int(size(ecp_head%ecp_coord) / 3, kind=c_int)
         u_coords = real(ecp_head%ecp_coord, kind=c_double)
         u_exps = real(ecp_head%exponents, kind=c_double)
@@ -174,16 +173,15 @@ end subroutine add_ecpder
         u_ams = int(ecp_head%ecp_am, kind=c_int)
         u_ns = int(ecp_head%ecp_r_expo, kind=c_int)
         u_lengths = ecp_head%n_exponents
-    
-        ! Initialize integrator
+
         integrator = init_integrator(num_gaussians, g_coords, g_exps, g_coefs, &
                                      g_ams, g_lengths)
-    
+
         call set_ecp_basis(integrator, num_ecps, u_coords, u_exps, u_coefs, &
                            u_ams, u_ns, u_lengths)
-    
+
         call init_integrator_instance(integrator, deriv_order)
-    
+
     end subroutine set_integrator
 
   subroutine libecpint_map(basis, label_map)
@@ -228,33 +226,33 @@ end subroutine add_ecpder
       end do
   end subroutine libecp_g_coords
 
-  subroutine transform_matrix(original_matrix, basis, transformed_matrix)
+  subroutine transform_matrix(basis, matrix)
 
     use basis_tools, only: basis_set
     type(basis_set), intent(in) :: basis
-    real(c_double), dimension(:), intent(in) :: original_matrix
-    real(c_double), dimension(:), allocatable, intent(out) :: transformed_matrix
+    real(c_double), dimension(:), intent(inout) :: matrix
+    real(c_double), dimension(:), allocatable :: tmp_matrix
     integer, dimension(:), allocatable :: label_map
     integer :: i, j, row, col, n
 
     n = basis%nbf
     allocate(label_map(n))
 
-    if (size(original_matrix) /= n * n) then
+    if (size(matrix) /= n * n) then
       print *, "Error: original_matrix size does not match labels."
       stop
     end if
 
     call libecpint_map(basis, label_map)
-    allocate(transformed_matrix(n * n))
+    allocate(tmp_matrix(n * n))
 
-    transformed_matrix = 0.0_c_double
+    tmp_matrix = matrix
 
     do i = 1, n
       do j = 1, n
         row = label_map(i)
         col = label_map(j)
-        transformed_matrix((row - 1) * n + col) = original_matrix((i - 1) * n + j)
+        matrix((row - 1) * n + col) = tmp_matrix((i - 1) * n + j)
       end do
     end do
   end subroutine transform_matrix
