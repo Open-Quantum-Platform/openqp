@@ -184,8 +184,7 @@ contains
 
     associate(grad  => infos%atoms%grad, &
               xyz   => infos%atoms%xyz, &
-              zn    => infos%atoms%zn &
-        )
+              zn    => infos%atoms%zn - infos%basis%ecp_zn_num)
 
 !     Zero out gradient
       grad = 0.0d0

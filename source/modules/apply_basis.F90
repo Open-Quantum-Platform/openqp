@@ -62,7 +62,7 @@ contains
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     if (pe%rank == 0) then
-      call map_shell2basis_set(infos%basis)
+      call map_shell2basis_set(infos, infos%basis)
     end if
 !    if (pe%rank == 0) then
 !      call infos%basis%from_file(basis_file, infos%atoms, err)

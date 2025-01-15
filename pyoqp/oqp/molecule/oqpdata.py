@@ -604,29 +604,7 @@ class OQPData:
         """Set up atomic data"""
         num_atoms, x, y, z, q, mass, atoms = read_system(system)
         self._data.mol_prop.natom = num_atoms
-        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, self.ecp_electron(q), mass)
-
-    def ecp_electron(self, q):
-        """
-        Calculate the effective core potential (ECP)
-        electrons for a list of elements.
-        """
-
-        import basis_set_exchange as bse
-        q_ecp_list = []
-        basis_names = self.basis_name.split(',')
-        if len(basis_names) == 1:
-            basis_names = [basis_names[0]] * len(q)
-        for element in q:
-            bs_set = bse.get_basis(basis_names[q.index(element)], elements=str(int(element)))
-            if 'ecp_potentials' in bs_set['elements'][str(int(element))]:
-                q_ecp= bs_set['elements'][str(int(element))]['ecp_electrons']
-            else:
-                q_ecp = 0
-            q_ecp_list.append(q_ecp)
-        q_plus_ecp = [q_ecp - q_val for q_ecp, q_val in zip(q, q_ecp_list)]
-
-        return q_plus_ecp
+        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)
 
     def get_basis_name(self, basis):
         self.basis_name = basis

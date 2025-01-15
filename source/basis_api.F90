@@ -94,7 +94,7 @@ contains
         ecp_head%coefficient = coef_ptr
         ecp_head%ecp_r_expo = rexpo_ptr
         ecp_head%ecp_am = am_ptr
-        ecp_head%ecp_coord = coord_ptr * UNITS_ANGSTROM
+        ecp_head%ecp_coord = coord_ptr
     end subroutine oqp_append_ecp
 
     subroutine oqp_append_shell(info)
@@ -154,8 +154,11 @@ contains
         print *, "----------------------"
     end subroutine print_all_shells
 
-    subroutine map_shell2basis_set(basis)
+    subroutine map_shell2basis_set(infos, basis)
         use basis_tools, only: basis_set
+        use types, only: information
+
+        type(information), intent(inout) :: infos
         class(basis_set) ,intent(inout):: basis
         type(electron_shell), pointer :: temp
         type(electron_shell), pointer :: temp1
@@ -253,7 +256,14 @@ contains
         end do
         if (.not. allocated(basis%ecp_zn_num)) allocate(basis%ecp_zn_num(maxval(basis%origin)))
 
-        basis%ecp_zn_num = ecp_head%ecp_zn 
+        basis%ecp_zn_num = ecp_head%ecp_zn
+
+        if (sum(basis%ecp_zn_num) > 0) then
+            infos%mol_prop%nelec = infos%mol_prop%nelec - sum(basis%ecp_zn_num)
+            infos%mol_prop%nelec_A = infos%mol_prop%nelec_A - sum(basis%ecp_zn_num)/2
+            infos%mol_prop%nelec_B = infos%mol_prop%nelec_B - sum(basis%ecp_zn_num)/2
+            infos%mol_prop%nocc = max(infos%mol_prop%nelec_A,infos%mol_prop%nelec_B)
+        end if
 
         call basis%set_bfnorms()
         call basis%normalize_primitives()

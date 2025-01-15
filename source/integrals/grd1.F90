@@ -160,7 +160,7 @@ contains
 
     do i = 1, infos%mol_prop%natom
        write(iw,'(7X,I4,5X,F4.1,3X,3F15.9)') &
-               i,infos%atoms%zn(i)+infos%basis%ecp_zn_num(i), infos%atoms%grad(:,i)
+               i,infos%atoms%zn(i), infos%atoms%grad(:,i)
     end do
 
 !   Compute Maximum and RMS Gradient
