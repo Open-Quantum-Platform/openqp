@@ -94,7 +94,7 @@ contains
         ecp_head%coefficient = coef_ptr
         ecp_head%ecp_r_expo = rexpo_ptr
         ecp_head%ecp_am = am_ptr
-        ecp_head%ecp_coord = coord_ptr
+        ecp_head%ecp_coord = coord_ptr !* UNITS_ANGSTROM
     end subroutine oqp_append_ecp
 
     subroutine oqp_append_shell(info)

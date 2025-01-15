@@ -11,8 +11,11 @@ class BasisData:
     def __init__(self, mol):
         self.mol = mol
         self.shell_num = 0
-        self.num_atoms = 0
-        self.atoms = []
+        self.num_atoms = mol.data["natom"]
+        self.atoms = mol.data["qn"]
+        self.atom_xyz = mol.data["xyz"]
+        print(type(self.atom_xyz))
+        print("xyz",list(self.atom_xyz[0][0:3]))
         self.basis_names = []
         self.shells_data = []
         self.ecp = {}
@@ -29,9 +32,7 @@ class BasisData:
     def get_basis_data(self, elements, basis_name='STO-3G',el_index=0):
 
         shells_data = []
-#        basis = bse.get_basis(basis_name, elements=elements)
         basis = self.read_basis_fmt(basis_name, elements)
-        print(basis)
 
         for shell in basis['elements'][str(elements)]['electron_shells']:
             ang_ii = 0
@@ -48,8 +49,6 @@ class BasisData:
                 shell_dict = {
                 "id" : self.shell_num,
                 "element_id":  el_index+1,
-#                "function_type": shell['function_type'],
-#                "region": shell['region'],
                 "angular_momentum": ang_mom,
                 "exponents": list(map(float, [shell['exponents'][i] for i in indices])),
                 "coefficients": list(map(float, [coefficients[i] for i in indices]))
@@ -71,14 +70,9 @@ class BasisData:
                 self.ecp["coef"].extend(term['coefficients'][0])
 
             self.ecp["num_expo"].extend([ecp_num_expo])
-            self.ecp["coord"].extend(self.atoms[el_index,1:])
+            self.ecp["coord"].extend(list(self.atom_xyz[0][0:3]))
         else:
             self.ecp["ecp_electron"].extend([0])
-        #    self.ecp["ang"] = [0]
-        #    self.ecp["r_expo"] = [0]
-        #    self.ecp["g_expo"] = [0]
-        #    self.ecp["coef"] = [0]
-        #    self.ecp["coord"] = [0]
 
         return shells_data
 
@@ -88,27 +82,19 @@ class BasisData:
 
         self.basis_names = self.mol.config["input"]["basis"].split(',')
 
-        print(self.basis_names)
 
         if len(self.basis_names) == 1:
             self.basis_names = [self.basis_names[0]] * self.num_atoms
         return self.basis_names
 
-    def get_num_atom(self):
-
-        system = self.mol.config["input"]["system"].strip().split('\n')
-        self.atoms = np.array([list(map(float, line.split())) for line in system])
-        self.num_atoms = self.atoms.shape[0]
-        return self.num_atoms
-
     def create_shell_data(self):
 
-        num_atoms = self.get_num_atom()
+        num_atoms = self.num_atoms
         basis_list = self.get_basislist()
 
         self.ecp["element_id"] = 0
         for el_index in range(0, num_atoms):
-            element_shells = self.get_basis_data(int(self.atoms[el_index,0]), basis_list[el_index], el_index)
+            element_shells = self.get_basis_data(int(self.atoms[el_index]), basis_list[el_index], el_index)
             self.shells_data.extend(element_shells)
         return self.shells_data
 
@@ -116,7 +102,6 @@ class BasisData:
 
 
         self.mol.data["element_id"] = int(self.ecp["element_id"])
-#        self.mol.data["num_expo"] = len(self.ecp["g_expo"])
         self.mol.data["ecp_nam"] = len(self.ecp["ang"])
 
         n_expo_array = np.array(self.ecp["num_expo"], dtype=np.int32)
@@ -145,7 +130,6 @@ class BasisData:
         for shell in shells_data:
             self.mol.data["id"] = int(shell["id"])
             self.mol.data["element_id"] = int(shell["element_id"])
-#            self.mol.data["num_expo"] = len(shell["exponents"])
             self.mol.data["ang_mom"] = shell["angular_momentum"]
 
             n_expo_array = np.array([len(shell["exponents"])], dtype=np.int32)
@@ -171,7 +155,6 @@ class BasisData:
         :return: Dictionary of basis data of element.
         """
 #        url = "file:631g.json"
-        print(url, elements)
         if url.startswith("file:"):
             file_path = url[len("file:"):]
 
@@ -196,9 +179,7 @@ class BasisData:
 def set_basis(mol):
     """Set up basis set for the molecule"""
     basis_file = mol.config["input"]["basis"]
-    print(basis_file)
     mol.data["OQP::basis_filename"] = basis_file
-#    print(mol.config["input"])
 
     basis_data= BasisData(mol)
 
