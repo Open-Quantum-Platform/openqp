@@ -148,17 +148,6 @@ struct electron_shell {
 	int* ecp_zn;
 };
 
-//struct ecpdata {
-//        int32_t element_id;
-//        int32_t num_am;
-//        int32_t num_exp;
-//        double* ecp_am;
-//        double* ecp_rcc;
-//        double* ecp_ex;
-//        double* ecp_cc;
-//};
-
-
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,

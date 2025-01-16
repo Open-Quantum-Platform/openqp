@@ -270,6 +270,10 @@ contains
         call basis%set_bfnorms()
         call basis%normalize_primitives()
 
+        nullify(head)
+        nullify(temp)
+        nullify(temp1)
+
     end subroutine map_shell2basis_set
 
     subroutine delete_all_shells()

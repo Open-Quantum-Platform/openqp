@@ -189,7 +189,6 @@ module types
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
     type(electron_shell) :: elshell
-!    type(ecpdata) :: ecp
   contains
     generic :: set_atoms => set_atoms_arr, set_atoms_atm
     procedure, pass :: set_atoms_arr => info_set_atoms_arr
