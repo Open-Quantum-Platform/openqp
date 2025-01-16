@@ -206,6 +206,24 @@ end subroutine add_ecpder
           label_map(i-2) = i
         case ('YZ')
           label_map(i-1) = i
+        case('YYY')
+          label_map(i+5) = i
+        case('ZZZ')
+          label_map(i+7) = i
+        case('XXY')
+          label_map(i-2) = i
+        case('XXZ')
+          label_map(i-2) = i
+        case('YYX')
+          label_map(i-2) = i
+        case('YYZ')
+          label_map(i+1) = i
+        case('ZZX')
+          label_map(i-2) = i
+        case('ZZY')
+          label_map(i) = i
+        case('XYZ')
+          label_map(i-5) = i
         case default
           label_map(i) = i
       end select

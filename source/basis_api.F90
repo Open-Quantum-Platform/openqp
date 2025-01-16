@@ -193,7 +193,7 @@ contains
                 case (2)
                     nbf = nbf + 6
                 case (3)
-                    nbf = nbf + 9
+                    nbf = nbf + 10
             end select
             temp => temp%next  ! Move to the next shell
         end do
@@ -248,7 +248,7 @@ contains
                 case (2)
                     basis%naos(ii) = 6
                 case (3)
-                    basis%naos(ii) = 9
+                    basis%naos(ii) = 10
             end select
 
             n1 = temp1%n_exponents(1)
