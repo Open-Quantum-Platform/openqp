@@ -272,7 +272,7 @@ contains
 !     Pulay force
       call grad_en_pulay(basis, xyz, zn, dens, grad, logtol=tol)
 !     Effective core potential gradient
-      call grad_1e_ecp(basis, xyz, dens, grad, logtol=tol)
+      call grad_1e_ecp(infos, basis, xyz, dens, grad, logtol=tol)
 
     end associate
 

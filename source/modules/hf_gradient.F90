@@ -218,7 +218,7 @@ contains
       print *, "Pulay force", grad
 
 !     Effective core potential gradient
-      call grad_1e_ecp(basis, xyz, dens, grad, logtol=tol)
+      call grad_1e_ecp(infos, basis, xyz, dens, grad, logtol=tol)
       print *, "Effective core potential gradient", grad
 
     end associate

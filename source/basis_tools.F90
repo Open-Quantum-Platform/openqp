@@ -1293,8 +1293,11 @@ contains
 
     call pe%bcast(basis%ao_offset, basis%nshell)
 
-
     call pe%bcast(basis%naos, basis%nshell)
+
+    if (.not. allocated(basis%ecp_zn_num)) allocate(basis%ecp_zn_num(maxval(basis%origin)))
+    call pe%bcast(basis%ecp_zn_num, maxval(basis%origin))
+
 
   end subroutine basis_broadcast
 

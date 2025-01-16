@@ -16,8 +16,7 @@ module grd1
 
    use mod_shell_tools, only: shell_t, shpair_t
    use mathlib, only: unpack_matrix
-   use ecp_tool, only: add_ecpder,add_ecpint
-   !call add_ecpint(basis,infos%atoms%xyz,dede, 1)
+   use ecp_tool, only: add_ecpder
    implicit none
 
    character(len=*), parameter :: module_name = "grd1"
@@ -789,16 +788,26 @@ atoms:      DO ic = 1, nat
 !-------------------------------------------------------------------------------
 
 !> @brief Effective core potential gradient
-  subroutine grad_1e_ecp(basis, coord, denab, de, logtol)
+  subroutine grad_1e_ecp(infos,basis, coord, denab, de, logtol)
+    use types, only: information
+    use parallel, only: par_env_t
+
+    type(information), target, intent(inout) :: infos
+    type(par_env_t) :: pe
     REAL(kind=dp), INTENT(INOUT) :: denab(:)
     type(basis_set), intent(inout) :: basis
     real(kind=dp), contiguous, intent(in) :: coord(:,:)
-
     REAL(kind=dp) :: de(:,:)
 
     REAL(kind=dp), optional :: logtol
 
-    call add_ecpder(basis, coord, denab, de)
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    if (pe%rank == 0) then
+        call add_ecpder(basis, coord, denab, de)
+    end if
+
+    call pe%bcast(de, size(de))
 
   end subroutine grad_1e_ecp
 

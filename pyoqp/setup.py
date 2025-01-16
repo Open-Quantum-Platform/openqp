@@ -19,7 +19,8 @@ setup(
         'libdlfind>=0.0.3',
         # 'dftd4>=3.5.0',
         'cffi>=1.16.0',
-#        'mpi4py>=4.0.0',
+        'mpi4py>=4.0.0',
+        'basis_set_exchange'
     ],
     extras_require={
     },

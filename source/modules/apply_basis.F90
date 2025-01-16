@@ -68,21 +68,19 @@ contains
 !      call infos%basis%from_file(basis_file, infos%atoms, err)
 !      infos%control%basis_set_issue = err
 !    endif
-  ! Checking error of basis set reading..
 
     call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    call pe%bcast(infos%control%basis_set_issue, 1)
-!    call add_ecpint(infos)
 
-!    write(iw,'(/5X,"Basis Sets options"/&
-!                  &5X,18("-")/&
-!                  &5X,"Basis Set File: ",A/&
-!                  &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
-!                  &5X,"Number of Basis Set functions  =",I8/&
-!                  &5X,"Maximum Angluar Momentum =",I8/)') &
-!                    trim(basis_file), &
-!                    infos%basis%nshell, infos%basis%nprim, &
-!                    infos%basis%nbf, infos%basis%mxam
+    if (sum(infos%basis%ecp_zn_num)>0) then
+      call pe%bcast(infos%mol_prop%nelec, 1)
+      call pe%bcast(infos%mol_prop%nelec_A, 1)
+      call pe%bcast(infos%mol_prop%nelec_B, 1)
+      call pe%bcast(infos%mol_prop%nocc, 1)
+    end if
+
+! Checking error of basis set reading..
+    call pe%bcast(infos%control%basis_set_issue, 1)
+
     write(iw,'(/5X,"Basis Sets options"/&
                   &5X,18("-")/&
                   &5X,"Basis Sets: ",A/&

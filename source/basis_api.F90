@@ -166,6 +166,8 @@ contains
         integer :: n1,n2
         real, dimension(:), allocatable :: ex
 
+        infos%control%basis_set_issue = .false.
+
         temp => head
         mxam = 0
         mxcontr = 0

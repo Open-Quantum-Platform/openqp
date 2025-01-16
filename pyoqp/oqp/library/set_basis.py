@@ -5,6 +5,7 @@ from oqp.utils.file_utils import try_basis, dump_log
 import numpy as np
 from oqp import ffi
 import basis_set_exchange as bse
+from oqp.utils.mpi_utils import MPIManager
 import json
 
 class BasisData:
@@ -14,8 +15,6 @@ class BasisData:
         self.num_atoms = mol.data["natom"]
         self.atoms = mol.data["qn"]
         self.atom_xyz = mol.data["xyz"]
-        print(type(self.atom_xyz))
-        print("xyz",list(self.atom_xyz[0][0:3]))
         self.basis_names = []
         self.shells_data = []
         self.ecp = {}
@@ -181,9 +180,11 @@ def set_basis(mol):
     basis_file = mol.config["input"]["basis"]
     mol.data["OQP::basis_filename"] = basis_file
 
-    basis_data= BasisData(mol)
 
-    basis_data.set_basis_data()
+    if(MPIManager().rank == 0):
+        basis_data= BasisData(mol)
+        basis_data.set_basis_data()
+
     oqp.apply_basis(mol)
 
     if mol.data["basis_set_issue"]:
