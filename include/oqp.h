@@ -16,7 +16,6 @@ typedef struct oqp_handle_t {
     struct control_parameters *control;
     struct mpi_communicator *mpiinfo;
     struct electron_shell *elshell;
-//    struct ecpdata *ecp;
 } oqp_handle_t;
 
 struct Cstring{
@@ -136,7 +135,6 @@ struct mpi_communicator {
 struct electron_shell {
         int id;
 	int element_id;
-//        int32_t num_expo;
 	int32_t ang_mom;
 	int32_t ecp_nam;
 	int* num_expo;
@@ -168,7 +166,6 @@ void apply_basis(struct oqp_handle_t *inf);
 
 void append_shell(struct oqp_handle_t *inf);
 void append_ecp(struct oqp_handle_t *inf);
-//void print_all_shells();
 
 void int1e(struct oqp_handle_t *inf);
 

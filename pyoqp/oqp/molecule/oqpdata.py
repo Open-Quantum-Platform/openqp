@@ -607,7 +607,7 @@ class OQPData:
         """Set up atomic data"""
         num_atoms, x, y, z, q, mass = read_system(system)
         self._data.mol_prop.natom = num_atoms
-        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)#self.ecp_electron(q), mass)
+        lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)
 
     def set_system2(self, system):
         """Set up the second set of atomic data"""
@@ -707,7 +707,6 @@ def compute_alpha_beta_electrons(n_e, mult):
     return (n_a, n_b) if mult > 0 else (n_b, n_a)
 
 
-
 def read_system(system):
     system = system.split("\n")
     if system[0]:
@@ -738,4 +737,3 @@ def read_system(system):
     mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass
-

@@ -166,16 +166,6 @@ module types
     type(c_ptr) :: ecp_zn
   end type electron_shell
 
-!  type,public, bind(c) :: ecpdata
-!    integer(c_int) :: element_id = -1
-!    integer(c_int) :: num_am = 0
-!    integer(c_int) :: num_exp = 0
-!    type(c_ptr) :: ecp_am
-!    type(c_ptr) :: ecp_rcc
-!    type(c_ptr) :: ecp_ex
-!    type(c_ptr) :: ecp_cc
-!  end type ecpdata
-
   type, public :: information
     type(molecule) :: mol_prop
     type(energy_results) :: mol_energy

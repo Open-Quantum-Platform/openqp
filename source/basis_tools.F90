@@ -1196,8 +1196,7 @@ contains
              , nbf => basis%naos(i) &
              )
 
-      zn = min(int(basis%atoms%zn(iat) + &
-              basis%ecp_zn_num(iat)), MAX_ELEMENT_Z)
+      zn = min(int(basis%atoms%zn(iat)), MAX_ELEMENT_Z)
 
       atname = ""
       if (zn > 0) atname = ELEMENTS_ATOMNAME(zn)
