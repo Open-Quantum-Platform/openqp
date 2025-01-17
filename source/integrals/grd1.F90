@@ -765,9 +765,10 @@ atoms:      DO ic = 1, nat
 !-------------------------------------------------------------------------------
 
 !> @brief Gradient of nuclear repulsion energy
-  subroutine grad_nn(atoms)
+  subroutine grad_nn(atoms, ecp_el)
     implicit none
     type(atomic_structure), intent(inout) :: atoms
+    integer, intent(in) :: ecp_el(:)
 
     integer :: k, l
     real(kind=dp) :: pkl(3), rkl3, de1(3)
@@ -777,7 +778,7 @@ atoms:      DO ic = 1, nat
             if (k==l) cycle
             pkl = atoms%xyz(:,k)-atoms%xyz(:,l)
             rkl3 = norm2(pkl)**3
-            de1 = -atoms%zn(k)*atoms%zn(l)*pkl/rkl3
+            de1 = -(atoms%zn(k)-ecp_el(k))*(atoms%zn(l)-ecp_el(l))*pkl/rkl3
             atoms%grad(:,k) = atoms%grad(:,k) + de1
             atoms%grad(:,l) = atoms%grad(:,l) - de1
         end do

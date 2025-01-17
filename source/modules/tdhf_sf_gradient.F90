@@ -231,7 +231,7 @@ contains
 !     Zero out gradient
       grad = 0.0d0
 !     Nuclear repulsion force
-      call grad_nn(infos%atoms)
+      call grad_nn(infos%atoms, infos%basis%ecp_zn_num)
 
 !     Obtain Lagrangian matrix (`dens`)
       call eijden(dens, nbf, infos)

@@ -190,15 +190,13 @@ contains
       grad = 0.0d0
 
 !     Nuclear repulsion force
-      call grad_nn(infos%atoms)
-      print *, "Nuclear repulsion force", grad
+      call grad_nn(infos%atoms, infos%basis%ecp_zn_num)
 
 !     Obtain Lagrangian matrix (`dens`)
       call eijden(dens, nbf, infos)
 
 !     Overlap gradient
       call grad_ee_overlap(basis, dens, grad, logtol=tol)
-      print *, "Overlap gradient", grad
 
 
 !     Compute total density matrix, discard Lagrangian
@@ -207,19 +205,15 @@ contains
 
 !     Kinetic gradient
       call grad_ee_kinetic(basis, dens, grad, logtol=tol)
-      print *, "Kinetic gradient", grad
 
 !     Hellmann-Feynman force
       call grad_en_hellman_feynman(basis, xyz, zn, dens, grad, logtol=tol)
-      print *, "Hellmann-Feynman force", grad
 
 !     Pulay force
       call grad_en_pulay(basis, xyz, zn, dens, grad, logtol=tol)
-      print *, "Pulay force", grad
 
 !     Effective core potential gradient
       call grad_1e_ecp(infos, basis, xyz, dens, grad, logtol=tol)
-      print *, "Effective core potential gradient", grad
 
     end associate
 
