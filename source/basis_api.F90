@@ -53,7 +53,7 @@ contains
         use types, only: information
         type(information), intent(in) :: info
         real(c_double), pointer :: expo_ptr(:), coef_ptr(:), rexpo_ptr(:),&
-                am_ptr(:), coord_ptr(:) 
+                am_ptr(:), coord_ptr(:)
         integer(c_int) , pointer :: n_expo_ptr(:), ecp_zn_ptr(:)
         integer :: natm, f_expo_len
         natm = info%mol_prop%natom
@@ -275,6 +275,81 @@ contains
         nullify(temp1)
 
     end subroutine map_shell2basis_set
+
+    subroutine print_basis(infos)
+        use types, only: information
+        use elements, only: ELEMENTS_SHORT_NAME
+
+
+        type(information), intent(inout) :: infos
+        integer :: iw, i, j, atom, elem, end_i
+        character(len=1) :: orbit
+
+        open (newunit=iw, file=infos%log_filename, position="append")
+
+        write(iw, '(/,5X,"====================== Basis Set Details ======================")')
+        atom = 0
+
+        do j = 1, infos%basis%nshell
+            if (atom .NE. infos%basis%origin(j)) then
+                elem = nint(infos%atoms%zn(infos%basis%origin(j)))
+                write(iw, '(5X, A2)') ELEMENTS_SHORT_NAME(elem)
+            end if
+            select case (infos%basis%am(j))
+                case (0)
+                  orbit = 'S'
+                case (1)
+                  orbit = 'P'
+                case (2)
+                  orbit = 'D'
+                case (3)
+                  orbit = 'F'
+                case default
+                  orbit = '?'
+            end select
+
+            write(iw, '(10X, A1)') orbit
+
+            end_i = infos%basis%g_offset(j) + infos%basis%ncontr(j) - 1
+
+            do i = infos%basis%g_offset(j), end_i
+                write(iw, '(15X, F10.5, 15X, F10.5)') infos%basis%ex(i),&
+                        infos%basis%cc(i)
+            end do
+            atom = infos%basis%origin(j)
+        end do
+        do i=1, infos%mol_prop%natom
+            if (infos%basis%ecp_zn_num(i) .NE. 0) then
+                elem = nint(infos%atoms%zn(i))
+                write(iw, '(5X, A2, A4)') ELEMENTS_SHORT_NAME(elem), '-ECP'
+                write(iw, '(5X, A, I5)') 'Core Electrons Removed:', infos%basis%ecp_zn_num(i)
+                call ecp_printing(iw, i)
+            end if
+        end do
+        write(iw, '(/,5X,"==================== End of Basis Set Data ====================")')
+        close(iw)
+
+    end subroutine print_basis
+
+    subroutine ecp_printing(iw,j)
+
+        integer, intent(in) :: iw, j
+        integer :: i, start_i, end_i
+
+        if (j > 1) then
+            start_i = sum(ecp_head%n_exponents(1:j-1)) + 1
+            end_i   = sum(ecp_head%n_exponents(1:j))
+        else
+            start_i = 1
+            end_i   = ecp_head%n_exponents(j)
+        end if
+        do i = start_i, end_i
+            write(iw, '(5X, I5, 5X, F10.5, 5X, I5, 5X, F10.5)') ecp_head%ecp_am(i),&
+                    ecp_head%exponents(i), ecp_head%ecp_r_expo(i),&
+                    ecp_head%coefficient(i)
+        end do
+
+    end subroutine ecp_printing
 
     subroutine delete_all_shells()
         type(electron_shell), pointer :: to_delete

@@ -69,7 +69,7 @@ class BasisData:
                 self.ecp["coef"].extend(term['coefficients'][0])
 
             self.ecp["num_expo"].extend([ecp_num_expo])
-            self.ecp["coord"].extend(list(self.atom_xyz[0][0:3]))
+            self.ecp["coord"].extend(list(self.atom_xyz[el_index][0:3]))
         else:
             self.ecp["ecp_electron"].extend([0])
 

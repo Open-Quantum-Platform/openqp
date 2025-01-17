@@ -27,7 +27,7 @@ contains
     use oqp_tagarray_driver
     use iso_c_binding, only: c_char
     use parallel, only: par_env_t
-    use basis_api, only: map_shell2basis_set
+    use basis_api, only: map_shell2basis_set, print_basis
 
     implicit none
     type(information), intent(inout) :: infos
@@ -91,6 +91,11 @@ contains
                     infos%basis%nshell, infos%basis%nprim, &
                     infos%basis%nbf, infos%basis%mxam
     close (iw)
+
+    if (pe%rank == 0) then
+      call print_basis(infos)
+    end if
+
 
   end subroutine oqp_apply_basis
 
