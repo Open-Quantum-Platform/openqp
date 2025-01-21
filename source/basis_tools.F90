@@ -15,6 +15,18 @@ module basis_tools
 
   implicit none
 
+  type ecp_parameters
+    real(real64), dimension(:), allocatable :: &
+      ecp_ex,   & !<
+      ecp_cc,   & !<
+      ecp_coord   !<
+    integer, dimension(:), allocatable :: &
+      ecp_r_ex,  & !<
+      ecp_am,    & !<
+      n_expo      !<
+    logical :: is_ecp = .false.
+  end type
+
   type basis_set
     real(real64), dimension(:), allocatable :: &
       ex, & !< Array of primitive Gaussian exponents
@@ -34,6 +46,7 @@ module basis_tools
       nbf = 0, &     !< Number of basis set functions
       mxcontr = 0, & !< Max. contraction degree
       mxam = 0       !< Max. angular momentum among basis set
+    type(ecp_parameters) :: ecp_params
     type(atomic_structure), pointer :: atoms
 
     real(real64), allocatable :: at_mx_dist2(:)

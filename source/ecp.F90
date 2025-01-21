@@ -4,7 +4,6 @@ module ecp_tool
     use, intrinsic :: iso_fortran_env, only: real64
     use libecpint_wrapper
     use libecp_result, only : ecp_result
-    use basis_api, only : ecp_head
     use basis_tools, only: basis_set
     use precision, only: dp
 
@@ -22,7 +21,7 @@ subroutine add_ecpint(basis, coord, hcore)
     integer :: i, j, c
     integer(c_int) :: driv_order
 
-    if (ecp_head%element_id == 0) then
+    if (.not.(basis%ecp_params%is_ecp)) then
         return
     end if
     driv_order = 0
@@ -68,9 +67,10 @@ subroutine add_ecpder(basis, coord, denab, de)
     integer :: tri_size, full_size
     integer(c_int) :: driv_order
 
-    if (ecp_head%element_id == 0) then
+    if (.not.(basis%ecp_params%is_ecp)) then
         return
     end if
+
     driv_order = 1
 
     tri_size = basis%nbf * (basis%nbf + 1) / 2
@@ -147,7 +147,7 @@ end subroutine add_ecpder
         tri_size = basis%nbf * (basis%nbf + 1) / 2
         full_size = basis%nbf * basis%nbf
 
-        f_expo_len = sum(ecp_head%n_exponents)
+        f_expo_len = sum(basis%ecp_params%n_expo)
         natm = size(coord, dim=2)
 
         num_gaussians = basis%nshell
@@ -156,9 +156,9 @@ end subroutine add_ecpder
         allocate(g_coords(n_coord), g_exps(basis%nprim), g_coefs(basis%nprim))
         allocate(g_ams(basis%nshell), g_lengths(basis%nshell))
 
-        allocate(u_coords(size(ecp_head%ecp_coord)), u_exps(f_expo_len))
+        allocate(u_coords(size(basis%ecp_params%ecp_coord)), u_exps(f_expo_len))
         allocate(u_coefs(f_expo_len), u_ams(f_expo_len))
-        allocate(u_ns(f_expo_len), u_lengths(ecp_head%element_id))
+        allocate(u_ns(f_expo_len), u_lengths(size(basis%ecp_params%n_expo)))
 
         call libecp_g_coords(basis, coord, g_coords)
         g_exps = real(basis%ex, kind=c_double)
@@ -166,13 +166,14 @@ end subroutine add_ecpder
         g_ams = int(basis%am, kind=c_int)
         g_lengths = int(basis%ncontr, kind=c_int)
 
-        num_ecps = int(size(ecp_head%ecp_coord) / 3, kind=c_int)
-        u_coords = real(ecp_head%ecp_coord, kind=c_double)
-        u_exps = real(ecp_head%exponents, kind=c_double)
-        u_coefs = real(ecp_head%coefficient, kind=c_double)
-        u_ams = int(ecp_head%ecp_am, kind=c_int)
-        u_ns = int(ecp_head%ecp_r_expo, kind=c_int)
-        u_lengths = ecp_head%n_exponents
+        num_ecps = int(size(basis%ecp_params%n_expo), kind=c_int)
+        u_coords = real(basis%ecp_params%ecp_coord, kind=c_double)
+        u_exps = real(basis%ecp_params%ecp_ex, kind=c_double)
+        u_coefs = real(basis%ecp_params%ecp_cc, kind=c_double)
+        u_ams = int(basis%ecp_params%ecp_am, kind=c_int)
+        u_ns = int(basis%ecp_params%ecp_r_ex, kind=c_int)
+        u_lengths = int(basis%ecp_params%n_expo, kind=c_int)
+
 
         integrator = init_integrator(num_gaussians, g_coords, g_exps, g_coefs, &
                                      g_ams, g_lengths)

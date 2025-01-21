@@ -133,7 +133,6 @@ contains
         end if
     end subroutine oqp_append_shell
 
-    ! Print all shells in the linked list
     subroutine print_all_shells() bind(C, name="print_all_shells")
         type(electron_shell), pointer :: temp
 
@@ -164,6 +163,7 @@ contains
         type(electron_shell), pointer :: temp1
         integer :: nbf, nshell, nprim, mxcontr, mxam, ii
         integer :: n1,n2
+        integer :: f_expo_len
         real, dimension(:), allocatable :: ex
 
         infos%control%basis_set_issue = .false.
@@ -269,6 +269,26 @@ contains
 
         call basis%set_bfnorms()
         call basis%normalize_primitives()
+        f_expo_len = sum(ecp_head%n_exponents)
+
+        allocate(basis%ecp_params%ecp_ex(f_expo_len))
+        allocate(basis%ecp_params%ecp_cc(f_expo_len))
+        allocate(basis%ecp_params%ecp_coord(size(ecp_head%ecp_coord)))
+        allocate(basis%ecp_params%ecp_r_ex(f_expo_len))
+        allocate(basis%ecp_params%ecp_am(size(ecp_head%ecp_am)))
+        allocate(basis%ecp_params%n_expo(size(ecp_head%n_exponents)))
+
+        basis%ecp_params%ecp_ex = ecp_head%exponents
+        basis%ecp_params%ecp_cc = ecp_head%coefficient
+        basis%ecp_params%ecp_r_ex = ecp_head%ecp_r_expo
+        basis%ecp_params%ecp_coord = ecp_head%ecp_coord
+        basis%ecp_params%ecp_am = ecp_head%ecp_am
+        basis%ecp_params%n_expo = ecp_head%n_exponents
+
+        if (ecp_head%element_id .NE. 0) then
+            basis%ecp_params%is_ecp = .true.
+        end if
+
 
         nullify(head)
         nullify(temp)
@@ -323,7 +343,7 @@ contains
                 elem = nint(infos%atoms%zn(i))
                 write(iw, '(5X, A2, A4)') ELEMENTS_SHORT_NAME(elem), '-ECP'
                 write(iw, '(5X, A, I5)') 'Core Electrons Removed:', infos%basis%ecp_zn_num(i)
-                call ecp_printing(iw, i)
+                call ecp_printing(infos%basis, iw, i)
             end if
         end do
         write(iw, '(/,5X,"==================== End of Basis Set Data ====================")')
@@ -331,22 +351,25 @@ contains
 
     end subroutine print_basis
 
-    subroutine ecp_printing(iw,j)
+    subroutine ecp_printing(basis,iw,j)
 
+        use basis_tools, only: basis_set
+
+        class(basis_set) ,intent(in):: basis
         integer, intent(in) :: iw, j
         integer :: i, start_i, end_i
 
         if (j > 1) then
-            start_i = sum(ecp_head%n_exponents(1:j-1)) + 1
-            end_i   = sum(ecp_head%n_exponents(1:j))
+            start_i = sum(basis%ecp_params%n_expo(1:j-1)) + 1
+            end_i   = sum(basis%ecp_params%n_expo(1:j))
         else
             start_i = 1
-            end_i   = ecp_head%n_exponents(j)
+            end_i   = basis%ecp_params%n_expo(j)
         end if
         do i = start_i, end_i
-            write(iw, '(5X, I5, 5X, F10.5, 5X, I5, 5X, F10.5)') ecp_head%ecp_am(i),&
-                    ecp_head%exponents(i), ecp_head%ecp_r_expo(i),&
-                    ecp_head%coefficient(i)
+            write(iw, '(5X, I5, 5X, F10.5, 5X, I5, 5X, F10.5)') basis%ecp_params%ecp_am(i),&
+                    basis%ecp_params%ecp_ex(i), basis%ecp_params%ecp_r_ex(i),&
+                    basis%ecp_params%ecp_cc(i)
         end do
 
     end subroutine ecp_printing
