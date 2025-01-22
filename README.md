@@ -24,6 +24,10 @@ Open Quantum Platform (OpenQP) is a quantum chemical platform featuring cutting-
 
 ### Quickstart
 
+- **Ready to Use Docker Image** of [openqp/openqp](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image)
+- **Building from Source Files Using the Instructions Below.**
+
+
 #### Requirements
 
 - **GCC, G++, Gfortran**: Version >= 8
@@ -112,6 +116,9 @@ mpirun -np number_of_mpi openqp any_example_file.inp
 
 For more in-depth information, visit:
 - [OpenQP Documentation](https://github.com/Open-Quantum-Platform/openqp/wiki)
+
+### Input Generator
+Easily create input files for OpenQP using our [Web-based Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/).
 
 ### Citing OpenQP
 If you use OpenQP in your research, please cite the following papers:
