@@ -56,6 +56,9 @@ def compute_grad(mol):
     # compute gradient
     Gradient(mol).gradient()
 
+    # compute properties
+    compute_scf_prop(mol)
+
     # compute dftd4
     LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
 
@@ -124,6 +127,9 @@ def compute_geom(mol):
 
     # optimize coordinates
     optimizer.optimize()
+
+    # compute properties
+    compute_scf_prop(mol)
 
 
 def compute_properties(mol):
