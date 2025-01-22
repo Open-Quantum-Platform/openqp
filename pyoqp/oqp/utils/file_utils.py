@@ -8,7 +8,7 @@ from oqp.molden.moldenwriter import write_frequency
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.utils.mpi_utils import mpi_dump
-
+from oqp.utils.qmmm import gradient_qmmm
 
 def try_basis(basis, path=None, fallback='6-31g'):
     """try various basis file locations and return the matching one"""
@@ -225,19 +225,20 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             loginfo += f'   PyOQP state {n:<6} {energy:<16.8f}\n'
 
     if section == 'grad':
-        atoms = mol.get_atoms()
-        loginfo += '   PyOQP electronic gradients\n'
-        for n in info['grad_list']:
-            grad = write_grad(atoms, info['el'][n])
-            loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
+        if not mol.config['input']['qmmm_flag']:
+           atoms = mol.get_atoms()
+           loginfo += '   PyOQP electronic gradients\n'
+           for n in info['grad_list']:
+               grad = write_grad(atoms, info['el'][n])
+               loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
 
-        d4 = info['d4']
-        loginfo += f'\n   PyOQP dftd correction\n'
-        loginfo += f'{write_grad(atoms, d4)}\n\n'
-        loginfo += '   PyOQP dispersion corrected gradients\n'
-        for n in info['grad_list']:
-            grad = write_grad(atoms, mol.grads[n])
-            loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
+           d4 = info['d4']
+           loginfo += f'\n   PyOQP dftd correction\n'
+           loginfo += f'{write_grad(atoms, d4)}\n\n'
+           loginfo += '   PyOQP dispersion corrected gradients\n'
+           for n in info['grad_list']:
+               grad = write_grad(atoms, mol.grads[n])
+               loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
 
     if section == 'opt':
         loginfo += """

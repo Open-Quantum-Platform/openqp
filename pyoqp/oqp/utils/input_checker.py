@@ -2,6 +2,7 @@
 
 import os
 import multiprocessing
+import oqp.utils.qmmm as qmmm
 from oqp.utils.mpi_utils import MPIManager
 
 
@@ -15,6 +16,7 @@ def check_input_values(config):
         'bp': check_nac_input,
         'soc': check_soc_input,
         'optimize': check_optimize_input,
+        'md': check_md_input,
         'meci': check_optimize_input,
         'mecp': check_optimize_input,
         'mep': check_optimize_input,
@@ -22,6 +24,7 @@ def check_input_values(config):
         'neb': check_optimize_input,
         'hess': check_hess_input,
         'nacme': check_nacme_input,
+        'qmmm': check_qmmm_input,
         'prop': skip_check,
         'data': skip_check,
     }
@@ -35,6 +38,9 @@ def skip_check(config, info):
 
 def not_available(func_name, info):
     exit(f'{info}\nPyOQP: runtype {func_name} is not available yet\n')
+
+def check_md_input(config, info):
+    if not config['input']['qmmm_flag']: exit(f"MD is only available for QM/MM")
 
 def check_scf_input(config, info):
     scf_type = config['scf']['type']
@@ -263,3 +269,8 @@ def check_hess_input(config, info):
 
 def check_nacme_input(config, info):
     check_energy_input(config, info)
+
+def check_qmmm_input(config, info):
+    if not config['input']['qmmm_flag']:
+       exit(f'{info}\nPyOQP: QM/MM group reguires qmmm_flag=True in input group.')
+

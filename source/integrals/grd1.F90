@@ -31,6 +31,7 @@ module grd1
    public grad_ee_kinetic
    public grad_en_hellman_feynman
    public grad_en_pulay
+   public grad_elpot
 
 contains
 
@@ -385,7 +386,122 @@ contains
     DEALLOCATE(de_priv)
 
  END SUBROUTINE
+!MHR START
+!-------------------------------------------------------------------------------
 
+!> @brief Electrostatic potential grid derivative contributions
+!> @details Compute derivative integrals of type <ii'|v|jj>
+!> @note No relativistic methods available
+!
+!> @author Vladimir Mironov, Miquel Huix-Rotllant
+!
+!   REVISION HISTORY:
+!> @date _Apr, 2024_ QMMM modifications
+!>
+!> @param[in]       coord   grid coordinates
+!> @param[in]       zq      grid weights
+!> @param[in,out]   denab   density matrix in packed format, remains unchanged on return
+!> @param[in]       l2      dimension of density matrix array
+!> @param[out]      de      integrals
+ SUBROUTINE grad_elpot(basis, coord, zq, denab, de, logtol)
+
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), contiguous, intent(in) :: coord(:)
+    real(kind=dp), intent(in) :: zq
+
+    REAL(kind=dp) :: de(:,:)
+
+    INTEGER :: l2, &
+        ii, jj
+
+    REAL(kind=dp), optional :: logtol
+
+    REAL(kind=dp) :: de1(3)
+    REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+
+    REAL(kind=dp) :: dernuc(3), tol
+    LOGICAL :: out, dbg, norm
+
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    INTEGER :: nat
+
+    dbg = .false.
+    out = .false.
+
+    IF (dbg) WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
+
+    nat = ubound(de, 2)
+    l2 = basis%nbf
+
+    !IF (dbg) write(iw,*) "OMP 1E GRD (TVDER)", basis%nshell, nat
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    norm = .true.
+    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+
+    IF (norm) THEN
+        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+    END IF
+
+!   temporary storage for 1e gradient
+    ALLOCATE(de_priv, mold=de)
+    de_priv = 0.0d0
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj,  &
+!$omp       shi, shj, cntp, &
+!$omp       dernuc, &
+!$omp       de1 &
+!$omp   ) &
+!$omp   reduction(+:de_priv)
+
+    CALL cntp%alloc(basis)
+
+!$omp do schedule(dynamic)
+!   I shell
+    DO ii = 1, basis%nshell
+
+
+        CALL shi%fetch_by_id(basis, ii)
+        de1 = 0.0
+
+!       J shell
+        DO jj = 1, basis%nshell
+
+            CALL shj%fetch_by_id(basis, jj)
+
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+
+!           Nuclear attraction derivative
+            CALL comp_coulomb_der1(cntp, coord(:), -zq, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), dernuc)
+            de1 = de1 + 2*dernuc(1:3)
+!           End of primitive loops
+
+        END DO
+
+        de_priv(:,shi%atid) = de_priv(:,shi%atid) + de1(:)
+
+    END DO
+!$omp end do
+!   End of shell loops
+!$omp end parallel
+
+    de = de + de_priv
+    DEALLOCATE(de_priv)
+
+ END SUBROUTINE
+!MHR END
 !-------------------------------------------------------------------------------
 
 !> @brief Basis function derivative contributions to gradient

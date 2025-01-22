@@ -59,6 +59,7 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
+            'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges'
         ]
 
         self.start_time = None

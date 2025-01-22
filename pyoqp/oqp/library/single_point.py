@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 
 from oqp.library.frequency import normal_mode, thermal_analysis
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
-
+import oqp.utils.qmmm as qmmm
 
 class Calculator:
     """
@@ -390,6 +390,11 @@ class Gradient(Calculator):
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
 
+        if self.mol.config['input']['qmmm_flag']:
+           current_xyz = self.mol.get_system().reshape((-1, 3))
+           gradient_qm,gradient_mm=qmmm.openmm_gradient(current_xyz,self.mol.data["OQP::partial_charges"])
+           self.mol.data["OQP::mm_gradient"]=gradient_qm
+
         # compute gradients
         grads = []
         if self.method == 'hf':
@@ -398,6 +403,9 @@ class Gradient(Calculator):
             grads = self.tddft_grad()
 
         self.mol.grads = grads
+
+        if self.mol.config['input']['qmmm_flag']:
+           qmmm.gradient_qmmm=qmmm.form_gradient_qmmm(grads,gradient_mm)
 
         return grads
 

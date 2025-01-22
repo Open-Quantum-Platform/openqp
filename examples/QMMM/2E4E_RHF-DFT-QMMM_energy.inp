@@ -1,0 +1,19 @@
+[input]
+system=2E4E.pdb 1 2 5 6 7 8 9 3 4 10 22 11 23
+charge=1
+runtype=energy
+functional=bhhlyp
+basis=6-31gs
+method=hf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[dftgrid]
+rad_type=becke
+
