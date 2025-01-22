@@ -5,18 +5,35 @@ module basis_api
     use libecpint_wrapper
     implicit none
 
+!###############################################################################
+
     type, abstract :: base_shell
         integer :: id
         integer :: element_id
         integer, pointer :: n_exponents(:)
         real, pointer :: exponents(:)
         real, pointer :: coefficient(:)
+    contains
+        procedure(base_shell_clear), deferred, pass :: clear
     end type base_shell
+
+    abstract interface
+        subroutine base_shell_clear(this)
+            import base_shell
+            class(base_shell), intent(inout) :: this
+        end subroutine base_shell_clear
+    end interface
+
+!###############################################################################
 
     type, extends(base_shell) :: electron_shell
         integer :: angular_momentum
         type(electron_shell), pointer :: next => null()
+   contains
+      procedure :: clear => electron_shell_clear
     end type electron_shell
+
+!###############################################################################
 
     type, extends(base_shell) :: ecpdata
         integer :: n_angular_m
@@ -24,6 +41,8 @@ module basis_api
         integer, pointer :: ecp_r_expo(:)
         integer, pointer :: ecp_am(:)
         real, pointer :: ecp_coord(:)
+   contains
+      procedure :: clear => ecpdata_clear
     end type ecpdata
 
     type(electron_shell), pointer :: head => null()
@@ -269,6 +288,19 @@ contains
 
         call basis%set_bfnorms()
         call basis%normalize_primitives()
+
+        call head%clear()
+        nullify(head)
+        nullify(temp)
+        nullify(temp1)
+
+
+        if (ecp_head%element_id == 0) then
+            basis%ecp_params%is_ecp = .false.
+            return
+        end if
+
+        basis%ecp_params%is_ecp = .true.
         f_expo_len = sum(ecp_head%n_exponents)
 
         allocate(basis%ecp_params%ecp_ex(f_expo_len))
@@ -285,14 +317,7 @@ contains
         basis%ecp_params%ecp_am = ecp_head%ecp_am
         basis%ecp_params%n_expo = ecp_head%n_exponents
 
-        if (ecp_head%element_id .NE. 0) then
-            basis%ecp_params%is_ecp = .true.
-        end if
-
-
-        nullify(head)
-        nullify(temp)
-        nullify(temp1)
+        call ecp_head%clear()
 
     end subroutine map_shell2basis_set
 
@@ -333,19 +358,20 @@ contains
             end_i = infos%basis%g_offset(j) + infos%basis%ncontr(j) - 1
 
             do i = infos%basis%g_offset(j), end_i
-                write(iw, '(15X, F10.5, 15X, F10.5)') infos%basis%ex(i),&
+                write(iw, '(15X, E12.5, 15X, E12.5)') infos%basis%ex(i),&
                         infos%basis%cc(i)
             end do
             atom = infos%basis%origin(j)
         end do
-        do i=1, infos%mol_prop%natom
-            if (infos%basis%ecp_zn_num(i) .NE. 0) then
+        if (infos%basis%ecp_params%is_ecp) then
+            do i=1, infos%mol_prop%natom
+                if (infos%basis%ecp_zn_num(i) .EQ. 0) cycle
                 elem = nint(infos%atoms%zn(i))
                 write(iw, '(5X, A2, A4)') ELEMENTS_SHORT_NAME(elem), '-ECP'
                 write(iw, '(5X, A, I5)') 'Core Electrons Removed:', infos%basis%ecp_zn_num(i)
                 call ecp_printing(infos%basis, iw, i)
-            end if
-        end do
+            end do
+        end if
         write(iw, '(/,5X,"==================== End of Basis Set Data ====================")')
         close(iw)
 
@@ -367,12 +393,47 @@ contains
             end_i   = basis%ecp_params%n_expo(j)
         end if
         do i = start_i, end_i
-            write(iw, '(5X, I5, 5X, F10.5, 5X, I5, 5X, F10.5)') basis%ecp_params%ecp_am(i),&
+            write(iw, '(5X, I5, 5X, E12.5, 5X, I5, 5X, E12.5)') basis%ecp_params%ecp_am(i),&
                     basis%ecp_params%ecp_ex(i), basis%ecp_params%ecp_r_ex(i),&
                     basis%ecp_params%ecp_cc(i)
         end do
 
     end subroutine ecp_printing
+
+    subroutine electron_shell_clear(this)
+        class(electron_shell), intent(inout) :: this
+
+        if (associated(this%n_exponents))  deallocate(this%n_exponents)
+        if (associated(this%exponents))    deallocate(this%exponents)
+        if (associated(this%coefficient))  deallocate(this%coefficient)
+
+        this%angular_momentum = 0
+        this%id         = 0
+        this%element_id = 0
+
+        if (associated(this%next)) then
+            call this%next%clear()
+            nullify(this%next)
+        end if
+
+    end subroutine electron_shell_clear
+
+    subroutine ecpdata_clear(this)
+        class(ecpdata), intent(inout) :: this
+
+        if (associated(this%n_exponents))  deallocate(this%n_exponents)
+        if (associated(this%exponents))    deallocate(this%exponents)
+        if (associated(this%coefficient))  deallocate(this%coefficient)
+
+        if (associated(this%ecp_zn))     deallocate(this%ecp_zn)
+        if (associated(this%ecp_r_expo)) deallocate(this%ecp_r_expo)
+        if (associated(this%ecp_am))     deallocate(this%ecp_am)
+        if (associated(this%ecp_coord))  deallocate(this%ecp_coord)
+
+        this%n_angular_m = 0
+        this%id          = 0
+        this%element_id  = 0
+    end subroutine ecpdata_clear
 
     subroutine delete_all_shells()
         type(electron_shell), pointer :: to_delete
