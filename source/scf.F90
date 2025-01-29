@@ -96,24 +96,6 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
-  ! pFON settings
-     logical :: do_pfon
-     real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
-     real(kind=dp) :: electron_sum_a, electron_sum_b 
-     real(kind=dp), allocatable :: occ_a(:), occ_b(:)
-
-     do_pfon = .false. 
-
-     do_pfon = infos%control%pfon 
-
-  !  pFON parameters (can be input by user in future)
-     start_temp = 0.005_dp 
-     end_temp   = 0.0001_dp 
-     temp_pfon  = start_temp
-     if (temp_pfon <= 1.0e-10_dp) temp_pfon = 1.0e-5_dp
-
-  !  for beta in this case we use atomic unit( change later)
-     beta_pfon = 3.166811563e-6_dp / temp_pfon 
 
   !  DIIS options
   !  none IS NOT recommended!
@@ -484,47 +466,6 @@ contains
         call int2_driver%pe%bcast(mo_a, size(mo_a))
         call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
 
-        ! pFON section
-        if (do_pfon) then
-            if (.not. allocated(occ_a)) allocate(occ_a(nbf))
-            if (.not. allocated(occ_b)) allocate(occ_b(nbf))
-
-            select case (scf_type)
-            case (scf_rhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon)
-
-            case (scf_uhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
-                if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon)
-                end if
-
-            case (scf_rohf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
-                if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon)
-                end if
-            end select
-
-            ! (Alpha)
-            sum_occ_alpha = 0.0_dp
-            do i = 1, nbf
-                sum_occ_alpha = sum_occ_alpha + occ_a(i)
-            end do
-
-            ! (Beta)
-            sum_occ_beta = 0.0_dp
-            if (scf_type == scf_uhf .or. scf_type == scf_rohf) then
-                do i = 1, nbf
-                    sum_occ_beta = sum_occ_beta + occ_b(i)
-                end do
-            end if
-
-            write(iw,'(" pFON: Temp=",F7.4,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
-                temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
-        end if
-
-
   !     MOM option works for RHF and ROHF
         if (do_mom .and. diis_error.lt.infos%control%mom_switch) do_mom_flag=.true.
         if (do_mom .and. do_mom_flag .and. .not. step_0_mom) then
@@ -539,19 +480,10 @@ contains
 
   !     New density matrix in AO basis using MO.
         if (int2_driver%pe%rank == 0) then
-            if (.not. do_pfon) then 
-                call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-            else 
-                call build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
-            end if
-        end if 
+           call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        end if
         call int2_driver%pe%bcast(pdmat, size(pdmat))
-        
-        ! adjusting temperature 
-        if (do_pfon) then 
-            temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
-            beta_pfon = 1.0_dp / temp_pfon
-        end if 
+
   !
 
   !     Checking the HOMO-LUMO gaps for predicting SCF convergency
@@ -985,97 +917,6 @@ contains
    call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
 
  end subroutine mo_reorder
-!> @brief      Assign pFON occupation 
- subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon)
-     use precision, only: dp 
-     implicit none 
-
-     integer, intent(in) :: nbf 
-     integer, intent(in) :: nelec
-     real(kind=dp), intent(in) :: beta_pfon
-     real(kind=dp), intent(in) :: mo_energy(nbf)
-     real(kind=dp), intent(inout) :: occ(nbf)
-
-     real(kind=dp) :: eF, sum_occ
-     integer :: i, i_homo, i_lumo
-     real(kind=dp) :: tmp
-
-   ! Identifying the homo for rhf, homo ~ nelect/2 
-     i_homo = max(1, nelec/2)
-     i_lumo = i_homo + 1 
-     if (i_lumo > nbf) i_lumo = nbf 
-
-     ! Fermi level!
-     eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
-
-     ! pre-normalizrion occupation 
-
-     do i = 1, nbf
-        tmp = beta_pfon * (mo_energy(i) - eF)
-        occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
-     end do 
-     
-     ! Re-normalization to total number of electrons for rhf (alpha) 
-
-     sum_occ = 0.0_dp 
-     do i = 1, nbf 
-        sum_occ = sum_occ + occ(i) 
-     end do 
-     if (sum_occ < 1.0e-14_dp) then
-        sum_occ = 1.0_dp 
-        ! avoid dividing by zero 
-     end if 
-     do i = 1, nbf 
-        occ(i) = occ(i) * (real(nelec,dp) / sum_occ)
-     end do 
- end subroutine pfon_occupations
- 
- ! pfon density
- subroutine build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
-    use precision, only: dp 
-    use mathlib, only: pack_matrix
-    implicit none 
-
-    real(kind=dp), intent(inout) :: pdmat(:,:)
-    real(kind=dp), intent(in) :: mo_a(:,:), mo_b(:,:)
-    real(kind=dp), intent(in) :: occ_a(:), occ_b(:)
-    integer, intent(in) :: nbf, scf_type, nelec_a, nelec_b
-
-    real(kind=dp), allocatable :: dtmp(:,:), cmo(:,:)
-    integer :: i, mu, nu 
-
-    allocate(dtmp(nbf, nbf), source=0.0_dp)
-    pdmat(:,1) = 0.0_dp 
-    if (size(pdmat,2) > 1) pdmat(:,2) = 0.0_dp 
-
-    ! build alpha density 
-    do i = 1, nbf 
-        if (occ_a(i) > 1.0e-14_dp) then 
-            do mu = 1, nbf
-                do nu = 1, nbf 
-                    dtmp(mu,nu) = dtmp(mu,nu) + occ_a(i) * mo_a(mu,i)*mo_a(nu,i)
-                end do 
-            end do 
-        end if 
-    end do 
-
-    call pack_matrix(dtmp, pdmat(:,1))
-
-    ! needs to be rechecked 
-    if (scf_type == 2 .or. scf_type == 3)
-        dtmp(:,:) = 0.0_dp 
-        do i = 1, nbf 
-            if (occ_b(i) > 1.0e-14_dp) then 
-                do mu = 1, nbf 
-                    do nu = 1, nbf 
-                        dtmp(mu,nu) = dtmp(mu,nu) + occ_b(i)*mo_b(mu,i)*mo_b(nu,i)
-                    end do 
-                end do 
-            end if 
-        end do
-        call pack_matrix(dtmp, pdmat(:,2))
-    end if 
- end subroutine build_pfon_density 
 
 !> @brief      This routine reorders orbitals to maximum overlap.
  subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
