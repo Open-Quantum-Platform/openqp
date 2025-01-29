@@ -75,7 +75,7 @@ OQP_CONFIG_SCHEMA = {
         'vshift': {'type': float, 'default': '0.0'},
         'mom': {'type': bool, 'default': 'False'},
         'mom_switch': {'type': float, 'default': '0.003'},
-        'pfon': {'type': bool, 'default': 'Flase'},
+        'pfon': {'type': bool, 'default': 'False'},
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
