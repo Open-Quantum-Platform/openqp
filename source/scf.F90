@@ -74,6 +74,12 @@ contains
 
      type(int2_compute_t) :: int2_driver
      class(int2_fock_data_t), allocatable :: int2_data
+     ! pFON 
+     logical :: do_pfon
+     real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
+     real(kind=dp) :: electron_sum_a, electron_sum_b 
+     real(kind=dp), allocatable :: occ_a(:), occ_b(:)
+     real(kind=dp) :: sum_occ_alpha, sum_occ_beta
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -97,13 +103,7 @@ contains
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
   ! pFON settings
-     logical :: do_pfon
-     real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
-     real(kind=dp) :: electron_sum_a, electron_sum_b 
-     real(kind=dp), allocatable :: occ_a(:), occ_b(:)
-
      do_pfon = .false. 
-
      do_pfon = infos%control%pfon 
 
   !  pFON parameters (can be input by user in future)
@@ -1062,7 +1062,7 @@ contains
     call pack_matrix(dtmp, pdmat(:,1))
 
     ! needs to be rechecked 
-    if (scf_type == 2 .or. scf_type == 3)
+    if (scf_type == 2 .or. scf_type == 3) then 
         dtmp(:,:) = 0.0_dp 
         do i = 1, nbf 
             if (occ_b(i) > 1.0e-14_dp) then 
