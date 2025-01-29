@@ -483,7 +483,7 @@ contains
         end if
         call int2_driver%pe%bcast(mo_a, size(mo_a))
         call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
-
+        do_pfon = infos%control%pfon
         ! pFON section
         if (do_pfon) then
             if (.not. allocated(occ_a)) allocate(occ_a(nbf))
