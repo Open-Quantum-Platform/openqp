@@ -114,6 +114,7 @@ struct control_parameters {
     double    vshift_cdiis_switch;
     double    vshift;
     bool      mom;
+    bool      pfon;
     double    mom_switch;
     double    conv;
     int64_t   scf_incremental;
