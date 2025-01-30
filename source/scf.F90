@@ -528,7 +528,7 @@ contains
                 end do
             end if
 
-            write(iw,'(" pFON: Temp=",F7.4,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
+            write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
                 temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
         end if
 
