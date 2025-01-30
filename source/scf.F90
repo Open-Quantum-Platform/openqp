@@ -80,6 +80,9 @@ contains
      real(kind=dp) :: electron_sum_a, electron_sum_b 
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta
+     ! (1 Hartree = 4.3597447222071e-18 J,  k_B = 1.380649e-23 J/K)
+     ! => kB_HaK ~ 3.166811563e-6
+     real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -106,15 +109,20 @@ contains
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
 
-  !  pFON parameters (can be input by user in future)
-     start_temp = 0.005_dp 
-     end_temp   = 0.0001_dp 
+  !  pFON parameters (can be input by user in future) temp in Kelvin
+     start_temp = 2000.0_dp 
+!     end_temp   = 0.0001_dp 
      temp_pfon  = start_temp
-     if (temp_pfon <= 1.0e-10_dp) temp_pfon = 1.0e-5_dp
+     ! these part needs to be changed since the temp can not be negative
+     ! If T < 1 K, clamp to 1 K
+     if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
+!     if (temp_pfon <= 1.0e-10_dp) temp_pfon = 1.0e-5_dp
 
   !  for beta in this case we use atomic unit( change later)
-     beta_pfon = 3.166811563e-6_dp / temp_pfon 
-
+  !   beta_pfon = 3.166811563e-6_dp / temp_pfon 
+     ! We'll compute beta as 1 / (k_B * T)
+     ! => if T in K,   beta = 1 / ( kB_HaK * T ) in 1/Hartree
+     beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
   !  DIIS options
   !  none IS NOT recommended!
   !  c-DIIS: Default commutator DIIS
@@ -548,11 +556,18 @@ contains
         call int2_driver%pe%bcast(pdmat, size(pdmat))
         
         ! adjusting temperature 
-        if (do_pfon) then 
-            temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
-            beta_pfon = 1.0_dp / temp_pfon
-        end if 
-  !
+!        if (do_pfon) then 
+!           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
+!            beta_pfon = 1.0_dp / temp_pfon
+!        end if 
+        if (do_pfon) then
+            ! Decrease temperature by 50 K each iteration
+            temp_pfon = temp_pfon - 50.0_dp
+            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
+
+            ! Recompute beta using T in Kelvin
+            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+        end if
 
   !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
