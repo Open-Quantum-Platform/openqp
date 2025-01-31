@@ -110,7 +110,7 @@ contains
      do_pfon = infos%control%pfon 
 
   !  pFON parameters (can be input by user in future) temp in Kelvin
-     start_temp = 2000.0_dp 
+     start_temp = 1000.0_dp 
 !     end_temp   = 0.0001_dp 
      temp_pfon  = start_temp
      ! these part needs to be changed since the temp can not be negative
@@ -529,7 +529,15 @@ contains
             end if
 
             write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
-                temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
+                 temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
+
+            write(iw,'(" Start: Temp=",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
+                 start_temp, end_temp, electron_sum_a, electron_sum_b
+
+            do i = 1, nbf
+                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
+                     i, occ_a(i), i, occ_b(i)
+            end do
         end if
 
 
