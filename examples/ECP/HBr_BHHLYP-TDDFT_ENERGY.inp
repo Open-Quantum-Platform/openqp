@@ -1,0 +1,33 @@
+# Energy Calculation of MRSF-TDDFT with BHHLYP/6-31G* of H2O
+# For MRSF-TDDFT, we have to set:
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype       energy
+#    input           method         tdhf
+#    scf           multiplicity       3
+#    scf              type          rohf
+#    tdhf             type          mrsf
+#
+# Since we did not specify multiplicity in [tdhf], OQP assumes singlet state.
+#
+[input]
+system=
+   35   0.000000000   0.000000000   0.000000000
+   1    0.000000000   0.000000000   1.407611
+charge=0
+runtype=grad
+basis=LANL2DZ
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[tdhf]
+type=tdhf
+nstate=3

@@ -17,23 +17,32 @@ class BasisData:
         self.atom_xyz = mol.data["xyz"]
         self.basis_names = []
         self.shells_data = []
-        self.ecp = {}
-        self.ecp["ang"] = []
-        self.ecp["r_expo"] = []
-        self.ecp["g_expo"] = []
-        self.ecp["coef"] = []
-        self.ecp["coord"] = []
-        self.ecp["element_id"] = []
-        self.ecp["ecp_electron"] = []
-        self.ecp["num_expo"] = []
-
+        self.ecp = {
+            "ang": [],
+            "r_expo": [],
+            "g_expo": [],
+            "coef": [],
+            "coord": [],
+            "element_id": [],
+            "ecp_electron": [],
+            "num_expo": []
+        }
 
     def get_basis_data(self, elements, basis_name='STO-3G',el_index=0):
+        """
+        Retrieves and organizes electron shell data (and ECP data if present) for a specified element.
+
+        :param elements: Atomic number (int) of the element.
+        :param basis_name: Name of the basis set (default: 'STO-3G').
+        :param el_index: Index of the element in the molecule.
+        :return: A list of dictionaries containing shell data.
+        """
 
         shells_data = []
         basis = self.read_basis_fmt(basis_name, elements)
+        element_key = str(elements)
 
-        for shell in basis['elements'][str(elements)]['electron_shells']:
+        for shell in basis['elements'][element_key]['electron_shells']:
             ang_ii = 0
 
             for coefficients in shell['coefficients']:
@@ -42,24 +51,27 @@ class BasisData:
                     ang_mom = shell['angular_momentum'][ang_ii]
                 else:
                     ang_mom = shell['angular_momentum'][0]
-                self.shell_num = self.shell_num + 1
-                f_coefficients =  list(map(float, coefficients))
-                indices = [i for i, value in enumerate(f_coefficients) if value != 0]
+
+                self.shell_num += 1
+
+                float_coeffs =  list(map(float, coefficients))
+                nonzero_indices = [i for i, value in enumerate(float_coeffs) if value != 0]
                 shell_dict = {
                 "id" : self.shell_num,
                 "element_id":  el_index+1,
                 "angular_momentum": ang_mom,
-                "exponents": list(map(float, [shell['exponents'][i] for i in indices])),
-                "coefficients": list(map(float, [coefficients[i] for i in indices]))
+                "exponents": [float(x) for i, x in enumerate(shell['exponents']) if i in nonzero_indices],
+                "coefficients": list(map(float, [coefficients[i] for i in nonzero_indices]))
             }
 
                 shells_data.append(shell_dict)
-                ang_ii+=1
+                ang_ii += 1
 
-        if 'ecp_potentials' in basis['elements'][str(elements)]:
-            ecp_list = basis['elements'][str(elements)]['ecp_potentials']
-            self.ecp["ecp_electron"].extend([basis['elements'][str(elements)]['ecp_electrons']])
+        if 'ecp_potentials' in basis['elements'][element_key]:
+            self.ecp["ecp_electron"].append(basis['elements'][element_key]['ecp_electrons'])
             self.ecp["element_id"] +=1
+
+            ecp_list = basis['elements'][element_key]['ecp_potentials']
             ecp_num_expo = 0
             for term in ecp_list:
                 ecp_num_expo += len(term['r_exponents'])
@@ -68,7 +80,7 @@ class BasisData:
                 self.ecp["g_expo"].extend(term['gaussian_exponents'])
                 self.ecp["coef"].extend(term['coefficients'][0])
 
-            self.ecp["num_expo"].extend([ecp_num_expo])
+            self.ecp["num_expo"].append(ecp_num_expo)
             self.ecp["coord"].extend(list(self.atom_xyz[el_index][0:3]))
         else:
             self.ecp["ecp_electron"].extend([0])
@@ -79,7 +91,7 @@ class BasisData:
 
     def get_basislist(self):
         """
-        Retrieves a list of basis names for each atom.
+        Retrieves a list of basis names for structure.
 
         :return: A list of basis names (strings).
         """
@@ -127,18 +139,27 @@ class BasisData:
         return self.basis_names
 
     def create_shell_data(self):
+        """
+        Creates the shells data for each atom in the molecule based on provided basis sets.
 
-        num_atoms = self.num_atoms
+        :return: A list of all shells data across all atoms.
+        """
+
         basis_list = self.get_basislist()
 
         self.ecp["element_id"] = 0
-        for el_index in range(0, num_atoms):
-            element_shells = self.get_basis_data(int(self.atoms[el_index]), basis_list[el_index], el_index)
+
+        for el_index in range(self.num_atoms):
+            element = int(self.atoms[el_index])
+            basis_name = basis_list[el_index]
+            element_shells = self.get_basis_data(element, basis_name,el_index)
             self.shells_data.extend(element_shells)
         return self.shells_data
 
     def set_ecp_data(self):
-
+        """
+        Sets the ECP-related data in the molecule's data structure and appends it via oqp.
+        """
 
         self.mol.data["element_id"] = int(self.ecp["element_id"])
         self.mol.data["ecp_nam"] = len(self.ecp["ang"])
@@ -153,18 +174,21 @@ class BasisData:
 
         r_expo_array = np.array(self.ecp["r_expo"], dtype=np.float64)
         self.mol.data["ecp_rex"] =  ffi.cast("int*", ffi.from_buffer(r_expo_array))
-        coord_array = np.array(self.ecp["coord"], dtype=np.float64)
 
+        coord_array = np.array(self.ecp["coord"], dtype=np.float64)
         self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ang"], dtype=np.float64)))
         self.mol.data["ecp_zn"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ecp_electron"], dtype=np.int32)))
         self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
+
         oqp.append_ecp(self.mol)
 
 
     def set_basis_data(self):
+        """
+        Sets the basis data for the molecule's shells, then sets the ECP data.
+        """
 
         shells_data = self.create_shell_data()
-
 
         for shell in shells_data:
             self.mol.data["id"] = int(shell["id"])

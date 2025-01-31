@@ -1,0 +1,23 @@
+# DFT/6-31G*/BHHLYP/RHF/ENERGY of H2O
+# For Closed-Shell systems we use RHF, when we use RHF, we have to choose multiplicity=1.
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation,
+# we dont need [tdhf] section.
+[input]
+system=
+   12   0.000000000   0.000000000   0.000000000
+charge=0
+runtype=energy
+#functional=bhhlyp
+basis=LANL2DZ
+#basis=6-31g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[dftgrid]
+rad_type=becke
