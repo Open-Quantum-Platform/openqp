@@ -358,7 +358,7 @@ contains
             end_i = infos%basis%g_offset(j) + infos%basis%ncontr(j) - 1
 
             do i = infos%basis%g_offset(j), end_i
-                write(iw, '(15X, E12.5, 15X, E12.5)') infos%basis%ex(i),&
+                write(iw, '(15X, ES12.5, 15X, ES12.5)') infos%basis%ex(i),&
                         infos%basis%cc(i)
             end do
             atom = infos%basis%origin(j)
@@ -393,7 +393,7 @@ contains
             end_i   = basis%ecp_params%n_expo(j)
         end if
         do i = start_i, end_i
-            write(iw, '(5X, I5, 5X, E12.5, 5X, I5, 5X, E12.5)') basis%ecp_params%ecp_am(i),&
+            write(iw, '(5X, I5, 5X, ES12.5, 5X, I5, 5X, ES12.5)') basis%ecp_params%ecp_am(i),&
                     basis%ecp_params%ecp_ex(i), basis%ecp_params%ecp_r_ex(i),&
                     basis%ecp_params%ecp_cc(i)
         end do
