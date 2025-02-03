@@ -76,6 +76,7 @@ OQP_CONFIG_SCHEMA = {
         'mom': {'type': bool, 'default': 'False'},
         'mom_switch': {'type': float, 'default': '0.003'},
         'pfon': {'type': bool, 'default': 'False'},
+        'pfon_start_temp': {'type': float, 'default': '2000.0'},
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
@@ -224,7 +225,8 @@ class OQPData:
             "vshift": "set_scf_vshift",
             "mom": "set_scf_mom",
             "mom_switch": "set_scf_mom_switch",
-            "pfon": "set_scf_pfon", 
+            "pfon": "set_scf_pfon",
+            "pfon_start_temp": "set_scf_pfon_start_temp",
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
@@ -444,8 +446,12 @@ class OQPData:
         self._data.control.mom_switch = mom_switch
 
     def set_scf_pfon(self, pfon): 
-        """pFON """
+        """pfon """
         self._data.control.pfon = pfon 
+
+    def set_scf_pfon_start_temp(self, pfon_start_temp): 
+        """pfon_start_temp """
+        self._data.control.pfon_start_temp = pfon_start_temp 
 
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""

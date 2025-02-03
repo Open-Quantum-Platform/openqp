@@ -77,7 +77,7 @@ contains
      ! pFON 
      logical :: do_pfon
      real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
-     real(kind=dp) :: electron_sum_a, electron_sum_b 
+     real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta
      ! (1 Hartree = 4.3597447222071e-18 J,  k_B = 1.380649e-23 J/K)
@@ -105,12 +105,16 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
-  ! pFON settings
+  !  pFON settings
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
-
+  !  Read the strating temp from the user 
+     start_temp = infos%control%pfon_start_temp
+     if (start_temp <= 0.0_dp) then 
+         start_temp = 1000.0_dp 
+     end if 
   !  pFON parameters (can be input by user in future) temp in Kelvin
-     start_temp = 1000.0_dp 
+!     start_temp = 1000.0_dp 
 !     end_temp   = 0.0001_dp 
      temp_pfon  = start_temp
      ! these part needs to be changed since the temp can not be negative
@@ -568,15 +572,31 @@ contains
 !           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
 !            beta_pfon = 1.0_dp / temp_pfon
 !        end if 
-        if (do_pfon) then
-            ! Decrease temperature by 50 K each iteration
-            temp_pfon = temp_pfon - 50.0_dp
-            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
-
-            ! Recompute beta using T in Kelvin
-            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-        end if
-
+!        if (do_pfon) then
+!            ! Decrease temperature by 50 K each iteration
+!            temp_pfon = temp_pfon - 50.0_dp
+!            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
+!            ! Recompute beta using T in Kelvin
+!            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+!        end if
+  !     Check if the next iteration is the last one or close to the convergence
+        if (do_pfon) then 
+            if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+                temp_pfon = 0.0_dp 
+                ! or clamp to 1k (need to be disscused) 
+            else 
+                temp_pfon = temp_pfon - 50.0_dp 
+                if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
+            end if 
+            ! Recompure the beta 
+            if (temp_pfon > 1.0e-12_dp) then 
+                beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+            else 
+                ! For temp 0:
+                beta_pfon = 1.0e20_dp 
+            end if
+            ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
+        end if 
   !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
            select case (scf_type)

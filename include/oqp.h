@@ -116,6 +116,7 @@ struct control_parameters {
     bool      mom;
     bool      pfon;
     double    mom_switch;
+    double    pfon_start_temp;
     double    conv;
     int64_t   scf_incremental;
     double    int2e_cutoff;
