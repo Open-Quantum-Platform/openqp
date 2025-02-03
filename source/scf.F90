@@ -354,7 +354,39 @@ contains
      do iter = 1, maxit
 
   !     The main SCF iteration loop
-
+!>------------------------------------------------------------------------- 
+        ! adjusting temperature 
+!        if (do_pfon) then 
+!           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
+!            beta_pfon = 1.0_dp / temp_pfon
+!        end if 
+!        if (do_pfon) then
+!            ! Decrease temperature by 50 K each iteration
+!            temp_pfon = temp_pfon - 50.0_dp
+!            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
+!            ! Recompute beta using T in Kelvin
+!            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+!        end if
+  !     Check if the next iteration is the last one or close to the convergence
+        if (do_pfon) then 
+            if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+                temp_pfon = 0.0_dp 
+                ! or clamp to 1k (need to be disscused) 
+            else 
+                temp_pfon = temp_pfon - 50.0_dp 
+                if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
+            end if 
+            ! Recompure the beta 
+            if (temp_pfon > 1.0e-12_dp) then 
+                beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+            else 
+                ! For temp 0:
+                beta_pfon = 1.0e20_dp 
+            end if
+            ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
+        end if 
+!>-------------------------------------------------------------------------
+ 
         pfock = 0.0_dp
 
   !     Compute difference density matrix for incremental Fock build,
@@ -575,39 +607,7 @@ contains
             end if
         end if 
         call int2_driver%pe%bcast(pdmat, size(pdmat))
-!>------------------------------------------------------------------------- 
-        ! adjusting temperature 
-!        if (do_pfon) then 
-!           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
-!            beta_pfon = 1.0_dp / temp_pfon
-!        end if 
-!        if (do_pfon) then
-!            ! Decrease temperature by 50 K each iteration
-!            temp_pfon = temp_pfon - 50.0_dp
-!            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
-!            ! Recompute beta using T in Kelvin
-!            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-!        end if
-  !     Check if the next iteration is the last one or close to the convergence
-        if (do_pfon) then 
-            if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
-                temp_pfon = 0.0_dp 
-                ! or clamp to 1k (need to be disscused) 
-            else 
-                temp_pfon = temp_pfon - 50.0_dp 
-                if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
-            end if 
-            ! Recompure the beta 
-            if (temp_pfon > 1.0e-12_dp) then 
-                beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-            else 
-                ! For temp 0:
-                beta_pfon = 1.0e20_dp 
-            end if
-            ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
-        end if 
-!>-------------------------------------------------------------------------
-  !     Checking the HOMO-LUMO gaps for predicting SCF convergency
+ !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
            select case (scf_type)
            case (scf_rhf)
