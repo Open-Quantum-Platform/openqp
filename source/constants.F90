@@ -71,6 +71,31 @@ module constants
                 ('    ', iii = 2, 15)] &
              ], shape(bf_names))
 
+!  canonical order is achieved by ordering angular momentum components (x,y,z)
+!  in descending order. For a given total angular momentum L, the components
+!  are generated as follows:
+!  Example for L = 2:
+!     do x = L, 0, -1          ! x descends from L to 0
+!         do y = L-x, 0, -1    ! y descends from remaining momentum (L-x) to 0
+!             z = L - x - y     ! z takes the remaining momentum
+!             ! This generates ordered triplets (x,y,z) where x >= y >= z
+!             ! and x + y + z = L
+!         end do
+!     end do 
+!  Last Modified: 2025-02-03 06:00:22 UTC
+
+   integer, parameter :: &
+      map_canonical(BAS_MXCART,0:BAS_MXANG) = reshape([ &
+      [0,                                                               (0, i = NUM_CART_BF(0)+1, BAS_MXCART)], & ! l = 0 (S)
+      [0, 0, 0,                                                         (0, i = NUM_CART_BF(1)+1, BAS_MXCART)], & ! l = 1 (P)
+      [0, 2, 3, -2, -2, -1,                                             (0, i = NUM_CART_BF(2)+1, BAS_MXCART)], & ! l = 2 (D)
+      [0, 5, 7, -2, -2, -2, 1, -2, 0, -5,                               (0, i = NUM_CART_BF(3)+1, BAS_MXCART)], & ! l = 3 (F)
+      [0, 9, 12, -2, -2, 1, 5, 2, 5, -6, -5, 1, -8, -6, -6,             (0, i = NUM_CART_BF(4)+1, BAS_MXCART)], & ! l = 4 (G)
+      [0,14,18,-2,-2,5,10,7,11,-6,-5,-5,5,-4,4,-11,-5,-4,-11,-11,-8,    (0, i = NUM_CART_BF(5)+1, BAS_MXCART)], & ! l = 4 (H)
+      [0,20,25,-2,-2,10,16,13,18,-6,-5,-1,11,1,11,-11,0,2,-12,-10,4,-14,-14,-12,-7,-12,-8,-15] &
+      ],  shape(map_canonical))
+
+
 ! normalization constants
   real(kind=dp), target, save :: shells_pnrm2(28,0:6) = reshape([ &
     [1.0_dp, &

@@ -217,7 +217,7 @@ contains
     call get_atomic_pop(basis, orbital_pop, chg)
 
     ! Compute partial charges
-    chg = infos%atoms%zn - chg
+    chg = infos%atoms%zn - infos%basis%ecp_zn_num - chg
 
   end subroutine
 

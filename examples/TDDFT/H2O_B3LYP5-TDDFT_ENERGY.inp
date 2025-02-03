@@ -11,7 +11,7 @@ system=
    1   0.533194329  -0.533194329  -0.614469223
 charge=0
 runtype=energy
-basis=6-31g(d)
+basis=6-31g*
 functional=b3lyp5
 method=tdhf
 

@@ -86,6 +86,23 @@ ExternalProject_Add(libtagarray
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
 
+ExternalProject_Add(libecpint
+        PREFIX ${CMAKE_SOURCE_DIR}/external/libecpint
+        URL https://github.com/robashaw/libecpint/archive/refs/tags/v1.0.7.tar.gz
+        URL_HASH SHA256=e9c60fddb2614f113ab59ec620799d961db73979845e6e637c4a6fb72aee51cc
+        BINARY_DIR ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}
+        STAMP_DIR  ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-stamp-${CMAKE_Fortran_COMPILER_ID}
+	INSTALL_DIR ${CMAKE_BINARY_DIR}/external/libecpint/install
+        UPDATE_COMMAND ""
+        INSTALL_COMMAND ""
+        CMAKE_ARGS -DLIBECPINT_BUILD_DOCS=OFF
+                   -DLIBECPINT_BUILD_TESTS=OFF
+		   -DLIBECPINT_USE_PUGIXML=OFF
+                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+        )
 if(ENABLE_Formatter)
   find_package(Python3 REQUIRED)
   ExternalProject_Add(fprettify
