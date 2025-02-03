@@ -74,7 +74,8 @@ contains
 
      type(int2_compute_t) :: int2_driver
      class(int2_fock_data_t), allocatable :: int2_data
-     ! pFON 
+!>-------------------------------------------------------------------------
+!    pFON 
      logical :: do_pfon
      real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
      real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
@@ -83,6 +84,7 @@ contains
      ! (1 Hartree = 4.3597447222071e-18 J,  k_B = 1.380649e-23 J/K)
      ! => kB_HaK ~ 3.166811563e-6
      real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
+!>-------------------------------------------------------------------------
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -105,15 +107,16 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
+!>-------------------------------------------------------------------------
   !  pFON settings
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
   !  Read the strating temp from the user 
      start_temp = infos%control%pfon_start_temp
      if (start_temp <= 0.0_dp) then 
-         start_temp = 1000.0_dp 
+         start_temp = 2000.0_dp 
      end if 
-  !  pFON parameters (can be input by user in future) temp in Kelvin
+  !  pFON parameters temp in Kelvin
 !     start_temp = 1000.0_dp 
 !     end_temp   = 0.0001_dp 
      temp_pfon  = start_temp
@@ -127,6 +130,7 @@ contains
      ! We'll compute beta as 1 / (k_B * T)
      ! => if T in K,   beta = 1 / ( kB_HaK * T ) in 1/Hartree
      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+!>-------------------------------------------------------------------------
   !  DIIS options
   !  none IS NOT recommended!
   !  c-DIIS: Default commutator DIIS
@@ -334,8 +338,10 @@ contains
                 & infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch, &
                 & infos%control%diis_reset_mod, infos%control%diis_reset_conv, &
                 & infos%control%vshift, infos%control%vshift_cdiis_switch
-     write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5/)') &
-                & infos%control%mom, infos%control%mom_switch
+     write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
+                & infos%control%mom, infos%control%mom_switch 
+     write(iw,'(5X,"pFON = ",L5,21X,"pFON Start Temp. = ",F9.2/)') &
+                & infos%control%pfon, infos%control%pfon_start_temp
   !  Initial message
      write(IW,fmt="&
           &(/3x,'Direct SCF iterations begin.'/, &
@@ -504,7 +510,7 @@ contains
             select case (scf_type)
             case (scf_rhf)
                 call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon)
-
+! uhf/rohf are wrong and needs to be corrected. 
             case (scf_uhf)
                 call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
                 if (nelec_b > 0) then
@@ -538,10 +544,10 @@ contains
             write(iw,'(" Start: Temp=",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
                  start_temp, end_temp, electron_sum_a, electron_sum_b
 
-            do i = 1, nbf
-                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
-                     i, occ_a(i), i, occ_b(i)
-            end do
+!            do i = 1, nbf
+!                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
+!                     i, occ_a(i), i, occ_b(i)
+!            end do
         end if
 
 
@@ -1028,7 +1034,14 @@ contains
    call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
 
  end subroutine mo_reorder
-!> @brief      Assign pFON occupation 
+!> @brief      pFON Implementation in SCF Module
+!> Author: Alireza Lashkaripour
+!> Date: January 2025
+
+!> This module incorporates the Partial Fractional Occupation Number (pFON) 
+!> method into SCF calculations, ensuring smooth occupation numbers using 
+!> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
+!> factors to enhance SCF convergence, particularly for near-degenerate states.
  subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon)
      use precision, only: dp 
      implicit none 
@@ -1042,7 +1055,7 @@ contains
      real(kind=dp) :: eF, sum_occ
      integer :: i, i_homo, i_lumo
      real(kind=dp) :: tmp
-
+! HOMO-LUMO and can be different for rhf,uhf, rohf
    ! Identifying the homo for rhf, homo ~ nelect/2 
      i_homo = max(1, nelec/2)
      i_lumo = i_homo + 1 
