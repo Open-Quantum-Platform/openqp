@@ -1,4 +1,4 @@
-# Energy Calculation of MRSF-TDDFT with BHHLYP/6-31G* of H2O
+# Energy Calculation of MRSF-TDDFT with BHHLYP/LANL2DZ of NaCl
 # For MRSF-TDDFT, we have to set:
 #
 #    group          keyword         value
@@ -18,16 +18,12 @@ system=
 charge=0
 runtype=energy
 basis=LANL2DZ
-#basis=6-31g*
 functional=bhhlyp
 method=tdhf
 
-#[basis_set]
-#library=
-#  Br1 6-31g*
-#  H1 6-31g
 [guess]
 type=huckel
+save_mol=false
 
 [scf]
 multiplicity=3

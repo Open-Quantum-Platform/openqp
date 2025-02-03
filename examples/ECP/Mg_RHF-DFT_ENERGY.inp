@@ -14,6 +14,7 @@ method=hf
 
 [guess]
 type=huckel
+save_mol=true
 
 [scf]
 multiplicity=1

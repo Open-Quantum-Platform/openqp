@@ -1,6 +1,7 @@
 """Set up basis set for the molecule"""
 
 import oqp
+import os
 from oqp.utils.file_utils import try_basis, dump_log
 import numpy as np
 from oqp import ffi
