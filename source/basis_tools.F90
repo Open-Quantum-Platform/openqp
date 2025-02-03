@@ -76,6 +76,7 @@ module basis_tools
 
     procedure, pass(basis) :: basis_broadcast
     procedure, pass(basis) :: bf_label
+    procedure, pass(basis) :: bf_to_shell
 
   end type
 

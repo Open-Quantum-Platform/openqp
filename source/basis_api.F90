@@ -175,6 +175,7 @@ contains
     subroutine map_shell2basis_set(infos, basis)
         use basis_tools, only: basis_set
         use types, only: information
+        use constants, only: NUM_CART_BF
 
         type(information), intent(inout) :: infos
         class(basis_set) ,intent(inout):: basis
@@ -204,16 +205,8 @@ contains
             nshell = temp%id
             nprim = nprim + temp%n_exponents(1)
 
-            select case (temp%angular_momentum)
-                case (0)
-                    nbf = nbf + 1
-                case (1)
-                    nbf = nbf + 3
-                case (2)
-                    nbf = nbf + 6
-                case (3)
-                    nbf = nbf + 10
-            end select
+            nbf = nbf + NUM_CART_BF(temp%angular_momentum)
+
             temp => temp%next  ! Move to the next shell
         end do
         temp1 => head
@@ -259,16 +252,7 @@ contains
 
             basis%origin(ii) = temp1%element_id
             basis%am(ii) = temp1%angular_momentum
-            select case (temp1%angular_momentum)
-                case (0)
-                    basis%naos(ii) = 1
-                case (1)
-                    basis%naos(ii) = 3
-                case (2)
-                    basis%naos(ii) = 6
-                case (3)
-                    basis%naos(ii) = 10
-            end select
+            basis%naos(ii) = NUM_CART_BF(temp1%angular_momentum)
 
             n1 = temp1%n_exponents(1)
 
@@ -329,6 +313,7 @@ contains
         type(information), intent(inout) :: infos
         integer :: iw, i, j, atom, elem, end_i
         character(len=1) :: orbit
+        character(len=1), dimension(5) :: orbital_types = ['S', 'P', 'D', 'F', 'G']
 
         open (newunit=iw, file=infos%log_filename, position="append")
 
@@ -340,18 +325,7 @@ contains
                 elem = nint(infos%atoms%zn(infos%basis%origin(j)))
                 write(iw, '(5X, A2)') ELEMENTS_SHORT_NAME(elem)
             end if
-            select case (infos%basis%am(j))
-                case (0)
-                  orbit = 'S'
-                case (1)
-                  orbit = 'P'
-                case (2)
-                  orbit = 'D'
-                case (3)
-                  orbit = 'F'
-                case default
-                  orbit = '?'
-            end select
+            orbit = orbital_types(infos%basis%am(j)+1)
 
             write(iw, '(10X, A1)') orbit
 
