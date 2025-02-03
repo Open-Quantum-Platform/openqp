@@ -131,6 +131,7 @@ contains
      ! => if T in K,   beta = 1 / ( kB_HaK * T ) in 1/Hartree
      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
 !>-------------------------------------------------------------------------
+
   !  DIIS options
   !  none IS NOT recommended!
   !  c-DIIS: Default commutator DIIS
@@ -340,7 +341,7 @@ contains
                 & infos%control%vshift, infos%control%vshift_cdiis_switch
      write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
                 & infos%control%mom, infos%control%mom_switch 
-     write(iw,'(5X,"pFON = ",L5,21X,"pFON Start Temp. = ",F9.2/)') &
+     write(iw,'(5X,"pFON = ",L5,21X,"pFON Start Temp. = ",F9.2)') &
                 & infos%control%pfon, infos%control%pfon_start_temp
   !  Initial message
      write(IW,fmt="&
@@ -502,6 +503,7 @@ contains
         call int2_driver%pe%bcast(mo_a, size(mo_a))
         call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
         do_pfon = infos%control%pfon
+!>-------------------------------------------------------------------------
         ! pFON section
         if (do_pfon) then
             if (.not. allocated(occ_a)) allocate(occ_a(nbf))
@@ -549,6 +551,7 @@ contains
 !                     i, occ_a(i), i, occ_b(i)
 !            end do
         end if
+!>-------------------------------------------------------------------------
 
 
   !     MOM option works for RHF and ROHF
@@ -572,7 +575,7 @@ contains
             end if
         end if 
         call int2_driver%pe%bcast(pdmat, size(pdmat))
-        
+!>------------------------------------------------------------------------- 
         ! adjusting temperature 
 !        if (do_pfon) then 
 !           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
@@ -603,6 +606,7 @@ contains
             end if
             ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
         end if 
+!>-------------------------------------------------------------------------
   !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
            select case (scf_type)
@@ -1034,10 +1038,11 @@ contains
    call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
 
  end subroutine mo_reorder
+!>-------------------------------------------------------------------------
 !> @brief      pFON Implementation in SCF Module
 !> Author: Alireza Lashkaripour
 !> Date: January 2025
-
+!> Reference paper: https://doi.org/10.1063/1.478177
 !> This module incorporates the Partial Fractional Occupation Number (pFON) 
 !> method into SCF calculations, ensuring smooth occupation numbers using 
 !> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
@@ -1132,6 +1137,7 @@ contains
         call pack_matrix(dtmp, pdmat(:,2))
     end if 
  end subroutine build_pfon_density 
+!>-------------------------------------------------------------------------
 
 !> @brief      This routine reorders orbitals to maximum overlap.
  subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
