@@ -578,10 +578,10 @@ contains
             write(iw,'(" END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
                   end_temp, electron_sum_a, electron_sum_b
 
-            do i = 1, nbf
-                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
-                     i, occ_a(i), i, occ_b(i)
-            end do
+!            do i = 1, nbf
+!                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
+!                     i, occ_a(i), i, occ_b(i)
+!            end do
         end if
 !>-------------------------------------------------------------------------
 
@@ -1070,12 +1070,16 @@ contains
      eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
 
      ! pre-normalizrion occupation 
-
+    print *, "Occ(i) Before ", occ(i)
+    print *, "tmp Before ", tmp
      do i = 1, nbf
         tmp = beta_pfon * (mo_energy(i) - eF)
+    print *, "tmp in loop ", tmp
         occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+    print *, "Occ(i) in loop ", occ(i)
      end do 
-    print *, "Occ(i) ", occ(i)  
+    print *, "tmp After ", tmp
+    print *, "Occ(i) After ", occ(i)  
      ! Re-normalization to total number of electrons for rhf (alpha) 
 
      sum_occ = 0.0_dp 
