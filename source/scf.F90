@@ -538,24 +538,26 @@ contains
 !>-------------------------------------------------------------------------
         ! pFON section
         if (do_pfon) then
-            if (.not. allocated(occ_a)) allocate(occ_a(nbf))
-            if (.not. allocated(occ_b)) allocate(occ_b(nbf))
-
             select case (scf_type)
             case (scf_rhf)
+                ! RHF: total electrons
                 call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon)
-! uhf/rohf are wrong and needs to be corrected. 
+                occ_a = 0.5_dp * occ_a  ! Scale for RHF (each orbital holds 2 electrons)
+
             case (scf_uhf)
+                ! UHF: separate alpha and beta
                 call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
                 if (nelec_b > 0) then
                     call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon)
                 end if
 
             case (scf_rohf)
+                ! ROHF: use same orbitals but different occupations
                 call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
                 if (nelec_b > 0) then
                     call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon)
                 end if
+
             end select
 
             ! (Alpha)
@@ -1047,54 +1049,36 @@ contains
 !> method into SCF calculations, ensuring smooth occupation numbers using 
 !> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
 !> factors to enhance SCF convergence, particularly for near-degenerate states.
+! Replace the current pfon_occupations with this:
  subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon)
-     use precision, only: dp 
-     implicit none 
+    use precision, only: dp 
+    implicit none 
 
-     integer, intent(in) :: nbf 
-     integer, intent(in) :: nelec
-     real(kind=dp), intent(in) :: beta_pfon
-     real(kind=dp), intent(in) :: mo_energy(nbf)
-     real(kind=dp), intent(inout) :: occ(nbf)
-
-     real(kind=dp) :: eF, sum_occ
-     integer :: i, i_homo, i_lumo
-     real(kind=dp) :: tmp
-! HOMO-LUMO and can be different for rhf,uhf, rohf
-   ! Identifying the homo for rhf, homo ~ nelect/2 
-     i_homo = max(1, nelec/2)
-     i_lumo = i_homo + 1 
-     if (i_lumo > nbf) i_lumo = nbf 
-
-     ! Fermi level!
-     eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
-
-     ! pre-normalizrion occupation 
-    print *, "Occ(i) Before ", occ(i)
-    print *, "tmp Before ", tmp
-     do i = 1, nbf
-        tmp = beta_pfon * (mo_energy(i) - eF)
-    print *, "tmp in loop ", tmp
-        occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
-    print *, "Occ(i) in loop ", occ(i)
-     end do 
-    print *, "tmp After ", tmp
-    print *, "Occ(i) After ", occ(i)  
-     ! Re-normalization to total number of electrons for rhf (alpha) 
-
-     sum_occ = 0.0_dp 
-     do i = 1, nbf 
-        sum_occ = sum_occ + occ(i) 
-     end do 
-     if (sum_occ < 1.0e-14_dp) then
-        sum_occ = 1.0_dp 
-        ! avoid dividing by zero 
-     end if 
-     do i = 1, nbf 
-        occ(i) = occ(i) * (real(nelec,dp) / sum_occ)
-     end do 
+    integer, intent(in) :: nbf, nelec
+    real(kind=dp), intent(in) :: beta_pfon, mo_energy(nbf)
+    real(kind=dp), intent(inout) :: occ(nbf)
+    
+    real(kind=dp) :: eF, sum_occ
+    integer :: i, i_homo, i_lumo
+    
+    ! Set HOMO and LUMO indices
+    i_homo = nelec  ! Use full electron count 
+    i_lumo = i_homo + 1
+    if (i_lumo > nbf) i_lumo = nbf
+    
+    ! Calculate Fermi energy
+    eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
+    
+    ! Calculate occupations
+    do i = 1, nbf
+        occ(i) = 1.0_dp / (1.0_dp + exp(beta_pfon * (mo_energy(i) - eF)))
+    end do
+    
+    ! Normalize
+    sum_occ = sum(occ)
+    if (sum_occ < 1.0e-14_dp) sum_occ = 1.0_dp
+    occ = occ * (real(nelec,dp) / sum_occ)
  end subroutine pfon_occupations
- 
  ! pfon density
  subroutine build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
     use precision, only: dp 
@@ -1106,34 +1090,38 @@ contains
     real(kind=dp), intent(in) :: occ_a(:), occ_b(:)
     integer, intent(in) :: nbf, scf_type, nelec_a, nelec_b
 
-    real(kind=dp), allocatable :: dtmp(:,:), cmo(:,:)
+    real(kind=dp), allocatable :: dtmp(:,:)
     integer :: i, mu, nu 
 
     allocate(dtmp(nbf, nbf), source=0.0_dp)
-    pdmat(:,1) = 0.0_dp 
-    if (size(pdmat,2) > 1) pdmat(:,2) = 0.0_dp 
-
-    ! build alpha density 
+    
+    ! Build alpha density
+    dtmp = 0.0_dp
     do i = 1, nbf 
         if (occ_a(i) > 1.0e-14_dp) then 
             do mu = 1, nbf
-                do nu = 1, nbf 
+                do nu = 1, mu  ! Use symmetry
                     dtmp(mu,nu) = dtmp(mu,nu) + occ_a(i) * mo_a(mu,i)*mo_a(nu,i)
+                    if (mu /= nu) dtmp(nu,mu) = dtmp(mu,nu)
                 end do 
             end do 
         end if 
     end do 
-
     call pack_matrix(dtmp, pdmat(:,1))
 
-    ! needs to be rechecked 
-    if (scf_type == 2 .or. scf_type == 3) then 
-        dtmp(:,:) = 0.0_dp 
+    ! Build beta density for UHF/ROHF
+    if (scf_type >= 2) then  ! UHF or ROHF
+        dtmp = 0.0_dp 
         do i = 1, nbf 
             if (occ_b(i) > 1.0e-14_dp) then 
                 do mu = 1, nbf 
-                    do nu = 1, nbf 
-                        dtmp(mu,nu) = dtmp(mu,nu) + occ_b(i)*mo_b(mu,i)*mo_b(nu,i)
+                    do nu = 1, mu  ! Use symmetry
+                        if (scf_type == 2) then  ! UHF
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_b(i)*mo_b(mu,i)*mo_b(nu,i)
+                        else  ! ROHF
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_b(i)*mo_a(mu,i)*mo_a(nu,i)
+                        end if
+                        if (mu /= nu) dtmp(nu,mu) = dtmp(mu,nu)
                     end do 
                 end do 
             end if 
