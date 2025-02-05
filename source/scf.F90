@@ -343,9 +343,9 @@ contains
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
         if (do_pfon) then
-            if (iter == maxit - 2) then 
-                temp_pfon = 0.0_dp 
-            elseif ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+!            if (iter == maxit - 2) then 
+!                temp_pfon = 0.0_dp 
+            if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
             else 
                 temp_pfon = temp_pfon - 50.0_dp 
