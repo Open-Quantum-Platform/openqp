@@ -343,8 +343,6 @@ contains
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
         if (do_pfon) then
-!            if (iter == maxit - 2) then 
-!                temp_pfon = 0.0_dp 
             if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
             else 
@@ -356,7 +354,6 @@ contains
             else 
                 beta_pfon = 1.0e20_dp 
             end if
-            ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
         end if 
 !>-------------------------------------------------------------------------
  
@@ -545,16 +542,11 @@ contains
                 end do
             end if
 
-            write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
-                 temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
+            write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", Start Temp=",F8.3)') &
+                 temp_pfon, beta_pfon, start_temp
 
-            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
-                  start_temp ,end_temp, electron_sum_a, electron_sum_b
-
-!            do i = 1, nbf
-!                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
-!                     i, occ_a(i), i, occ_b(i)
-!            end do
+!            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
+!                  start_temp ,end_temp, electron_sum_a, electron_sum_b
         end if
 !>-------------------------------------------------------------------------
 
@@ -1055,7 +1047,7 @@ contains
         occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
      end do 
 
-     ! Re-normalization to total number of electrons for rhf (alpha) 
+     ! Re-normalization  
      sum_occ = 0.0_dp 
      do i = 1, nbf 
         sum_occ = sum_occ + occ(i) 
