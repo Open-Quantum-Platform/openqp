@@ -342,8 +342,10 @@ contains
 
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
-        if (do_pfon) then 
-            if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+        if (do_pfon) then
+            if (iter == maxit - 2) then 
+                temp_pfon = 0.0_dp 
+            elseif ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
             else 
                 temp_pfon = temp_pfon - 50.0_dp 
@@ -546,8 +548,8 @@ contains
             write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", sumOcc(a)=",F8.3,", sumOcc(b)=",F8.3)') &
                  temp_pfon, beta_pfon, sum_occ_alpha, sum_occ_beta
 
-            write(iw,'(" END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
-                  end_temp, electron_sum_a, electron_sum_b
+            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
+                  start_temp ,end_temp, electron_sum_a, electron_sum_b
 
 !            do i = 1, nbf
 !                write(iw,'(" Occ a(",I3,")=",F9.2,", Occ b(",I3,")=",F9.2)') &
@@ -1048,14 +1050,10 @@ contains
      eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
 
      ! pre-normalizrion occupation 
-    print *, "Occ(i) Before ", occ(i)
-    print *, "tmp Before ", tmp
      do i = 1, nbf
         tmp = beta_pfon * (mo_energy(i) - eF)
         occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
      end do 
-    print *, "tmp After ", tmp
-    print *, "Occ(i) After ", occ(i)  
      ! Re-normalization to total number of electrons for rhf (alpha) 
 
      sum_occ = 0.0_dp 
