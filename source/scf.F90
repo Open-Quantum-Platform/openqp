@@ -516,18 +516,18 @@ contains
 
             select case (scf_type)
             case (scf_rhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon)
-! uhf/rohf are wrong and needs to be corrected. 
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type)
+
             case (scf_uhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type)
                 if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon)
+                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon, scf_type)
                 end if
 
             case (scf_rohf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type)
                 if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon)
+                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon, scf_type)
                 end if
             end select
 
@@ -1020,7 +1020,7 @@ contains
 !> method into SCF calculations, ensuring smooth occupation numbers using 
 !> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
 !> factors to enhance SCF convergence, particularly for near-degenerate states.
- subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon)
+ subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon, scf_type)
      use precision, only: dp 
      implicit none 
 
@@ -1028,21 +1028,21 @@ contains
      integer, intent(in) :: nelec
      real(kind=dp), intent(in) :: beta_pfon
      real(kind=dp), intent(in) :: mo_energy(nbf)
-!     logical, intent(in) :: is_alpha ! if its alpha or not, this is for uhf and rohf 
      real(kind=dp), intent(inout) :: occ(nbf)
+     integer, intent(in) :: scf_type ! 1,2,3 RHF,UHF,ROHF 
      real(kind=dp) :: eF, sum_occ
      integer :: i, i_homo, i_lumo
      real(kind=dp) :: tmp
-! For UHF and ROHF, the HOMO can be like this (check with Prof.)
-!     if (is_alpha) then
-!         i_homo = nelec
-!     else 
-!         i_homo = nelec
-!     end if 
-!     i_lumo = i_homo + 1
-! HOMO-LUMO and can be different for rhf,uhf, rohf
-   ! Identifying the homo for rhf, homo ~ nelect/2 
-     i_homo = max(1, nelec/2)
+
+     select case (scf_type)
+     case(1) ! RHF 
+         i_homo = max(1, nelec/2) 
+     case(2) ! UHF 
+         i_homo = max(1, nelec)
+     case(3) ! ROHF 
+         i_homo = max(1, nelec) 
+     end select 
+
      i_lumo = i_homo + 1 
      if (i_lumo > nbf) i_lumo = nbf 
 
@@ -1054,15 +1054,14 @@ contains
         tmp = beta_pfon * (mo_energy(i) - eF)
         occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
      end do 
-     ! Re-normalization to total number of electrons for rhf (alpha) 
 
+     ! Re-normalization to total number of electrons for rhf (alpha) 
      sum_occ = 0.0_dp 
      do i = 1, nbf 
         sum_occ = sum_occ + occ(i) 
      end do 
      if (sum_occ < 1.0e-14_dp) then
         sum_occ = 1.0_dp 
-        ! avoid dividing by zero 
      end if 
      do i = 1, nbf 
         occ(i) = occ(i) * (real(nelec,dp) / sum_occ)
@@ -1100,7 +1099,7 @@ contains
 
     call pack_matrix(dtmp, pdmat(:,1))
 
-    ! needs to be rechecked 
+    ! bulid beta density
     if (scf_type == 2 .or. scf_type == 3) then 
         dtmp(:,:) = 0.0_dp 
         do i = 1, nbf 
