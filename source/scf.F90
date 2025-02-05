@@ -81,8 +81,6 @@ contains
      real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta
-     ! (1 Hartree = 4.3597447222071e-18 J,  k_B = 1.380649e-23 J/K)
-     ! => kB_HaK ~ 3.166811563e-6
      real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
 !>-------------------------------------------------------------------------
   ! tagarray
@@ -111,24 +109,13 @@ contains
   !  pFON settings
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
-  !  Read the strating temp from the user 
      start_temp = infos%control%pfon_start_temp
      if (start_temp <= 0.0_dp) then 
          start_temp = 2000.0_dp 
      end if 
-  !  pFON parameters temp in Kelvin
-!     start_temp = 1000.0_dp 
-!     end_temp   = 0.0001_dp 
      temp_pfon  = start_temp
-     ! these part needs to be changed since the temp can not be negative
-     ! If T < 1 K, clamp to 1 K
      if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
-!     if (temp_pfon <= 1.0e-10_dp) temp_pfon = 1.0e-5_dp
 
-  !  for beta in this case we use atomic unit( change later)
-  !   beta_pfon = 3.166811563e-6_dp / temp_pfon 
-     ! We'll compute beta as 1 / (k_B * T)
-     ! => if T in K,   beta = 1 / ( kB_HaK * T ) in 1/Hartree
      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
 !>-------------------------------------------------------------------------
 
@@ -355,33 +342,16 @@ contains
 
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
-        ! adjusting temperature 
-!        if (do_pfon) then 
-!           temp_pfon = max(temp_pfon * 0.95_dp, end_temp)
-!            beta_pfon = 1.0_dp / temp_pfon
-!        end if 
-!        if (do_pfon) then
-!            ! Decrease temperature by 50 K each iteration
-!            temp_pfon = temp_pfon - 50.0_dp
-!            if (temp_pfon < 0.0_dp) temp_pfon = 0.0_dp
-!            ! Recompute beta using T in Kelvin
-!            beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-!        end if
-  !     Check if the next iteration is the last one or close to the convergence
         if (do_pfon) then 
-            if  (iter == maxit - 1) then 
-           ! if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+            if ( (iter == maxit - 1) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
-                ! or clamp to 1k (need to be disscused) 
             else 
                 temp_pfon = temp_pfon - 50.0_dp 
                 if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
             end if 
-            ! Recompure the beta 
             if (temp_pfon > 1.0e-12_dp) then 
                 beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
             else 
-                ! For temp 0:
                 beta_pfon = 1.0e20_dp 
             end if
             ! Force integer occupation: fill up the lowest mo_i with 2 electrons until we run out
@@ -544,19 +514,18 @@ contains
 
             select case (scf_type)
             case (scf_rhf)
-                ! For RHF, use the original behavior (total electrons are split equally)
-                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, .true.)
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon)
+! uhf/rohf are wrong and needs to be corrected. 
             case (scf_uhf)
-                ! For UHF, provide the appropriate spin flag:
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, .true.)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
                 if (nelec_b > 0) then
-                     call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon, .false.)
+                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon)
                 end if
+
             case (scf_rohf)
-                ! For ROHF, typically the alpha channel is taken from mo_energy_a and beta may be handled similarly.
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, .true.)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon)
                 if (nelec_b > 0) then
-                     call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon, .false.)
+                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon)
                 end if
             end select
 
@@ -1049,7 +1018,7 @@ contains
 !> method into SCF calculations, ensuring smooth occupation numbers using 
 !> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
 !> factors to enhance SCF convergence, particularly for near-degenerate states.
- subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon, is_alpha)
+ subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon)
      use precision, only: dp 
      implicit none 
 
@@ -1057,7 +1026,7 @@ contains
      integer, intent(in) :: nelec
      real(kind=dp), intent(in) :: beta_pfon
      real(kind=dp), intent(in) :: mo_energy(nbf)
-     logical, intent(in), optional :: is_alpha ! if its alpha or not, this is for uhf and rohf 
+!     logical, intent(in) :: is_alpha ! if its alpha or not, this is for uhf and rohf 
      real(kind=dp), intent(inout) :: occ(nbf)
      real(kind=dp) :: eF, sum_occ
      integer :: i, i_homo, i_lumo
@@ -1071,32 +1040,32 @@ contains
 !     i_lumo = i_homo + 1
 ! HOMO-LUMO and can be different for rhf,uhf, rohf
    ! Identifying the homo for rhf, homo ~ nelect/2 
-    if (present(is_alpha)) then 
-        i_homo = max(1, nelec)
-    else 
-        i_homo = max(1, nelec/2)
-    end if 
+     i_homo = max(1, nelec/2)
+     i_lumo = i_homo + 1 
+     if (i_lumo > nbf) i_lumo = nbf 
 
-    i_lumo = i_homo + 1 
-    if (i_lumo > nbf) i_lumo = nbf 
      ! Fermi level!
-    eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
+     eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
 
      ! pre-normalizrion occupation 
     print *, "Occ(i) Before ", occ(i)
-     sum_occ = 0.0_dp 
+    print *, "tmp Before ", tmp
      do i = 1, nbf
         tmp = beta_pfon * (mo_energy(i) - eF)
         occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+     end do 
+    print *, "tmp After ", tmp
+    print *, "Occ(i) After ", occ(i)  
+     ! Re-normalization to total number of electrons for rhf (alpha) 
+
+     sum_occ = 0.0_dp 
+     do i = 1, nbf 
         sum_occ = sum_occ + occ(i) 
      end do 
-    print *, "Occ(i) After ", occ(i)  
-
      if (sum_occ < 1.0e-14_dp) then
         sum_occ = 1.0_dp 
         ! avoid dividing by zero 
      end if 
-     ! Re-normalization to total number of electrons for rhf (alpha) 
      do i = 1, nbf 
         occ(i) = occ(i) * (real(nelec,dp) / sum_occ)
      end do 
