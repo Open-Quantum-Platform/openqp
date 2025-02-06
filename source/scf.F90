@@ -342,6 +342,7 @@ contains
 
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
+  !     pFON Cooling
         if (do_pfon) then
             if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
@@ -542,8 +543,8 @@ contains
                 end do
             end if
 
-            write(iw,'(" pFON: Temp=",F9.2,", Beta=",ES11.4,", Start Temp=",F8.3)') &
-                 temp_pfon, beta_pfon, start_temp
+            write(iw,'(T7, " pFON: Temp=",F9.2,", Beta=",ES11.4)') &
+                 temp_pfon, beta_pfon
 
 !            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
 !                  start_temp ,end_temp, electron_sum_a, electron_sum_b
