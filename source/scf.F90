@@ -80,7 +80,8 @@ contains
      real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
      real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
-     real(kind=dp) :: sum_occ_alpha, sum_occ_beta
+     real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
+     real(kind=dp) :: pfon_cooling_rate
      real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
 !>-------------------------------------------------------------------------
   ! tagarray
@@ -110,6 +111,7 @@ contains
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
      start_temp = infos%control%pfon_start_temp
+     cooling_rate = infos%control%pfon_cooling_rate
      if (start_temp <= 0.0_dp) then 
          start_temp = 2000.0_dp 
      end if 
@@ -328,8 +330,11 @@ contains
                 & infos%control%vshift, infos%control%vshift_cdiis_switch
      write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
                 & infos%control%mom, infos%control%mom_switch 
-     write(iw,'(5X,"pFON = ",L5,21X,"pFON Start Temp. = ",F9.2)') &
-                & infos%control%pfon, infos%control%pfon_start_temp
+     write(iw,'(5X,"pFON = ",L5,20X,"pFON Start Temp. = ",F9.2,/, &
+               5X, "pFON Cooling Rate = ", F9.2)') &
+               infos%control%pfon, infos%control%pfon_start_temp, &
+               infos%control%pfon_cooling_rate
+
   !  Initial message
      write(IW,fmt="&
           &(/3x,'Direct SCF iterations begin.'/, &
@@ -343,11 +348,14 @@ contains
   !     The main SCF iteration loop
 !>------------------------------------------------------------------------- 
   !     pFON Cooling
+        if (cooling_rate <= 0.0_dp) then
+            cooling_rate = 50_dp 
+        end if 
         if (do_pfon) then
             if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
                 temp_pfon = 0.0_dp 
             else 
-                temp_pfon = temp_pfon - 50.0_dp 
+                temp_pfon = temp_pfon - cooling_rate 
                 if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
             end if 
             if (temp_pfon > 1.0e-12_dp) then 
