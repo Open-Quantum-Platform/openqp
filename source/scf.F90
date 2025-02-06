@@ -74,7 +74,6 @@ contains
 
      type(int2_compute_t) :: int2_driver
      class(int2_fock_data_t), allocatable :: int2_data
-!>-------------------------------------------------------------------------
 !    pFON 
      logical :: do_pfon
      real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
@@ -83,7 +82,6 @@ contains
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
      real(kind=dp) :: pfon_cooling_rate
      real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
-!>-------------------------------------------------------------------------
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -106,7 +104,7 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
-!>-------------------------------------------------------------------------
+
   !  pFON settings
      do_pfon = .false. 
      do_pfon = infos%control%pfon 
@@ -119,7 +117,6 @@ contains
      if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
 
      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-!>-------------------------------------------------------------------------
 
   !  DIIS options
   !  none IS NOT recommended!
@@ -346,7 +343,7 @@ contains
      do iter = 1, maxit
 
   !     The main SCF iteration loop
-!>------------------------------------------------------------------------- 
+
   !     pFON Cooling
         if (cooling_rate <= 0.0_dp) then
             cooling_rate = 50_dp 
@@ -364,7 +361,6 @@ contains
                 beta_pfon = 1.0e20_dp 
             end if
         end if 
-!>-------------------------------------------------------------------------
  
         pfock = 0.0_dp
 
@@ -513,9 +509,9 @@ contains
         end if
         call int2_driver%pe%bcast(mo_a, size(mo_a))
         call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
-        do_pfon = infos%control%pfon
-!>-------------------------------------------------------------------------
+
         ! pFON section
+        do_pfon = infos%control%pfon
         if (do_pfon) then
             if (.not. allocated(occ_a)) allocate(occ_a(nbf))
             if (.not. allocated(occ_b)) allocate(occ_b(nbf))
@@ -557,7 +553,6 @@ contains
 !            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
 !                  start_temp ,end_temp, electron_sum_a, electron_sum_b
         end if
-!>-------------------------------------------------------------------------
 
 
   !     MOM option works for RHF and ROHF
@@ -1012,7 +1007,7 @@ contains
    call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
 
  end subroutine mo_reorder
-!>-------------------------------------------------------------------------
+
 !> @brief      pFON Implementation in SCF Module
 !> Author: Alireza Lashkaripour
 !> Date: January 2025
@@ -1069,7 +1064,7 @@ contains
      end do 
  end subroutine pfon_occupations
  
- ! pfon density
+ ! pFON Density
  subroutine build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
     use precision, only: dp 
     use mathlib, only: pack_matrix
@@ -1115,7 +1110,6 @@ contains
         call pack_matrix(dtmp, pdmat(:,2))
     end if 
  end subroutine build_pfon_density 
-!>-------------------------------------------------------------------------
 
 !> @brief      This routine reorders orbitals to maximum overlap.
  subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
