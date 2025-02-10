@@ -80,8 +80,9 @@ contains
      real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
-     real(kind=dp) :: pfon_cooling_rate
+     real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
      real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
+     integer :: nsmear 
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -328,11 +329,10 @@ contains
      write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
                 & infos%control%mom, infos%control%mom_switch 
      write(iw,'(5X,"pFON = ",L5,20X,"pFON Start Temp. = ",F9.2,/, &
-               5X, "pFON Cooling Rate = ", F9.2)') &
-               infos%control%pfon, infos%control%pfon_start_temp, &
-               infos%control%pfon_cooling_rate
-
-  !  Initial message
+                5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
+                infos%control%pfon, infos%control%pfon_start_temp, &
+                infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
+     !  Initial message
      write(IW,fmt="&
           &(/3x,'Direct SCF iterations begin.'/, &
           &  3x,93('='),/ &
@@ -515,21 +515,21 @@ contains
         if (do_pfon) then
             if (.not. allocated(occ_a)) allocate(occ_a(nbf))
             if (.not. allocated(occ_b)) allocate(occ_b(nbf))
-
+        nsmear = infos%control%pfon_nsmear
             select case (scf_type)
             case (scf_rhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type)
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear)
 
             case (scf_uhf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type, nsmear)
                 if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon, scf_type)
+                    call pfon_occupations(mo_energy_b, nbf, nelec_b, occ_b, beta_pfon, scf_type, nsmear)
                 end if
 
             case (scf_rohf)
-                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type)
+                call pfon_occupations(mo_energy_a, nbf, nelec_a, occ_a, beta_pfon, scf_type, nsmear)
                 if (nelec_b > 0) then
-                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon, scf_type)
+                    call pfon_occupations(mo_energy_a, nbf, nelec_b, occ_b, beta_pfon, scf_type, nsmear)
                 end if
             end select
 
@@ -1016,18 +1016,18 @@ contains
 !> method into SCF calculations, ensuring smooth occupation numbers using 
 !> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
 !> factors to enhance SCF convergence, particularly for near-degenerate states.
- subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon, scf_type)
+ subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon, scf_type, nsmear)
      use precision, only: dp 
      implicit none 
 
      integer, intent(in) :: nbf 
-     integer, intent(in) :: nelec
+     integer, intent(in) :: nelec, nsmear
      real(kind=dp), intent(in) :: beta_pfon
      real(kind=dp), intent(in) :: mo_energy(nbf)
      real(kind=dp), intent(inout) :: occ(nbf)
      integer, intent(in) :: scf_type ! 1,2,3 RHF,UHF,ROHF 
      real(kind=dp) :: eF, sum_occ
-     integer :: i, i_homo, i_lumo
+     integer :: i, i_homo, i_lumo, i_low, i_high
      real(kind=dp) :: tmp
 
      select case (scf_type)
@@ -1044,12 +1044,38 @@ contains
 
      ! Fermi level!
      eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
-
+     ! If smear <= 0 --> smear all orbitals 
+     if (nsmear <= 0) then 
      ! pre-normalizrion occupation 
-     do i = 1, nbf
-        tmp = beta_pfon * (mo_energy(i) - eF)
-        occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
-     end do 
+         do i = 1, nbf
+            tmp = beta_pfon * (mo_energy(i) - eF)
+            occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+         end do 
+     else
+         i_low = max(1, i_homo - nsmear)
+         i_high = min(nbf, i_lumo + nsmear)
+
+         do i = 1, i_low - 1 
+            if (scf_type == 1) then 
+                occ(i) = 2.0_dp 
+            else 
+                occ(i) = 1.0_dp
+            end if 
+        end do 
+
+        do i = i_high + 1, nbf 
+            occ(i) = 0.0_dp 
+        end do 
+        ! Apply Fermi-Dirac
+        do i = i_low, i_high
+            tmp = beta_pfon * (mo_energy(i) - eF)
+            if (scf_type == 1) then  
+                occ(i) = 2.0_dp / (1.0_dp + exp(tmp))
+            else 
+                occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+            end if 
+        end do 
+     end if 
 
      ! Re-normalization  
      sum_occ = 0.0_dp 

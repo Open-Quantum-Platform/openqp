@@ -118,6 +118,7 @@ struct control_parameters {
     double    mom_switch;
     double    pfon_start_temp;
     double    pfon_cooling_rate;
+    double    pfon_nsmear;
     double    conv;
     int64_t   scf_incremental;
     double    int2e_cutoff;
