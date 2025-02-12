@@ -1,4 +1,5 @@
 name: CI
+on: [push, pull_request]
 env:
    BUILD_DIR: _build
 jobs:
