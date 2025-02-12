@@ -1,0 +1,34 @@
+name: CI
+env:
+   BUILD_DIR: _build
+jobs:
+   gcc-build:
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            os: [ubuntu-24.04, ubuntu-24.04-arm]
+            version: [14]
+            MPI: [ON, OFF]
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: 3.x
+         - name: Install OpenBLAS (ubuntu-latest)
+           if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
+           run: |
+            sudo apt-get install libopenblas-dev
+         - name: Install CMake
+           run: pip install ninja cmake
+         - name: Configure build
+           run: |
+            cmake -B ${{ env.BUILD_DIR }} -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc-${{ matrix.version }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.version }} -DCMAKE_Fortran_COMPILER=gfortran-${{ matrix.version }} -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=${{ matrix.MPI }}
+         - name: Compile & Install
+           run: |
+            ninja -C ${{ env.BUILD_DIR }} install
+         - name: Install pyoqp
+           run: |
+            cd pyoqp && pip install .
