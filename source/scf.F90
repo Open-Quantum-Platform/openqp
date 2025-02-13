@@ -549,14 +549,14 @@ contains
 
             write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
             
-            select case (scf_type)
-            case (scf_rhf)
-                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha
-            case (scf_uhf, scf_rohf)
-                write(iw,'(T7," Alpha electron count = ",F12.6)') sum_occ_alpha
-                write(iw,'(T7," Beta electron count  = ",F12.6)') sum_occ_beta
-                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha + sum_occ_beta
-            end select
+!            select case (scf_type)
+!            case (scf_rhf)
+!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha
+!            case (scf_uhf, scf_rohf)
+!                write(iw,'(T7," Alpha electron count = ",F12.6)') sum_occ_alpha
+!                write(iw,'(T7," Beta electron count  = ",F12.6)') sum_occ_beta
+!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha + sum_occ_beta
+!           end select
 
         end if
 
