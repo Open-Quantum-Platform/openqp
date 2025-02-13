@@ -9,7 +9,7 @@ system=
    1   0.533194329  -0.533194329  -0.614469223
 charge=0
 runtype=grad
-basis=6-31g(d)
+basis=6-31g*
 method=hf
 
 [guess]

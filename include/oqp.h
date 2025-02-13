@@ -15,6 +15,7 @@ typedef struct oqp_handle_t {
     struct tddft_parameters *tddft;
     struct control_parameters *control;
     struct mpi_communicator *mpiinfo;
+    struct electron_shell *elshell;
 } oqp_handle_t;
 
 struct Cstring{
@@ -131,6 +132,20 @@ struct mpi_communicator {
         bool usempi;
 };
 
+struct electron_shell {
+        int id;
+	int element_id;
+	int32_t ang_mom;
+	int32_t ecp_nam;
+	int* num_expo;
+	double* expo;
+	double* coef;
+        int* ecp_am;
+        int* ecp_rex;
+	double* ecp_coord;
+	int* ecp_zn;
+};
+
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
@@ -148,6 +163,9 @@ int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, do
 void oqp_banner(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);
+
+void append_shell(struct oqp_handle_t *inf);
+void append_ecp(struct oqp_handle_t *inf);
 
 void int1e(struct oqp_handle_t *inf);
 

@@ -300,6 +300,11 @@ class OQPData:
             return getattr(self._data.mpiinfo, key)
         if key in dir(self._data.control):
             return getattr(self._data.control, key)
+        if key in dir(self._data.elshell):
+            return getattr(self._data.elshell, key)
+        if key in dir(self._data):
+            return getattr(self._data, key)
+
         code = bytes(key, 'ascii')
         req = ffi.new('char []', code)
         type_id = ffi.new('int32_t *')
@@ -340,6 +345,10 @@ class OQPData:
 
         if key in dir(self._data.mpiinfo):
             setattr(self._data.mpiinfo, key, value)
+
+        if key in dir(self._data.elshell):
+            setattr(self._data.elshell, key, value)
+            return
 
         if isinstance(value, np.ndarray):
             _value = value

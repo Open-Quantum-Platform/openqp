@@ -220,7 +220,7 @@ contains
             z=xyz(:nptcur,3), &
             w=wt(:nptcur), &
             at=infos%atoms%xyz, &
-            q=infos%atoms%zn, &
+            q=infos%atoms%zn - infos%basis%ecp_zn_num, &
             pot=pot(:nptcur))
 
 !   Fit ESP c8harges

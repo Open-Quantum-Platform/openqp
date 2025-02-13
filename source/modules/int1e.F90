@@ -96,7 +96,8 @@ contains
 
 !   Compute conventional H, S, and T integrals
     tol = log(10.0d0)*tol_int
-    call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn, hcore, smat, tmat, logtol=tol)
+    call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num, hcore, smat, tmat,&
+            logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
 
     if (dbg) then
         write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')

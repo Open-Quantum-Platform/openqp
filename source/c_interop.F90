@@ -33,6 +33,7 @@ module c_interop
     type(c_ptr) :: tddft
     type(c_ptr) :: control
     type(c_ptr) :: mpiinfo
+    type(c_ptr) :: elshell
   end type
 
 contains
@@ -104,6 +105,7 @@ contains
     c_handle%control     = c_loc(inf%control)
     c_handle%tddft       = c_loc(inf%tddft)
     c_handle%mpiinfo     = c_loc(inf%mpiinfo)
+    c_handle%elshell     = c_loc(inf%elshell)
     if (allocated(inf%atoms%xyz)) then
         c_handle%xyz  = c_loc(inf%atoms%xyz)
         c_handle%qn   = c_loc(inf%atoms%zn)

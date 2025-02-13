@@ -5,7 +5,7 @@ system=
    H   0.5331943294  -0.5331943294  -0.6144692230
 charge=0
 functional=bhhlyp
-basis=6-31g(d)
+basis=6-31g*
 runtype=optimize
 method=tdhf
 

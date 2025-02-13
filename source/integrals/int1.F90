@@ -71,12 +71,16 @@ contains
 !> @param[in,out]   t       packed matrix of kinetic energy integrals
 !> @param[in,out]   z       packed matrix of z-angular momentum (Lz) integrals
 !> @param[in]       dbug    flag for debug output
- subroutine omp_hst(basis, coord, zq, h, s, t, z, debug, logtol)
+ subroutine omp_hst(basis, coord, zq, h, s, t, z, debug, logtol, comm, usempi)
 
     use io_constants, only: iw
     use precision, only: dp
     use basis_tools, only: basis_set
     use printing, only: print_sym_labeled
+    use ecp_tool, only: add_ecpint
+    use parallel, only: par_env_t
+    use iso_c_binding, only: c_bool
+    use, intrinsic :: iso_fortran_env, only: int32
 
     type(basis_set), intent(in) :: basis
     real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
@@ -84,11 +88,19 @@ contains
     real(real64), contiguous, optional, intent(inout) :: z(:)
     real(real64), optional, intent(in) :: logtol
     logical, optional, intent(in) :: debug
+    integer :: ii
 
     real(real64) :: tol
     logical :: lzint, dbug
 
     integer :: nbf, nbf_tri
+    type(par_env_t) :: pe
+
+    integer(kind=int32) :: comm
+    logical(c_bool), intent(in) :: usempi
+
+    call pe%init(comm, usempi)
+
 
     lzint = present(z)
     dbug = .false.
@@ -115,6 +127,13 @@ contains
     call kin_ovl_ints(s, t, basis, tol)
 
     call nuc_ints(basis, coord(:,:), zq, h, tol)
+
+!   Add effective core potential
+    if(pe%rank == 0) then
+        call add_ecpint(basis,coord(:,:),h)
+    end if
+
+    call pe%bcast(h, nbf_tri)
 
 !    IF (exterior%num_chg/=0) THEN
 !        SELECT CASE (pbc%method)
