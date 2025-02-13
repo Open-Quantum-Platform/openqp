@@ -49,3 +49,6 @@ jobs:
          - name: Check environment
            run: |
              cat "$GITHUB_ENV"
+         - name: Run tests
+           run: |
+             openqp --run_tests all
