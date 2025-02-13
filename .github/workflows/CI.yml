@@ -41,3 +41,11 @@ jobs:
          - name: Install pyoqp
            run: |
             cd pyoqp && pip install .
+         - name: Setup environment
+           run: |
+             echo "OPENQP_ROOT=${GITHUB_WORKSPACE}/${{ env.INSTALL_DIR }}" >> "$GITHUB_ENV"
+             echo "OMP_NUM_THREADS=$(nproc)" >> "$GITHUB_ENV"
+             echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/${{ env.INSTALL_DIR }}/lib:${GITHUB_WORKSPACE}/${{ env.INSTALL_DIR }}/lib64:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+         - name: Check environment
+           run: |
+             cat "$GITHUB_ENV"
