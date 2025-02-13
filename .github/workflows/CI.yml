@@ -24,6 +24,9 @@ jobs:
             sudo apt-get install libopenblas-dev
          - name: Install CMake
            run: pip install ninja cmake
+         - name: Install pyoqp dependencies
+           run: |
+            cd pyoqp && pip install -r requirements.txt
          - name: Configure build
            run: |
             cmake -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc-${{ matrix.version }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.version }} -DCMAKE_Fortran_COMPILER=gfortran-${{ matrix.version }} -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=${{ matrix.MPI }}
