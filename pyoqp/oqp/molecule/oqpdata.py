@@ -78,7 +78,7 @@ OQP_CONFIG_SCHEMA = {
         'pfon': {'type': bool, 'default': 'False'},
         'pfon_start_temp': {'type': float, 'default': '2000.0'},
         'pfon_cooling_rate': {'type': float, 'default': '50.0'},
-        'pfon_nsmear': {'type': float, 'default': '0.0'},
+        'pfon_nsmear': {'type': float, 'default': '5.0'},
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},

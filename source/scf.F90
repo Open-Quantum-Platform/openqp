@@ -333,13 +333,20 @@ contains
                 infos%control%pfon, infos%control%pfon_start_temp, &
                 infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
      !  Initial message
-     write(IW,fmt="&
-          &(/3x,'Direct SCF iterations begin.'/, &
-          &  3x,93('='),/ &
-          &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
-          &  3x,93('='))")
+     if (infos%control%pfon) then
+           write(IW,fmt="&
+                 &(/3x,'Direct SCF iterations begin.'/, &
+                 &  3x,113('='),/ &
+                 &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
+                 &  3x,113('='))")
+     else
+          write(IW,fmt="&
+                 &(/3x,'Direct SCF iterations begin.'/, &
+                 &  3x,93('='),/ &
+                 &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
+                 &  3x,93('='))")
+     endif
      call flush(iw)
-
      do iter = 1, maxit
 
   !     The main SCF iteration loop
@@ -441,9 +448,16 @@ contains
         diis_error = conv_res%error
   !     Checking the convergency
         diffe = etot-e_old
-        write(iw,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-                iter, etot, diffe, nschwz, &
-                diis_error, vshift, trim(conv_res%active_converger_name)
+        if (infos%control%pfon) then
+           write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
+                 iter, etot, diffe, nschwz, diis_error, vshift, &
+                 trim(conv_res%active_converger_name), "Temp:", temp_pfon
+           write(IW,fmt="(100x,a,f9.2)") "Beta:", beta_pfon
+        else
+           write(iw,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
+                 iter, etot, diffe, nschwz, diis_error, vshift, &
+                 trim(conv_res%active_converger_name)
+        endif
         call flush(iw)
   !     VDIIS option
         if ((infos%control%diis_type.eq.5) &
@@ -547,7 +561,7 @@ contains
                 sum_occ_beta = sum(occ_b(1:nbf))
             end if
 
-            write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
+!            write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
             
 !            select case (scf_type)
 !            case (scf_rhf)

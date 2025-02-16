@@ -116,7 +116,7 @@ module types
     real(c_double) :: mom_switch = 0.003_dp          !< Turn on criteria of DIIS error
     real(c_double) :: pfon_start_temp = 2000.0_dp    !< Starting tempreature for pFON
     real(c_double) :: pfon_cooling_rate = 50.0_dp    !< Tempreature cooling rate for pFON
-    real(c_double) :: pfon_nsmear = 0.0_dp          !< Num. of smearing orbitals for pFON if = 0, all 
+    real(c_double) :: pfon_nsmear = 5.0_dp           !< Num. of smearing orbitals for pFON if = 0, all 
     real(c_double) :: conv         = 1e-6_dp         !< Convergency criteria of SCF
     integer(c_int64_t) :: scf_incremental = 1        !< Enable/disable incremental Fock build
     real(c_double) :: int2e_cutoff = 5e-11_dp        !< 2e-integrals cutoff
