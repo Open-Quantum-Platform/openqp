@@ -492,7 +492,7 @@ contains
             beta=dft_params%cam_beta, &
             omega=dft_params%cam_mu)
       write(*,fmt='(3a)') "[2] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
-            "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
+            "and C. H. Choi, J. Chem. Theory Comput., 20(13), 5679-5694 (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
     case ("DTCAM-VAEE", "DTCAMVAEE")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
@@ -508,7 +508,7 @@ contains
       tddft_params%spc_ovov = 0.5_fp
       tddft_params%spc_coov = 0.5_fp
       write(*,fmt='(3a)') "[2] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
-            "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
+            "and C. H. Choi, J. Chem. Theory Comput., 20(13), 5679-5694 (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
     case ("DTCAM-XIV", "DTCAMXIV")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
@@ -525,7 +525,7 @@ contains
       tddft_params%spc_ovov = 0.50_fp
       tddft_params%spc_coov = 0.50_fp
       write(*,fmt='(3a)') "[2] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
-            "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
+            "and C. H. Choi, J. Chem. Theory Comput., 20(13), 5679-5694 (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
     case ("DTCAM-XI", "DTCAMXI")
       dft_params%cam_flag = .true.
@@ -589,7 +589,7 @@ contains
       tddft_params%spc_ovov = 0.5_fp
       tddft_params%spc_coov = 0.5_fp
       write(*,fmt='(3a)') "[2] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
-            "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
+            "and C. H. Choi, J. Chem. Theory Comput., 20(13), 5679-5694 (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
     case ("RCAM-B3LYP", "RCAMB3LYP")
       dft_params%cam_flag = .true.

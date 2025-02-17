@@ -1,0 +1,5 @@
+numpy>=1.20.0
+scipy>=1.10.0
+libdlfind==0.0.3
+cffi==1.16.0
+mpi4py>=4.0.0
