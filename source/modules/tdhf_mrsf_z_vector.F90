@@ -464,6 +464,8 @@ contains
 
 !****** INITIAL (A+B)*PK *************************************************
   ! Initialize ERI calculations
+    call int2_data%clean()
+    deallocate(int2_data)
     int2_data = int2_td_data_t( &
         d2 = pa, &
         int_apb = .true., &
@@ -519,6 +521,8 @@ contains
       call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
 
 !     (A+B)*PK
+      call int2_data%clean()
+      deallocate(int2_data)
       int2_data = int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &
@@ -605,7 +609,8 @@ contains
 
  !  Update density for beta
     call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
-
+    call int2_data%clean()
+    deallocate(int2_data)
     int2_data = int2_tdgrd_data_t( &
         d2 = pa, &
         int_apb = .true., &
