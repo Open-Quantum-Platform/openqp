@@ -94,7 +94,6 @@ ExternalProject_Add(libecpint
         STAMP_DIR  ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-stamp-${CMAKE_Fortran_COMPILER_ID}
 	INSTALL_DIR ${CMAKE_BINARY_DIR}/external/libecpint/install
         UPDATE_COMMAND ""
-        INSTALL_COMMAND ""
         CMAKE_ARGS -DLIBECPINT_BUILD_DOCS=OFF
                    -DLIBECPINT_BUILD_TESTS=OFF
 		   -DLIBECPINT_USE_PUGIXML=OFF
