@@ -48,25 +48,31 @@ module basis_api
     type(electron_shell), pointer :: head => null()
     type(ecpdata) :: ecp_head
 
+    private
+    public append_shell
+    public append_ecp
+    public map_shell2basis_set
+    public print_basis 
+
 contains
 
-    subroutine append_shell_C(c_handle) bind(C, name="append_shell")
+    subroutine append_shell(c_handle) bind(C, name="append_shell")
         use c_interop, only: oqp_handle_t, oqp_handle_get_info
         use types, only: information
         type(oqp_handle_t) :: c_handle
         type(information), pointer :: inf
         inf => oqp_handle_get_info(c_handle)
         call oqp_append_shell(inf)
-    end subroutine append_shell_C
+    end subroutine append_shell
 
-    subroutine append_ecp_C(c_handle) bind(C, name="append_ecp")
+    subroutine append_ecp(c_handle) bind(C, name="append_ecp")
         use c_interop, only: oqp_handle_t, oqp_handle_get_info
         use types, only: information
         type(oqp_handle_t) :: c_handle
         type(information), pointer :: inf
         inf => oqp_handle_get_info(c_handle)
         call oqp_append_ecp(inf)
-    end subroutine append_ecp_C
+    end subroutine append_ecp
 
     subroutine oqp_append_ecp(info)
         use types, only: information

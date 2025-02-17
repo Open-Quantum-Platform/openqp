@@ -92,9 +92,7 @@ contains
                     infos%basis%nbf, infos%basis%mxam
     close (iw)
 
-    if (pe%rank == 0) then
-      call print_basis(infos)
-    end if
+    call print_basis(infos)
 
 
   end subroutine oqp_apply_basis

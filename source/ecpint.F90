@@ -10,7 +10,6 @@ end module libecp_result
 
 module libecpint_wrapper
     use iso_c_binding, only : c_int, c_double, c_ptr
-!    use ecpresult, only : ecp_result
     implicit none
 
     interface

@@ -9,6 +9,10 @@ module ecp_tool
 
     implicit none
 
+    private
+    public add_ecpint
+    public add_ecpder
+
 contains
 
     subroutine add_ecpint(basis, coord, hcore)
