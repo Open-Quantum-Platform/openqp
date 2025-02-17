@@ -2,6 +2,7 @@
 
 import oqp
 import os
+import sys
 from oqp.utils.file_utils import try_basis, dump_log
 import numpy as np
 from oqp import ffi
@@ -42,6 +43,14 @@ class BasisData:
         shells_data = []
         basis = self.read_basis_fmt(basis_name, elements)
         element_key = str(elements)
+        if 'electron_shells' not in basis['elements'].get(element_key, {}):
+            print(
+                f"Error: The basis set '{basis_name}' does not support the element '{element_key}'.\n"
+                "Please choose a valid basis set. For more information, visit:\n"
+                "www.basissetexchange.org\n"
+                "Aborting."
+            )
+            sys.exit(1)
 
         for shell in basis['elements'][element_key]['electron_shells']:
             ang_ii = 0

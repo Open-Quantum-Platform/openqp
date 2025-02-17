@@ -320,6 +320,7 @@ contains
         write(iw, '(/,5X,"====================== Basis Set Details ======================")')
         atom = 0
 
+        write(iw, '(/,17X, A,13X,A)') 'Exponent', 'Normalized Coefficient'
         do j = 1, infos%basis%nshell
             if (atom .NE. infos%basis%origin(j)) then
                 elem = nint(infos%atoms%zn(infos%basis%origin(j)))
@@ -368,8 +369,8 @@ contains
         end if
         do i = start_i, end_i
             write(iw, '(5X, I5, 5X, ES12.5, 5X, I5, 5X, ES12.5)') basis%ecp_params%ecp_am(i),&
-                    basis%ecp_params%ecp_ex(i), basis%ecp_params%ecp_r_ex(i),&
-                    basis%ecp_params%ecp_cc(i)
+                    basis%ecp_params%ecp_cc(i), basis%ecp_params%ecp_r_ex(i),&
+                    basis%ecp_params%ecp_ex(i)
         end do
 
     end subroutine ecp_printing
@@ -408,18 +409,6 @@ contains
         this%id          = 0
         this%element_id  = 0
     end subroutine ecpdata_clear
-
-    subroutine delete_all_shells()
-        type(electron_shell), pointer :: to_delete
-
-        do while (associated(head))
-            to_delete => head
-            head => head%next
-            deallocate(to_delete%exponents)
-            deallocate(to_delete%coefficient)
-            deallocate(to_delete)
-        end do
-    end subroutine delete_all_shells
 
 end module basis_api
 
