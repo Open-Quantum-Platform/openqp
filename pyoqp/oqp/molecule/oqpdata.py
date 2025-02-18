@@ -179,6 +179,9 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
+    'basis_set':{
+        'library': {'type': str, 'default': ''},
+        },
     'tests': {
         'exception': {'type': bool, 'default': False},
     },
