@@ -1,0 +1,44 @@
+# Energy Calculation of MRSF-TDDFT with BHHLYP/LANL2DZ of NaCl
+# For MRSF-TDDFT, we have to set:
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype       energy
+#    input           method         tdhf
+#    scf           multiplicity       3
+#    scf              type          rohf
+#    tdhf             type          mrsf
+#
+# Since we did not specify multiplicity in [tdhf], OQP assumes singlet state.
+#
+[input]
+system=
+   11   0.000000000   0.000000000   0.000000000
+   17   2.350000000   0.000000000   0.000000000
+charge=0
+runtype=energy
+basis=LANL2DZ
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+multiplicity=3
+type=rohf
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=mrsf
+maxit=30
+multiplicity=1
+nstate=10
+conv=1.0e-8
+zvconv=1.0e-10
+

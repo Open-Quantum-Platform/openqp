@@ -298,7 +298,7 @@ contains
       energ = excitation_energy(istat)-excitation_energy(1)
       f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,1,istat)**2)
       write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
-               &f5.3, 4(1x,e10.3),2x,e10.3)') &
+               &f5.3, 4(1x,f10.4),2x,f10.4)') &
            istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
            toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
     end do
@@ -312,7 +312,7 @@ contains
       energ = excitation_energy(istat)-excitation_energy(1)
       f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,1,istat)**2)
       write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
-               &f5.3, 4(1x,e10.3),2x,e10.3)') &
+               &f5.3, 4(1x,f10.4),2x,f10.4)') &
            istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
            toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
     end do
@@ -323,7 +323,7 @@ contains
        do jstat=istat+1, nstates
           energ = excitation_energy(jstat)-excitation_energy(istat)
           f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,istat,jstat)**2)
-    write(*,"(3x,i0,1x,'->',1x,i0,t11,3x,f11.6,3x,3e11.3,1x,e11.3,2x,e11.3)") &
+    write(*,"(3x,i0,1x,'->',1x,i0,t11,3x,f11.6,3x,3f11.4,1x,f11.4,2x,f11.4)") &
              istat,jstat,toev*energ,dip(1:3,istat,jstat), sqrt(sum(dip(:,istat,jstat)**2)), f
        enddo
     enddo

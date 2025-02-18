@@ -10,7 +10,7 @@ system=
 charge=0
 runtype=energy
 functional=bhhlyp
-basis=6-31g(d)
+basis=6-31g*
 method=hf
 
 [guess]
