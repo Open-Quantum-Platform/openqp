@@ -8,7 +8,7 @@ system=
    35   0.000000000   0.000000000   0.000000000
    1    0.000000000   0.000000000   1.407611
 charge=0
-runtype=grad
+runtype=energy
 functional=bhhlyp
 basis=aug-cc-pVDZ-PP,aug-cc-pVDZ
 method=hf
@@ -16,6 +16,7 @@ method=hf
 [guess]
 type=huckel
 save_mol=false
+
 [scf]
 multiplicity=1
 type=rhf

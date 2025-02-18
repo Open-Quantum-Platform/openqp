@@ -34,9 +34,6 @@ rad_npts=96
 ang_npts=302
 pruned=
 
-[properties]
-grad=1
-
 [tdhf]
 type=mrsf
 maxit=30
