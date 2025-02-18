@@ -75,6 +75,10 @@ OQP_CONFIG_SCHEMA = {
         'vshift': {'type': float, 'default': '0.0'},
         'mom': {'type': bool, 'default': 'False'},
         'mom_switch': {'type': float, 'default': '0.003'},
+        'pfon': {'type': bool, 'default': 'False'},
+        'pfon_start_temp': {'type': float, 'default': '2000.0'},
+        'pfon_cooling_rate': {'type': float, 'default': '50.0'},
+        'pfon_nsmear': {'type': float, 'default': '5.0'},
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
@@ -226,6 +230,10 @@ class OQPData:
             "vshift": "set_scf_vshift",
             "mom": "set_scf_mom",
             "mom_switch": "set_scf_mom_switch",
+            "pfon": "set_scf_pfon",
+            "pfon_start_temp": "set_scf_pfon_start_temp",
+            "pfon_cooling_rate": "set_scf_pfon_cooling_rate",
+            "pfon_nsmear": "set_scf_pfon_nsmear",
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
@@ -452,6 +460,22 @@ class OQPData:
     def set_scf_mom_switch(self, mom_switch):
         """Set MOM turn on criteria of DIIS error """
         self._data.control.mom_switch = mom_switch
+
+    def set_scf_pfon(self, pfon): 
+        """pfon """
+        self._data.control.pfon = pfon 
+
+    def set_scf_pfon_start_temp(self, pfon_start_temp): 
+        """pfon_start_temp """
+        self._data.control.pfon_start_temp = pfon_start_temp 
+
+    def set_scf_pfon_cooling_rate(self, pfon_cooling_rate): 
+        """pfon_cooling_rate """
+        self._data.control.pfon_cooling_rate = pfon_cooling_rate
+
+    def set_scf_pfon_nsmear(self, pfon_nsmear): 
+        """pfon_cooling_rate """
+        self._data.control.pfon_nsmear = pfon_nsmear
 
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""
@@ -740,3 +764,4 @@ def read_system(system):
     mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass
+

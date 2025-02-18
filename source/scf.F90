@@ -74,6 +74,15 @@ contains
 
      type(int2_compute_t) :: int2_driver
      class(int2_fock_data_t), allocatable :: int2_data
+!    pFON 
+     logical :: do_pfon
+     real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
+     real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp 
+     real(kind=dp), allocatable :: occ_a(:), occ_b(:)
+     real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
+     real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
+     real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
+     integer :: nsmear 
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
@@ -96,6 +105,19 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
+
+  !  pFON settings
+     do_pfon = .false. 
+     do_pfon = infos%control%pfon 
+     start_temp = infos%control%pfon_start_temp
+     cooling_rate = infos%control%pfon_cooling_rate
+     if (start_temp <= 0.0_dp) then 
+         start_temp = 2000.0_dp 
+     end if 
+     temp_pfon  = start_temp
+     if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
+
+     beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
 
   !  DIIS options
   !  none IS NOT recommended!
@@ -304,20 +326,49 @@ contains
                 & infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch, &
                 & infos%control%diis_reset_mod, infos%control%diis_reset_conv, &
                 & infos%control%vshift, infos%control%vshift_cdiis_switch
-     write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5/)') &
-                & infos%control%mom, infos%control%mom_switch
-  !  Initial message
-     write(IW,fmt="&
-          &(/3x,'Direct SCF iterations begin.'/, &
-          &  3x,93('='),/ &
-          &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
-          &  3x,93('='))")
+     write(iw,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
+                & infos%control%mom, infos%control%mom_switch 
+     write(iw,'(5X,"pFON = ",L5,20X,"pFON Start Temp. = ",F9.2,/, &
+                5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
+                infos%control%pfon, infos%control%pfon_start_temp, &
+                infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
+     !  Initial message
+     if (infos%control%pfon) then
+           write(IW,fmt="&
+                 &(/3x,'Direct SCF iterations begin.'/, &
+                 &  3x,113('='),/ &
+                 &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
+                 &  3x,113('='))")
+     else
+          write(IW,fmt="&
+                 &(/3x,'Direct SCF iterations begin.'/, &
+                 &  3x,93('='),/ &
+                 &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
+                 &  3x,93('='))")
+     endif
      call flush(iw)
-
      do iter = 1, maxit
 
   !     The main SCF iteration loop
 
+  !     pFON Cooling
+        if (cooling_rate <= 0.0_dp) then
+            cooling_rate = 50_dp 
+        end if 
+        if (do_pfon) then
+            if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
+                temp_pfon = 0.0_dp 
+            else 
+                temp_pfon = temp_pfon - cooling_rate 
+                if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
+            end if 
+            if (temp_pfon > 1.0e-12_dp) then 
+                beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+            else 
+                beta_pfon = 1.0e20_dp 
+            end if
+        end if 
+ 
         pfock = 0.0_dp
 
   !     Compute difference density matrix for incremental Fock build,
@@ -397,9 +448,16 @@ contains
         diis_error = conv_res%error
   !     Checking the convergency
         diffe = etot-e_old
-        write(iw,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-                iter, etot, diffe, nschwz, &
-                diis_error, vshift, trim(conv_res%active_converger_name)
+        if (infos%control%pfon) then
+           write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
+                 iter, etot, diffe, nschwz, diis_error, vshift, &
+                 trim(conv_res%active_converger_name), "Temp:", temp_pfon
+           write(IW,fmt="(100x,a,f9.2)") "Beta:", beta_pfon
+        else
+           write(iw,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
+                 iter, etot, diffe, nschwz, diis_error, vshift, &
+                 trim(conv_res%active_converger_name)
+        endif
         call flush(iw)
   !     VDIIS option
         if ((infos%control%diis_type.eq.5) &
@@ -466,6 +524,60 @@ contains
         call int2_driver%pe%bcast(mo_a, size(mo_a))
         call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
 
+        ! pFON section
+        do_pfon = infos%control%pfon
+        if (do_pfon) then
+            if (.not. allocated(occ_a)) allocate(occ_a(nbf))
+            if (.not. allocated(occ_b)) allocate(occ_b(nbf))
+            nsmear = infos%control%pfon_nsmear
+
+            select case (scf_type)
+            case (scf_rhf)
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear)
+
+            case (scf_uhf)
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
+                                    is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
+                if (nelec_b > 0) then
+                    call pfon_occupations(mo_energy_b, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
+                                        is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
+                end if
+
+            case (scf_rohf)
+                call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
+                                    is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
+                if (nelec_b > 0) then
+                    call pfon_occupations(mo_energy_a, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
+                                        is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
+                end if
+            end select
+
+            ! Alpha occupations
+            sum_occ_alpha = sum(occ_a(1:nbf))
+
+            ! Beta occupations
+            sum_occ_beta = 0.0_dp
+            if (scf_type == scf_uhf .or. scf_type == scf_rohf) then
+                sum_occ_beta = sum(occ_b(1:nbf))
+            end if
+
+!            write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
+            
+!            select case (scf_type)
+!            case (scf_rhf)
+!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha
+!            case (scf_uhf, scf_rohf)
+!                write(iw,'(T7," Alpha electron count = ",F12.6)') sum_occ_alpha
+!                write(iw,'(T7," Beta electron count  = ",F12.6)') sum_occ_beta
+!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha + sum_occ_beta
+!           end select
+
+        end if
+
+!            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
+!                  start_temp ,end_temp, electron_sum_a, electron_sum_b
+
+
   !     MOM option works for RHF and ROHF
         if (do_mom .and. diis_error.lt.infos%control%mom_switch) do_mom_flag=.true.
         if (do_mom .and. do_mom_flag .and. .not. step_0_mom) then
@@ -480,13 +592,14 @@ contains
 
   !     New density matrix in AO basis using MO.
         if (int2_driver%pe%rank == 0) then
-           call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-        end if
+            if (.not. do_pfon) then 
+                call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+            else 
+                call build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
+            end if
+        end if 
         call int2_driver%pe%bcast(pdmat, size(pdmat))
-
-  !
-
-  !     Checking the HOMO-LUMO gaps for predicting SCF convergency
+ !     Checking the HOMO-LUMO gaps for predicting SCF convergency
         if ((iter > 10).and.(vshift==0.0_dp)) then
            select case (scf_type)
            case (scf_rhf)
@@ -918,6 +1031,251 @@ contains
 
  end subroutine mo_reorder
 
+!> @brief      pFON Implementation in SCF Module
+!> Author: Alireza Lashkaripour
+!> Date: January 2025
+!> Reference paper: https://doi.org/10.1063/1.478177
+!> This subroutine incorporates the Partial Fractional Occupation Number (pFON) 
+!> method into SCF calculations, ensuring smooth occupation numbers using 
+!> Fermi-Dirac distribution. It dynamically adjusts temperature and beta 
+!> factors to enhance SCF convergence, particularly for near-degenerate states.
+    subroutine pfon_occupations(mo_energy, nbf, nelec, occ, beta_pfon, scf_type, nsmear, is_beta, nelec_a, nelec_b)
+        use precision, only: dp 
+        implicit none 
+
+        integer, intent(in) :: nbf 
+        integer, intent(in) :: nelec, nsmear
+        real(kind=dp), intent(in) :: beta_pfon
+        real(kind=dp), intent(in) :: mo_energy(nbf)
+        real(kind=dp), intent(inout) :: occ(nbf)
+        integer, intent(in) :: scf_type ! 1,2,3 RHF,UHF,ROHF 
+        logical, intent(in), optional :: is_beta
+        integer, intent(in), optional :: nelec_a, nelec_b
+        real(kind=dp) :: eF, sum_occ
+        integer :: i, i_homo, i_lumo, i_low, i_high
+        real(kind=dp) :: tmp
+        logical :: is_beta_calc
+        integer :: n_electrons, n_double, n_single
+
+        is_beta_calc = .false.
+        if (present(is_beta)) is_beta_calc = is_beta
+
+        select case (scf_type)
+        case(1) ! RHF 
+            i_homo = max(1, nelec/2)
+            n_electrons = nelec
+
+        case(2) ! UHF 
+            if (.not. present(nelec_a) .or. .not. present(nelec_b)) then
+                stop 'UHF requires nelec_a and nelec_b'
+            endif
+            ! UHF: completely independent alpha and beta
+            if (is_beta_calc) then
+                i_homo = max(1, nelec_b)
+                n_electrons = nelec_b
+            else
+                i_homo = max(1, nelec_a)
+                n_electrons = nelec_a
+            endif
+
+        case(3) ! ROHF 
+            if (.not. present(nelec_a) .or. .not. present(nelec_b)) then
+                stop 'ROHF requires nelec_a and nelec_b'
+            endif
+            ! ROHF: same spatial orbitals, different occupations
+            n_double = nelec_b           
+            n_single = nelec_a - nelec_b 
+            if (is_beta_calc) then
+                i_homo = n_double
+                n_electrons = nelec_b
+            else
+                i_homo = n_double + n_single
+                n_electrons = nelec_a
+            endif
+        end select 
+
+        i_lumo = i_homo + 1 
+        if (i_lumo > nbf) i_lumo = nbf 
+
+        ! Calculate Fermi level
+        eF = 0.5_dp * (mo_energy(i_homo) + mo_energy(i_lumo))
+
+        if (nsmear <= 0) then 
+            do i = 1, nbf
+                tmp = beta_pfon * (mo_energy(i) - eF)
+                if (scf_type == 1) then  ! RHF
+                    occ(i) = 2.0_dp / (1.0_dp + exp(tmp))
+                else  ! UHF or ROHF
+                    occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+                endif
+            end do 
+        else
+            i_low = max(1, i_homo - nsmear)
+            i_high = min(nbf, i_lumo + nsmear)
+
+            ! Special handling for ROHF
+            if (scf_type == 3) then
+                if (is_beta_calc) then
+                    do i = 1, n_double
+                        occ(i) = 1.0_dp
+                    end do
+                    do i = n_double + 1, nbf
+                        occ(i) = 0.0_dp
+                    end do
+                else
+                    do i = 1, n_double
+                        occ(i) = 1.0_dp
+                    end do
+                    do i = n_double + 1, n_double + n_single
+                        occ(i) = 1.0_dp
+                    end do
+                    do i = n_double + n_single + 1, nbf
+                        occ(i) = 0.0_dp
+                    end do
+                endif
+
+                ! Apply smearing only around the Fermi level
+                do i = i_low, i_high
+                    tmp = beta_pfon * (mo_energy(i) - eF)
+                    occ(i) = occ(i) / (1.0_dp + exp(tmp))
+                end do
+            else
+                ! RHF/UHF handling
+                do i = 1, i_low - 1 
+                    if (scf_type == 1) then 
+                        occ(i) = 2.0_dp 
+                    else 
+                        occ(i) = 1.0_dp
+                    endif
+                end do 
+
+                do i = i_high + 1, nbf 
+                    occ(i) = 0.0_dp 
+                end do 
+
+                do i = i_low, i_high
+                    tmp = beta_pfon * (mo_energy(i) - eF)
+                    if (scf_type == 1) then  
+                        occ(i) = 2.0_dp / (1.0_dp + exp(tmp))
+                    else 
+                        occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
+                    endif
+                end do 
+            endif
+        endif 
+
+        ! Normalize occupations
+        sum_occ = sum(occ(1:nbf))
+        if (sum_occ < 1.0e-14_dp) then
+            sum_occ = 1.0_dp 
+        endif 
+        occ(1:nbf) = occ(1:nbf) * (real(n_electrons,dp) / sum_occ)
+
+    end subroutine pfon_occupations
+ ! pFON Density
+    subroutine build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
+        use precision, only: dp 
+        use mathlib, only: pack_matrix
+        implicit none 
+
+        real(kind=dp), intent(inout) :: pdmat(:,:)
+        real(kind=dp), intent(in) :: mo_a(:,:), mo_b(:,:)
+        real(kind=dp), intent(in) :: occ_a(:), occ_b(:)
+        integer, intent(in) :: nbf, scf_type, nelec_a, nelec_b
+
+        real(kind=dp), allocatable :: dtmp(:,:)
+        integer :: i, mu, nu
+        integer :: n_double, n_single
+        real(kind=dp) :: occ_factor
+
+        allocate(dtmp(nbf, nbf), source=0.0_dp)
+        
+        pdmat(:,:) = 0.0_dp
+
+        select case(scf_type)
+        case(1)  ! RHF
+            do i = 1, nbf 
+                if (occ_a(i) > 1.0e-14_dp) then 
+                    do mu = 1, nbf
+                        do nu = 1, nbf 
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_a(i) * mo_a(mu,i)*mo_a(nu,i)
+                        end do 
+                    end do 
+                end if 
+            end do 
+            call pack_matrix(dtmp, pdmat(:,1))
+
+        case(2)  ! UHF
+            do i = 1, nbf 
+                if (occ_a(i) > 1.0e-14_dp) then 
+                    do mu = 1, nbf
+                        do nu = 1, nbf 
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_a(i) * mo_a(mu,i)*mo_a(nu,i)
+                        end do 
+                    end do 
+                end if 
+            end do 
+            call pack_matrix(dtmp, pdmat(:,1))
+
+            dtmp(:,:) = 0.0_dp 
+            do i = 1, nbf 
+                if (occ_b(i) > 1.0e-14_dp) then 
+                    do mu = 1, nbf 
+                        do nu = 1, nbf 
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_b(i) * mo_b(mu,i)*mo_b(nu,i)
+                        end do 
+                    end do 
+                end if 
+            end do
+            call pack_matrix(dtmp, pdmat(:,2))
+
+        case(3)  ! ROHF
+            n_double = nelec_b           
+            n_single = nelec_a - nelec_b 
+
+            dtmp(:,:) = 0.0_dp
+            do i = 1, nbf 
+                if (occ_a(i) > 1.0e-14_dp) then 
+                    if (i <= n_double) then
+                        occ_factor = occ_a(i)  
+                    else if (i <= n_double + n_single) then
+                        occ_factor = 1.0_dp  
+                    else
+                        occ_factor = occ_a(i)  ! Virtual orbitals
+                    endif
+
+                    do mu = 1, nbf
+                        do nu = 1, nbf 
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_factor * mo_a(mu,i)*mo_a(nu,i)
+                        end do 
+                    end do 
+                end if 
+            end do 
+            call pack_matrix(dtmp, pdmat(:,1))
+
+            dtmp(:,:) = 0.0_dp 
+            do i = 1, nbf 
+                if (occ_b(i) > 1.0e-14_dp) then 
+                    if (i <= n_double) then
+                        occ_factor = occ_b(i)
+                    else
+                        occ_factor = 0.0_dp
+                    endif
+
+                    do mu = 1, nbf 
+                        do nu = 1, nbf 
+                            dtmp(mu,nu) = dtmp(mu,nu) + occ_factor * mo_a(mu,i)*mo_a(nu,i)
+                        end do 
+                    end do 
+                end if 
+            end do
+            call pack_matrix(dtmp, pdmat(:,2))
+        end select
+
+        deallocate(dtmp)
+
+    end subroutine build_pfon_density
+
 !> @brief      This routine reorders orbitals to maximum overlap.
  subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
     use precision, only: dp
@@ -981,3 +1339,4 @@ contains
  end subroutine
 
 end module scf
+
