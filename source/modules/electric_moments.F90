@@ -92,7 +92,7 @@ contains
 
     do i = 1, nat
       dr = infos%atoms%xyz(:,i)-com
-      z = infos%atoms%zn(i)
+      z = infos%atoms%zn(i) - infos%basis%ecp_zn_num(i)
 
       dip = dip + z * dr
 

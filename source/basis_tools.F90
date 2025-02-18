@@ -15,6 +15,18 @@ module basis_tools
 
   implicit none
 
+  type ecp_parameters
+    real(real64), dimension(:), allocatable :: &
+      ecp_ex,   & !<
+      ecp_cc,   & !<
+      ecp_coord   !<
+    integer, dimension(:), allocatable :: &
+      ecp_r_ex,  & !<
+      ecp_am,    & !<
+      n_expo      !<
+    logical :: is_ecp = .false.
+  end type
+
   type basis_set
     real(real64), dimension(:), allocatable :: &
       ex, & !< Array of primitive Gaussian exponents
@@ -26,13 +38,15 @@ module basis_tools
       am, &        !< Array of shell angular momentum
       ncontr, &    !< Array of contraction degrees
       ao_offset, & !< Indices of shells in the total AO basis
-      naos         !< Array of shell's AO numbers
+      naos,   &         !< Array of shell's AO numbers
+      ecp_zn_num   !< number of electrons removed by ecp
     integer :: &
       nshell = 0, &  !< Number of shells in the basis set
       nprim = 0, &   !< Number of primitive Gaussians in the basis set
       nbf = 0, &     !< Number of basis set functions
       mxcontr = 0, & !< Max. contraction degree
       mxam = 0       !< Max. angular momentum among basis set
+    type(ecp_parameters) :: ecp_params
     type(atomic_structure), pointer :: atoms
 
     real(real64), allocatable :: at_mx_dist2(:)
@@ -62,6 +76,7 @@ module basis_tools
 
     procedure, pass(basis) :: basis_broadcast
     procedure, pass(basis) :: bf_label
+    procedure, pass(basis) :: bf_to_shell
 
   end type
 
@@ -1259,7 +1274,6 @@ contains
     call pe%bcast(basis%mxcontr, length)
 
     call pe%bcast(basis%mxam, length)
-
     if ( pe%rank /= 0) then
       ! Allocate arrays based on the received sizes (on all processes)
       if (.not. allocated(basis%ex)) allocate(basis%ex(basis%nprim))
@@ -1292,8 +1306,11 @@ contains
 
     call pe%bcast(basis%ao_offset, basis%nshell)
 
-
     call pe%bcast(basis%naos, basis%nshell)
+
+    if (.not. allocated(basis%ecp_zn_num)) allocate(basis%ecp_zn_num(maxval(basis%origin)))
+    call pe%bcast(basis%ecp_zn_num, maxval(basis%origin))
+
 
   end subroutine basis_broadcast
 

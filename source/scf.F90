@@ -243,7 +243,7 @@ contains
      call matrix_invsqrt(smat, qmat, nbf)
 
   !  First Compute Nuclear-Nuclear energy
-     nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn)
+     nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
   !  During guess, the Hcore, Q nd Overlap matrices were formed.
   !  Using these, the initial orbitals (VEC) and density (Dmat) were subsequently computed.

@@ -155,6 +155,20 @@ module types
     logical(c_bool) :: usempi = .false.
   end type mpi_communicator
 
+  type, public, bind(c) :: electron_shell
+    integer(c_int) :: id = 0
+    integer(c_int) :: element_id = -1
+!    integer(c_int) :: num_expo = 0
+    integer(c_int) :: ang_mom = 0
+    integer(c_int) :: ecp_nam = 0
+    type(c_ptr) :: num_expo
+    type(c_ptr) :: expo
+    type(c_ptr) :: coef
+    type(c_ptr) :: ecp_am
+    type(c_ptr) :: ecp_rex
+    type(c_ptr) :: ecp_coord
+    type(c_ptr) :: ecp_zn
+  end type electron_shell
 
   type, public :: information
     type(molecule) :: mol_prop
@@ -168,6 +182,7 @@ module types
     type(basis_set) :: basis
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
+    type(electron_shell) :: elshell
   contains
     generic :: set_atoms => set_atoms_arr, set_atoms_atm
     procedure, pass :: set_atoms_arr => info_set_atoms_arr

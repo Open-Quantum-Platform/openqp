@@ -10,7 +10,7 @@ runtype=meci
 functional=bhhlyp
 charge=0
 method=tdhf
-basis=6-31g(d)
+basis=6-31g*
 
 [scf]
 type=rohf

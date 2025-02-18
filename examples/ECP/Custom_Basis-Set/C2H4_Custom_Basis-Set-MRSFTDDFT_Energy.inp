@@ -1,0 +1,51 @@
+# Energy Calculation of MRSF-TDDFT with BHHLYP/LANL2DZ of HBr
+# For MRSF-TDDFT, we have to set:
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype       energy
+#    input           method         tdhf
+#    scf           multiplicity       3
+#    scf              type          rohf
+#    tdhf             type          mrsf
+#
+# Since we did not specify multiplicity in [tdhf], OQP assumes singlet state.
+#
+#The custom basis-set used in this input if 6-31g*
+[input]
+system=
+ C    1.6062782722   1.5141391221  -1.8538091464  
+ C    1.8295756914   2.1530602256  -2.9302391911  
+ H    0.7846511041   1.8564598303  -1.2260835006  
+ H    2.0658311171   0.5858648490  -1.5523155830  
+ H    1.3961209467   3.0492511400  -3.1437367515  
+ H    2.3877626192   1.8783782433  -3.7562666130  
+charge=0
+method=tdhf
+basis=file:Custom_Basis-Set.json
+runtype=energy
+functional=bhhlyp
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+type=rohf
+multiplicity=3
+maxit=30
+save_molden=False
+conv=1.0e-8
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=mrsf
+maxit=30
+multiplicity=1
+nstate=10
+conv=1.0e-8
+zvconv=1.0e-10

@@ -16,7 +16,7 @@ module grd1
 
    use mod_shell_tools, only: shell_t, shpair_t
    use mathlib, only: unpack_matrix
-
+   use ecp_tool, only: add_ecpder
    implicit none
 
    character(len=*), parameter :: module_name = "grd1"
@@ -31,6 +31,7 @@ module grd1
    public grad_ee_kinetic
    public grad_en_hellman_feynman
    public grad_en_pulay
+   public grad_1e_ecp
 
 contains
 
@@ -764,9 +765,10 @@ atoms:      DO ic = 1, nat
 !-------------------------------------------------------------------------------
 
 !> @brief Gradient of nuclear repulsion energy
-  subroutine grad_nn(atoms)
+  subroutine grad_nn(atoms, ecp_el)
     implicit none
     type(atomic_structure), intent(inout) :: atoms
+    integer, intent(in) :: ecp_el(:)
 
     integer :: k, l
     real(kind=dp) :: pkl(3), rkl3, de1(3)
@@ -776,7 +778,7 @@ atoms:      DO ic = 1, nat
             if (k==l) cycle
             pkl = atoms%xyz(:,k)-atoms%xyz(:,l)
             rkl3 = norm2(pkl)**3
-            de1 = -atoms%zn(k)*atoms%zn(l)*pkl/rkl3
+            de1 = -(atoms%zn(k)-ecp_el(k))*(atoms%zn(l)-ecp_el(l))*pkl/rkl3
             atoms%grad(:,k) = atoms%grad(:,k) + de1
             atoms%grad(:,l) = atoms%grad(:,l) - de1
         end do
@@ -785,5 +787,31 @@ atoms:      DO ic = 1, nat
   end subroutine grad_nn
 
 !-------------------------------------------------------------------------------
+
+!> @brief Effective core potential gradient
+  subroutine grad_1e_ecp(infos,basis, coord, denab, de, logtol)
+    use types, only: information
+    use parallel, only: par_env_t
+
+    type(information), target, intent(inout) :: infos
+    type(par_env_t) :: pe
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), contiguous, intent(in) :: coord(:,:)
+    REAL(kind=dp) :: de(:,:)
+
+    REAL(kind=dp), optional :: logtol
+
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    if (pe%rank == 0) then
+        call add_ecpder(basis, coord, denab, de)
+    end if
+
+    call pe%bcast(de, size(de))
+
+  end subroutine grad_1e_ecp
+
+  !-------------------------------------------------------------------------------
 
 end module grd1
