@@ -111,8 +111,12 @@ module types
     real(c_double) :: vdiis_vshift_switch = 0.003_dp !< The threshold for setting vshift = 0
     real(c_double) :: vshift_cdiis_switch = 0.3_dp   !< The threshold for selecting cdiis for vshift
     real(c_double) :: vshift = 0.0_dp                !< Virtual orbital shift for ROHF
-    logical(c_bool) :: mom = .false.                 ! Maximum Overlap Method for SCF Convergency
-    real(c_double) :: mom_switch = 0.003_dp          ! Turn on criteria of DIIS error
+    logical(c_bool) :: mom = .false.                 !< Maximum Overlap Method for SCF Convergency
+    logical(c_bool) :: pfon = .false.                !< Pseudo-Fractional Occupation Number Method (pFON) for scf
+    real(c_double) :: mom_switch = 0.003_dp          !< Turn on criteria of DIIS error
+    real(c_double) :: pfon_start_temp = 2000.0_dp    !< Starting tempreature for pFON
+    real(c_double) :: pfon_cooling_rate = 50.0_dp    !< Tempreature cooling rate for pFON
+    real(c_double) :: pfon_nsmear = 5.0_dp           !< Num. of smearing orbitals for pFON if = 0, all 
     real(c_double) :: conv         = 1e-6_dp         !< Convergency criteria of SCF
     integer(c_int64_t) :: scf_incremental = 1        !< Enable/disable incremental Fock build
     real(c_double) :: int2e_cutoff = 5e-11_dp        !< 2e-integrals cutoff
@@ -220,3 +224,4 @@ contains
   end function
 
 end module types
+
