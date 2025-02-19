@@ -57,8 +57,8 @@ maxit=500
 multiplicity=3
 pfon=true 
 pfon_start_temp=5000
-pfon_cooling_rate=50 
-pfon_nsmear=5
+pfon_cooling_rate=30 
+pfon_nsmear=10
 
 [tdhf]
 type=mrsf
