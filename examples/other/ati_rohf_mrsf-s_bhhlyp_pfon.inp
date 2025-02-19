@@ -48,7 +48,7 @@ basis=maug-cc-pv(d+d)z
 
 [guess]
 type=huckel
-save_mol=True
+save_mol=false
 continue_geom=false
 
 [scf]

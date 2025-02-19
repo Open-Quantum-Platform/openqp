@@ -28,6 +28,7 @@ contains
      use mathlib, only: traceprod_sym_packed, matrix_invsqrt
      use mathlib, only: unpack_matrix
      use io_constants, only: IW
+     use constants, only: kB_HaK 
      use basis_tools, only: basis_set
      use scf_converger, only: scf_conv_result, scf_conv, &
              conv_cdiis, conv_ediis
@@ -81,7 +82,6 @@ contains
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
      real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
-     real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
      integer :: nsmear 
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
@@ -561,21 +561,7 @@ contains
                 sum_occ_beta = sum(occ_b(1:nbf))
             end if
 
-!            write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
-            
-!            select case (scf_type)
-!            case (scf_rhf)
-!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha
-!            case (scf_uhf, scf_rohf)
-!                write(iw,'(T7," Alpha electron count = ",F12.6)') sum_occ_alpha
-!                write(iw,'(T7," Beta electron count  = ",F12.6)') sum_occ_beta
-!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha + sum_occ_beta
-!           end select
-
         end if
-
-!            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
-!                  start_temp ,end_temp, electron_sum_a, electron_sum_b
 
 
   !     MOM option works for RHF and ROHF
