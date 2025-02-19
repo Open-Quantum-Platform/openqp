@@ -22,7 +22,7 @@ system=
  H    2.3877626192   1.8783782433  -3.7562666130  
 charge=0
 method=tdhf
-basis=file:Custom_Basis-Set.json
+basis=file:custom_basis-set.json
 runtype=energy
 functional=bhhlyp
 
