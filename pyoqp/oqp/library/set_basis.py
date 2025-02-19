@@ -229,7 +229,9 @@ class BasisData:
         """
 
         if url.startswith("file:"):
-            file_path = url[len("file:"):]
+            file_name = url[len("file:"):]
+            directory = os.path.dirname(self.mol.input_file)
+            file_path = os.path.join(directory, file_name)
 
             if file_path.endswith('.json'):
                 with open(file_path, "r") as f:
