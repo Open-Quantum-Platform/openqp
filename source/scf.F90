@@ -28,6 +28,7 @@ contains
      use mathlib, only: traceprod_sym_packed, matrix_invsqrt
      use mathlib, only: unpack_matrix
      use io_constants, only: IW
+     use constants, only: kB_HaK 
      use basis_tools, only: basis_set
      use scf_converger, only: scf_conv_result, scf_conv, &
              conv_cdiis, conv_ediis
@@ -81,7 +82,7 @@ contains
      real(kind=dp), allocatable :: occ_a(:), occ_b(:)
      real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
      real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
-     real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
+     real(kind=dp) :: last_cooled_temp = 0.0_dp 
      integer :: nsmear 
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
@@ -351,25 +352,41 @@ contains
 
   !     The main SCF iteration loop
 
-  !     pFON Cooling
-        if (cooling_rate <= 0.0_dp) then
-            cooling_rate = 50_dp 
-        end if 
-        if (do_pfon) then
-            if ( (iter == maxit ) .or. (abs(diis_error) < 10.0_dp * infos%control%conv) ) then 
-                temp_pfon = 0.0_dp 
-            else 
-                temp_pfon = temp_pfon - cooling_rate 
-                if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp 
-            end if 
-            if (temp_pfon > 1.0e-12_dp) then 
-                beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-            else 
-                beta_pfon = 1.0e20_dp 
-            end if
-        end if 
- 
-        pfock = 0.0_dp
+
+
+
+!     pFON Cooling
+      if (cooling_rate <= 0.0_dp) then
+          cooling_rate = 50_dp 
+      end if 
+
+      if (do_pfon) then
+          if (iter == maxit) then 
+              temp_pfon = 0.0_dp 
+          else if (abs(diis_error) < 10.0_dp * infos%control%conv) then 
+              if (temp_pfon > 1.0_dp) then
+                  last_cooled_temp = temp_pfon
+              end if
+              temp_pfon = 1.0_dp 
+          else 
+              if (temp_pfon == 1.0_dp .and. last_cooled_temp > 1.0_dp) then
+                  temp_pfon = last_cooled_temp
+              end if
+              temp_pfon = temp_pfon - cooling_rate 
+              if (temp_pfon < 1.0_dp) then
+                  temp_pfon = 1.0_dp 
+              end if
+              last_cooled_temp = temp_pfon
+          end if 
+
+          if (temp_pfon > 1.0e-12_dp) then 
+              beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+          else 
+              beta_pfon = 1.0e20_dp 
+          end if
+      end if 
+
+      pfock = 0.0_dp 
 
   !     Compute difference density matrix for incremental Fock build,
   !     which is the main advantage of direct SCF.
@@ -561,21 +578,7 @@ contains
                 sum_occ_beta = sum(occ_b(1:nbf))
             end if
 
-!            write(iw,'(T7," pFON: Temp=",F9.2,", Beta=",ES11.4)') temp_pfon, beta_pfon
-            
-!            select case (scf_type)
-!            case (scf_rhf)
-!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha
-!            case (scf_uhf, scf_rohf)
-!                write(iw,'(T7," Alpha electron count = ",F12.6)') sum_occ_alpha
-!                write(iw,'(T7," Beta electron count  = ",F12.6)') sum_occ_beta
-!                write(iw,'(T7," Total electron count = ",F12.6)') sum_occ_alpha + sum_occ_beta
-!           end select
-
         end if
-
-!            write(iw,'(" Start: ",F9.2,", END: Temp=",F9.2,", Elect Sum(a)=",F8.3,", Elect Sum(b)=",F8.3)') &
-!                  start_temp ,end_temp, electron_sum_a, electron_sum_b
 
 
   !     MOM option works for RHF and ROHF

@@ -13,6 +13,9 @@ module constants
 !  angular momentum labels
    character(len=7) :: angular_label = 'SPDFGHI'
 
+!  Boltzmann Constant
+   real(kind=dp), parameter :: kB_HaK = 3.166811563e-6_dp
+
 !  number of cartesian bf for each shell kind
 
    integer, parameter :: BAS_MXANG = 6
