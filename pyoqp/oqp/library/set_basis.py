@@ -14,6 +14,7 @@ class BasisData:
     def __init__(self, mol):
         self.mol = mol
         self.shell_num = 0
+        self.mpi_manager = MPIManager()
         self.num_atoms = mol.data["natom"]
         self.atoms = mol.data["qn"]
         self.atom_xyz = mol.data["xyz"]
@@ -41,7 +42,11 @@ class BasisData:
         """
 
         shells_data = []
-        basis = self.read_basis_fmt(basis_name, elements)
+        if self.mol.usempi:
+            basis = self.read_basis_fmt(basis_name, elements) if self.mpi_manager.rank == 0 else None
+            basis = self.mpi_manager.bcast(basis, root=0)
+        else:
+            basis = self.read_basis_fmt(basis_name, elements)
         element_key = str(elements)
         if 'electron_shells' not in basis['elements'].get(element_key, {}):
             print(
@@ -257,9 +262,8 @@ def set_basis(mol):
     basis_file = mol.config["input"]["basis"]
     mol.data["OQP::basis_filename"] = basis_file
 
-    if(MPIManager().rank == 0):
-        basis_data= BasisData(mol)
-        basis_data.set_basis_data()
+    basis_data= BasisData(mol)
+    basis_data.set_basis_data()
 
     oqp.apply_basis(mol)
 
