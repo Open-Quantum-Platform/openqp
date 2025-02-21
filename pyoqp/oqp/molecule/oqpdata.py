@@ -64,6 +64,7 @@ OQP_CONFIG_SCHEMA = {
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
+        'forced_attempt' : {'type': int, 'default': '1'},
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},

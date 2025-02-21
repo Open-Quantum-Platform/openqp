@@ -161,6 +161,7 @@ class SinglePoint(Calculator):
         self.basis = mol.config['input']['basis']
         self.scf_type = mol.config['scf']['type']
         self.scf_maxit = mol.config['scf']['maxit']
+        self.forced_attempt = mol.config['scf']['forced_attempt']
         self.scf_mult = mol.config['scf']['multiplicity']
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
@@ -297,16 +298,24 @@ class SinglePoint(Calculator):
             # do initial scf iteration to help convergence
             self._init_convergence()
 
-        self.scf()
-        energy = [self.mol.mol_energy.energy]
+        scf_flag = False
+        for itr in range(self.forced_attempt):
+            self.scf()
+            energy = [self.mol.mol_energy.energy]
 
-        # check convergence
-        scf_flag = self.mol.mol_energy.SCF_converged
+            # check convergence
+            scf_flag = self.mol.mol_energy.SCF_converged
+
+            if scf_flag:
+                dump_log(self.mol, title='PyOQP: SCF energy is converged after %s attempts' % (itr + 1), section='')
+                break
+            else:
+                dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
 
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
 
-            if self.exception:
+            if self.exception is True:
                 raise SCFnotConverged()
             else:
                 exit()
@@ -329,7 +338,7 @@ class SinglePoint(Calculator):
         if self.method != 'hf' and not td_flag:
             dump_log(self.mol, title='PyOQP: TD energy is not converged', section='end')
 
-            if self.exception:
+            if self.exception is True:
                 raise TDnotConverged()
             else:
                 exit()
@@ -432,7 +441,7 @@ class Gradient(Calculator):
             if not z_flag:
                 dump_log(self.mol, title='PyOQP: TD Z-vector is not converged', section='end')
 
-                if self.exception:
+                if self.exception is True:
                     raise ZVnotConverged()
                 else:
                     exit()
