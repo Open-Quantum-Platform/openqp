@@ -61,15 +61,13 @@ contains
     write(iw,'(  22X,"Setting up basis set information")')
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    if (pe%rank == 0) then
-      call map_shell2basis_set(infos, infos%basis)
-    end if
+    call map_shell2basis_set(infos, infos%basis)
 !    if (pe%rank == 0) then
 !      call infos%basis%from_file(basis_file, infos%atoms, err)
 !      infos%control%basis_set_issue = err
 !    endif
 
-    call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+!    call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     if (sum(infos%basis%ecp_zn_num)>0) then
       call pe%bcast(infos%mol_prop%nelec, 1)
@@ -79,7 +77,7 @@ contains
     end if
 
 ! Checking error of basis set reading..
-    call pe%bcast(infos%control%basis_set_issue, 1)
+!    call pe%bcast(infos%control%basis_set_issue, 1)
 
     write(iw,'(/5X,"Basis Sets options"/&
                   &5X,18("-")/&
