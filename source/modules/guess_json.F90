@@ -12,7 +12,6 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    print *, "HELLLO"
     call guess_json(inf)
   end subroutine guess_json_C
 
@@ -23,14 +22,10 @@ contains
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
     use guess, only: get_ab_initio_density
-    use mathlib, only: matrix_invsqrt
-    use huckel, only: huckel_guess
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
-    use strings, only: Cstring, fstring
     use printing, only: print_module_info
     use oqp_tagarray_driver
-    use iso_c_binding, only: c_char
     use parallel, only: par_env_t
 
     implicit none
@@ -63,7 +58,7 @@ contains
   !
     open (unit=IW, file=infos%log_filename, position="append")
 
-    print_module_info("Loading JSON", "Using stored SCF guess")
+    call print_module_info("Loading JSON", "Using stored SCF guess")
 
   ! load basis set
     basis => infos%basis
