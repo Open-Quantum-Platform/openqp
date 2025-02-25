@@ -60,6 +60,10 @@ class Molecule:
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
         ]
+        self.skip_tag = { "rhf": ['OQP::DM_B','OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
+                "rohf": [],
+                "uhf": []
+                }
 
         self.start_time = None
         self.back_door = None
@@ -135,8 +139,11 @@ class Molecule:
         """
         Extract data from mol to dict
         """
+        scf_type = self.config['scf']['type']
         data = {}
         for key in self.tag:
+            if key in self.skip_tag[scf_type]:
+                continue 
             try:
                 data[key] = np.array(self.data[key]).tolist()
 
