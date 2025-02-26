@@ -27,6 +27,14 @@ def guess(mol):
 
     elif guess_type == 'json':
         guess_file = mol.config["guess"]["file"]
+        if mol.config['scf']['type'] != 'rhf':
+            try:
+                mol.data["OQP::VEC_MO_B"]
+            except AttributeError:
+                mol.data["OQP::VEC_MO_B"] = copy.deepcopy(mol.data["OQP::VEC_MO_A"])
+                mol.data["OQP::E_MO_B"] = copy.deepcopy(mol.data["OQP::E_MO_A"])
+                mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
+                oqp.guess_json(mol)
         alpha = 'reloaded'
         beta = 'reloaded'
 
