@@ -20,6 +20,7 @@ contains
   end subroutine hf_energy_C
 
   subroutine hf_energy(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use io_constants, only: iw
     use basis_tools, only: basis_set
     use messages, only: show_message
@@ -42,6 +43,9 @@ contains
     type(basis_set), pointer :: basis
     type(dft_grid_t) :: molGrid
 
+    ! tagarray
+    integer(c_int32_t) :: stat
+
     urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
     dft = infos%control%hamilton == 20
 
@@ -60,14 +64,14 @@ contains
     nsh2 = (basis%nshell**2+basis%nshell)/2
 
     ! clean data
-    call infos%dat%remove_records((/ character(len=80) :: OQP_FOCK_A, OQP_FOCK_B /))
+    call infos%dat%erase((/ character(len=80) :: OQP_FOCK_A, OQP_FOCK_B /))
 
-    call infos%dat%reserve_data(OQP_FOCK_A, TA_TYPE_REAL64, nbf2, comment=OQP_FOCK_A_comment)
-    call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_FOCK_A)
+    stat = infos%dat%create(OQP_FOCK_A, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_FOCK_A_comment)
+    call check_status(stat, module_name, subroutine_name, OQP_FOCK_A)
 
     if (urohf) then
-      call infos%dat%reserve_data(OQP_FOCK_B, TA_TYPE_REAL64, nbf2, comment=OQP_FOCK_B_comment)
-      call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_FOCK_B)
+      stat = infos%dat%create(OQP_FOCK_B, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_FOCK_B_comment)
+      call check_status(stat, module_name, subroutine_name, OQP_FOCK_B)
     end if
 
 !   Prepare dft grid
