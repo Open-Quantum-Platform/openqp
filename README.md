@@ -1,5 +1,4 @@
 ## Open Quantum Platform: OpenQP
-**August 23, 2024**
 
 Open Quantum Platform (OpenQP) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
@@ -12,13 +11,16 @@ Open Quantum Platform (OpenQP) is a quantum chemical platform featuring cutting-
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
 - **Ground State Properties** by HF and DFT theories
 - **Geometry Optimization, Transition State Search, and Conical Intersection Search** by SciPy and [DL-Find](https://github.com/digital-chemistry-laboratory/libdlfind)
+- [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
 - [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
+- [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) Integration to support a variety of basis sets
+- [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
 - **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 
 ### Upcoming Features
-
+- **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
 - **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
