@@ -433,6 +433,18 @@ contains
               alpha=dft_params%cam_alpha, &
               beta=dft_params%cam_beta, &
               omega=dft_params%cam_mu)
+    case ("WB97X-D")
+      dft_params%cam_flag = .true.
+      call functional%add_functional(XC_HYB_GGA_XC_WB97X_D, 1.00_fp, &
+              alpha=dft_params%cam_alpha, &
+              beta=dft_params%cam_beta, &
+              omega=dft_params%cam_mu)
+    case ("WB97X-D3")
+      dft_params%cam_flag = .true.
+      call functional%add_functional(XC_HYB_GGA_XC_WB97X_D3, 1.00_fp, &
+              alpha=dft_params%cam_alpha, &
+              beta=dft_params%cam_beta, &
+              omega=dft_params%cam_mu)
     case ("HSE03")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_HSE03, 1.00_fp, &
