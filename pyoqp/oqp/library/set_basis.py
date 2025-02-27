@@ -10,6 +10,7 @@ import basis_set_exchange as bse
 from oqp.utils.mpi_utils import MPIManager
 import json
 
+
 class BasisData:
     def __init__(self, mol):
         self.mol = mol
@@ -31,7 +32,7 @@ class BasisData:
             "num_expo": []
         }
 
-    def get_basis_data(self, elements, basis_name='STO-3G',el_index=0):
+    def get_basis_data(self, elements, basis_name='STO-3G', el_index=0):
         """
         Retrieves and organizes electron shell data (and ECP data if present) for a specified element.
 
@@ -69,28 +70,28 @@ class BasisData:
 
                 self.shell_num += 1
 
-                float_coeffs =  list(map(float, coefficients))
+                float_coeffs = list(map(float, coefficients))
                 nonzero_indices = [i for i, value in enumerate(float_coeffs) if value != 0]
                 shell_dict = {
-                "id" : self.shell_num,
-                "element_id":  el_index+1,
-                "angular_momentum": ang_mom,
-                "exponents": [float(x) for i, x in enumerate(shell['exponents']) if i in nonzero_indices],
-                "coefficients": list(map(float, [coefficients[i] for i in nonzero_indices]))
-            }
+                    "id": self.shell_num,
+                    "element_id": el_index + 1,
+                    "angular_momentum": ang_mom,
+                    "exponents": [float(x) for i, x in enumerate(shell['exponents']) if i in nonzero_indices],
+                    "coefficients": list(map(float, [coefficients[i] for i in nonzero_indices]))
+                }
 
                 shells_data.append(shell_dict)
                 ang_ii += 1
 
         if 'ecp_potentials' in basis['elements'][element_key]:
             self.ecp["ecp_electron"].append(basis['elements'][element_key]['ecp_electrons'])
-            self.ecp["element_id"] +=1
+            self.ecp["element_id"] += 1
 
             ecp_list = basis['elements'][element_key]['ecp_potentials']
             ecp_num_expo = 0
             for term in ecp_list:
                 ecp_num_expo += len(term['r_exponents'])
-                self.ecp["ang"].extend((term['angular_momentum']*len(term['gaussian_exponents'])))
+                self.ecp["ang"].extend((term['angular_momentum'] * len(term['gaussian_exponents'])))
                 self.ecp["r_expo"].extend(term['r_exponents'])
                 self.ecp["g_expo"].extend(term['gaussian_exponents'])
                 self.ecp["coef"].extend(term['coefficients'][0])
@@ -101,8 +102,6 @@ class BasisData:
             self.ecp["ecp_electron"].extend([0])
 
         return shells_data
-
-
 
     def get_basislist(self):
         """
@@ -146,7 +145,6 @@ class BasisData:
                 self.basis_names = [basis_dict.get(tag, "UNKNOWN") for tag in basis_tags]
                 return self.basis_names
 
-
         self.basis_names = self.mol.config["input"]["basis"].split(',')
         if len(self.basis_names) == 1:
             self.basis_names = [self.basis_names[0]] * self.num_atoms
@@ -167,7 +165,7 @@ class BasisData:
         for el_index in range(self.num_atoms):
             element = int(self.atoms[el_index])
             basis_name = basis_list[el_index]
-            element_shells = self.get_basis_data(element, basis_name,el_index)
+            element_shells = self.get_basis_data(element, basis_name, el_index)
             self.shells_data.extend(element_shells)
         return self.shells_data
 
@@ -188,7 +186,7 @@ class BasisData:
         self.mol.data["coef"] = ffi.cast("double*", ffi.from_buffer(coef_array))
 
         r_expo_array = np.array(self.ecp["r_expo"], dtype=np.float64)
-        self.mol.data["ecp_rex"] =  ffi.cast("int*", ffi.from_buffer(r_expo_array))
+        self.mol.data["ecp_rex"] = ffi.cast("int*", ffi.from_buffer(r_expo_array))
 
         coord_array = np.array(self.ecp["coord"], dtype=np.float64)
         self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ang"], dtype=np.float64)))
@@ -196,7 +194,6 @@ class BasisData:
         self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
 
         oqp.append_ecp(self.mol)
-
 
     def set_basis_data(self):
         """
@@ -257,12 +254,11 @@ class BasisData:
 
 
 def set_basis(mol):
-
     """Set up basis set for the molecule"""
     basis_file = mol.config["input"]["basis"]
     mol.data["OQP::basis_filename"] = basis_file
 
-    basis_data= BasisData(mol)
+    basis_data = BasisData(mol)
     basis_data.set_basis_data()
 
     oqp.apply_basis(mol)

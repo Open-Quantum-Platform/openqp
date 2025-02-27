@@ -165,6 +165,7 @@ class SinglePoint(Calculator):
         self.scf_mult = mol.config['scf']['multiplicity']
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
+        self.init_basis = mol.config['scf']['init_basis']
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
@@ -179,8 +180,19 @@ class SinglePoint(Calculator):
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
 
+    def _prep_guess(self):
+        oqp.library.set_basis(self.mol)
+        oqp.library.ints_1e(self.mol)
+        oqp.library.guess(self.mol)
+
     def _init_convergence(self):
         init_calc = self.energy_func['hf']
+        init_basis = self.init_basis
+        target_basis = self.basis
+
+        if init_basis:
+            self.mol.config['input']['basis'] = init_basis
+
         self.mol.data.set_scf_maxit(self.init_it)
 
         if self.init_scf == 'rhf':
@@ -216,6 +228,7 @@ class SinglePoint(Calculator):
             raise ValueError(f'Unknown initial scf method {self.init_scf}')
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
+        self._prep_guess()
         init_calc(self.mol)
 
         # save initially converge orbitals
@@ -223,23 +236,17 @@ class SinglePoint(Calculator):
             guess_file = self.pack_molden_name('init', self.init_scf, self.mol.config['input']['functional'])
             self.mol.write_molden(guess_file)
 
-        # copy initial orbital to target orbitals for normal scf calculations
-        self.update_orbital(self.init_scf, self.scf_type)
-
         # set parameters back to normal scf
+        self.mol.config['input']['basis'] = target_basis
         self.mol.config['input']['functional'] = self.functional
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
         self.mol.data.set_mol_multiplicity(self.scf_mult)
+        ## TODO: call basis projection function here
+        oqp.library.update_guess(self.mol)
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps done, switching back to normal SCF', section='scf')
-
-    def update_orbital(self, init_scf, scf):
-        if init_scf in ['rhf', 'rks'] and scf in ['rohf', 'uhf']:
-            self.mol.data["OQP::VEC_MO_B"] = copy.deepcopy(self.mol.data["OQP::VEC_MO_A"])
-            self.mol.data["OQP::E_MO_B"] = copy.deepcopy(self.mol.data["OQP::E_MO_A"])
-            self.mol.data["OQP::DM_B"] = copy.deepcopy(self.mol.data["OQP::DM_A"])
 
     def pack_molden_name(self, cal_type, scf_type, functional):
         """Add information to molden file name"""
@@ -297,6 +304,8 @@ class SinglePoint(Calculator):
         if self.init_scf != 'no' and do_init_scf:
             # do initial scf iteration to help convergence
             self._init_convergence()
+        else:
+            self._prep_guess()
 
         scf_flag = False
         for itr in range(self.forced_attempt):
@@ -671,9 +680,6 @@ def grad_wrapper(key_dict):
             dump_log(mol, title='', section='start')
             mol.data["OQP::log_filename"] = log
             oqp.oqp_banner(mol)
-            oqp.library.set_basis(mol)
-            oqp.library.ints_1e(mol)
-            oqp.library.guess(mol)
             SinglePoint(mol).energy()
             Gradient(mol).gradient()
             LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
@@ -1171,9 +1177,6 @@ def nacme_wrapper(key_dict):
             dump_log(mol, title='', section='start')
             mol.data["OQP::log_filename"] = log
             oqp.oqp_banner(mol)
-            oqp.library.set_basis(mol)
-            oqp.library.ints_1e(mol)
-            oqp.library.guess(mol)
             sp = SinglePoint(mol)
             ref_energy = sp.reference()
             BasisOverlap(mol).overlap()
