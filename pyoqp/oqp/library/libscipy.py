@@ -192,9 +192,6 @@ class ConstrainOpt(Optimizer):
         # update coordinates
         self.mol.update_system(coordinates)
 
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
-
         # compute energy
         energies = self.sp.energy(do_init_scf=do_init_scf)
 
@@ -349,9 +346,6 @@ class MECIOpt(Optimizer):
 
         # update coordinates
         self.mol.update_system(coordinates)
-
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
 
         # compute energy
         energies = self.sp.energy(do_init_scf=do_init_scf)
@@ -640,9 +634,6 @@ class MECPOpt(Optimizer):
         # update coordinates
         self.mol.update_system(coordinates)
 
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
-
         # compute reference
         ref_energy = self.sp.reference(do_init_scf=do_init_scf)
 
@@ -781,9 +772,6 @@ class StateSpecificOpt(Optimizer):
 
         # update coordinates
         self.mol.update_system(coordinates)
-
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
 
         # compute energy
         energies = self.sp.energy(do_init_scf=do_init_scf)

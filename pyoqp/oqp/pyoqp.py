@@ -113,9 +113,6 @@ class Runner:
         # Set up banner
         oqp.oqp_banner(self.mol)
 
-        # Set up basis set
-        oqp.library.set_basis(self.mol)
-
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
 

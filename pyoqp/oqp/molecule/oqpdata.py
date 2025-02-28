@@ -84,6 +84,7 @@ OQP_CONFIG_SCHEMA = {
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
         'init_scf': {'type': string, 'default': 'no'},
+        'init_basis': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
     },
