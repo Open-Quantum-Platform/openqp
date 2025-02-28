@@ -268,7 +268,7 @@ contains
 !==============================================================================
 
   !> @brief Set up a ring buffer to store SCF iteration history.
- !!> @param[inout] self The converger_data object to initialize.
+  !> @param[inout] self The converger_data object to initialize.
   !> @param[in] ldim Number of basis functions (nbf)
   !> @param[in] nfocks Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
   !> @param[in] nslots Maximum number of SCF iterations to store

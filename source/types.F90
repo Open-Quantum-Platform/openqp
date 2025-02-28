@@ -124,7 +124,21 @@ module types
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
-    real(c_double) :: conf_print_threshold = 5.0d-02             !< The threshold for configuration printout
+    real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
+    ! SOSCF parameters
+    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS, 3=DIIS then SOSCF
+    integer(c_int64_t) :: soscf_start = 1      !< First SCF iteration to apply SOSCF
+    integer(c_int64_t) :: soscf_freq = 1       !< Frequency of SOSCF application
+    integer(c_int64_t) :: soscf_max = 5        !< Maximum SOSCF micro-iterations
+    integer(c_int64_t) :: soscf_min = 1        !< Minimum SOSCF micro-iterations
+    real(c_double) :: soscf_conv = 1.0e-3_dp   !< DIIS error threshold to start SOSCF
+    real(c_double) :: soscf_grad = 1.0e-3_dp   !< Orbital gradient threshold for SOSCF convergence
+    real(c_double) :: soscf_lvl_shift = 0.2_dp !< Level shifting parameter for SOSCF
+    real(c_double) :: soscf_diis_weight = 0.5_dp      !< Weight for SOSCF in SOSCF+DIIS combination
+    logical(c_bool) :: soscf_diis_alternate = .false. !< Alternate between SOSCF and DIIS instead of combining
+    logical(c_bool) :: soscf_coupled_uhf = .false.    !< Use coupled update for UHF (F. Neese's approach)
+    logical(c_bool) :: soscf_lineq = .false.   !< Use linear equations for SOSCF (true) or BFGS update (false)
+    logical(c_bool) :: soscf_enable = .false.  !< Master switch to enable SOSCF
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

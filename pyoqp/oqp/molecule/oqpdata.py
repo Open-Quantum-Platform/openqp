@@ -64,7 +64,7 @@ OQP_CONFIG_SCHEMA = {
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
-        'forced_attempt' : {'type': int, 'default': '1'},
+        'forced_attempt': {'type': int, 'default': '1'},
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},
@@ -86,6 +86,19 @@ OQP_CONFIG_SCHEMA = {
         'init_scf': {'type': string, 'default': 'no'},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
+        'soscf_type': {'type': int, 'default': '0'},
+        'soscf_start': {'type': int, 'default': '1'},
+        'soscf_freq': {'type': int, 'default': '1'},
+        'soscf_max': {'type': int, 'default': '5'},
+        'soscf_min': {'type': int, 'default': '1'},
+        'soscf_conv': {'type': float, 'default': '1.0e-3'},
+        'soscf_grad': {'type': float, 'default': '1.0e-3'},
+        'soscf_lvl_shift': {'type': float, 'default': '0.2'},
+        'soscf_diis_weight': {'type': float, 'default': '0.5'},
+        'soscf_diis_alternate': {'type': bool, 'default': 'False'},
+        'soscf_coupled_uhf': {'type': bool, 'default': 'False'},
+        'soscf_lineq': {'type': bool, 'default': 'False'},
+        'soscf_enable': {'type': bool, 'default': 'False'},
     },
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
@@ -238,6 +251,19 @@ class OQPData:
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
+            "soscf_type": "set_scf_soscf_type",
+            "soscf_start": "set_scf_soscf_start",
+            "soscf_freq": "set_scf_soscf_freq",
+            "soscf_max": "set_scf_soscf_max",
+            "soscf_min": "set_scf_soscf_min",
+            "soscf_conv": "set_scf_soscf_conv",
+            "soscf_grad": "set_scf_soscf_grad",
+            "soscf_lvl_shift": "set_scf_soscf_lvl_shift",
+            "soscf_diis_weight": "set_scf_soscf_diis_weight",
+            "soscf_diis_alternate": "set_scf_soscf_diis_alternate",
+            "soscf_coupled_uhf": "set_scf_soscf_coupled_uhf",
+            "soscf_lineq": "set_scf_soscf_lineq",
+            "soscf_enable": "set_scf_soscf_enable",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -462,19 +488,19 @@ class OQPData:
         """Set MOM turn on criteria of DIIS error """
         self._data.control.mom_switch = mom_switch
 
-    def set_scf_pfon(self, pfon): 
+    def set_scf_pfon(self, pfon):
         """pfon """
-        self._data.control.pfon = pfon 
+        self._data.control.pfon = pfon
 
-    def set_scf_pfon_start_temp(self, pfon_start_temp): 
+    def set_scf_pfon_start_temp(self, pfon_start_temp):
         """pfon_start_temp """
-        self._data.control.pfon_start_temp = pfon_start_temp 
+        self._data.control.pfon_start_temp = pfon_start_temp
 
-    def set_scf_pfon_cooling_rate(self, pfon_cooling_rate): 
+    def set_scf_pfon_cooling_rate(self, pfon_cooling_rate):
         """pfon_cooling_rate """
         self._data.control.pfon_cooling_rate = pfon_cooling_rate
 
-    def set_scf_pfon_nsmear(self, pfon_nsmear): 
+    def set_scf_pfon_nsmear(self, pfon_nsmear):
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
 
@@ -485,6 +511,70 @@ class OQPData:
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
+
+    def set_scf_soscf_type(self, soscf_type):
+        """Set SOSCF type for SCF convergence:
+            soscf_type (int): SOSCF algorithm type
+                0: SOSCF disabled
+                1: SOSCF only
+                2: SOSCF+DIIS combined mode
+                3: DIIS then SOSCF
+        """
+        self._data.control.soscf_type = soscf_type
+
+    def set_scf_soscf_start(self, soscf_start):
+        """Set first iteration to start using SOSCF"""
+        self._data.control.soscf_start = soscf_start
+
+    def set_scf_soscf_freq(self, soscf_freq):
+        """Set frequency of using SOSCF"""
+        self._data.control.soscf_freq = soscf_freq
+
+    def set_scf_soscf_max(self, soscf_max):
+        """Set maximum number of SOSCF micro-iterations"""
+        self._data.control.soscf_max = soscf_max
+
+    def set_scf_soscf_min(self, soscf_min):
+        """Set minimum number of SOSCF micro-iterations"""
+        self._data.control.soscf_min = soscf_min
+
+    def set_scf_soscf_conv(self, soscf_conv):
+        """Set DIIS error threshold to start SOSCF"""
+        self._data.control.soscf_conv = soscf_conv
+
+    def set_scf_soscf_grad(self, soscf_grad):
+        """Set orbital gradient threshold for SOSCF convergence"""
+        self._data.control.soscf_grad = soscf_grad
+
+    def set_scf_soscf_lvl_shift(self, soscf_lvl_shift):
+        """Set level shifting parameter for SOSCF"""
+        self._data.control.soscf_lvl_shift = soscf_lvl_shift
+
+    def set_scf_soscf_diis_weight(self, soscf_diis_weight):
+        """Set weight for SOSCF in SOSCF+DIIS combination mode"""
+        self._data.control.soscf_diis_weight = soscf_diis_weight
+
+    def set_scf_soscf_diis_alternate(self, soscf_diis_alternate):
+        """
+        Set whether to alternate between SOSCF and DIIS instead
+        of combining them
+        """
+        self._data.control.soscf_diis_alternate = soscf_diis_alternate
+
+    def set_scf_soscf_coupled_uhf(self, soscf_coupled_uhf):
+        """Set whether to use coupled (alpha-beta) update for UHF"""
+        self._data.control.soscf_coupled_uhf = soscf_coupled_uhf
+
+    def set_scf_soscf_lineq(self, soscf_lineq):
+        """
+        Set whether to use linear equations for SOSCF (True)
+        or BFGS update (False)
+        """
+        self._data.control.soscf_lineq = soscf_lineq
+
+    def set_scf_soscf_enable(self, soscf_enable):
+        """Enable SOSCF in convergence sequence"""
+        self._data.control.soscf_enable = soscf_enable
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
