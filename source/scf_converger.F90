@@ -1,6 +1,7 @@
 module scf_converger
 
   use precision, only: dp
+  use io_constants, only: iw
   implicit none
 
   private
@@ -12,6 +13,7 @@ module scf_converger
   integer, parameter, public :: conv_cdiis = 2
   integer, parameter, public :: conv_ediis = 3
   integer, parameter, public :: conv_adiis = 4
+  integer, parameter, public :: conv_soscf = 5
 
   !> Converger state constants
   integer, parameter, public :: conv_state_not_initialized = 0
@@ -27,7 +29,13 @@ module scf_converger
     real(kind=dp), allocatable :: focks(:,:)      !< Fock matrices (nbf_tri, num_focks)
     real(kind=dp), allocatable :: densities(:,:)  !< Density matrices (nbf_tri, num_focks)
     real(kind=dp), allocatable :: errs(:,:)       !< DIIS error matrices (nbf_tri, num_focks)
+    real(kind=dp), allocatable :: mo_a(:,:)       !< MO coefficients alpha (nbf, nbf)
+    real(kind=dp), allocatable :: mo_b(:,:)       !< MO coefficients beta (nbf, nbf)
+    real(kind=dp), allocatable :: mo_e_a(:)       !< MO energies alpha (nbf)
+    real(kind=dp), allocatable :: mo_e_b(:)       !< MO energies beta (nbf)
     real(kind=dp)              :: energy = 0.0_dp !< SCF energy
+    integer                    :: nocca = 0       !< Number of occupied alpha orbitals
+    integer                    :: noccb = 0       !< Number of occupied beta orbitals
   contains
     procedure, private, pass :: init  => scf_data_init
     procedure, private, pass :: clean => scf_data_clean
@@ -44,16 +52,22 @@ module scf_converger
     integer                   :: ldim = 0         !< Size of square matrices (nbf)
     type(scf_data_t), allocatable :: buffer(:)    !< Ring buffer of SCF data
   contains
-    procedure, private, pass :: init         => converger_data_init
-    procedure, private, pass :: clean        => converger_data_clean
+    procedure, private, pass :: init         => conv_data_init
+    procedure, private, pass :: clean        => conv_data_clean
     procedure, private, pass :: next_slot    => conv_data_next_slot
     procedure, private, pass :: discard_last => conv_data_discard
     procedure, private, pass :: put          => conv_data_put
     procedure, private, pass :: get_fock     => conv_data_get_fock
+    procedure, private, pass :: get_mo_a     => conv_data_get_mo_a
+    procedure, private, pass :: get_mo_b     => conv_data_get_mo_b
+    procedure, private, pass :: get_mo_e_a   => conv_data_get_mo_e_a
+    procedure, private, pass :: get_mo_e_b   => conv_data_get_mo_e_b
     procedure, private, pass :: get_density  => conv_data_get_density
     procedure, private, pass :: get_err      => conv_data_get_err
     procedure, private, pass :: get_energy   => conv_data_get_energy
     procedure, private, pass :: get_slot     => conv_data_get_slot
+    procedure, private, pass :: get_nocca    => conv_data_get_nocca
+    procedure, private, pass :: get_noccb    => conv_data_get_noccb
   end type converger_data
 
   !> @brief Base type for SCF converger results
@@ -71,8 +85,13 @@ module scf_converger
     type(converger_data), pointer :: dat => null() !< Pointer to SCF data storage
     character(len=conv_name_maxlen) :: active_converger_name = '' !< Name of active converger
   contains
+    procedure, pass :: get_error   => conv_result_get_error
     procedure, pass :: get_fock    => conv_result_dummy_get_fock
     procedure, pass :: get_density => conv_result_dummy_get_density
+    procedure, pass :: get_mo_a    => conv_result_dummy_get_mo_a
+    procedure, pass :: get_mo_b    => conv_result_dummy_get_mo_b
+    procedure, pass :: get_mo_e_a  => conv_result_dummy_get_mo_e_a
+    procedure, pass :: get_mo_e_b  => conv_result_dummy_get_mo_e_b
   end type scf_conv_result
 
   !> @brief SCF converger results for interpolation methods like DIIS
@@ -86,6 +105,16 @@ module scf_converger
     procedure, pass :: get_density => conv_result_interp_get_density
     procedure, private, pass :: interpolate => conv_result_interpolate
   end type scf_conv_interp_result
+
+  !> @brief SCF converger results for SOSCF method
+  type, extends(scf_conv_result) :: scf_conv_soscf_result
+  contains
+    procedure, pass :: get_fock    => conv_result_soscf_get_fock
+    procedure, pass :: get_mo_a    => conv_result_soscf_get_mo_a
+    procedure, pass :: get_mo_b    => conv_result_soscf_get_mo_b
+    procedure, pass :: get_mo_e_a  => conv_result_soscf_get_mo_e_a
+    procedure, pass :: get_mo_e_b  => conv_result_soscf_get_mo_e_b
+  end type scf_conv_soscf_result
 
   !> @brief Base type for real SCF convergers (subconvergers)
   !> @detail Used by main SCF convergence driver `scf_conv`.
@@ -190,11 +219,11 @@ module scf_converger
     procedure, pass :: run   => ediis_run
   end type ediis_converger
 
-!> @brief A-DIIS subconverger type
-!> @detail Optimizes the following function:
-!>         \f$ E_\mathrm{A-DIIS} = \sum_{i} c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr( (D_i-D_n) (F_j-F_n) ) \f$
-!>         under the constraints:
-!>         \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
+  !> @brief A-DIIS subconverger type
+  !> @detail Optimizes the following function:
+  !>         \f$ E_\mathrm{A-DIIS} = \sum_{i} c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr( (D_i-D_n) (F_j-F_n) ) \f$
+  !>         under the constraints:
+  !>         \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
   type, extends(ediis_converger) :: adiis_converger
   contains
     procedure, pass :: init  => adiis_init
@@ -222,6 +251,22 @@ module scf_converger
     end subroutine
   end interface
 
+  !> @brief SOSCF subconverger type
+  !> @detail Implementation is based on
+  !          T. H. Fischer, J. Almlof, Journal of Physical Chemistry, 96(24), 9768-9774 (1992)
+  !          F. Neese, Chemical Physics Letters, 325(1-3), 93-98 (2000)
+  type, extends(subconverger) :: soscf_converger
+    integer :: verbose = 0            !< Verbosity parameter
+    integer :: nfocks = 0             !< Number of Focks (RHF = 1, UHF = 2)
+    integer :: nbf = 0                !< Number of basis functions
+    integer :: nbf_tri = 0            !< Number of basis functions in triangular format
+  contains
+    procedure, pass :: init  => soscf_init
+    procedure, pass :: clean => soscf_clean
+    procedure, pass :: setup => soscf_setup
+    procedure, pass :: run   => soscf_run
+  end type soscf_converger
+
 contains
 
 !==============================================================================
@@ -246,11 +291,15 @@ contains
              self%densities(nbf_tri, nfocks), &
              self%errs(nbf_tri, nfocks), &
              stat=istat)
-    if (istat /= 0) return
+    ! Note: MO coefficients mo_a, mo_b and energies mo_e_a, mo_e_b
+    ! Note: are allocated on demand in conv_data_put
+
     self%focks     = 0.0_dp
     self%densities = 0.0_dp
     self%errs      = 0.0_dp
     self%energy    = 0.0_dp
+    self%nocca     = 0
+    self%noccb     = 0
   end subroutine scf_data_init
 
   !> @brief Clean up an scf_data_t instance
@@ -261,6 +310,8 @@ contains
     if (allocated(self%densities)) deallocate(self%densities)
     if (allocated(self%errs))      deallocate(self%errs)
     self%energy = 0.0_dp
+    self%nocca  = 0
+    self%noccb  = 0
   end subroutine scf_data_clean
 
 !==============================================================================
@@ -273,12 +324,13 @@ contains
   !> @param[in] nfocks Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
   !> @param[in] nslots Maximum number of SCF iterations to store
   !> @param[out] istat Success status (0 for success, nonzero for error)
-  subroutine converger_data_init(self, ldim, nfocks, nslots, istat)
+  subroutine conv_data_init(self, ldim, nfocks, nslots, istat)
     class(converger_data), intent(inout) :: self
     integer, intent(in) :: ldim, nfocks, nslots
     integer, intent(out) :: istat
     integer :: i
 
+    istat = 0
     if (allocated(self%buffer)) call self%clean()
     self%ldim      = ldim
     self%num_focks = nfocks
@@ -286,15 +338,13 @@ contains
     self%num_saved = 0
     self%slot      = 0
     allocate(self%buffer(nslots), stat=istat)
-    if (istat /= 0) return
     do i = 1, nslots
       call self%buffer(i)%init(ldim, nfocks, istat)
-      if (istat /= 0) return
     end do
-  end subroutine converger_data_init
+  end subroutine conv_data_init
 
   !> @brief Finalize converger_data and deallocate memory
-  subroutine converger_data_clean(self)
+  subroutine conv_data_clean(self)
     class(converger_data), intent(inout) :: self
     integer :: i
 
@@ -309,7 +359,7 @@ contains
     self%num_slots = 0
     self%num_saved = 0
     self%slot      = 0
-  end subroutine converger_data_clean
+  end subroutine conv_data_clean
 
   !> @brief Advance to the next slot in the ring buffer
   subroutine conv_data_next_slot(self)
@@ -328,20 +378,58 @@ contains
   end subroutine conv_data_discard
 
   !> @brief Store SCF data for the current iteration
-  !> @param[in] f Fock matrices
+  !> @param[in] fock Fock matrices
   !> @param[in] dens Density matrices
-  !> @param[in] e SCF energy (optional)
-  subroutine conv_data_put(self, f, dens, e)
+  !> @param[in] energy SCF energy (optional)
+  !> @param[in] mo_a Alpha MO coefficients (optional)
+  !> @param[in] mo_b Beta MO coefficients (optional)
+  !> @param[in] mo_e_a Alpha MO energies (optional)
+  !> @param[in] mo_e_b Beta MO energies (optional)
+  !> @param[in] nocca Number of occupied alpha orbitals (optional)
+  !> @param[in] noccb Number of occupied beta orbitals (optional)
+  subroutine conv_data_put(self, fock, dens, energy, mo_a, mo_b, &
+                           mo_e_a, mo_e_b, nocca, noccb)
     class(converger_data), intent(inout) :: self
-    real(kind=dp), intent(in) :: f(:,:)
+    real(kind=dp), intent(in) :: fock(:,:)
     real(kind=dp), intent(in) :: dens(:,:)
-    real(kind=dp), intent(in), optional :: e
+    real(kind=dp), intent(in), optional :: energy
+    real(kind=dp), intent(in), optional :: mo_a(:,:), mo_b(:,:)
+    real(kind=dp), intent(in), optional :: mo_e_a(:), mo_e_b(:)
+    integer, intent(in), optional :: nocca, noccb
 
-    integer :: slot
+    integer :: slot, nbf
+
+    nbf = self%ldim
     slot = self%slot
-    self%buffer(slot)%focks     = f
+    self%buffer(slot)%focks = fock
     self%buffer(slot)%densities = dens
-    if (present(e)) self%buffer(slot)%energy = e
+    if (present(energy)) self%buffer(slot)%energy = energy
+    if (present(nocca))  self%buffer(slot)%nocca  = nocca
+    if (present(noccb))  self%buffer(slot)%noccb  = noccb
+    if (present(mo_a)) then
+      if (.not. allocated(self%buffer(slot)%mo_a)) then
+        allocate(self%buffer(slot)%mo_a(nbf, nbf))
+      end if
+      self%buffer(slot)%mo_a = mo_a
+    end if
+    if (present(mo_b)) then
+      if (.not. allocated(self%buffer(slot)%mo_b)) then
+        allocate(self%buffer(slot)%mo_b(nbf, nbf))
+      end if
+      self%buffer(slot)%mo_b = mo_b
+    end if
+    if (present(mo_e_a)) then
+      if (.not. allocated(self%buffer(slot)%mo_e_a)) then
+        allocate(self%buffer(slot)%mo_e_a(nbf))
+      end if
+      self%buffer(slot)%mo_e_a = mo_e_a
+    end if
+    if (present(mo_e_b)) then
+      if (.not. allocated(self%buffer(slot)%mo_e_b)) then
+        allocate(self%buffer(slot)%mo_e_b(nbf))
+      end if
+      self%buffer(slot)%mo_e_b = mo_e_b
+    end if
   end subroutine conv_data_put
 
   !> @brief Get Fock matrix for a specific iteration and matrix ID
@@ -357,6 +445,58 @@ contains
     slot = self%get_slot(n)
     res => self%buffer(slot)%focks(:, matrix_id)
   end function conv_data_get_fock
+
+  !> @brief Get MO coefficients for alpha orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the alpha MO coefficients
+  function conv_data_get_mo_a(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:,:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_a
+  end function conv_data_get_mo_a
+
+  !> @brief Get MO coefficients for beta orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the beta MO coefficients
+  function conv_data_get_mo_b(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:,:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_b
+  end function conv_data_get_mo_b
+
+  !> @brief Get alpha MO energies for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the alpha MO energies
+  function conv_data_get_mo_e_a(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_e_a
+  end function conv_data_get_mo_e_a
+
+  !> @brief Get beta MO energies for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the beta MO energies
+  function conv_data_get_mo_e_b(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_e_b
+  end function conv_data_get_mo_e_b
 
   !> @brief Get density matrix for a specific iteration and matrix ID
   !> @param[in] n Slot ID (1 = oldest, -1 = latest)
@@ -414,6 +554,30 @@ contains
     end if
   end function
 
+  !> @brief Get number of occupied alpha orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Number of occupied alpha orbitals
+  function conv_data_get_nocca(self, n) result(res)
+    class(converger_data), intent(in) :: self
+    integer, intent(in) :: n
+    integer :: res, slot
+
+    slot = self%get_slot(n)
+    res = self%buffer(slot)%nocca
+  end function conv_data_get_nocca
+
+  !> @brief Get number of occupied beta orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Number of occupied beta orbitals
+  function conv_data_get_noccb(self, n) result(res)
+    class(converger_data), intent(in) :: self
+    integer, intent(in) :: n
+    integer :: res, slot
+
+    slot = self%get_slot(n)
+    res = self%buffer(slot)%noccb
+  end function conv_data_get_noccb
+
 !==============================================================================
 ! scf_conv_result Methods
 !==============================================================================
@@ -438,6 +602,38 @@ contains
     istat = 0
   end subroutine conv_result_dummy_get_density
 
+  subroutine conv_result_dummy_get_mo_a(self, matrix, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_a
+
+  subroutine conv_result_dummy_get_mo_b(self, matrix, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_b
+
+  subroutine conv_result_dummy_get_mo_e_a(self, vector, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_e_a
+
+  subroutine conv_result_dummy_get_mo_e_b(self, vector, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_e_b
+
   !> @brief Form the interpolated Fock matrix
   !> @detail F_n = \sum_{i=start}^{end} F_i * c_i
   subroutine conv_result_interp_get_fock(self, matrix, istat)
@@ -451,6 +647,21 @@ contains
       istat = self%ierr
     end if
   end subroutine conv_result_interp_get_fock
+
+  !> @brief Get error value from result
+  !> @return Current error value
+  !> @brief Get the current convergence error
+  !> @return Current error value for the active converger
+  function conv_result_get_error(self) result(err)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: err
+
+    err = self%error
+  end function conv_result_get_error
+
+!==============================================================================
+! DIIS Result Methods
+!==============================================================================
 
   !> @brief Form the interpolated density matrix
   !> @detail D_n = \sum_{i=start}^{end} D_i * c_i
@@ -496,6 +707,89 @@ contains
 
     istat = 0
   end subroutine conv_result_interpolate
+
+!==============================================================================
+! SOSCF Result Methods
+!==============================================================================
+
+  !> @brief Get Fock matrix from SOSCF result
+  subroutine conv_result_soscf_get_fock(self, matrix, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    integer :: i
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    do i = 1, self%dat%num_focks
+      matrix(:,i) = self%dat%get_fock(-1, i)
+    end do
+
+  end subroutine conv_result_soscf_get_fock
+
+  !> @brief Get alpha MO coefficients from SOSCF result
+  subroutine conv_result_soscf_get_mo_a(self, matrix, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_a
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_a
+
+  !> @brief Get beta MO coefficients from SOSCF result
+  subroutine conv_result_soscf_get_mo_b(self, matrix, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_b
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_b
+
+  !> @brief Get alpha orbital energies from SOSCF result
+  subroutine conv_result_soscf_get_mo_e_a(self, vector, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_a
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_e_a
+
+  !> @brief Get beta orbital energies from SOSCF result
+  subroutine conv_result_soscf_get_mo_e_b(self, vector, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_b
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_e_b
 
 !==============================================================================
 ! scf_conv Methods
@@ -578,6 +872,8 @@ contains
           allocate(ediis_converger :: self%sconv(i)%s)
         case (conv_adiis)
           allocate(adiis_converger :: self%sconv(i)%s)
+        case (conv_soscf)
+          allocate(soscf_converger :: self%sconv(i)%s)
         end select
         call self%sconv(i)%s%init(self)
       end do
@@ -591,18 +887,34 @@ contains
   !> @param[in] f Fock matrix/matrices
   !> @param[in] dens Density matrix/matrices
   !> @param[in] e SCF energy (optional)
-  subroutine scf_conv_add_data(self, f, dens, e)
+  subroutine scf_conv_add_data(self, f, dens, e, mo_a, mo_b, mo_e_a, mo_e_b, nocca, noccb)
     class(scf_conv), intent(inout) :: self
-    real(kind=dp), intent(in) :: f(:,:)
-    real(kind=dp), intent(in) :: dens(:,:)
-    real(kind=dp), intent(in), optional :: e
+    real(kind=dp), intent(in) :: f(:,:)              ! Fock matrices
+    real(kind=dp), intent(in) :: dens(:,:)           ! Density matrices
+    real(kind=dp), intent(in) :: e                   ! SCF energy
+    real(kind=dp), intent(in), optional :: mo_a(:,:) ! Alpha MO coefficients
+    real(kind=dp), intent(in), optional :: mo_b(:,:) ! Beta MO coefficients
+    real(kind=dp), intent(in), optional :: mo_e_a(:) ! Alpha MO energies
+    real(kind=dp), intent(in), optional :: mo_e_b(:) ! Beta MO energies
+    integer, intent(in), optional :: nocca           ! Number of occupied alpha orbitals
+    integer, intent(in), optional :: noccb           ! Number of occupied beta orbitals
     integer :: i
 
     call self%dat%next_slot()
+
     ! Save the current Fock and density matrices
     call self%dat%put(f, dens, e)
+
+    if (present(mo_a)) self%dat%buffer(self%dat%slot)%mo_a = mo_a
+    if (present(mo_b)) self%dat%buffer(self%dat%slot)%mo_b = mo_b
+    if (present(mo_e_a)) self%dat%buffer(self%dat%slot)%mo_e_a = mo_e_a
+    if (present(mo_e_b)) self%dat%buffer(self%dat%slot)%mo_e_b = mo_e_b
+    if (present(nocca)) self%dat%buffer(self%dat%slot)%nocca = nocca
+    if (present(noccb)) self%dat%buffer(self%dat%slot)%noccb = noccb
+    ! Compute the current error
     self%current_error = self%compute_error()
 
+    ! Update subconverger states
     do i = lbound(self%sconv, 1), ubound(self%sconv, 1)
       self%sconv(i)%s%last_setup = self%sconv(i)%s%last_setup + 1
     end do
@@ -638,7 +950,6 @@ contains
 
     ! Solve the set of DIIS linear equations
     call conv%run(tmp_result)
-    tmp_result%error = self%current_error
     call move_alloc(from=tmp_result, to=conv_result)
   end subroutine scf_conv_run
 
@@ -767,9 +1078,18 @@ contains
   subroutine noconv_run(self, res)
     class(noconv_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
+    real(kind=dp) :: diis_error
+    integer :: ifock
 
     allocate(scf_conv_result :: res)
     res = scf_conv_result(ierr=0, active_converger_name='SD', dat=self%dat)
+
+    ! Compute error
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      diis_error = max(diis_error, maxval(abs(self%dat%get_err(-1, ifock))))
+    end do
+    res%error = diis_error
   end subroutine noconv_run
 
 !> @brief Prepare subconverger to run
@@ -815,10 +1135,12 @@ contains
     use io_constants, only: iw
     class(cdiis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-    integer :: i, na, cur, info
+      integer :: i, na, cur, info, ifock
     real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1)
     real(kind=dp) :: x_loc(self%maxdiis+1)
     real(kind=dp), allocatable :: x(:)
+    real(kind=dp), pointer :: err(:)
+    real(kind=dp) :: diis_error
 
     allocate(scf_conv_interp_result :: res)
     res%dat => self%dat
@@ -859,6 +1181,14 @@ contains
         call move_alloc(from=x, to=res%coeffs)
       end select
     end if
+
+    ! Compute DIIS error from the latest iteration
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      err => self%dat%get_err(-1, ifock)
+      diis_error = max(diis_error, maxval(abs(err)))
+    end do
+    res%error = diis_error
   end subroutine cdiis_run
 
 !> @brief Prepare C-DIIS subconverger to run
@@ -1006,8 +1336,10 @@ contains
     real(kind=dp), parameter :: constrtol = 1.0e-8_dp
     real(kind=dp) :: minf, minf_min
     real(kind=dp), allocatable :: x(:), xmin(:)
+    real(kind=dp), pointer :: err(:)
+    real(kind=dp) :: diis_error
     integer(kind=4) :: ires
-    integer :: na, i, j
+    integer :: na, i, j, ifock
     logical :: is_a_repeat
     integer :: opt_global, opt_lbfgs
     type(ediis_opt_data) :: t
@@ -1160,6 +1492,14 @@ contains
     class is (scf_conv_interp_result)
       call move_alloc(from=xmin, to=res%coeffs)
     end select
+
+    ! compute diis error from the latest iteration
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      err => self%dat%get_err(-1, ifock)
+      diis_error = max(diis_error, maxval(abs(err)))
+    end do
+    res%error = diis_error
   end subroutine ediis_run
 
 !==============================================================================
@@ -1349,5 +1689,97 @@ contains
       write(iw, '(*(ES15.7,","))') self%b(1:num_saved)
     end select
   end subroutine diis_print_equation
+
+!==============================================================================
+! soscf_converger Methods
+!==============================================================================
+
+  !> @brief Initialize the SOSCF converger
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[in] params SCF convergence parameters from the driver
+  subroutine soscf_init(self, params)
+    class(soscf_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
+
+    ! Initialize base class
+    call self%subconverger_init(params)
+    self%conv_name = 'SOSCF'
+
+    self%nfocks  = params%dat%num_focks
+    self%verbose = params%verbose
+    self%nbf     = params%dat%ldim
+    self%nbf_tri = self%nbf * (self%nbf + 1) / 2
+    if (self%verbose > 0) then
+      write(iw, *) " DBG| SOSCF init:  nfocks=", self%nfocks
+      write(iw, *) " DBG| SOSCF init: verbose=", self%verbose
+      write(iw, *) " DBG| SOSCF init:     nbf=", self%nbf
+      write(iw, *) " DBG| SOSCF init: nbf_tri=", self%nbf_tri
+    end if
+  end subroutine soscf_init
+
+  !> @brief Clean up SOSCF converger
+  !> @param[inout] self The SOSCF converger instance
+  subroutine soscf_clean(self)
+    class(soscf_converger), intent(inout) :: self
+
+    call self%subconverger_clean()
+  end subroutine soscf_clean
+
+  !> @brief Setup SOSCF for the current iteration
+  !> @param[inout] self The SOSCF converger instance
+subroutine soscf_setup(self)
+
+  class(soscf_converger), intent(inout) :: self
+
+end subroutine soscf_setup
+
+  !> @brief Run the SOSCF convergence step
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[out] res Convergence result
+subroutine soscf_run(self, res)
+  use mathlib, only: unpack_matrix
+  use oqp_linalg
+
+  class(soscf_converger), target, intent(inout) :: self
+  class(scf_conv_result), allocatable, intent(out) :: res
+  
+  real(kind=dp) :: soscf_error
+
+  ! Allocate result as SOSCF-specific type
+  allocate(scf_conv_soscf_result :: res)
+  res%dat => self%dat
+  res%active_converger_name = self%conv_name
+  res%ierr = 0
+
+  ! Main micro-iteration loop
+
+  soscf_error = 1.0e-2_dp  ! Dummy
+  res%error = soscf_error
+
+end subroutine soscf_run
+
+  !> @brief Compute the orbital gradient for SOSCF
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[out] gradient The computed gradient vector
+subroutine soscf_compute_gradient(self, gradient)
+  use mathlib, only: unpack_matrix, orthogonal_transform_sym
+
+  class(soscf_converger), intent(inout) :: self
+  real(kind=dp), intent(out) :: gradient(:)
+
+end subroutine soscf_compute_gradient
+
+  !> @brief Update the inverse Hessian and compute displacement using BFGS
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[in] gradient Current orbital gradient
+  !> @param[out] displacement New displacement vector
+subroutine soscf_update_hessian(self, gradient, displacement)
+
+  class(soscf_converger), intent(inout) :: self
+  real(kind=dp), intent(in) :: gradient(:)
+  real(kind=dp), intent(out) :: displacement(:)
+
+
+end subroutine soscf_update_hessian
 
 end module scf_converger

@@ -29,7 +29,7 @@ contains
     use constants, only: kB_HaK
     use basis_tools, only: basis_set
     use scf_converger, only: scf_conv_result, scf_conv, &
-            conv_cdiis, conv_ediis
+            conv_cdiis, conv_ediis, conv_soscf
 
     implicit none
 
@@ -51,6 +51,8 @@ contains
     real(kind=dp), parameter :: ethr_ediis = 1.0_dp
     integer :: diis_nfocks, diis_stat, maxdiis
     character(len=6), dimension(5) :: diis_name
+    ! For SOSCF
+    logical :: use_soscf
     ! Vshift
     real(kind=dp) :: vshift, H_U_gap, H_U_gap_crit
     logical :: vshift_last_iter
@@ -116,6 +118,14 @@ contains
     if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
 
     beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+
+    ! SOSCF
+    use_soscf = .false.
+    if (infos%control%soscf_enable) then
+      use_soscf = (iter >= infos%control%soscf_start) &
+            .and. (mod(iter, infos%control%soscf_freq) == 0) &
+            .and. (diis_error < infos%control%soscf_conv)
+    end if
 
     ! DIIS options
     ! none IS NOT recommended!
@@ -449,13 +459,30 @@ contains
          pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
       end if
 
-      ! SCF Converger to get refined Fock Matrix
-      call conv%add_data(f=pfock(:,1:diis_nfocks), &
-              dens=pdmat(:,1:diis_nfocks), e=Etot)
+      if (use_soscf) then
+        ! SOSCF: SCF Converger to get refined Fock matrix, MOs and its energies
+        call conv%add_data( &
+                f=pfock(:,1:diis_nfocks), &
+                dens=pdmat(:,1:diis_nfocks), &
+                e=Etot, &
+                mo_a=mo_a, &
+                mo_b=mo_b, &
+                mo_e_a=mo_energy_a, &
+                mo_e_b=mo_energy_b, &
+                nocca=nelec_a, &
+                noccb=nelec_b)
 
-      ! Run DIIS calculation, get DIIS error
+      else
+        ! DIIS: SCF Converger to get refined Fock matrix
+        call conv%add_data( &
+                f=pfock(:,1:diis_nfocks), &
+                dens=pdmat(:,1:diis_nfocks), &
+                e=Etot)
+      end if
+
+      ! Run DIIS/SOSCF calculation, get DIIS/SOSCF error
       call conv%run(conv_res)
-      diis_error = conv_res%error
+      diis_error = conv_res%get_error()
 
       ! Checking the convergency
       diffe = etot - e_old
@@ -494,28 +521,49 @@ contains
          exit
       endif
 
-      ! Reset DIIS for difficult case
-      ! VSHIFT=0 and slow cases
-      diis_reset_condition = (((iter/diis_reset) >= 1) &
-         .and. (modulo(iter,diis_reset) == 0) &
-         .and. (diis_error > infos%control%diis_reset_conv) &
-         .and. (infos%control%vshift == 0.0_dp))
-      if (diis_reset_condition) then
-         ! Resetting DIIS
-         write(IW,"(3x,64('-')/10x,'Resetting DIIS.')")
-         call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
-         call conv%init(ldim=nbf, maxvec=maxdiis, &
-           subconvergers=[conv_cdiis], &
-           thresholds=[ethr_cdiis_big], &
-           overlap=smat_full, overlap_sqrt=qmat, &
-           num_focks=diis_nfocks, verbose=1)
-         ! After resetting DIIS, we need to skip SD
-         call conv%add_data(f=pfock(:,1:diis_nfocks), &
-              dens=pdmat(:,1:diis_nfocks), e=Etot)
-         call conv%run(conv_res)
+      ! Update orbitals and Fock matrix based on the active converger
+      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
+        ! SOSCF: Retrieve updated MOs and energies directly
+        if (int2_driver%pe%rank == 0) then
+          call conv_res%get_mo_a(mo_a, diis_stat)
+          call conv_res%get_mo_e_a(mo_energy_a, diis_stat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) then
+            call conv_res%get_mo_b(mo_b, diis_stat)
+            call conv_res%get_mo_e_b(mo_energy_b, diis_stat)
+          elseif (scf_type == scf_rohf) then
+            mo_b = mo_a
+            mo_energy_b = mo_energy_a
+          end if
+          if (diis_stat /= 0) then
+            call show_message('Error retrieving SOSCF results', WITH_ABORT)
+          endif
+        endif
+
       else
-         ! Form the interpolated the Fock/density matrix
-         call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
+        ! Reset DIIS for difficult case
+        ! VSHIFT=0 and slow cases
+        diis_reset_condition = (((iter/diis_reset) >= 1) &
+           .and. (modulo(iter,diis_reset) == 0) &
+           .and. (diis_error > infos%control%diis_reset_conv) &
+           .and. (infos%control%vshift == 0.0_dp) &
+           .and. (trim(conv_res%active_converger_name) /= 'SOSCF'))
+        if (diis_reset_condition) then
+           ! Resetting DIIS
+           write(IW,"(3x,64('-')/10x,'Resetting DIIS.')")
+           call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
+           call conv%init(ldim=nbf, maxvec=maxdiis, &
+             subconvergers=[conv_cdiis], &
+             thresholds=[ethr_cdiis_big], &
+             overlap=smat_full, overlap_sqrt=qmat, &
+             num_focks=diis_nfocks, verbose=1)
+           ! After resetting DIIS, we need to skip SD
+           call conv%add_data(f=pfock(:,1:diis_nfocks), &
+                dens=pdmat(:,1:diis_nfocks), e=Etot)
+           call conv%run(conv_res)
+        else
+           ! Form the interpolated the Fock/density matrix
+           call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
+        endif
       endif
 
       ! Calculate new orbitals and density
