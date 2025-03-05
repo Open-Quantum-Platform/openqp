@@ -287,31 +287,42 @@ contains
     !   b) If VSHIFT is not set, c-DIIS is default.
     !   c) If vdiis (diis_type=5) is chosen, the VSHIFT is initally turned on.
     !   d) if MOM=.true., MOM turns on if DIIS error < mom_switch
-    if (infos%control%diis_type == 5) then
-       call conv%init(ldim=nbf, maxvec=maxdiis, &
-            subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
-            thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vdiis_cdiis_switch], &
-            overlap=smat_full, overlap_sqrt=qmat, &
-            num_focks=diis_nfocks, verbose=1)
-       if (infos%control%vshift == 0.0_dp) then
-          infos%control%vshift = 0.1_dp
-          vshift = 0.1_dp
-          call show_message("")
-          call show_message('Setting VSHIFT=0.1, since VDIIS is chosen without VSHIFT value.')
-       endif
-    elseif (infos%control%vshift /= 0.0_dp) then
-       call conv%init(ldim=nbf, maxvec=maxdiis, &
-            subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
-            thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vshift_cdiis_switch], &
-            overlap=smat_full, overlap_sqrt=qmat, &
-            num_focks=diis_nfocks, verbose=1)
+    if (use_soscf) then
+      call conv%init(ldim=nbf, maxvec=maxdiis, &
+                 subconvergers=[conv_soscf], &
+                 thresholds=[huge(1.0_dp)], &
+                 overlap=smat_full, overlap_sqrt=qmat, &
+                 num_focks=diis_nfocks, verbose=3)
+
+      call set_soscf_parametres(infos, conv)
+
     else
-       ! Normally, c-DIIS works best. But one can choose others (e-DIIS and a-DIIS).
-       call conv%init(ldim=nbf, maxvec=maxdiis, &
-            subconvergers=[infos%control%diis_type], &
-            thresholds=[infos%control%diis_method_threshold], &
-            overlap=smat_full, overlap_sqrt=qmat, &
-            num_focks=diis_nfocks, verbose=1)
+      if (infos%control%diis_type == 5) then
+         call conv%init(ldim=nbf, maxvec=maxdiis, &
+              subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+              thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vdiis_cdiis_switch], &
+              overlap=smat_full, overlap_sqrt=qmat, &
+              num_focks=diis_nfocks, verbose=1)
+         if (infos%control%vshift == 0.0_dp) then
+            infos%control%vshift = 0.1_dp
+            vshift = 0.1_dp
+            call show_message("")
+            call show_message('Setting VSHIFT=0.1, since VDIIS is chosen without VSHIFT value.')
+         endif
+      elseif (infos%control%vshift /= 0.0_dp) then
+         call conv%init(ldim=nbf, maxvec=maxdiis, &
+              subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+              thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vshift_cdiis_switch], &
+              overlap=smat_full, overlap_sqrt=qmat, &
+              num_focks=diis_nfocks, verbose=1)
+      else
+         ! Normally, c-DIIS works best. But one can choose others (e-DIIS and a-DIIS).
+         call conv%init(ldim=nbf, maxvec=maxdiis, &
+              subconvergers=[infos%control%diis_type], &
+              thresholds=[infos%control%diis_method_threshold], &
+              overlap=smat_full, overlap_sqrt=qmat, &
+              num_focks=diis_nfocks, verbose=1)
+      endif
     endif
 
     eexc = 0.0_dp
@@ -762,6 +773,30 @@ contains
      write(IW,"('                 Virial ratio (V/T) =',F19.10)") virial
      write(IW,*)
   end subroutine print_scf_energy
+
+  subroutine set_soscf_parametres(infos, conv)
+    use types, only: information
+    use scf_converger, only: scf_conv, soscf_converger
+
+    type(information), target, intent(in) :: infos
+    type(scf_conv) :: conv
+
+    integer :: i
+
+    ! Through accessing the SOSCF converger set its parameters:
+    do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
+      select type (sc => conv%sconv(i)%s)
+        type is (soscf_converger)
+          sc%max_iter = infos%control%soscf_max
+          sc%min_iter = infos%control%soscf_min
+          sc%grad_thresh = infos%control%soscf_grad
+          sc%level_shift = infos%control%soscf_lvl_shift
+          sc%coupled_uhf = infos%control%soscf_coupled_uhf
+          sc%use_lineq = infos%control%soscf_lineq
+      end select
+    end do
+
+  end subroutine set_soscf_parametres
 
   !> @brief Form the ROHF Fock matrix in MO basis.
   !>

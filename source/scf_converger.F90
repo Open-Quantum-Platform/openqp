@@ -7,6 +7,7 @@ module scf_converger
   private
   public :: scf_conv
   public :: scf_conv_result
+  public :: soscf_converger ! Used to provide parametres for soscf
 
   !> Constants for converger types
   integer, parameter, public :: conv_none  = 1
@@ -260,6 +261,14 @@ module scf_converger
     integer :: nfocks = 0             !< Number of Focks (RHF = 1, UHF = 2)
     integer :: nbf = 0                !< Number of basis functions
     integer :: nbf_tri = 0            !< Number of basis functions in triangular format
+
+    ! SOSCF parameters from scf_driver:
+    integer :: max_iter = 10                  !< Maximum micro-iterations
+    integer :: min_iter = 1                   !< Minimum micro-iterations
+    real(kind=dp) :: grad_thresh = 1.0e-3_dp  !< Gradient threshold
+    real(kind=dp) :: level_shift = 0.2_dp     !< Level shifting parameter
+    logical :: coupled_uhf = .false.          !< Coupled UHF update
+    logical :: use_lineq = .false.            !< Use linear equations (vs BFGS)
   contains
     procedure, pass :: init  => soscf_init
     procedure, pass :: clean => soscf_clean
@@ -858,6 +867,12 @@ contains
 
     self%step = 0
 
+    call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
+    if (istat /= 0) then
+      self%state = conv_state_not_initialized
+      return
+    end if
+
     if (present(subconvergers)) then
       allocate(self%sconv(0:ubound(subconvergers,1)))
       allocate(noconv_converger :: self%sconv(0)%s)
@@ -879,8 +894,8 @@ contains
       end do
     end if
 
-    call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
-    if (istat == 0) self%state = conv_state_initialized
+    self%state = conv_state_initialized
+
   end subroutine scf_conv_init
 
   !> @brief Store data from the new SCF iteration
@@ -1150,6 +1165,7 @@ contains
       res%pstart = 1
       res%pend = self%dat%num_saved
     end select
+    write(*,*) " DBG| current converger", trim(self%conv_name)
 
     res%ierr = 3 ! Need to set up DIIS equations first
     if (self%last_setup /= 0) return
@@ -1352,6 +1368,7 @@ contains
       res%pstart = 1
       res%pend = self%dat%num_saved
     end select
+    write(*,*) " DBG| current converger", trim(self%conv_name)
 
     res%ierr = 3 ! Need to set up DIIS equations first
     if (self%last_setup /= 0) return
@@ -1709,12 +1726,7 @@ contains
     self%verbose = params%verbose
     self%nbf     = params%dat%ldim
     self%nbf_tri = self%nbf * (self%nbf + 1) / 2
-    if (self%verbose > 0) then
-      write(iw, *) " DBG| SOSCF init:  nfocks=", self%nfocks
-      write(iw, *) " DBG| SOSCF init: verbose=", self%verbose
-      write(iw, *) " DBG| SOSCF init:     nbf=", self%nbf
-      write(iw, *) " DBG| SOSCF init: nbf_tri=", self%nbf_tri
-    end if
+
   end subroutine soscf_init
 
   !> @brief Clean up SOSCF converger
@@ -1731,6 +1743,8 @@ subroutine soscf_setup(self)
 
   class(soscf_converger), intent(inout) :: self
 
+  ! Data verification on each setup call
+  self%last_setup = 0
 end subroutine soscf_setup
 
   !> @brief Run the SOSCF convergence step
@@ -1742,16 +1756,18 @@ subroutine soscf_run(self, res)
 
   class(soscf_converger), target, intent(inout) :: self
   class(scf_conv_result), allocatable, intent(out) :: res
-  
+
   real(kind=dp) :: soscf_error
 
   ! Allocate result as SOSCF-specific type
   allocate(scf_conv_soscf_result :: res)
   res%dat => self%dat
   res%active_converger_name = self%conv_name
+
   res%ierr = 0
 
   ! Main micro-iteration loop
+  write(iw,*) "check max_iter=",self%max_iter
 
   soscf_error = 1.0e-2_dp  ! Dummy
   res%error = soscf_error
