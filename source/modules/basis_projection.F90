@@ -93,7 +93,8 @@ contains
   !
     open (unit=IW, file=infos%log_filename, position="append")
 
-    call print_module_info('Basis Projection', "Projecting MOs and DMs from initial to primary basis")
+    call print_module_info('Basis Projection', "Projecting MOs and DMs from // &
+                             initial to primary basis")
 
   ! Readings
   ! load basis set

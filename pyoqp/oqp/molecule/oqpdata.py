@@ -48,7 +48,6 @@ OQP_CONFIG_SCHEMA = {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': ''},
         'library': {'type': string, 'default': ''},
-        'init_basis': {'type':str, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
         'runtype': {'type': string, 'default': 'energy'},
@@ -199,7 +198,7 @@ class OQPData:
     """Wrapper for OQP data class"""
 
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
-    _guesses = {"huckel": 1, "hcore": 2}
+    _guesses = {"huckel": 1, "hcore": 2, "db": 3}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf')
@@ -238,6 +237,7 @@ class OQPData:
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
+            "active_basis": "set_scf_active_basis",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -477,6 +477,11 @@ class OQPData:
     def set_scf_pfon_nsmear(self, pfon_nsmear): 
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
+
+    def set_scf_active_basis(self, active_basis):
+        """Select basis set: 0 => info%basis
+                             1 => info%alt_basis"""
+        self._data.control.active_basis = active_basis
 
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""

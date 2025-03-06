@@ -184,6 +184,8 @@ class SinglePoint(Calculator):
         oqp.library.set_basis(self.mol)
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
+    def _project_basis(self):
+        oqp.library.project_basis(self.mol)
 
     def _init_convergence(self):
         init_calc = self.energy_func['hf']
@@ -230,6 +232,13 @@ class SinglePoint(Calculator):
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
         self._prep_guess()
         init_calc(self.mol)
+        if init_basis:
+            dump_log(self.mol, title='OQP: Applying Basis Sets for Overlap calculation', section='scf')
+            self.mol.data.set_scf_active_basis(1)
+            oqp.library.set_basis(self.mol)
+            self.mol.data.set_scf_active_basis(0)
+            self.mol.config['input']['basis'] = target_basis
+            oqp.library.set_basis(self.mol)
 
         # save initially converge orbitals
         if self.save_molden:
@@ -243,8 +252,8 @@ class SinglePoint(Calculator):
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
         self.mol.data.set_mol_multiplicity(self.scf_mult)
-        ## TODO: call basis projection function here
-        oqp.library.update_guess(self.mol)
+        self._project_basis()
+#        oqp.library.update_guess(self.mol)
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps done, switching back to normal SCF', section='scf')
 
