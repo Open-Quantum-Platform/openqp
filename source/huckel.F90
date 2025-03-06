@@ -7,6 +7,7 @@ module huckel
 
   private
   public huckel_guess
+  public orthogonalize_orbitals
 
 contains
 
