@@ -47,6 +47,8 @@ OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': ''},
+        'library': {'type': string, 'default': ''},
+        'init_basis': {'type':str, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
         'runtype': {'type': string, 'default': 'energy'},
@@ -185,9 +187,6 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
-    'basis_set':{
-        'library': {'type': str, 'default': ''},
-        },
     'tests': {
         'exception': {'type': bool, 'default': False},
     },

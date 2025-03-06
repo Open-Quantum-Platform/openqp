@@ -102,6 +102,7 @@ struct control_parameters {
     int64_t   scftype;
     char      runtype[20];
     int64_t   guess;
+    int64_t   active_basis;
     int64_t   maxit;
     int64_t   maxit_dav;
     int64_t   maxit_zv;
@@ -176,6 +177,7 @@ void int1e(struct oqp_handle_t *inf);
 void guess_hcore(struct oqp_handle_t *inf);
 void guess_huckel(struct oqp_handle_t *inf);
 void guess_json(struct oqp_handle_t *inf);
+void proj_dm_newbas(struct oqp_handle_t *inf);
 
 void hf_energy(struct oqp_handle_t *inf);
 void hf_gradient(struct oqp_handle_t *inf);

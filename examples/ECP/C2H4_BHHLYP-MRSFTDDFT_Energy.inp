@@ -23,17 +23,16 @@ charge=0
 method=tdhf
 runtype=energy
 functional=bhhlyp
-
-[guess]
-type=huckel
-save_mol=false
-
-[basis_set]
+basis=library
 library=
  c1 6-31g
  c2 cc-pvdz
  h1 6-31g*
  h2 3-21g
+
+[guess]
+type=huckel
+save_mol=false
 
 [scf]
 type=rohf

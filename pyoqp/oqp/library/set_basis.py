@@ -109,41 +109,43 @@ class BasisData:
 
         :return: A list of basis names (strings).
         """
-        basis_tags = []
-        system = self.mol.config["input"]["system"]
-        system = system.split("\n")
-        if system[0]:
-            if not os.path.exists(system[0]):
-                raise FileNotFoundError("XYZ file %s is not found!" % system[0])
+        if self.mol.config["input"]["basis"]=='library':
+            basis_tags = []
+            system = self.mol.config["input"]["system"]
+            system = system.split("\n")
+            if system[0]:
+                if not os.path.exists(system[0]):
+                    raise FileNotFoundError("XYZ file %s is not found!" % system[0])
 
-            with open(system[0], 'r') as xyzfile:
-                system = xyzfile.read().splitlines()
+                with open(system[0], 'r') as xyzfile:
+                    system = xyzfile.read().splitlines()
 
-            num_atoms = int(system[0])
-            system = system[2: 2 + num_atoms]
-        else:
-            system = system[1:]
+                num_atoms = int(system[0])
+                system = system[2: 2 + num_atoms]
+            else:
+                system = system[1:]
 
-        for i, line in enumerate(system):
-            parts = line.split()
-            if len(parts) < 5:
-                basis_tags.clear()
-                break
-            basis_tags.append(parts[4])
+            for i, line in enumerate(system):
+                parts = line.split()
+                if len(parts) < 5:
+                    basis_tags.clear()
+                    raise FileNotFoundError(f"Please correctly add a tag for each atom. ({parts})")
+                    break
+                basis_tags.append(parts[4])
 
-        if basis_tags:
-            basis_list_str = self.mol.config["basis_set"]["library"].strip()
-            if basis_list_str:
-                basis_dict = {}
-                for line in basis_list_str.splitlines():
-                    library_parts = line.split()
-                    if len(library_parts) >= 2:
-                        key = library_parts[0]
-                        basis_info = " ".join(library_parts[1:])
-                        basis_dict[key] = basis_info
+            basis_list_str = self.mol.config["input"]["library"].strip()
+            if not(basis_list_str):
+                raise FileNotFoundError("Please ensure the necessary library for tags is correctly added.")
+            basis_dict = {}
+            for line in basis_list_str.splitlines():
+                library_parts = line.split()
+                if len(library_parts) >= 2:
+                    key = library_parts[0]
+                    basis_info = " ".join(library_parts[1:])
+                    basis_dict[key] = basis_info
 
-                self.basis_names = [basis_dict.get(tag, "UNKNOWN") for tag in basis_tags]
-                return self.basis_names
+            self.basis_names = [basis_dict.get(tag, "UNKNOWN") for tag in basis_tags]
+            return self.basis_names
 
         self.basis_names = self.mol.config["input"]["basis"].split(',')
         if len(self.basis_names) == 1:
