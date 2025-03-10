@@ -1,0 +1,30 @@
+# DFT/aug-cc-pVDZ/BHHLYP/ROHF/ENERGY of H2O
+# For Restricted Open-Shell systems we use ROHF, when we use ROHF, we have to choose multiplicity=3.
+# Since this is a DFT calculation, we have to set method=hf. 
+# Because this is a DFT calculation, we dont need [tdhf] section.
+# The initial SCF is performed using RHF (init_scf=rhf) with the 6-31g basis set (init_basis=6-31g).
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+basis=aug-cc-pVDZ
+runtype=energy
+functional=bhhlyp
+method=hf
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+multiplicity=3
+type=rohf
+init_basis=6-31g
+init_scf=rhf
+init_it=3
+save_molden=true
+
+[dftgrid]
+rad_type=becke

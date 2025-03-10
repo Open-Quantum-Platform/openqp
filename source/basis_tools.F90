@@ -63,7 +63,7 @@ module basis_tools
     procedure, pass(basis) :: normalize_contracted
     procedure, pass(basis) :: set_bfnorms
     procedure, pass(basis) :: reserve => omp_sp_reserve
-    procedure, private, pass(basis) :: destroy => omp_sp_destroy
+    procedure, pass(basis) :: destroy => omp_sp_destroy
 
     generic :: aoval => compAOv, compAOVg, compAOVgg
     procedure, pass(basis) :: compAOv

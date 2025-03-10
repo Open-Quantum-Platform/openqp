@@ -164,14 +164,14 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         loginfo += """
    PyOQP natom:                        %s
    PyOQP charge:                       %s
-   PyOQP basis:                        %s
     
-""" % (natom, charge, basis)
+""" % (natom, charge)
 
     if section in ['scf']:
         loginfo += """
    PyOQP method:                       %s
    PyOQP hf/functional:                %s
+   PyOQP basis:                        %s
    PyOQP scf type:                     %s
    PyOQP scf maxit:                    %s
    PyOQP scf forced attempt:           %s
@@ -185,7 +185,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP vshift:                       %s
    
 """ % (
-            method, functional, scftypes[scf_type], scf_maxit, scf_forced_attempt, scf_mult, scf_conv, scf_incre,
+            method, functional, basis, scftypes[scf_type], scf_maxit, scf_forced_attempt, scf_mult, scf_conv, scf_incre,
             diis_type,
             vdiis_cdiis_switch,
             vdiis_vshift_switch,

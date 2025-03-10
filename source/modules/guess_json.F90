@@ -93,7 +93,7 @@ contains
 
 
   !  For ROHF/UHF
-    if (INFOS%control%scftype >= 2) MO_B = MO_A
+    if (INFOS%control%scftype == 1) MO_B = MO_A
 
 ! Calculate Density Matrix
     if (pe%rank == root) then

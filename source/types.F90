@@ -99,6 +99,7 @@ module types
     integer(c_int64_t) :: scftype  = 1       !< Refence wavefuction, 1= RHF 2= UHF 3= ROHF
     character(c_char)  :: runtype(20)  = ''  !<  Run type: energy, grad, etc.
     integer(c_int64_t) :: guess    = 1       !< used guess
+    integer(c_int64_t) :: active_basis = 0    !< Choose data basis: 0 -> info%basis, 1 -> info%alt_basis
     integer(c_int64_t) :: maxit    = 3       !< The maximum number of iterations
     integer(c_int64_t) :: maxit_dav = 50     !< The maximum number of iterations in Davidson eigensolver
     integer(c_int64_t) :: maxit_zv = 50      !< The maximum number of CG iterations in Z-vector subroutines
@@ -180,6 +181,7 @@ module types
     type(tddft_parameters) :: tddft
     type(container_t) :: dat
     type(basis_set) :: basis
+    type(basis_set) :: alt_basis
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
     type(electron_shell) :: elshell

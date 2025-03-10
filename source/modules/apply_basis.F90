@@ -61,7 +61,7 @@ contains
     write(iw,'(  22X,"Setting up basis set information")')
     write(iw,'(20x,"++++++++++++++++++++++++++++++++++++++++")')
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    call map_shell2basis_set(infos, infos%basis)
+    call map_shell2basis_set(infos)
 !    if (pe%rank == 0) then
 !      call infos%basis%from_file(basis_file, infos%atoms, err)
 !      infos%control%basis_set_issue = err
@@ -79,15 +79,27 @@ contains
 ! Checking error of basis set reading..
 !    call pe%bcast(infos%control%basis_set_issue, 1)
 
-    write(iw,'(/5X,"Basis Sets options"/&
-                  &5X,18("-")/&
-                  &5X,"Basis Sets: ",A/&
-                  &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
-                  &5X,"Number of Basis Set functions  =",I8/&
-                  &5X,"Maximum Angluar Momentum =",I8/)') &
-                    trim(basis_file), &
-                    infos%basis%nshell, infos%basis%nprim, &
-                    infos%basis%nbf, infos%basis%mxam
+    if (infos%control%active_basis == 0) then
+      write(iw,'(/5X,"Basis Sets options"/&
+                    &5X,18("-")/&
+                    &5X,"Basis Sets: ",A/&
+                    &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
+                    &5X,"Number of Basis Set functions  =",I8/&
+                    &5X,"Maximum Angluar Momentum =",I8/)') &
+                      trim(basis_file), &
+                      infos%basis%nshell, infos%basis%nprim, &
+                      infos%basis%nbf, infos%basis%mxam
+    else
+      write(iw,'(/5X,"Alternative Basis Set Options"/&
+                    &5X,18("-")/&
+                    &5X,"Basis Sets: ",A/&
+                    &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
+                    &5X,"Number of Basis Set functions  =",I8/&
+                    &5X,"Maximum Angluar Momentum =",I8/)') &
+                      trim(basis_file), &
+                      infos%alt_basis%nshell, infos%alt_basis%nprim, &
+                      infos%alt_basis%nbf, infos%alt_basis%mxam
+    endif
     close (iw)
 
     call print_basis(infos)

@@ -178,13 +178,13 @@ contains
         print *, "----------------------"
     end subroutine print_all_shells
 
-    subroutine map_shell2basis_set(infos, basis)
+    subroutine map_shell2basis_set(infos)
         use basis_tools, only: basis_set
         use types, only: information
         use constants, only: NUM_CART_BF
 
-        type(information), intent(inout) :: infos
-        class(basis_set) ,intent(inout):: basis
+        type(information), target, intent(inout) :: infos
+        class(basis_set), pointer :: basis
         type(electron_shell), pointer :: temp
         type(electron_shell), pointer :: temp1
         integer :: nbf, nshell, nprim, mxcontr, mxam, ii
@@ -193,6 +193,12 @@ contains
         real, dimension(:), allocatable :: ex
 
         infos%control%basis_set_issue = .false.
+        if (infos%control%active_basis == 0) then
+            basis => infos%basis
+        else
+            basis => infos%alt_basis
+        end if
+        if (allocated(basis%ex)) call basis%destroy()
 
         temp => head
         mxam = 0
@@ -201,7 +207,6 @@ contains
         nshell = 0
         nprim = 0  ! Initialize nprim
         ii = 0
-
 
         do while (associated(temp))
 
@@ -254,12 +259,9 @@ contains
             basis%ex(basis%g_offset(ii):(basis%g_offset(ii) + n2 - 1)) = real(temp1%exponents, kind=real64)
             basis%cc(basis%g_offset(ii):(basis%g_offset(ii) + n2 - 1)) = real(temp1%coefficient,  kind=real64)
 
-
-
             basis%origin(ii) = temp1%element_id
             basis%am(ii) = temp1%angular_momentum
             basis%naos(ii) = NUM_CART_BF(temp1%angular_momentum)
-
             n1 = temp1%n_exponents(1)
 
             temp1 => temp1%next
@@ -283,7 +285,6 @@ contains
         nullify(head)
         nullify(temp)
         nullify(temp1)
-
 
         if (ecp_head%element_id == 0) then
             basis%ecp_params%is_ecp = .false.
@@ -314,43 +315,49 @@ contains
     subroutine print_basis(infos)
         use types, only: information
         use elements, only: ELEMENTS_SHORT_NAME
+        use basis_tools, only: basis_set
 
+        type(information), target, intent(inout) :: infos
+        type(basis_set), pointer :: basis
 
-        type(information), intent(inout) :: infos
         integer :: iw, i, j, atom, elem, end_i
         character(len=1) :: orbit
         character(len=1), dimension(5) :: orbital_types = ['S', 'P', 'D', 'F', 'G']
-
+        if (infos%control%active_basis == 0) then
+           basis => infos%basis
+        else
+           basis => infos%alt_basis
+        end if
         open (newunit=iw, file=infos%log_filename, position="append")
 
         write(iw, '(/,5X,"====================== Basis Set Details ======================")')
         atom = 0
 
         write(iw, '(/,17X, A,13X,A)') 'Exponent', 'Normalized Coefficient'
-        do j = 1, infos%basis%nshell
-            if (atom .NE. infos%basis%origin(j)) then
+        do j = 1, basis%nshell
+            if (atom .NE. basis%origin(j)) then
                 elem = nint(infos%atoms%zn(infos%basis%origin(j)))
                 write(iw, '(5X, A2)') ELEMENTS_SHORT_NAME(elem)
             end if
-            orbit = orbital_types(infos%basis%am(j)+1)
+            orbit = orbital_types(basis%am(j)+1)
 
             write(iw, '(10X, A1)') orbit
 
-            end_i = infos%basis%g_offset(j) + infos%basis%ncontr(j) - 1
+            end_i = basis%g_offset(j) + basis%ncontr(j) - 1
 
-            do i = infos%basis%g_offset(j), end_i
-                write(iw, '(15X, ES12.5, 15X, ES12.5)') infos%basis%ex(i),&
-                        infos%basis%cc(i)
+            do i = basis%g_offset(j), end_i
+                write(iw, '(15X, ES12.5, 15X, ES12.5)') basis%ex(i),&
+                        basis%cc(i)
             end do
-            atom = infos%basis%origin(j)
+            atom = basis%origin(j)
         end do
-        if (infos%basis%ecp_params%is_ecp) then
+        if (basis%ecp_params%is_ecp) then
             do i=1, infos%mol_prop%natom
-                if (infos%basis%ecp_zn_num(i) .EQ. 0) cycle
+                if (basis%ecp_zn_num(i) .EQ. 0) cycle
                 elem = nint(infos%atoms%zn(i))
                 write(iw, '(5X, A2, A4)') ELEMENTS_SHORT_NAME(elem), '-ECP'
-                write(iw, '(5X, A, I5)') 'Core Electrons Removed:', infos%basis%ecp_zn_num(i)
-                call ecp_printing(infos%basis, iw, i)
+                write(iw, '(5X, A, I5)') 'Core Electrons Removed:', basis%ecp_zn_num(i)
+                call ecp_printing(basis, iw, i)
             end do
         end if
         write(iw, '(/,5X,"==================== End of Basis Set Data ====================")')
