@@ -563,7 +563,7 @@ module qmmm_mod
     ! Solve the least-squares problem T * X ≈ B
     call dgels('T', nat, npts, npts, r, nat, b, npts, work, lwork, info)
 
-    ttt=b(:nat,:npts)
+    ttt(:nat,:npts)=b(:nat,:npts)
 
   end subroutine espf_weights
 
