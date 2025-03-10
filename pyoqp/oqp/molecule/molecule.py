@@ -64,7 +64,9 @@ class Molecule:
                 "rohf": [],
                 "uhf": []
                 }
-
+        self.config_tag = {
+            'json': ['scf_type', 'basis', 'library']
+        }
         self.start_time = None
         self.back_door = None
 
@@ -330,6 +332,15 @@ class Molecule:
 
         return log_c
 
+    def set_config_json(self):
+        data = {}
+        data['json'] = {
+            'scf_type': self.config['scf']['type'],
+            'basis': self.config['input']['basis'],
+            'library': self.config['input']['library']
+        }
+        return data
+
     @mpi_dump
     def save_data(self):
         """
@@ -341,6 +352,7 @@ class Molecule:
             jsonfile = self.log.replace('.log', '.json')
         data = self.get_data()
         data.update(self.get_results())
+        data.update(self.set_config_json())
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
@@ -383,9 +395,22 @@ class Molecule:
             exit('loading data from json, the types of atoms does not match!')
 
         self.put_data(data)
+        self.update_config_json()
 
         if guess_geom:
             self.update_system(np.array(data['coord']))
+
+    def update_config_json(self):
+        # Update the configuration from JSON
+        if config['guess']['type'] != 'json':
+            return
+        if (config['input']['basis'] == config['json']['basis'] and
+                config['scf']['init_library'] == config['json']['library']):
+            return
+        self.config['json']['do_init'] = 'yes'
+        self.config['scf']['init_scf'] = self.config['json']['scf_type']
+        self.config['scf']['init_basis'] = self.config['json']['basis']
+        self.config['scf']['init_library'] = self.config['json']['library']
 
     def put_data(self, data):
         # convert list to data
@@ -395,6 +420,15 @@ class Molecule:
 
             except KeyError:
                 continue
+        for key in self.config_tag.keys():
+            for item in self.config_tag[key]:
+                print(item, key)
+                try:
+                    self.config[key][item] = data[key][item]
+                except KeyError:
+                    print(f"Warning: Key {key} not found in data")
+                except Exception as e:
+                    print(f"Error: {e}")
 
     def read_freqs(self):
         jsonfile = self.log.replace('.log', '.hess.json')

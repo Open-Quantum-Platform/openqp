@@ -83,16 +83,17 @@ contains
       OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
     character(len=*), parameter :: tags_beta_tmp(3) = (/ character(len=80) :: &
       "OQP::DM_B_tmp", "OQP::E_MO_B_tmp", "OQP::VEC_MO_B_tmp" /)
-    character(len=*), parameter :: tags_general(2) = (/ character(len=80) :: &
-      OQP_SM, OQP_hbasis_filename /)
+    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
+      OQP_SM /)
     character(len=1,kind=c_char), contiguous, pointer :: basis_filename(:)
 
   ! Files open
   ! 1. XYZ: Read : Geometric data, ATOMS
   ! 3. LOG: Read Write: Main output file
-  !
+  ! 
+    print *, "hoosh"
     open (unit=IW, file=infos%log_filename, position="append")
-
+    print *, "hoosh2"
     call print_module_info('Basis Projection', "Projecting MOs and DMs from // &
                              initial to primary basis")
 
@@ -116,10 +117,13 @@ contains
                   "exceeds the primary basis ("//trim(adjustl(itoa(nbf)))//"). " // &
                   "Please select a smaller initial basis set.", WITH_ABORT)
     end if
-
+!
+!    print *, "hihihihi1"
+!
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
-
+    print *, "smat_shape",shape(smat)
+!
     allocate(sco(nbf_alt,nbf), &
             mo_a(nbf,nbf), &
             mo_b(nbf,nbf), &
@@ -136,12 +140,11 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a_alt)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a_alt)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a_alt)
-
     call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2_alt, comment=OQP_DM_B_comment)
     call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf_alt, comment=OQP_E_MO_B_comment)
     call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf_alt*nbf_alt, (/ nbf_alt, nbf_alt /), comment=OQP_VEC_MO_B_comment)
-
-    ! load beta
+!
+!    ! load beta
     call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b_alt)
     call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b_alt)
@@ -149,7 +152,6 @@ contains
     ! clean data
     call infos%dat%remove_records(tags_alpha_tmp)
     call infos%dat%remove_records(tags_beta_tmp)
-
     ! allocate alpha_tmp
     call infos%dat%reserve_data("OQP::DM_A_tmp", TA_TYPE_REAL64, nbf2, comment=OQP_DM_A_comment)
     call infos%dat%reserve_data("OQP::E_MO_A_tmp", TA_TYPE_REAL64, nbf, comment=OQP_E_MO_A_comment)
@@ -159,7 +161,6 @@ contains
     call tagarray_get_data(infos%dat, "OQP::DM_A_tmp", dmat_a)
     call tagarray_get_data(infos%dat, "OQP::E_MO_A_tmp", mo_energy_a)
     call tagarray_get_data(infos%dat, "OQP::VEC_MO_A_tmp", mo_a)
-
     ! allocate beta_tmp
     call infos%dat%reserve_data("OQP::DM_B_tmp", TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
     call infos%dat%reserve_data("OQP::E_MO_B_tmp", TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
@@ -169,7 +170,7 @@ contains
     call tagarray_get_data(infos%dat, "OQP::DM_B_tmp", dmat_b)
     call tagarray_get_data(infos%dat, "OQP::E_MO_B_tmp", mo_energy_b)
     call tagarray_get_data(infos%dat, "OQP::VEC_MO_B_tmp", mo_b)
-
+!
     Dmat_b = 0_dp
     Dmat_a = 0_dp
     mo_b = 0_dp
@@ -197,7 +198,6 @@ contains
 
     call corresponding_orbital_projection(mo_a_alt, sco, mo_a, ndoc, nact, nproj, nbf, nbf_alt, l0)
     call orthogonalize_orbitals(q, smat, mo_a, nproj, l0, nbf, nbf)
-    call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=infos%basis)
 
     Dmat_B = Dmat_A
 
@@ -208,7 +208,7 @@ contains
         call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=basis)
   ! ROHF/UHF
       else
-        call get_ab_initio_density(Dmat_A, MO_A, Dmat_B, MO_B, infos, basis)
+        call get_ab_initio_density(Dmat_A, MO_A, Dmat_B, MO_B, infos, infos%basis)
       endif
     endif
     ! Broadcast MO and density matrices to all processes

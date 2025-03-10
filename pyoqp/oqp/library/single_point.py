@@ -231,7 +231,13 @@ class SinglePoint(Calculator):
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
         self._prep_guess()
-        init_calc(self.mol)
+        if self.mol.config['guess']['type'] != 'json':
+            init_calc(self.mol)
+        # save initially converge orbitals
+        if self.save_molden:
+            guess_file = self.pack_molden_name('init', self.init_scf, self.mol.config['input']['functional'])
+            self.mol.write_molden(guess_file)
+
         if init_basis:
             dump_log(self.mol, title='OQP: Applying Basis Sets for Overlap calculation', section='scf')
             self.mol.data.set_scf_active_basis(1)
@@ -240,10 +246,6 @@ class SinglePoint(Calculator):
             self.mol.config['input']['basis'] = target_basis
             oqp.library.set_basis(self.mol)
 
-        # save initially converge orbitals
-        if self.save_molden:
-            guess_file = self.pack_molden_name('init', self.init_scf, self.mol.config['input']['functional'])
-            self.mol.write_molden(guess_file)
 
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
