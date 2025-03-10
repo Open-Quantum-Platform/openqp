@@ -402,6 +402,7 @@ class Molecule:
 
     def update_config_json(self):
         # Update the configuration from JSON
+        config = self.config
         if config['guess']['type'] != 'json':
             return
         if (config['input']['basis'] == config['json']['basis'] and
@@ -422,7 +423,6 @@ class Molecule:
                 continue
         for key in self.config_tag.keys():
             for item in self.config_tag[key]:
-                print(item, key)
                 try:
                     self.config[key][item] = data[key][item]
                 except KeyError:
@@ -457,7 +457,7 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
-            'OQP::dc_matrix', 'OQP::nac_matrix','OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B','E_MO_A','OQP::Hcore','OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B','OQP::WAO',
+            'OQP::dc_matrix', 'OQP::nac_matrix','OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B','E_MO_A','OQP::Hcore','OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B','OQP::WAO', 'json'
         ]
 
         if runtype in ['energy']:

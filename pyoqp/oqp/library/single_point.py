@@ -159,6 +159,7 @@ class SinglePoint(Calculator):
         self.method = mol.config['input']['method']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
+        self.library = mol.config['input']['library']
         self.scf_type = mol.config['scf']['type']
         self.scf_maxit = mol.config['scf']['maxit']
         self.forced_attempt = mol.config['scf']['forced_attempt']
@@ -166,6 +167,7 @@ class SinglePoint(Calculator):
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
         self.init_basis = mol.config['scf']['init_basis']
+        self.init_library = mol.config['scf']['init_library']
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
@@ -190,10 +192,14 @@ class SinglePoint(Calculator):
     def _init_convergence(self):
         init_calc = self.energy_func['hf']
         init_basis = self.init_basis
+        init_library = self.init_library
         target_basis = self.basis
+        target_library = self.library
 
         if init_basis:
             self.mol.config['input']['basis'] = init_basis
+            self.mol.config['input']['library'] = init_library
+
 
         self.mol.data.set_scf_maxit(self.init_it)
 
@@ -244,6 +250,7 @@ class SinglePoint(Calculator):
             oqp.library.set_basis(self.mol)
             self.mol.data.set_scf_active_basis(0)
             self.mol.config['input']['basis'] = target_basis
+            self.mol.config['input']['library'] = target_library
             oqp.library.set_basis(self.mol)
 
 

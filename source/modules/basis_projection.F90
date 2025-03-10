@@ -91,11 +91,10 @@ contains
   ! 1. XYZ: Read : Geometric data, ATOMS
   ! 3. LOG: Read Write: Main output file
   ! 
-    print *, "hoosh"
     open (unit=IW, file=infos%log_filename, position="append")
-    print *, "hoosh2"
-    call print_module_info('Basis Projection', "Projecting MOs and DMs from // &
-                             initial to primary basis")
+    call print_module_info('Basis Projection', "Projecting MOs and DMs from" &
+                              // new_line('') // &
+                             "initial to primary basis")
 
   ! Readings
   ! load basis set
@@ -117,13 +116,8 @@ contains
                   "exceeds the primary basis ("//trim(adjustl(itoa(nbf)))//"). " // &
                   "Please select a smaller initial basis set.", WITH_ABORT)
     end if
-!
-!    print *, "hihihihi1"
-!
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
-    print *, "smat_shape",shape(smat)
-!
     allocate(sco(nbf_alt,nbf), &
             mo_a(nbf,nbf), &
             mo_b(nbf,nbf), &
@@ -143,7 +137,6 @@ contains
     call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2_alt, comment=OQP_DM_B_comment)
     call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf_alt, comment=OQP_E_MO_B_comment)
     call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf_alt*nbf_alt, (/ nbf_alt, nbf_alt /), comment=OQP_VEC_MO_B_comment)
-!
 !    ! load beta
     call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b_alt)
@@ -199,7 +192,12 @@ contains
     call corresponding_orbital_projection(mo_a_alt, sco, mo_a, ndoc, nact, nproj, nbf, nbf_alt, l0)
     call orthogonalize_orbitals(q, smat, mo_a, nproj, l0, nbf, nbf)
 
-    Dmat_B = Dmat_A
+    if (infos%control%scftype >= 2) then
+      call corresponding_orbital_projection(mo_b_alt, sco, mo_b, ndoc, nact, nproj, nbf, nbf_alt, l0)
+      call orthogonalize_orbitals(q, smat, mo_b, nproj, l0, nbf, nbf)
+    else
+      Dmat_B = Dmat_A
+    end if
 
   ! Calculate Density Matrix
     if (pe%rank == root) then

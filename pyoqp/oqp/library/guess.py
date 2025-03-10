@@ -8,13 +8,10 @@ from oqp.utils.file_utils import dump_log
 
 
 def update_guess(mol):
-    try:
-        mol.data["OQP::VEC_MO_B"]
-    except AttributeError:
+    if mol.config['json']['scf_type'] == 'rhf':
         mol.data["OQP::VEC_MO_B"] = copy.deepcopy(mol.data["OQP::VEC_MO_A"])
         mol.data["OQP::E_MO_B"] = copy.deepcopy(mol.data["OQP::E_MO_A"])
         mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
-
     oqp.guess_json(mol)
 
 def guess(mol):
