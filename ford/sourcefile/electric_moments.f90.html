@@ -1,0 +1,1298 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>electric_moments.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>electric_moments.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for source files.">154 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/electric_moments.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">electric_moments.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/electric_moments_mod.html">electric_moments_mod</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/electric_moments.f90.html#src">electric_moments.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~electric_moments.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefileelectric_momentsf90EfferentGraph" width="641pt" height="469pt"
+ viewBox="0.00 0.00 641.00 468.74" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph" class="graph" transform="scale(.5228 .5228) rotate(0) translate(4 892.5384)">
+<title>sourcefile~~electric_moments.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-892.5384 1222,-892.5384 1222,4 -4,4"/>
+<!-- sourcefile~electric_moments.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~electric_moments.f90</title>
+<polygon fill="none" stroke="#000000" points="1218,-579.4332 1088,-579.4332 1088,-555.4332 1218,-555.4332 1218,-579.4332"/>
+<text text-anchor="middle" x="1153" y="-565.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">electric_moments.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="607.5,-341.4332 514.5,-341.4332 514.5,-317.4332 607.5,-317.4332 607.5,-341.4332"/>
+<text text-anchor="middle" x="561" y="-327.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-312.4332C988.3339,-283.3743 733.7797,-309.1233 617.9118,-322.5221"/>
+<polygon fill="#000000" stroke="#000000" points="617.3373,-319.0652 607.8098,-323.6996 618.1479,-326.0182 617.3373,-319.0652"/>
+</g>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~c_interop.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/c_interop.f90.html" xlink:title="c_interop.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="914.5,-619.4332 829.5,-619.4332 829.5,-595.4332 914.5,-595.4332 914.5,-619.4332"/>
+<text text-anchor="middle" x="872" y="-605.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">c_interop.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-567.4332C995.1903,-568.1607 951.1659,-581.2401 917.0836,-592.2471"/>
+<polygon fill="#000000" stroke="#000000" points="915.7374,-589.0046 907.315,-595.4322 917.9074,-595.6598 915.7374,-589.0046"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="292.5,-463.4332 191.5,-463.4332 191.5,-439.4332 292.5,-439.4332 292.5,-463.4332"/>
+<text text-anchor="middle" x="242" y="-449.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1087.9214,-566.3708C1064.5975,-566.2709 1038.1131,-566.4795 1014,-567.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-567.4332C979.9185,-568.7812 445.4206,-445.8612 411.5,-449.4332"/>
+</g>
+<!-- sourcefile~int1.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~int1.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/int1.f90.html" xlink:title="int1.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1041.5,-443.4332 986.5,-443.4332 986.5,-419.4332 1041.5,-419.4332 1041.5,-443.4332"/>
+<text text-anchor="middle" x="1014" y="-429.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1140.6647,-555.3641C1116.5118,-531.7326 1062.8055,-479.1853 1033.6863,-450.6946"/>
+<polygon fill="#000000" stroke="#000000" points="1036.103,-448.1626 1026.5075,-443.6708 1031.2076,-453.166 1036.103,-448.1626"/>
+</g>
+<!-- sourcefile~mathlib.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~mathlib.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/mathlib.f90.html" xlink:title="mathlib.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1052,-717.4332 976,-717.4332 976,-693.4332 1052,-693.4332 1052,-717.4332"/>
+<text text-anchor="middle" x="1014" y="-703.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~mathlib.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~mathlib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1140.6647,-579.6798C1116.3898,-603.78 1062.2622,-657.5182 1033.2469,-686.3247"/>
+<polygon fill="#000000" stroke="#000000" points="1030.7399,-683.8818 1026.1092,-693.4111 1035.6717,-688.8494 1030.7399,-683.8818"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="455.5,-655.4332 367.5,-655.4332 367.5,-631.4332 455.5,-631.4332 455.5,-655.4332"/>
+<text text-anchor="middle" x="411.5" y="-641.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-647.4332C836.3868,-658.8878 745.0378,-690.6973 708,-685.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-685.4332C640.7284,-675.872 628.9461,-643.8954 561,-643.4332"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-149.4332 0,-149.4332 0,-125.4332 135,-125.4332 135,-149.4332"/>
+<text text-anchor="middle" x="67.5" y="-135.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1148.5871,-555.427C1134.0023,-516.8774 1084.2454,-394.0038 1014,-312.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-312.4332C961.5545,-251.5323 993.9451,-207.0099 940,-147.4332 916.6153,-121.6072 901.6561,-126.7183 872,-108.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-108.4332C606.5256,55.2508 471.8879,5.6375 171,-76.4332 140.6759,-84.7045 110.1876,-104.3761 90.2366,-119.1597"/>
+<polygon fill="#000000" stroke="#000000" points="87.9431,-116.5068 82.1063,-125.3489 92.1832,-122.0766 87.9431,-116.5068"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-463.4332 32.5,-463.4332 32.5,-439.4332 102.5,-439.4332 102.5,-463.4332"/>
+<text text-anchor="middle" x="67.5" y="-449.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1148.9845,-579.664C1129.201,-637.3483 1036.3828,-879.4332 872,-879.4332 872,-879.4332 872,-879.4332 708,-879.4332 576.2222,-879.4332 541.8383,-898.8577 411.5,-879.4332"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="766.5,-657.4332 649.5,-657.4332 649.5,-633.4332 766.5,-633.4332 766.5,-657.4332"/>
+<text text-anchor="middle" x="708" y="-643.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-567.4332C971.4106,-569.1177 977.7878,-608.7158 940,-628.4332 912.1798,-642.9496 901.8726,-637.825 872,-647.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-647.4332C841.8115,-657.143 806.8511,-658.0261 776.9841,-655.9247"/>
+<polygon fill="#000000" stroke="#000000" points="776.9038,-652.406 766.6484,-655.0665 776.3245,-659.382 776.9038,-652.406"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="740,-577.4332 676,-577.4332 676,-553.4332 740,-553.4332 740,-577.4332"/>
+<text text-anchor="middle" x="708" y="-563.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014,-567.4332C919.8504,-571.0744 809.2879,-568.7106 750.2401,-566.9146"/>
+<polygon fill="#000000" stroke="#000000" points="750.2809,-563.4142 740.1759,-566.5986 750.0612,-570.4108 750.2809,-563.4142"/>
+</g>
+<!-- sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~xyzorder.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/xyzorder.f90.html" xlink:title="xyzorder.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="748.5,-120.4332 667.5,-120.4332 667.5,-96.4332 748.5,-96.4332 748.5,-120.4332"/>
+<text text-anchor="middle" x="708" y="-106.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyzorder.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~xyzorder.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-108.4332C838.3611,-87.6924 792.9892,-89.4422 758.4958,-95.3916"/>
+<polygon fill="#000000" stroke="#000000" points="757.7965,-91.9617 748.6208,-97.2586 759.0969,-98.8399 757.7965,-91.9617"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M553.0694,-341.824C533.3267,-371.0476 478.6907,-442.3577 411.5,-449.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-449.4332C375.5835,-453.2154 335.1513,-453.8311 302.7861,-453.4469"/>
+<polygon fill="#000000" stroke="#000000" points="302.6301,-449.9442 292.5774,-453.2898 302.5223,-456.9434 302.6301,-449.9442"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M549.5291,-341.4513C537.8814,-354.3094 520.156,-375.7915 510,-397.4332 480.6903,-459.8899 501.3726,-485.1036 474,-548.4332 461.9639,-576.2802 441.8583,-604.9254 427.7074,-623.3773"/>
+<polygon fill="#000000" stroke="#000000" points="424.8892,-621.2994 421.4878,-631.3334 430.4041,-625.6106 424.8892,-621.2994"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="474,-539.4332 349,-539.4332 349,-515.4332 474,-515.4332 474,-539.4332"/>
+<text text-anchor="middle" x="411.5" y="-525.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M549.9581,-341.6658C538.6602,-354.6987 521.2166,-376.3217 510,-397.4332 487.0505,-440.6283 507.5164,-465.8081 474,-501.4332 470.8342,-504.7982 467.1669,-507.7428 463.2267,-510.3168"/>
+<polygon fill="#000000" stroke="#000000" points="461.2434,-507.417 454.2537,-515.3791 464.6831,-513.5137 461.2434,-507.417"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="461.5,-383.4332 361.5,-383.4332 361.5,-359.4332 461.5,-359.4332 461.5,-383.4332"/>
+<text text-anchor="middle" x="411.5" y="-369.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M518.1593,-341.4687C501.2694,-346.2137 481.7037,-351.7104 463.9772,-356.6905"/>
+<polygon fill="#000000" stroke="#000000" points="463.0276,-353.3217 454.347,-359.3959 464.9209,-360.0608 463.0276,-353.3217"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="285,-231.4332 199,-231.4332 199,-207.4332 285,-207.4332 285,-231.4332"/>
+<text text-anchor="middle" x="242" y="-217.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M552.4341,-317.3498C538.179,-298.0287 507.7934,-260.0589 474,-237.4332 449.2747,-220.879 441.0958,-216.5109 411.5,-213.4332"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node18" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node18"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="284.5,-343.4332 199.5,-343.4332 199.5,-319.4332 284.5,-319.4332 284.5,-343.4332"/>
+<text text-anchor="middle" x="242" y="-329.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M514.273,-329.7262C455.7885,-330.0929 355.8876,-330.7192 294.7249,-331.1027"/>
+<polygon fill="#000000" stroke="#000000" points="294.4922,-327.604 284.5143,-331.1667 294.5361,-334.6038 294.4922,-327.604"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node23" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node23"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="449.5,-303.4332 373.5,-303.4332 373.5,-279.4332 449.5,-279.4332 449.5,-303.4332"/>
+<text text-anchor="middle" x="411.5" y="-289.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M514.1074,-317.514C496.7844,-313.1109 477.1321,-308.1156 459.6955,-303.6836"/>
+<polygon fill="#000000" stroke="#000000" points="460.2735,-300.2193 449.7195,-301.1479 458.549,-307.0036 460.2735,-300.2193"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node24" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node24"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-271.4332 25.5,-271.4332 25.5,-247.4332 109.5,-247.4332 109.5,-271.4332"/>
+<text text-anchor="middle" x="67.5" y="-257.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M546.9477,-317.382C521.7916,-296.9547 466.5309,-257.1777 411.5,-251.4332"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M852.4785,-595.3917C799.2891,-562.5156 655.2821,-473.0327 648,-463.4332 617.0452,-422.6277 646.1635,-389.4492 613.3069,-349.3175"/>
+<polygon fill="#000000" stroke="#000000" points="615.7372,-346.7875 606.4222,-341.7397 610.5562,-351.4947 615.7372,-346.7875"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M829.2124,-598.9383C795.3096,-594.0711 747.2786,-591.3859 708,-605.4332"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M829.2642,-617.1246C819.9577,-620.9208 810.8571,-626.1753 804,-633.4332 767.802,-671.7474 804.6007,-708.5035 768,-746.4332 728.6602,-787.2016 701.144,-769.8018 648,-789.4332 542.503,-828.404 523.095,-865.4725 411.5,-879.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-879.4332C337.1225,-885.731 216.9041,-797.4792 171,-739.4332 104.5261,-655.3766 78.5506,-524.9924 70.5221,-473.4629"/>
+<polygon fill="#000000" stroke="#000000" points="73.9653,-472.8211 69.0357,-463.443 67.041,-473.8483 73.9653,-472.8211"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M829.3391,-617.3181C811.1525,-621.532 789.5825,-626.53 769.7092,-631.1348"/>
+<polygon fill="#000000" stroke="#000000" points="768.758,-627.7623 759.8062,-633.4293 770.3382,-634.5817 768.758,-627.7623"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M829.3391,-596.5079C804.9242,-590.2553 774.4117,-582.4411 750.0924,-576.213"/>
+<polygon fill="#000000" stroke="#000000" points="750.6406,-572.7405 740.0849,-573.6501 748.9039,-579.5216 750.6406,-572.7405"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M986.4394,-430.9365C932.6614,-429.6795 810.065,-425.4002 708,-411.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-411.4332C657.2926,-402.2804 658.2058,-369.2376 612,-346.4332 611.3252,-346.1002 610.6424,-345.7713 609.9526,-345.4466"/>
+<polygon fill="#000000" stroke="#000000" points="611.2621,-342.1998 600.6926,-341.4667 608.498,-348.631 611.2621,-342.1998"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-411.4332C492.5796,-415.7636 479.6803,-442.2535 411.5,-449.4332"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M998.1272,-443.4845C960.1856,-471.8202 860.4946,-543.5129 768,-586.4332 742.6269,-598.2071 734.3381,-596.0138 708,-605.4332"/>
+</g>
+<!-- sourcefile~ecp.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~ecp.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/ecp.f90.html" xlink:title="ecp.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="735.5,-242.4332 680.5,-242.4332 680.5,-218.4332 735.5,-218.4332 735.5,-242.4332"/>
+<text text-anchor="middle" x="708" y="-228.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ecp.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~ecp.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~ecp.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-274.4332C832.8664,-250.6055 780.8012,-239.4922 745.9307,-234.4377"/>
+<polygon fill="#000000" stroke="#000000" points="746.0725,-230.9252 735.6942,-233.0563 745.1363,-237.8623 746.0725,-230.9252"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node20" class="node">
+<title>sourcefile~mod_1e_primitives.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node20"><a xlink:href="../sourcefile/mod_1e_primitives.f90.html" xlink:title="mod_1e_primitives.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="940,-180.4332 804,-180.4332 804,-156.4332 940,-156.4332 940,-180.4332"/>
+<text text-anchor="middle" x="872" y="-166.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1009.8638,-419.376C999.83,-390.7902 972.6072,-317.0591 940,-260.4332 924.9241,-234.2523 903.7565,-206.7033 889.0589,-188.6551"/>
+<polygon fill="#000000" stroke="#000000" points="891.482,-186.0924 882.4184,-180.6059 886.0824,-190.547 891.482,-186.0924"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node21" class="node">
+<title>sourcefile~mod_shell_tools.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node21"><a xlink:href="../sourcefile/mod_shell_tools.f90.html" xlink:title="mod_shell_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="768,-200.4332 648,-200.4332 648,-176.4332 768,-176.4332 768,-200.4332"/>
+<text text-anchor="middle" x="708" y="-186.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_shell_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1006.4549,-419.0207C987.675,-389.2203 935.7234,-313.2331 872,-274.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-274.4332C825.4436,-246.086 817.137,-233.026 768,-209.4332 764.1946,-207.6061 760.1868,-205.8561 756.1222,-204.201"/>
+<polygon fill="#000000" stroke="#000000" points="757.1925,-200.8624 746.6032,-200.5198 754.6676,-207.3912 757.1925,-200.8624"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-274.4332C837.5362,-253.4489 571.4062,-276.0957 460.1448,-286.6381"/>
+<polygon fill="#000000" stroke="#000000" points="459.496,-283.184 449.874,-287.6187 460.1614,-290.1523 459.496,-283.184"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-411.4332C643.7057,-399.828 626.2029,-407.3065 561,-411.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-411.4332C386.0445,-422.5063 326.7751,-432.8457 171,-352.4332 135.563,-334.1403 102.7895,-300.766 83.9809,-279.3685"/>
+<polygon fill="#000000" stroke="#000000" points="86.428,-276.846 77.2553,-271.5438 81.1194,-281.4089 86.428,-276.846"/>
+</g>
+<!-- sourcefile~printing.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node25" class="node">
+<title>sourcefile~printing.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node25"><a xlink:href="../sourcefile/printing.f90.html" xlink:title="printing.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="910,-463.4332 834,-463.4332 834,-439.4332 910,-439.4332 910,-463.4332"/>
+<text text-anchor="middle" x="872" y="-449.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">printing.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~printing.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~printing.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M986.2839,-435.3369C967.5407,-437.9768 942.2897,-441.5333 920.2901,-444.6318"/>
+<polygon fill="#000000" stroke="#000000" points="919.5353,-441.2035 910.1212,-446.064 920.5117,-448.1351 919.5353,-441.2035"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M975.9328,-697.3194C947.4552,-691.9223 907.4754,-685.7627 872,-685.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-685.4332C799.1143,-684.7564 780.1637,-695.6897 708,-685.4332"/>
+</g>
+<!-- sourcefile~eigen.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node17" class="node">
+<title>sourcefile~eigen.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node17"><a xlink:href="../sourcefile/eigen.f90.html" xlink:title="eigen.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="904.5,-737.4332 839.5,-737.4332 839.5,-713.4332 904.5,-713.4332 904.5,-737.4332"/>
+<text text-anchor="middle" x="872" y="-723.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eigen.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M975.9466,-710.7929C957.1446,-713.441 934.3818,-716.6471 914.956,-719.3831"/>
+<polygon fill="#000000" stroke="#000000" points="914.2621,-715.9462 904.848,-720.8067 915.2385,-722.8778 914.2621,-715.9462"/>
+</g>
+<!-- sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node22" class="node">
+<title>sourcefile~oqp_linalg.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node22"><a xlink:href="../sourcefile/oqp_linalg.f90.html" xlink:title="oqp_linalg.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="753,-737.4332 663,-737.4332 663,-713.4332 753,-713.4332 753,-737.4332"/>
+<text text-anchor="middle" x="708" y="-723.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872,-685.4332C828.5773,-685.03 780.4796,-698.4937 747.6654,-709.9072"/>
+<polygon fill="#000000" stroke="#000000" points="746.2318,-706.7028 737.9944,-713.3659 748.589,-713.294 746.2318,-706.7028"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M993.5997,-717.5644C978.9212,-726.0874 958.5267,-737.5131 940,-746.4332 865.4858,-782.3099 848.0591,-796.6958 768,-817.4332 678.3426,-840.6568 653.4251,-835.4849 561,-841.4332"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge38" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M402.9595,-631.4139C390.4851,-613.6516 366.8292,-579.1731 349,-548.4332 331.2491,-517.8283 339.4519,-500.9289 313,-477.4332 308.8903,-473.7828 304.2253,-470.6309 299.2967,-467.9122"/>
+<polygon fill="#000000" stroke="#000000" points="300.7253,-464.7148 290.2036,-463.4721 297.6538,-471.005 300.7253,-464.7148"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge39" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M401.2147,-655.735C373.6064,-687.2818 296.291,-765.824 242,-725.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242,-725.4332C130.1015,-642.1843 184.3868,-560.8656 135,-430.4332 114.6036,-376.5657 89.4193,-313.666 76.3339,-281.2388"/>
+<polygon fill="#000000" stroke="#000000" points="79.524,-279.7913 72.5319,-271.8313 73.034,-282.4143 79.524,-279.7913"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge40" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M649.3459,-644.4525C622.4287,-644.0494 590.0958,-643.6311 561,-643.4332"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge42" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.9392,-557.9629C665.6261,-554.053 655.0547,-548.1824 648,-539.4332 596.2429,-475.2443 660.7113,-423.9631 612,-357.4332 609.1302,-353.5136 605.5387,-350.0786 601.5979,-347.0843"/>
+<polygon fill="#000000" stroke="#000000" points="603.4209,-344.0944 593.1378,-341.5431 599.5855,-349.9501 603.4209,-344.0944"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge41" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-525.4332C536.3674,-520.6256 509.016,-519.7348 484.5131,-520.488"/>
+<polygon fill="#000000" stroke="#000000" points="484.053,-517.0036 474.2025,-520.9048 484.3358,-523.9979 484.053,-517.0036"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node19" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node19"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="608,-579.4332 514,-579.4332 514,-555.4332 608,-555.4332 608,-579.4332"/>
+<text text-anchor="middle" x="561" y="-565.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge43" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.7402,-565.8721C658.8992,-566.1013 637.7873,-566.3885 618.2798,-566.6539"/>
+<polygon fill="#000000" stroke="#000000" points="618.2074,-563.1545 608.256,-566.7903 618.3027,-570.1538 618.2074,-563.1545"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge44" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.8861,-557.6289C665.6932,-553.7019 655.2105,-547.9059 648,-539.4332 605.8036,-489.8502 653.6265,-447.4957 612,-397.4332 580.0873,-359.0531 554.1411,-373.736 510,-350.4332 485.499,-337.4988 458.5679,-321.218 439.0675,-309.0371"/>
+<polygon fill="#000000" stroke="#000000" points="440.7296,-305.9478 430.4009,-303.5879 437.0035,-311.8738 440.7296,-305.9478"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge45" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.9134,-555.247C646.3453,-546.2096 601.1066,-533.261 561,-525.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-525.4332C493.7123,-512.3005 480.0525,-486.6245 411.5,-487.4332"/>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge46" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M348.9766,-528.3056C299.6928,-527.4328 229.7271,-522.7061 171,-505.4332 143.1787,-497.2504 114.124,-481.3451 93.9062,-468.9063"/>
+<polygon fill="#000000" stroke="#000000" points="95.6028,-465.8386 85.2749,-463.4753 91.8748,-471.7634 95.6028,-465.8386"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge48" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M385.7566,-383.5835C356.5919,-397.3485 308.9196,-419.8488 276.5397,-435.1313"/>
+<polygon fill="#000000" stroke="#000000" points="274.9797,-431.9972 267.4303,-439.4307 277.9676,-438.3276 274.9797,-431.9972"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge50" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M361.4794,-383.0659C294.6187,-398.6149 177.0933,-425.9464 112.7496,-440.9101"/>
+<polygon fill="#000000" stroke="#000000" points="111.8426,-437.5275 102.8954,-443.2017 113.4283,-444.3456 111.8426,-437.5275"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge47" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.0307,-359.268C382.4955,-348.0922 362.8823,-330.5578 349,-312.4332 328.4448,-285.5967 338.5388,-267.5801 313,-245.4332 307.5455,-240.7031 301.1575,-236.8054 294.4889,-233.6007"/>
+<polygon fill="#000000" stroke="#000000" points="295.8525,-230.3772 285.2828,-229.6472 293.0902,-236.8092 295.8525,-230.3772"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge49" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M361.1033,-359.5402C340.1266,-354.5899 315.7699,-348.842 294.5687,-343.8388"/>
+<polygon fill="#000000" stroke="#000000" points="295.2957,-340.4143 284.7592,-341.5239 293.6879,-347.2272 295.2957,-340.4143"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge51" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M198.8652,-229.3209C174.8083,-234.8353 144.6795,-241.7416 119.3461,-247.5487"/>
+<polygon fill="#000000" stroke="#000000" points="118.5017,-244.1514 109.5365,-249.7973 120.0658,-250.9745 118.5017,-244.1514"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge52" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M689.9749,-242.5726C664.4066,-259.792 617.4257,-291.4323 587.7751,-311.401"/>
+<polygon fill="#000000" stroke="#000000" points="585.5118,-308.7055 579.1725,-317.1946 589.422,-314.5116 585.5118,-308.7055"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge53" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M680.4886,-221.7645C670.168,-218.2631 658.42,-213.9763 648,-209.4332 609.3222,-192.5698 603.0723,-168.2288 561,-171.4332"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge55" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M680.1492,-235.6433C627.554,-244.7641 510.0455,-261.72 411.5,-251.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-251.4332C336.4662,-243.8385 317.3701,-262.0979 242,-259.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242,-259.4332C201.1176,-257.9879 154.8139,-258.0673 120.1824,-258.465"/>
+<polygon fill="#000000" stroke="#000000" points="119.7827,-254.9698 109.8283,-258.5974 119.8722,-261.9692 119.7827,-254.9698"/>
+</g>
+<!-- sourcefile~ecpint.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node27" class="node">
+<title>sourcefile~ecpint.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node27"><a xlink:href="../sourcefile/ecpint.f90.html" xlink:title="ecpint.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="595,-223.4332 527,-223.4332 527,-199.4332 595,-199.4332 595,-223.4332"/>
+<text text-anchor="middle" x="561" y="-209.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ecpint.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~ecpint.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge54" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~ecpint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M680.3504,-226.8595C659.2464,-224.1317 629.7455,-220.3187 605.3545,-217.1661"/>
+<polygon fill="#000000" stroke="#000000" points="605.6196,-213.6713 595.2534,-215.8605 604.7222,-220.6136 605.6196,-213.6713"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge57" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M839.3865,-715.4709C806.553,-705.9196 754.2794,-692.0108 708,-685.4332"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge58" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M839.2063,-725.4332C817.5171,-725.4332 788.5396,-725.4332 763.3341,-725.4332"/>
+<polygon fill="#000000" stroke="#000000" points="763.1596,-721.9333 753.1596,-725.4332 763.1595,-728.9333 763.1596,-721.9333"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge59" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-803.4332C643.2329,-822.3781 628.3416,-837.0992 561,-841.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-841.4332C494.6927,-845.7006 477.5053,-849.0599 411.5,-841.4332"/>
+</g>
+<!-- sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node29" class="node">
+<title>sourcefile~mathlib_types.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node29"><a xlink:href="../sourcefile/mathlib_types.f90.html" xlink:title="mathlib_types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="466,-777.4332 357,-777.4332 357,-753.4332 466,-753.4332 466,-777.4332"/>
+<text text-anchor="middle" x="411.5" y="-763.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge56" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M853.808,-737.4416C824.554,-755.9542 764.589,-790.6615 708,-803.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-803.4332C619.4683,-823.4141 513.5259,-798.362 455.2761,-780.4797"/>
+<polygon fill="#000000" stroke="#000000" points="456.2474,-777.1162 445.6581,-777.4582 454.1494,-783.7945 456.2474,-777.1162"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge60" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M231.0842,-319.2977C201.7662,-286.7034 121.1024,-197.0256 85.1699,-157.0776"/>
+<polygon fill="#000000" stroke="#000000" points="87.7014,-154.6584 78.4116,-149.5642 82.497,-159.3397 87.7014,-154.6584"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge61" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M202.4636,-343.5264C191.872,-347.5426 180.6823,-352.5275 171,-358.4332 137.3177,-378.9777 104.4869,-411.1602 85.13,-431.7696"/>
+<polygon fill="#000000" stroke="#000000" points="82.3782,-429.5904 78.1633,-439.3108 87.52,-434.3404 82.3782,-429.5904"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge62" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M537.3113,-579.4756C512.3088,-592.1859 472.707,-612.3179 444.6192,-626.5967"/>
+<polygon fill="#000000" stroke="#000000" points="442.9011,-623.5438 435.5729,-631.1955 446.0733,-629.7838 442.9011,-623.5438"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge63" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M513.6756,-568.528C470.0331,-568.2974 403.8949,-564.7804 349,-548.4332 297.3588,-533.055 287.4333,-520.4008 242,-491.4332"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge68" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M838.8122,-156.2913C813.3876,-146.9897 778.1198,-134.0868 750.6099,-124.0222"/>
+<polygon fill="#000000" stroke="#000000" points="751.452,-120.6035 740.8582,-120.4545 749.0469,-127.1773 751.452,-120.6035"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge64" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-148.4332C642.2826,-141.0739 626.9372,-166.4112 561,-171.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-171.4332C492.1826,-176.6746 480.1466,-220.5717 411.5,-213.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-213.4332C372.7489,-209.4035 328.776,-211.1421 295.3306,-213.7627"/>
+<polygon fill="#000000" stroke="#000000" points="294.9808,-210.2797 285.3064,-214.5989 295.5628,-217.2554 294.9808,-210.2797"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge66" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_shell_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M803.874,-176.7413C795.3347,-177.7826 786.5887,-178.8492 778.021,-179.8941"/>
+<polygon fill="#000000" stroke="#000000" points="777.5709,-176.4229 768.0682,-181.1078 778.4184,-183.3715 777.5709,-176.4229"/>
+</g>
+<!-- sourcefile~mod_gauss_hermite.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node30" class="node">
+<title>sourcefile~mod_gauss_hermite.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node30"><a xlink:href="../sourcefile/mod_gauss_hermite.f90.html" xlink:title="mod_gauss_hermite.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="313,-109.4332 171,-109.4332 171,-85.4332 313,-85.4332 313,-109.4332"/>
+<text text-anchor="middle" x="242" y="-95.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_gauss_hermite.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge65" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_gauss_hermite.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M803.813,-159.8135C774.3598,-156.169 739.498,-151.9605 708,-148.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-148.4332C680.202,-145.3203 674.3741,-138.7513 648,-129.4332 608.8567,-115.6037 602.4717,-97.3185 561,-95.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-95.4332C480.2561,-91.7627 387.8994,-92.9272 323.4124,-94.6069"/>
+<polygon fill="#000000" stroke="#000000" points="323.2096,-91.111 313.3079,-94.8802 323.399,-98.1084 323.2096,-91.111"/>
+</g>
+<!-- sourcefile~rys.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node31" class="node">
+<title>sourcefile~rys.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node31"><a xlink:href="../sourcefile/rys.f90.html" xlink:title="rys.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="438.5,-185.4332 384.5,-185.4332 384.5,-161.4332 438.5,-161.4332 438.5,-185.4332"/>
+<text text-anchor="middle" x="411.5" y="-171.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge67" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-95.4332C509.8488,-93.108 458.8069,-130.3705 431.6022,-154.2112"/>
+<polygon fill="#000000" stroke="#000000" points="429.027,-151.8208 423.951,-161.1205 433.7185,-157.0161 429.027,-151.8208"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge69" class="edge">
+<title>sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M663.5,-200.5155C658.0119,-202.9926 652.6913,-205.9397 648,-209.4332 612.3136,-236.0078 585.1446,-281.4286 571.2676,-308.1135"/>
+<polygon fill="#000000" stroke="#000000" points="567.9897,-306.8404 566.6098,-317.345 574.2392,-309.9936 567.9897,-306.8404"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge70" class="edge">
+<title>sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M677.3949,-176.3105C658.7935,-169.5098 634.3874,-161.5805 612,-157.4332 450.0706,-127.4357 401.2331,-95.4118 242,-137.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242,-137.4332C210.5539,-146.2765 199.3119,-140.1391 171,-156.4332 133.9833,-177.7372 100.8619,-215.6108 82.541,-239.0177"/>
+<polygon fill="#000000" stroke="#000000" points="79.5651,-237.1473 76.2668,-247.2156 85.1239,-241.4017 79.5651,-237.1473"/>
+</g>
+<!-- sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node26" class="node">
+<title>sourcefile~blas_wrap.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node26"><a xlink:href="../sourcefile/blas_wrap.f90.html" xlink:title="blas_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="605,-737.4332 517,-737.4332 517,-713.4332 605,-713.4332 605,-737.4332"/>
+<text text-anchor="middle" x="561" y="-723.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge71" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M662.6957,-725.4332C647.679,-725.4332 630.8116,-725.4332 615.1954,-725.4332"/>
+<polygon fill="#000000" stroke="#000000" points="615.1461,-721.9333 605.1461,-725.4332 615.1461,-728.9333 615.1461,-721.9333"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node28" class="node">
+<title>sourcefile~lapack_wrap.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node28"><a xlink:href="../sourcefile/lapack_wrap.f90.html" xlink:title="lapack_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="612,-695.4332 510,-695.4332 510,-671.4332 612,-671.4332 612,-695.4332"/>
+<text text-anchor="middle" x="561" y="-681.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge72" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M665.8757,-713.3977C649.422,-708.6966 630.3858,-703.2577 613.0843,-698.3144"/>
+<polygon fill="#000000" stroke="#000000" points="613.7072,-694.8524 603.1305,-695.4705 611.7841,-701.5831 613.7072,-694.8524"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge73" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.166,-280.7621C339.0538,-272.0935 287.6405,-261.0468 242,-259.4332"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge74" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M833.7948,-454.9655C800.2822,-457.1198 750.4195,-458.0259 708,-449.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-449.4332C679.8508,-443.7312 669.3598,-444.6334 648,-425.4332 622.5681,-402.5727 635.996,-381.7966 612,-357.4332 608.0574,-353.4302 603.4202,-349.8448 598.5765,-346.6846"/>
+<polygon fill="#000000" stroke="#000000" points="600.129,-343.5364 589.7402,-341.4569 596.5647,-349.5611 600.129,-343.5364"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge75" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-449.4332C643.9672,-436.4625 626.2029,-445.3065 561,-449.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-449.4332C494.6882,-453.6301 477.5791,-442.4747 411.5,-449.4332"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge76" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M856.1993,-463.6017C841.3713,-475.6009 819.2508,-495.0554 804,-515.4332 782.8009,-543.759 794.9665,-563.5299 768,-586.4332 746.6801,-604.5408 734.3381,-596.0138 708,-605.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M708,-605.4332C692.1151,-611.1142 577.8698,-643.548 561,-643.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-643.4332C529.4473,-643.2186 494.1479,-643.2078 465.7759,-643.2557"/>
+<polygon fill="#000000" stroke="#000000" points="465.6492,-639.7558 455.6562,-643.2757 465.6632,-646.7558 465.6492,-639.7558"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge78" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M867.4237,-463.7484C855.5501,-494.1627 820.9455,-573.6761 768,-619.4332 764.022,-622.8711 759.5197,-625.916 754.8129,-628.5977"/>
+<polygon fill="#000000" stroke="#000000" points="752.9018,-625.6439 745.5936,-633.3146 756.0903,-631.8756 752.9018,-625.6439"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge79" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M854.4491,-463.6332C825.4731,-483.7751 767.4922,-524.0789 733.8287,-547.4791"/>
+<polygon fill="#000000" stroke="#000000" points="731.6381,-544.7393 725.4247,-553.3209 735.6335,-550.4871 731.6381,-544.7393"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge77" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561,-449.4332C492.5796,-453.7636 480.0525,-486.6245 411.5,-487.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-487.4332C373.8255,-487.8777 274.0535,-511.2358 242,-491.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242,-491.4332C214.2098,-474.2645 196.1939,-493.2258 171,-472.4332 139.1688,-446.1629 93.6072,-330.0917 75.4292,-281.2303"/>
+<polygon fill="#000000" stroke="#000000" points="78.6299,-279.7938 71.8862,-271.6223 72.0622,-282.2156 78.6299,-279.7938"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge81" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M529.3472,-713.3455C522.8587,-710.6052 516.1388,-707.5712 510,-704.4332 484.5285,-691.4129 456.9582,-674.033 437.4823,-661.1558"/>
+<polygon fill="#000000" stroke="#000000" points="439.4007,-658.2283 429.1401,-655.588 435.5146,-664.0506 439.4007,-658.2283"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge82" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M549.5467,-737.8705C520.6948,-768.5881 444.9504,-845.2983 411.5,-841.4332"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.5,-841.4332C320.8176,-830.9552 315.5061,-779.5622 242,-725.4332"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge80" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516.9537,-737.2182C501.1904,-741.4358 483.2224,-746.2433 466.6398,-750.6801"/>
+<polygon fill="#000000" stroke="#000000" points="465.2815,-747.4203 456.526,-753.3861 467.0908,-754.1825 465.2815,-747.4203"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge84" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516.1451,-671.4319C500.2618,-667.1822 482.2225,-662.3556 465.6488,-657.9212"/>
+<polygon fill="#000000" stroke="#000000" points="466.1159,-654.4231 455.5511,-655.2195 464.3066,-661.1853 466.1159,-654.4231"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge85" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M520.996,-695.4894C445.4244,-717.1891 285.3608,-757.6923 242,-725.4332"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge83" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.6135,-695.4763C520.8717,-698.0757 515.1228,-701.0699 510,-704.4332 491.3458,-716.6805 492.632,-727.1522 474,-739.4332 468.5909,-742.9985 462.6134,-746.2339 456.5629,-749.1162"/>
+<polygon fill="#000000" stroke="#000000" points="454.7737,-746.0818 447.0664,-753.3515 457.6249,-752.4749 454.7737,-746.0818"/>
+</g>
+<!-- sourcefile~mod_gauss_hermite.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge86" class="edge">
+<title>sourcefile~mod_gauss_hermite.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M196.8483,-109.5748C187.7976,-113.1852 178.711,-117.744 171,-123.4332 148.7396,-139.8571 103.9952,-204.5106 81.3316,-238.4197"/>
+<polygon fill="#000000" stroke="#000000" points="78.1811,-236.8369 75.5619,-247.1029 84.0114,-240.711 78.1811,-236.8369"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge87" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M384.2669,-180.8239C360.2208,-187.3497 324.4783,-197.0497 294.8357,-205.0943"/>
+<polygon fill="#000000" stroke="#000000" points="293.7767,-201.755 285.0425,-207.7521 295.6102,-208.5107 293.7767,-201.755"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge88" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M384.1704,-164.5024C343.3833,-151.7068 268.5425,-130.4287 242,-137.4332"/>
+</g>
+<!-- sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_node32" class="node">
+<title>sourcefile~rys_lut.f90</title>
+<g id="a_sourcefile~~electric_moments.f90~~EfferentGraph_node32"><a xlink:href="../sourcefile/rys_lut.f90.html" xlink:title="rys_lut.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="277,-189.4332 207,-189.4332 207,-165.4332 277,-165.4332 277,-189.4332"/>
+<text text-anchor="middle" x="242" y="-175.0332" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~electric_moments.f90~~EfferentGraph_edge89" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M384.2669,-174.0759C358.1189,-174.693 318.1402,-175.6364 287.214,-176.3662"/>
+<polygon fill="#000000" stroke="#000000" points="287.0207,-172.8697 277.106,-176.6048 287.1859,-179.8678 287.0207,-172.8697"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefileelectric_momentsf90EfferentGraph = svgPanZoom('#sourcefileelectric_momentsf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">electric_moments_mod</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w">  </span><span class="k">implicit none</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="k">  </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">module_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;electric_moments_mod&quot;</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="w">  </span><span class="k">private</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="k">  public </span><span class="n">electric_moments</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="k">contains</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="k">  subroutine </span><span class="n">electric_moments_C</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;electric_moments&quot;</span><span class="p">)</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">    </span><span class="k">use </span><span class="n">c_interop</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">oqp_handle_t</span><span class="p">,</span><span class="w"> </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a><span class="w">    </span><span class="n">inf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">oqp_handle_get_info</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">    </span><span class="k">call </span><span class="n">electric_moments</span><span class="p">(</span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">electric_moments_c</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">electric_moments</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">Cstring</span><span class="p">,</span><span class="w"> </span><span class="n">fstring</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">,</span><span class="w"> </span><span class="n">triangular_to_full</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="k">use </span><span class="n">int1</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">multipole_integrals</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="w">    </span><span class="k">use </span><span class="n">physical_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">AU_TO_DEBYE</span><span class="p">,</span><span class="w"> </span><span class="n">AU_TO_BUCK</span><span class="p">,</span><span class="w"> </span><span class="n">AU_TO_OCT</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="k">use </span><span class="n">xyz_order</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;electric_moments&quot;</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">urohf</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mints</span><span class="p">(:,:)</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">com</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="mi">6</span><span class="p">),</span><span class="w"> </span><span class="n">quad</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">z</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nat</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">(:)</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">status</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">    </span><span class="n">urohf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">.</span><span class="nb">or</span><span class="p">.</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">3</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="c">!   3. LOG: Write: Main output file</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="c">!   Load basis set</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="c">!   Allocate memory</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">    </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(2/)&#39;</span><span class="p">)</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;========================&#39;</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Electric moment analysis&#39;</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;========================&#39;</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">    </span><span class="k">call </span><span class="nb">flush</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">    </span><span class="n">nat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">mints</span><span class="p">(</span><span class="n">nbf2</span><span class="p">,</span><span class="mi">19</span><span class="p">),</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0d0</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Cannot allocate memory&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">status</span><span class="p">)</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">    </span><span class="k">call </span><span class="n">check_status</span><span class="p">(</span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">)</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="k">      call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">status</span><span class="p">)</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">      </span><span class="k">call </span><span class="n">check_status</span><span class="p">(</span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">)</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a>
+<a id="ln-81" name="ln-81" href="#ln-81"></a><span class="k">    </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nat</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">        </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">com</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">mass</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="k">    </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">com</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">mass</span><span class="p">)</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="w">    </span><span class="k">call </span><span class="n">multipole_integrals</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">mints</span><span class="p">,</span><span class="w"> </span><span class="n">com</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">    </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">    </span><span class="n">qxyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w">    </span><span class="n">oxyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nat</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="w">      </span><span class="n">dr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="o">-</span><span class="n">com</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">      </span><span class="n">z</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">ecp_zn_num</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a>
+<a id="ln-97" name="ln-97" href="#ln-97"></a><span class="w">      </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span>
+<a id="ln-98" name="ln-98" href="#ln-98"></a>
+<a id="ln-99" name="ln-99" href="#ln-99"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a><span class="w">        </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a><span class="w">        </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">3</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span>
+<a id="ln-127" name="ln-127" href="#ln-127"></a><span class="w">        </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">9</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a>
+<a id="ln-130" name="ln-130" href="#ln-130"></a><span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-131" name="ln-131" href="#ln-131"></a><span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span>
+<a id="ln-132" name="ln-132" href="#ln-132"></a><span class="w">        </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-133" name="ln-133" href="#ln-133"></a><span class="w">      </span><span class="k">end do</span>
+<a id="ln-134" name="ln-134" href="#ln-134"></a><span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span>
+<a id="ln-135" name="ln-135" href="#ln-135"></a><span class="w">        </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">3</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="w">      </span><span class="k">end do</span>
+<a id="ln-137" name="ln-137" href="#ln-137"></a><span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span>
+<a id="ln-138" name="ln-138" href="#ln-138"></a><span class="w">        </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">9</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-139" name="ln-139" href="#ln-139"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-140" name="ln-140" href="#ln-140"></a><span class="k">    end if</span>
+<a id="ln-141" name="ln-141" href="#ln-141"></a>
+<a id="ln-142" name="ln-142" href="#ln-142"></a><span class="k">    </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="o">*</span><span class="n">AU_TO_DEBYE</span>
+<a id="ln-143" name="ln-143" href="#ln-143"></a>
+<a id="ln-144" name="ln-144" href="#ln-144"></a><span class="w">    </span><span class="c">! Assemble quadrupole tensor:</span>
+<a id="ln-145" name="ln-145" href="#ln-145"></a><span class="w">    </span><span class="c">! Q_ab = 1/2 * ( 3 * r_a * r_b - r^2 * \delta(a,b) )</span>
+<a id="ln-146" name="ln-146" href="#ln-146"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">X__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)))</span>
+<a id="ln-147" name="ln-147" href="#ln-147"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">Y__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<a id="ln-148" name="ln-148" href="#ln-148"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<a id="ln-149" name="ln-149" href="#ln-149"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Y__</span><span class="p">,</span><span class="n">Y__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)))</span>
+<a id="ln-150" name="ln-150" href="#ln-150"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Y__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<a id="ln-151" name="ln-151" href="#ln-151"></a><span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Z__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)))</span>
+<a id="ln-152" name="ln-152" href="#ln-152"></a><span class="w">    </span><span class="k">call </span><span class="n">triangular_to_full</span><span class="p">(</span><span class="n">quad</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="s1">&#39;u&#39;</span><span class="p">)</span>
+<a id="ln-153" name="ln-153" href="#ln-153"></a><span class="w">    </span><span class="n">quad</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">quad</span><span class="o">*</span><span class="n">AU_TO_BUCK</span>
+<a id="ln-154" name="ln-154" href="#ln-154"></a>
+<a id="ln-155" name="ln-155" href="#ln-155"></a><span class="w">    </span><span class="c">! Assemble octopole tensor:</span>
+<a id="ln-156" name="ln-156" href="#ln-156"></a><span class="w">    </span><span class="c">! O_abc = 1/2*(5*r_a*r_b*r_c - r^2*(r_a*\delta(b,c)+r_b*\delta(a,c)+r_c*\delta(a,b))</span>
+<a id="ln-157" name="ln-157" href="#ln-157"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)))</span>
+<a id="ln-158" name="ln-158" href="#ln-158"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)))</span>
+<a id="ln-159" name="ln-159" href="#ln-159"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)))</span>
+<a id="ln-160" name="ln-160" href="#ln-160"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)))</span>
+<a id="ln-161" name="ln-161" href="#ln-161"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)))</span>
+<a id="ln-162" name="ln-162" href="#ln-162"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)))</span>
+<a id="ln-163" name="ln-163" href="#ln-163"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)))</span>
+<a id="ln-164" name="ln-164" href="#ln-164"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)))</span>
+<a id="ln-165" name="ln-165" href="#ln-165"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)))</span>
+<a id="ln-166" name="ln-166" href="#ln-166"></a><span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">5</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w">                          </span><span class="p">)</span>
+<a id="ln-167" name="ln-167" href="#ln-167"></a>
+<a id="ln-168" name="ln-168" href="#ln-168"></a><span class="w">    </span><span class="n">oct</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oct</span><span class="o">*</span><span class="n">AU_TO_OCT</span>
+<a id="ln-169" name="ln-169" href="#ln-169"></a>
+<a id="ln-170" name="ln-170" href="#ln-170"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/1x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;At point (Bohr):&#39;</span>
+<a id="ln-171" name="ln-171" href="#ln-171"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span>
+<a id="ln-172" name="ln-172" href="#ln-172"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3f15.8,sp,f12.5)&#39;</span><span class="p">)</span><span class="w"> </span><span class="n">com</span>
+<a id="ln-173" name="ln-173" href="#ln-173"></a>
+<a id="ln-174" name="ln-174" href="#ln-174"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric charge (a.u.):&#39;</span>
+<a id="ln-175" name="ln-175" href="#ln-175"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,sp,f12.5)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;C_o&#39;</span><span class="p">,</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">charge</span><span class="p">)</span>
+<a id="ln-176" name="ln-176" href="#ln-176"></a>
+<a id="ln-177" name="ln-177" href="#ln-177"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric dipole (Debye):&#39;</span>
+<a id="ln-178" name="ln-178" href="#ln-178"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x),a10)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Norm&#39;</span>
+<a id="ln-179" name="ln-179" href="#ln-179"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,4f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;D_o&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">dip</span><span class="p">,</span><span class="w"> </span><span class="nb">norm2</span><span class="p">(</span><span class="n">dip</span><span class="p">)</span>
+<a id="ln-180" name="ln-180" href="#ln-180"></a>
+<a id="ln-181" name="ln-181" href="#ln-181"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric quadrupole (Buckingham):&#39;</span>
+<a id="ln-182" name="ln-182" href="#ln-182"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span>
+<a id="ln-183" name="ln-183" href="#ln-183"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3F15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_X&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-184" name="ln-184" href="#ln-184"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">2</span><span class="p">)</span>
+<a id="ln-185" name="ln-185" href="#ln-185"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_Z&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">3</span><span class="p">)</span>
+<a id="ln-186" name="ln-186" href="#ln-186"></a>
+<a id="ln-187" name="ln-187" href="#ln-187"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric octoupole (Buckingham*Angstrom):&#39;</span>
+<a id="ln-188" name="ln-188" href="#ln-188"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxx&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span>
+<a id="ln-189" name="ln-189" href="#ln-189"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span>
+<a id="ln-190" name="ln-190" href="#ln-190"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span>
+<a id="ln-191" name="ln-191" href="#ln-191"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xyy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span>
+<a id="ln-192" name="ln-192" href="#ln-192"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span>
+<a id="ln-193" name="ln-193" href="#ln-193"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xzz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span>
+<a id="ln-194" name="ln-194" href="#ln-194"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span>
+<a id="ln-195" name="ln-195" href="#ln-195"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span>
+<a id="ln-196" name="ln-196" href="#ln-196"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span>
+<a id="ln-197" name="ln-197" href="#ln-197"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_zzz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span>
+<a id="ln-198" name="ln-198" href="#ln-198"></a>
+<a id="ln-199" name="ln-199" href="#ln-199"></a><span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-200" name="ln-200" href="#ln-200"></a>
+<a id="ln-201" name="ln-201" href="#ln-201"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">electric_moments</span>
+<a id="ln-202" name="ln-202" href="#ln-202"></a>
+<a id="ln-203" name="ln-203" href="#ln-203"></a><span class="k">end module </span><span class="n">electric_moments_mod</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

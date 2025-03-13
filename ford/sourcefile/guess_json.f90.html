@@ -1,0 +1,1060 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>guess_json.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>guess_json.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for source files.">82 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess_json.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">guess_json.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/guess_json_mod.html">guess_json_mod</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/guess_json.f90.html#src">guess_json.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~guess_json.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefileguess_jsonf90EfferentGraph" width="641pt" height="469pt"
+ viewBox="0.00 0.00 641.00 469.20" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~guess_json.f90~~EfferentGraph" class="graph" transform="scale(.5919 .5919) rotate(0) translate(4 788.7331)">
+<title>sourcefile~~guess_json.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-788.7331 1079,-788.7331 1079,4 -4,4"/>
+<!-- sourcefile~guess_json.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~guess_json.f90</title>
+<polygon fill="none" stroke="#000000" points="1075,-181.9073 982,-181.9073 982,-157.9073 1075,-157.9073 1075,-181.9073"/>
+<text text-anchor="middle" x="1028.5" y="-167.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">guess_json.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="570,-552.9073 477,-552.9073 477,-528.9073 570,-528.9073 570,-552.9073"/>
+<text text-anchor="middle" x="523.5" y="-538.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M913,-386.9073C839.6826,-454.0979 887.5763,-531.0987 801.5,-580.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-580.9073C746.8088,-612.5547 727.6645,-544.6228 664.5,-542.9073"/>
+</g>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~c_interop.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/c_interop.f90.html" xlink:title="c_interop.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="844,-480.9073 759,-480.9073 759,-456.9073 844,-456.9073 844,-480.9073"/>
+<text text-anchor="middle" x="801.5" y="-466.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">c_interop.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M913,-386.9073C882.8231,-414.5624 877.9797,-425.0853 844,-447.9073 841.9077,-449.3125 839.7077,-450.6821 837.4558,-452.0045"/>
+<polygon fill="#000000" stroke="#000000" points="835.7148,-448.9675 828.6309,-456.8459 839.0817,-455.1046 835.7148,-448.9675"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="118,-491.9073 17,-491.9073 17,-467.9073 118,-467.9073 118,-491.9073"/>
+<text text-anchor="middle" x="67.5" y="-477.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-580.9073C607.4434,-693.1994 503.7159,-840.5051 316,-717.9073 282.6756,-696.143 301.8035,-669.206 280,-635.9073 260.4449,-606.0422 258.1956,-591.2362 225.5,-576.9073"/>
+</g>
+<!-- sourcefile~guess.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~guess.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/guess.f90.html" xlink:title="guess.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="946,-231.9073 880,-231.9073 880,-207.9073 946,-207.9073 946,-231.9073"/>
+<text text-anchor="middle" x="913" y="-217.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~guess.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~guess.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1000.5407,-182.0109C985.4721,-188.5341 966.6772,-196.6704 950.3695,-203.73"/>
+<polygon fill="#000000" stroke="#000000" points="948.8887,-200.5571 941.1022,-207.7418 951.6697,-206.981 948.8887,-200.5571"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="269.5,-315.9073 181.5,-315.9073 181.5,-291.9073 269.5,-291.9073 269.5,-315.9073"/>
+<text text-anchor="middle" x="225.5" y="-301.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-386.9073C714.2017,-386.9073 692.1606,-391.8595 606,-405.9073 568.8639,-411.962 561.0507,-422.5201 523.5,-424.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M523.5,-424.9073C430.9898,-429.1629 398.6422,-447.6986 316,-405.9073 280.1912,-387.7991 252.1269,-348.9544 237.2499,-324.7714"/>
+<polygon fill="#000000" stroke="#000000" points="240.1535,-322.8064 232.0352,-315.9988 234.1363,-326.3832 240.1535,-322.8064"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="416.5,-354.9073 340.5,-354.9073 340.5,-330.9073 416.5,-330.9073 416.5,-354.9073"/>
+<text text-anchor="middle" x="378.5" y="-340.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1025.2022,-182.0255C1014.803,-218.102 979.3884,-326.0667 913,-386.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M913,-386.9073C896.6536,-401.8877 744.9055,-329.3374 723,-325.9073 618.4083,-309.5292 493.9785,-323.88 426.9926,-334.3283"/>
+<polygon fill="#000000" stroke="#000000" points="426.0688,-330.9314 416.7468,-335.9664 427.174,-337.8437 426.0688,-330.9314"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-315.9073 25.5,-315.9073 25.5,-291.9073 109.5,-291.9073 109.5,-315.9073"/>
+<text text-anchor="middle" x="67.5" y="-301.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1024.5368,-157.8081C1015.4266,-132.2518 990.3026,-73.2118 946,-49.9073 888.5648,-19.6946 864.7751,-56.4899 801.5,-70.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-70.9073C739.4893,-83.0467 727.0345,-117.97 664.5,-108.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-108.9073C468.2261,-80.4626 403.2389,59.0782 225.5,-28.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-28.9073C125.5153,-81.6634 84.2797,-226.6805 71.8703,-282.0384"/>
+<polygon fill="#000000" stroke="#000000" points="68.4386,-281.349 69.7639,-291.8607 75.283,-282.8169 68.4386,-281.349"/>
+</g>
+<!-- sourcefile~printing.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~printing.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/printing.f90.html" xlink:title="printing.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="839.5,-438.9073 763.5,-438.9073 763.5,-414.9073 839.5,-414.9073 839.5,-438.9073"/>
+<text text-anchor="middle" x="801.5" y="-424.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">printing.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~printing.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~printing.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M913,-386.9073C895.5264,-402.9207 871.188,-412.6228 849.707,-418.4507"/>
+<polygon fill="#000000" stroke="#000000" points="848.6079,-415.1177 839.7548,-420.9378 850.305,-421.9088 848.6079,-415.1177"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="723,-438.9073 606,-438.9073 606,-414.9073 723,-414.9073 723,-438.9073"/>
+<text text-anchor="middle" x="664.5" y="-424.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-386.9073C765.5296,-386.9073 726.2992,-399.7703 699.0734,-410.9078"/>
+<polygon fill="#000000" stroke="#000000" points="697.4625,-407.7888 689.6142,-414.9059 700.1879,-414.2365 697.4625,-407.7888"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="696.5,-358.9073 632.5,-358.9073 632.5,-334.9073 696.5,-334.9073 696.5,-358.9073"/>
+<text text-anchor="middle" x="664.5" y="-344.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M913,-386.9073C876.4657,-420.3886 851.0556,-386.9073 801.5,-386.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-386.9073C765.5296,-386.9073 726.2992,-374.0442 699.0734,-362.9067"/>
+<polygon fill="#000000" stroke="#000000" points="700.1879,-359.5781 689.6142,-358.9086 697.4625,-366.0258 700.1879,-359.5781"/>
+</g>
+<!-- sourcefile~util.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~util.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/util.f90.html" xlink:title="util.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="940,-82.9073 886,-82.9073 886,-58.9073 940,-58.9073 940,-82.9073"/>
+<text text-anchor="middle" x="913" y="-68.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~util.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~util.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1014.3374,-157.7679C994.5079,-140.7711 958.2863,-109.7241 934.9481,-89.7199"/>
+<polygon fill="#000000" stroke="#000000" points="937.1488,-86.9964 927.2784,-83.1459 932.5932,-92.3112 937.1488,-86.9964"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-538.9073C310.0932,-523.7501 289.9065,-604.4941 225.5,-576.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-576.9073C201.92,-566.8074 193.626,-569.9941 171,-557.9073 139.9521,-541.3215 108.1986,-515.8774 88.1972,-498.596"/>
+<polygon fill="#000000" stroke="#000000" points="90.4582,-495.9236 80.6317,-491.9624 85.8432,-501.1869 90.4582,-495.9236"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M476.9072,-545.0299C448.1982,-546.401 410.8225,-546.0691 378.5,-538.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-538.9073C349.4492,-532.4704 337.4417,-535.5382 316,-514.9073 301.4223,-500.8808 253.0515,-376.4064 233.6526,-325.4804"/>
+<polygon fill="#000000" stroke="#000000" points="236.8984,-324.1685 230.0763,-316.0624 230.3543,-326.6536 236.8984,-324.1685"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M521.2471,-528.6151C514.7611,-496.6995 493.0718,-410.4501 441,-363.9073 436.6261,-359.9977 431.4985,-356.8119 426.0944,-354.2167"/>
+<polygon fill="#000000" stroke="#000000" points="427.4014,-350.9698 416.8228,-350.3833 424.7267,-357.4387 427.4014,-350.9698"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-538.9073C304.3707,-522.4821 291.5416,-500.3699 225.5,-462.9073"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="441,-708.9073 316,-708.9073 316,-684.9073 441,-684.9073 441,-708.9073"/>
+<text text-anchor="middle" x="378.5" y="-694.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M518.7928,-553.0354C508.4231,-578.2915 481.2839,-636.9926 441,-670.9073 436.7858,-674.4552 432.0194,-677.5755 427.0443,-680.3059"/>
+<polygon fill="#000000" stroke="#000000" points="425.3514,-677.2384 417.938,-684.8076 428.4536,-683.5135 425.3514,-677.2384"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="428.5,-628.9073 328.5,-628.9073 328.5,-604.9073 428.5,-604.9073 428.5,-628.9073"/>
+<text text-anchor="middle" x="378.5" y="-614.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M500.5243,-552.9497C476.3799,-565.6047 438.1984,-585.6171 410.9783,-599.8841"/>
+<polygon fill="#000000" stroke="#000000" points="409.0806,-596.9271 401.8483,-604.6695 412.3303,-603.1271 409.0806,-596.9271"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268.5,-548.9073 182.5,-548.9073 182.5,-524.9073 268.5,-524.9073 268.5,-548.9073"/>
+<text text-anchor="middle" x="225.5" y="-534.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-538.9073C345.9035,-531.6847 308.4362,-531.0719 278.7372,-532.3195"/>
+<polygon fill="#000000" stroke="#000000" points="278.3885,-528.8325 268.577,-532.8306 278.7402,-535.8237 278.3885,-528.8325"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node17" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node17"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268,-668.9073 183,-668.9073 183,-644.9073 268,-644.9073 268,-668.9073"/>
+<text text-anchor="middle" x="225.5" y="-654.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517.3177,-553.0796C505.6856,-574.5324 478.3161,-618.6235 441,-637.9073 390.2817,-664.1168 323.8169,-665.9003 278.1861,-663.0241"/>
+<polygon fill="#000000" stroke="#000000" points="278.4333,-659.5329 268.2062,-662.3001 277.9267,-666.5145 278.4333,-659.5329"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-504.9073C634.4423,-510.5316 601.288,-518.885 574.6843,-526.1296"/>
+<polygon fill="#000000" stroke="#000000" points="573.5407,-522.8142 564.829,-528.8439 575.3994,-529.5629 573.5407,-522.8142"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M761.9771,-480.9093C734.7932,-488.764 697.7374,-498.688 664.5,-504.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-504.9073C588.1314,-519.1971 380.796,-519.7773 316,-476.9073 262.7406,-441.67 238.857,-364.5984 229.9573,-326.3533"/>
+<polygon fill="#000000" stroke="#000000" points="233.3014,-325.2616 227.746,-316.24 226.463,-326.7569 233.3014,-325.2616"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M762.2413,-456.8717C747.0502,-452.2146 729.4971,-446.8334 713.4936,-441.9272"/>
+<polygon fill="#000000" stroke="#000000" points="714.3511,-438.5294 703.7644,-438.9445 712.2994,-445.2219 714.3511,-438.5294"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.1062,-456.8824C768.1918,-454.2501 763.2893,-451.24 759,-447.9073 739.586,-432.8228 739.6662,-423.9816 723,-405.9073 710.6061,-392.4661 696.1443,-377.8715 684.7006,-366.5606"/>
+<polygon fill="#000000" stroke="#000000" points="686.908,-363.8227 677.3227,-359.3092 682.0012,-368.8151 686.908,-363.8227"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node21" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node21"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-689.9073 32.5,-689.9073 32.5,-665.9073 102.5,-665.9073 102.5,-689.9073"/>
+<text text-anchor="middle" x="67.5" y="-675.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M795.3334,-481.0364C783.6219,-503.1824 756.328,-550.7486 723,-581.9073 549.7544,-743.8761 459.9855,-810.4672 225.5,-774.9073"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M910.2442,-232.07C898.5668,-283.412 853.3377,-480.2184 844,-489.9073 786.2763,-549.8016 747.4426,-549.2227 664.5,-542.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-542.9073C636.8608,-542.1566 606.1658,-541.679 580.4907,-541.3796"/>
+<polygon fill="#000000" stroke="#000000" points="580.2234,-537.8766 570.1853,-541.2658 580.146,-544.8761 580.2234,-537.8766"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-268.9073C609.6019,-280.7498 381.7213,-294.5058 279.6469,-300.6513"/>
+<polygon fill="#000000" stroke="#000000" points="279.3535,-297.1625 269.5819,-301.2572 279.7741,-304.1499 279.3535,-297.1625"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M906.5083,-207.6085C895.7929,-188.329 872.7065,-150.8306 844,-127.9073 827.8319,-114.9964 821.1227,-115.4683 801.5,-108.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-108.9073C743.7535,-89.5993 724.7594,-117.6403 664.5,-108.9073"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M902.4252,-232.1452C889.7736,-246.123 867.3567,-268.8673 844,-282.9073 800.4557,-309.0821 744.5634,-326.8836 706.8053,-336.9389"/>
+<polygon fill="#000000" stroke="#000000" points="705.4626,-333.6713 696.6618,-339.5701 707.2203,-340.447 705.4626,-333.6713"/>
+</g>
+<!-- sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~eigen.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/eigen.f90.html" xlink:title="eigen.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="697,-198.9073 632,-198.9073 632,-174.9073 697,-174.9073 697,-198.9073"/>
+<text text-anchor="middle" x="664.5" y="-184.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eigen.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M895.8514,-232.0318C874.7742,-245.8117 837.3773,-266.6932 801.5,-268.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-268.9073C752.8179,-271.9116 706.3351,-232.0471 682.0269,-206.8247"/>
+<polygon fill="#000000" stroke="#000000" points="684.3186,-204.1501 674.9391,-199.223 679.1988,-208.9238 684.3186,-204.1501"/>
+</g>
+<!-- sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node19" class="node">
+<title>sourcefile~mathlib.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node19"><a xlink:href="../sourcefile/mathlib.f90.html" xlink:title="mathlib.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="839.5,-160.9073 763.5,-160.9073 763.5,-136.9073 839.5,-136.9073 839.5,-160.9073"/>
+<text text-anchor="middle" x="801.5" y="-146.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~mathlib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M894.0855,-207.8631C876.2251,-196.4901 849.235,-179.3035 828.9968,-166.4165"/>
+<polygon fill="#000000" stroke="#000000" points="830.8223,-163.4295 820.5072,-161.0105 827.0624,-169.334 830.8223,-163.4295"/>
+</g>
+<!-- sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node20" class="node">
+<title>sourcefile~oqp_linalg.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node20"><a xlink:href="../sourcefile/oqp_linalg.f90.html" xlink:title="oqp_linalg.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="568.5,-158.9073 478.5,-158.9073 478.5,-134.9073 568.5,-134.9073 568.5,-158.9073"/>
+<text text-anchor="middle" x="523.5" y="-144.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M801.5,-108.9073C741.5733,-88.8703 727.553,-142.7828 664.5,-146.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-146.9073C636.2506,-148.7551 604.7494,-148.9334 578.6995,-148.5735"/>
+<polygon fill="#000000" stroke="#000000" points="578.6917,-145.073 568.6342,-148.4044 578.574,-152.072 578.6917,-145.073"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M214.64,-316.0044C187.8054,-345.8962 118.1654,-423.4698 85.2416,-460.1444"/>
+<polygon fill="#000000" stroke="#000000" points="82.5118,-457.9459 78.436,-467.7254 87.7208,-462.6222 82.5118,-457.9459"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M181.4882,-303.9073C162.3601,-303.9073 139.8025,-303.9073 119.8239,-303.9073"/>
+<polygon fill="#000000" stroke="#000000" points="119.6433,-300.4074 109.6433,-303.9073 119.6432,-307.4074 119.6433,-300.4074"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M366.8161,-330.7975C342.4642,-307.0152 283.6939,-257.0798 225.5,-263.9073"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-466.9073C621.3372,-478.5603 576.4397,-505.0212 549.2238,-522.931"/>
+<polygon fill="#000000" stroke="#000000" points="547.0587,-520.1686 540.6999,-528.6432 550.9556,-525.9837 547.0587,-520.1686"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M769.7469,-438.9624C765.7573,-441.4668 762.0231,-444.4285 759,-447.9073 725.5349,-486.4164 763.7383,-526.1948 723,-556.9073 678.8248,-590.2108 276.3539,-598.6892 225.5,-576.9073"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M763.2332,-438.5337C735.8231,-446.7505 697.9898,-457.8657 664.5,-466.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M664.5,-466.9073C603.1353,-483.4744 440.2459,-477.9917 378.5,-462.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-462.9073C349.9392,-454.5609 339.2593,-457.465 316,-438.9073 276.9342,-407.7382 248.6047,-355.0774 234.8552,-325.5835"/>
+<polygon fill="#000000" stroke="#000000" points="237.9167,-323.8591 230.6062,-316.1905 231.5389,-326.7442 237.9167,-323.8591"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge38" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-462.9073C313.2299,-443.8334 284.6465,-496.4586 225.5,-462.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-462.9073C162.1127,-426.9503 106.9158,-358.5177 81.8453,-324.3623"/>
+<polygon fill="#000000" stroke="#000000" points="84.553,-322.1335 75.8616,-316.0746 78.8776,-326.2311 84.553,-322.1335"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge39" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M763.3379,-426.9073C754.0151,-426.9073 743.7528,-426.9073 733.4762,-426.9073"/>
+<polygon fill="#000000" stroke="#000000" points="733.2292,-423.4074 723.2291,-426.9073 733.2291,-430.4074 733.2292,-423.4074"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge40" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M780.6926,-414.757C757.5247,-401.2283 719.907,-379.2617 693.7757,-364.0025"/>
+<polygon fill="#000000" stroke="#000000" points="695.4547,-360.93 685.0543,-358.9098 691.9249,-366.9749 695.4547,-360.93"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge41" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M605.7955,-424.0402C580.459,-423.3289 550.4977,-423.191 523.5,-424.9073"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge43" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.5665,-359.2164C638.0907,-370.625 619.7046,-388.4246 606,-405.9073 576.57,-443.4503 549.1016,-492.1862 534.478,-519.6497"/>
+<polygon fill="#000000" stroke="#000000" points="531.2513,-518.2658 529.6917,-528.7452 537.4459,-521.5256 531.2513,-518.2658"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge45" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M632.2641,-358.4985C604.0216,-367.7819 561.6429,-379.6197 523.5,-381.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M523.5,-381.9073C513.6765,-382.4964 464.9904,-368.8208 426.7073,-357.504"/>
+<polygon fill="#000000" stroke="#000000" points="427.3112,-354.0322 416.7285,-354.5385 425.3171,-360.7422 427.3112,-354.0322"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge46" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M634.6512,-334.8484C564.0263,-307.7286 380.9224,-245.6727 225.5,-263.9073"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge42" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M648.3573,-358.9157C634.9813,-369.7343 616.5183,-386.8341 606,-405.9073 571.6385,-468.2162 607.9113,-501.6923 570,-561.9073 533.5549,-619.7933 462.3595,-659.8823 417.7929,-680.578"/>
+<polygon fill="#000000" stroke="#000000" points="416.0994,-677.5028 408.437,-684.8197 418.9899,-683.8781 416.0994,-677.5028"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node18" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node18"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="425.5,-396.9073 331.5,-396.9073 331.5,-372.9073 425.5,-372.9073 425.5,-396.9073"/>
+<text text-anchor="middle" x="378.5" y="-382.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge44" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M523.5,-381.9073C494.655,-383.6372 462.5311,-384.419 435.8654,-384.7551"/>
+<polygon fill="#000000" stroke="#000000" points="435.5168,-381.2585 425.5552,-384.8665 435.5925,-388.2581 435.5168,-381.2585"/>
+</g>
+<!-- sourcefile~util.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge47" class="edge">
+<title>sourcefile~util.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M885.5853,-67.549C862.7801,-65.5508 829.6221,-64.4996 801.5,-70.9073"/>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge48" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M366.7474,-709.1967C342.2688,-733.2922 283.2771,-783.6692 225.5,-774.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-774.9073C169.0194,-766.3419 114.9115,-723.0308 87.0334,-697.268"/>
+<polygon fill="#000000" stroke="#000000" points="89.2362,-694.5338 79.5673,-690.202 84.4245,-699.6179 89.2362,-694.5338"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge50" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M328.3362,-607.739C297.8504,-601.2106 258.5613,-591.0682 225.5,-576.9073"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge49" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M357.1655,-604.7577C337.339,-593.5756 306.9049,-576.6861 280,-562.9073 273.7935,-559.7287 267.1329,-556.4467 260.6733,-553.3295"/>
+<polygon fill="#000000" stroke="#000000" points="261.9609,-550.0657 251.4291,-548.9116 258.9425,-556.3815 261.9609,-550.0657"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge51" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M332.595,-628.9086C315.5242,-633.3715 296.0201,-638.4706 278.3752,-643.0837"/>
+<polygon fill="#000000" stroke="#000000" points="277.023,-639.8195 268.2334,-645.7351 278.7936,-646.5919 277.023,-639.8195"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge52" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M328.2436,-615.4742C285.4537,-615.6647 222.8534,-619.3147 171,-635.9073 153.3579,-641.5525 151.9521,-649.4415 135,-656.9073 127.8134,-660.0723 120.0026,-662.967 112.3284,-665.5289"/>
+<polygon fill="#000000" stroke="#000000" points="111.1997,-662.2151 102.7383,-668.5912 113.3291,-668.8834 111.1997,-662.2151"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge53" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M213.0362,-524.6648C201.4565,-512.9618 184.0798,-494.5383 171,-476.9073 132.6615,-425.2285 96.0081,-358.5501 78.3932,-325.0709"/>
+<polygon fill="#000000" stroke="#000000" points="81.4794,-323.4195 73.75,-316.1733 75.2736,-326.6581 81.4794,-323.4195"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge55" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-188.9073C349.9139,-197.1668 338.4521,-193.3807 316,-212.9073 291.0818,-234.5787 304.0487,-255.2748 280,-277.9073 276.4644,-281.2346 272.4244,-284.2091 268.1781,-286.8493"/>
+<polygon fill="#000000" stroke="#000000" points="266.3057,-283.8857 259.2681,-291.8055 269.7085,-290.003 266.3057,-283.8857"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge57" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M523.5,-187.9073C459.4909,-180.4159 440.4134,-171.0182 378.5,-188.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-188.9073C349.9139,-197.1668 342.9224,-200.2358 316,-212.9073 274.2264,-232.5687 271.3721,-258.6773 225.5,-263.9073"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge56" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M631.7974,-177.6299C615.1015,-172.8935 594.3903,-167.018 575.5653,-161.6775"/>
+<polygon fill="#000000" stroke="#000000" points="576.4997,-158.3046 565.9241,-158.9425 574.5893,-165.0389 576.4997,-158.3046"/>
+</g>
+<!-- sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node24" class="node">
+<title>sourcefile~mathlib_types.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node24"><a xlink:href="../sourcefile/mathlib_types.f90.html" xlink:title="mathlib_types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="280,-120.9073 171,-120.9073 171,-96.9073 280,-96.9073 280,-120.9073"/>
+<text text-anchor="middle" x="225.5" y="-106.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge54" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M631.8684,-189.6168C603.1939,-191.4088 560.4057,-192.6507 523.5,-187.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M523.5,-187.9073C501.1864,-185.0393 495.2827,-181.0171 477,-167.9073 457.563,-153.9698 462.3999,-138.5888 441,-127.9073 394.3915,-104.643 335.031,-101.0101 290.417,-102.5653"/>
+<polygon fill="#000000" stroke="#000000" points="290.1075,-99.0755 280.2729,-103.0164 290.4185,-106.0686 290.1075,-99.0755"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge59" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-662.5902C161.0464,-665.4739 134.6935,-668.9765 112.6669,-671.9041"/>
+<polygon fill="#000000" stroke="#000000" points="112.0147,-668.4599 102.563,-673.247 112.937,-675.3989 112.0147,-668.4599"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node25" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node25"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-647.9073 0,-647.9073 0,-623.9073 135,-623.9073 135,-647.9073"/>
+<text text-anchor="middle" x="67.5" y="-633.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge58" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-651.2244C171.2048,-649.6908 158.3497,-647.9822 145.5288,-646.2782"/>
+<polygon fill="#000000" stroke="#000000" points="145.6538,-642.7641 135.2798,-644.916 144.7315,-649.7031 145.6538,-642.7641"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge60" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M337.5362,-372.8593C330.2286,-370.2293 322.7869,-367.226 316,-363.9073 291.9867,-352.1651 266.8098,-335.0228 249.1255,-322.0651"/>
+<polygon fill="#000000" stroke="#000000" points="251.1963,-319.2433 241.084,-316.0822 247.0178,-324.8595 251.1963,-319.2433"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge61" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M331.3914,-373.9378C325.7947,-371.2834 320.4869,-367.9907 316,-363.9073 286.8642,-337.3911 308.9855,-309.5876 280,-282.9073 261.1263,-265.5346 250.9773,-260.9182 225.5,-263.9073"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge63" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M789.3304,-160.9117C774.8064,-174.5125 749.1807,-196.2919 723,-207.9073 682.7145,-225.7804 400.6109,-274.5033 279.9915,-294.821"/>
+<polygon fill="#000000" stroke="#000000" points="279.1475,-291.4137 269.8664,-296.5237 280.3084,-298.3168 279.1475,-291.4137"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge65" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M769.6787,-136.8514C742.2671,-127.1401 701.405,-114.2557 664.5,-108.9073"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge62" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M763.3379,-159.4924C745.8354,-164.3471 725.0215,-170.1203 707.0185,-175.1138"/>
+<polygon fill="#000000" stroke="#000000" points="706.0455,-171.7515 697.3449,-177.797 707.9166,-178.4968 706.0455,-171.7515"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge64" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M763.368,-146.7211C735.8591,-145.5412 697.8498,-144.7258 664.5,-146.9073"/>
+</g>
+<!-- sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node22" class="node">
+<title>sourcefile~blas_wrap.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node22"><a xlink:href="../sourcefile/blas_wrap.f90.html" xlink:title="blas_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="422.5,-160.9073 334.5,-160.9073 334.5,-136.9073 422.5,-136.9073 422.5,-160.9073"/>
+<text text-anchor="middle" x="378.5" y="-146.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge66" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.4159,-147.5291C463.9608,-147.7285 447.8005,-147.9514 432.7603,-148.1588"/>
+<polygon fill="#000000" stroke="#000000" points="432.5122,-144.6618 422.5615,-148.2995 432.6088,-151.6612 432.5122,-144.6618"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_node23" class="node">
+<title>sourcefile~lapack_wrap.f90</title>
+<g id="a_sourcefile~~guess_json.f90~~EfferentGraph_node23"><a xlink:href="../sourcefile/lapack_wrap.f90.html" xlink:title="lapack_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="429.5,-80.9073 327.5,-80.9073 327.5,-56.9073 429.5,-56.9073 429.5,-80.9073"/>
+<text text-anchor="middle" x="378.5" y="-66.5073" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge67" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M506.3028,-134.8674C489.9539,-123.7144 464.4477,-107.0641 441,-94.9073 434.3293,-91.4487 427.092,-88.0959 419.9873,-85.0118"/>
+<polygon fill="#000000" stroke="#000000" points="421.0211,-81.6493 410.447,-80.988 418.3008,-88.0991 421.0211,-81.6493"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge69" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M335.7604,-160.9747C328.4654,-164.5361 321.4846,-169.095 316,-174.9073 282.7184,-210.1768 312.3732,-241.8021 280,-277.9073 277.1262,-281.1123 273.7722,-283.9581 270.1659,-286.4774"/>
+<polygon fill="#000000" stroke="#000000" points="268.1459,-283.6087 261.4006,-291.7788 271.7686,-289.5984 268.1459,-283.6087"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge70" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M342.9125,-160.957C333.7839,-164.7759 324.2268,-169.4509 316,-174.9073 268.9872,-206.0884 281.5291,-257.3338 225.5,-263.9073"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-263.9073C187.0815,-268.4146 144.6389,-279.5145 113.4255,-288.8807"/>
+<polygon fill="#000000" stroke="#000000" points="112.2462,-285.5812 103.7051,-291.8502 114.2914,-292.2758 112.2462,-285.5812"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge68" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M334.2461,-137.3376C317.794,-133.0364 298.9065,-128.0985 281.5379,-123.5577"/>
+<polygon fill="#000000" stroke="#000000" points="282.077,-120.0811 271.5169,-120.9378 280.3064,-126.8534 282.077,-120.0811"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge72" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M360.9962,-80.914C346.7459,-91.6107 327.2159,-108.5376 316,-127.9073 281.6446,-187.2381 323.1422,-224.6231 280,-277.9073 277.4386,-281.0708 274.4004,-283.8728 271.089,-286.3502"/>
+<polygon fill="#000000" stroke="#000000" points="268.9767,-283.5455 262.411,-291.8607 272.7291,-289.4548 268.9767,-283.5455"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge73" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M350.3238,-56.8811C312.4468,-41.5075 247.3374,-18.0972 225.5,-28.9073"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_json.f90~~EfferentGraph_edge71" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M332.595,-80.9086C316.4808,-85.1214 298.1982,-89.9012 281.3581,-94.3038"/>
+<polygon fill="#000000" stroke="#000000" points="280.4264,-90.9297 271.6369,-96.8453 282.197,-97.7021 280.4264,-90.9297"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefileguess_jsonf90EfferentGraph = svgPanZoom('#sourcefileguess_jsonf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">guess_json_mod</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w">  </span><span class="k">implicit none</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="k">  </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">module_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;guess_json_mod&quot;</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="k">contains</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="k">  subroutine </span><span class="n">guess_json_C</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;guess_json&quot;</span><span class="p">)</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="w">    </span><span class="k">use </span><span class="n">c_interop</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">oqp_handle_t</span><span class="p">,</span><span class="w"> </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">    </span><span class="n">inf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">oqp_handle_get_info</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">    </span><span class="k">call </span><span class="n">guess_json</span><span class="p">(</span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">guess_json_C</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">guess_json</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">IW</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">    </span><span class="k">use </span><span class="n">guess</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">get_ab_initio_density</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">    </span><span class="k">use </span><span class="n">printing</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">print_module_info</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;guess_json&quot;</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a>
+<a id="ln-38" name="ln-38" href="#ln-38"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="p">:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">err</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">  </span><span class="c">! tagarray</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">      </span><span class="n">Smat</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="w">      </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="w">      </span><span class="n">dmat_b</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_b</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">(:)</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a><span class="w">      </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">      </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="w">      </span><span class="n">OQP_SM</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="w">  </span><span class="c">! Files open</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="w">  </span><span class="c">! 1. XYZ: Read : Geometric data, ATOMS</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">  </span><span class="c">! 3. LOG: Read Write: Main output file</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">    </span><span class="k">call </span><span class="n">print_module_info</span><span class="p">(</span><span class="s2">&quot;Loading JSON&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Using stored SCF guess&quot;</span><span class="p">)</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">  </span><span class="c">! load basis set</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="w">  </span><span class="c">!  Allocate H, S ,T and D matrices</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">    </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="w">    </span><span class="c">! load general data</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_SM</span><span class="p">,</span><span class="w"> </span><span class="n">smat</span><span class="p">)</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="c">! load alpha data</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">)</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">)</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">)</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="c">! allocate beta</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_DM_B_comment</span><span class="p">)</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_E_MO_B_comment</span><span class="p">)</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_VEC_MO_B_comment</span><span class="p">)</span>
+<a id="ln-87" name="ln-87" href="#ln-87"></a>
+<a id="ln-88" name="ln-88" href="#ln-88"></a><span class="w">   </span><span class="c">! load beta</span>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">)</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">)</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_b</span><span class="p">)</span>
+<a id="ln-93" name="ln-93" href="#ln-93"></a>
+<a id="ln-94" name="ln-94" href="#ln-94"></a>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">  </span><span class="c">!  For ROHF/UHF</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">INFOS</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="n">MO_B</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MO_A</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="c">! Calculate Density Matrix</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">    </span><span class="c">! RHF</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="o">=</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">)</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">    </span><span class="c">! ROHF/UHF</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">      </span><span class="k">else</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a><span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">)</span>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">      </span><span class="k">endif</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="k">    endif</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">    </span><span class="c">! Broadcast MO and density matrices to all processes</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">    </span><span class="c">! Broadcast the density matrices to all processes</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="w">    </span><span class="k">else</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="k">    call </span><span class="n">pe</span><span class="p">%</span><span class="n">barrier</span><span class="p">()</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a><span class="w">    </span><span class="k">write</span><span class="w"> </span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/x,a,/)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;...... End of initial orbital guess ......&#39;</span>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="w">    </span><span class="k">call </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="o">=</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a><span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">guess_json</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="k">end module </span><span class="n">guess_json_mod</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,1362 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_ab_initio_density &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_ab_initio_density
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">38 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/guess.f90.html'>guess.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/guess.html'>guess</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_ab_initio_density</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/get_ab_initio_density.html#src">get_ab_initio_density</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine get_ab_initio_density(alpha_density, alpha_orbital, beta_density, beta_orbital, infos, basis)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_ab_initio_density~~UsesGraph Pages: 1 -->
+<svg id="procget_ab_initio_densityUsesGraph" width="641pt" height="372pt"
+ viewBox="0.00 0.00 641.00 372.46" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_ab_initio_density~~UsesGraph" class="graph" transform="scale(.7586 .7586) rotate(0) translate(4 487)">
+<title>proc~~get_ab_initio_density~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-487 841,-487 841,4 -4,4"/>
+<!-- proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node1" class="node">
+<title>proc~get_ab_initio_density</title>
+<polygon fill="none" stroke="#000000" points="837,-165 713,-165 713,-141 837,-141 837,-165"/>
+<text text-anchor="middle" x="775" y="-150.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_ab_initio_density</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="479.5,-281 409.5,-281 409.5,-257 479.5,-257 479.5,-281"/>
+<text text-anchor="middle" x="444.5" y="-266.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~basis_tools -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge1" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M765.8301,-165.112C746.9787,-189.0826 701.3085,-242.5345 650,-269"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650,-269C599.9511,-294.8158 533.4946,-288.7963 489.8914,-280.3853"/>
+<polygon fill="#000000" stroke="#000000" points="490.3643,-276.9096 479.8654,-278.3315 488.9595,-283.7672 490.3643,-276.9096"/>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node3" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node3"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="677,-165 623,-165 623,-141 677,-141 677,-165"/>
+<text text-anchor="middle" x="650" y="-150.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~mathlib -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge2" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M712.8662,-153C704.1751,-153 695.4745,-153 687.4367,-153"/>
+<polygon fill="#000000" stroke="#000000" points="687.3087,-149.5001 677.3087,-153 687.3086,-156.5001 687.3087,-149.5001"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node4" class="node">
+<title>module~messages</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node4"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="343,-45 277,-45 277,-21 343,-21 343,-45"/>
+<text text-anchor="middle" x="310" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~messages -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge3" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M747.117,-140.9417C695.9982,-119.3769 583.3872,-74.3729 484,-52 440.0185,-42.0994 388.5773,-37.293 353.0929,-35.0014"/>
+<polygon fill="#000000" stroke="#000000" points="353.2672,-31.5057 343.0737,-34.3938 352.8435,-38.4928 353.2672,-31.5057"/>
+</g>
+<!-- module~types -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node5" class="node">
+<title>module~types</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node5"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="580.5,-321 526.5,-321 526.5,-297 580.5,-297 580.5,-321"/>
+<text text-anchor="middle" x="553.5" y="-306.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~types -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge4" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650,-269C630.736,-278.9366 608.4255,-288.3137 590.1122,-295.4879"/>
+<polygon fill="#000000" stroke="#000000" points="588.7358,-292.2675 580.6664,-299.1331 591.256,-298.7981 588.7358,-292.2675"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node9" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node9"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-283 0,-283 0,-259 94,-259 94,-283"/>
+<text text-anchor="middle" x="47" y="-268.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.2245,-269.1775C340.3691,-269.5239 187.524,-270.293 104.0759,-270.7128"/>
+<polygon fill="#000000" stroke="#000000" points="103.9898,-267.2131 94.0076,-270.7635 104.0251,-274.213 103.9898,-267.2131"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node10" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node10"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="369,-403 251,-403 251,-379 369,-379 369,-403"/>
+<text text-anchor="middle" x="310" y="-388.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.5238,-281.1347C415.6275,-285.0041 409.6454,-289.683 405,-295 380.6728,-322.8441 396.4879,-345.2709 369,-370 367.6663,-371.1998 366.2594,-372.3322 364.7944,-373.4009"/>
+<polygon fill="#000000" stroke="#000000" points="362.5812,-370.6514 355.8713,-378.8507 366.2298,-376.6254 362.5812,-370.6514"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node11" class="node">
+<title>module~constants</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node11"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="342,-243 278,-243 278,-219 342,-219 342,-243"/>
+<text text-anchor="middle" x="310" y="-228.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.1617,-259.0159C391.6933,-254.0806 370.4852,-248.0888 352.1727,-242.915"/>
+<polygon fill="#000000" stroke="#000000" points="352.914,-239.4875 342.3391,-240.1367 351.0108,-246.2238 352.914,-239.4875"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node13" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node13"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-126 133,-126 133,-102 212,-102 212,-126"/>
+<text text-anchor="middle" x="172.5" y="-111.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M437.7818,-256.9713C426.2386,-237.3799 400.7855,-198.6023 369,-177 344.8836,-160.6098 271.9841,-139.5904 222.0931,-126.4563"/>
+<polygon fill="#000000" stroke="#000000" points="222.6924,-122.9955 212.1327,-123.8581 220.9255,-129.7689 222.6924,-122.9955"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node15" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node15"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="337,-361 283,-361 283,-337 337,-337 337,-361"/>
+<text text-anchor="middle" x="310" y="-346.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.0723,-281.1503C401.4265,-294.6199 364.7182,-316.4539 339.0782,-331.7044"/>
+<polygon fill="#000000" stroke="#000000" points="336.9846,-328.8773 330.1792,-336.9975 340.563,-334.8935 336.9846,-328.8773"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node16" class="node">
+<title>module~precision</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node16"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-243 142,-243 142,-219 203,-219 203,-243"/>
+<text text-anchor="middle" x="172.5" y="-228.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.4329,-256.9458C413.402,-233.2844 362.3958,-183.666 310,-191"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node14" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node14"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="587,-127 520,-127 520,-103 587,-103 587,-127"/>
+<text text-anchor="middle" x="553.5" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge11" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M622.8626,-142.3138C613.8316,-138.7575 603.5715,-134.7173 593.7641,-130.8553"/>
+<polygon fill="#000000" stroke="#000000" points="594.7569,-127.4847 584.1699,-127.0773 592.1921,-133.9979 594.7569,-127.4847"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge12" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M622.6111,-155.5402C564.7536,-161.0208 425.8791,-174.78 310,-191"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node6" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-66 130,-66 130,-42 215,-42 215,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-38.0835C261.2346,-40.4478 242.4505,-43.3167 225.1166,-45.964"/>
+<polygon fill="#000000" stroke="#000000" points="224.471,-42.5219 215.1141,-47.4917 225.5279,-49.4417 224.471,-42.5219"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node7" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-24 136.5,-24 136.5,0 208.5,0 208.5,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-27.9165C259.3333,-25.2618 237.7866,-21.971 218.8042,-19.0719"/>
+<polygon fill="#000000" stroke="#000000" points="219.2708,-15.6027 208.857,-17.5527 218.2139,-22.5224 219.2708,-15.6027"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M279.429,-45.1157C270.1151,-49.1651 259.9719,-53.9448 251,-59 231.7306,-69.8574 211.3096,-84.2666 196.1271,-95.6127"/>
+<polygon fill="#000000" stroke="#000000" points="193.6993,-93.0609 187.8416,-101.8891 197.9262,-98.6407 193.6993,-93.0609"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge16" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7935,-42.6923C267.5907,-46.6088 258.17,-51.9232 251,-59 248.0951,-61.8671 202.293,-164.1622 182.0243,-209.6105"/>
+<polygon fill="#000000" stroke="#000000" points="178.7674,-208.3205 177.8932,-218.8792 185.1611,-211.1702 178.7674,-208.3205"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge19" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.2759,-299.0095C514.4025,-294.6523 500.202,-289.4411 486.9919,-284.5934"/>
+<polygon fill="#000000" stroke="#000000" points="488.1891,-281.3045 477.5954,-281.1451 485.7775,-287.876 488.1891,-281.3045"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node8" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node8"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214.5,-422 130.5,-422 130.5,-398 214.5,-398 214.5,-422"/>
+<text text-anchor="middle" x="172.5" y="-407.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge17" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M546.6472,-321.2211C531.7475,-346.5114 493.7475,-404.4392 444.5,-431"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-431C407.8229,-450.7812 293.0533,-433.4463 224.8773,-420.6742"/>
+<polygon fill="#000000" stroke="#000000" points="225.2412,-417.1807 214.7631,-418.7489 223.9322,-424.0572 225.2412,-417.1807"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge18" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-309C425.2286,-311.8497 420.4463,-316.1291 405,-328 385.5064,-342.9815 389.2626,-356.0762 369,-370 366.6478,-371.6164 364.1576,-373.122 361.5825,-374.5227"/>
+<polygon fill="#000000" stroke="#000000" points="360.0483,-371.3768 352.5771,-378.8889 363.1022,-377.6756 360.0483,-371.3768"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node12" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node12"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="345.5,-483 274.5,-483 274.5,-459 345.5,-459 345.5,-483"/>
+<text text-anchor="middle" x="310" y="-468.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge20" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-431C416.6462,-446.0224 382.4277,-456.0987 355.476,-462.3804"/>
+<polygon fill="#000000" stroke="#000000" points="354.5258,-459.0063 345.5307,-464.6045 356.0536,-465.8376 354.5258,-459.0063"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge21" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-309C410.6295,-314.0085 373.4101,-325.5738 346.7276,-334.9869"/>
+<polygon fill="#000000" stroke="#000000" points="345.2703,-331.7916 337.0462,-338.4711 347.6406,-338.3781 345.2703,-331.7916"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge22" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.4625,-306.8125C504.3076,-305.5433 472.2057,-304.9031 444.5,-309"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-309C353.6472,-322.4345 250.4308,-274.6493 201.3608,-247.8945"/>
+<polygon fill="#000000" stroke="#000000" points="203.0068,-244.8051 192.5658,-243.0056 199.6057,-250.9233 203.0068,-244.8051"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node17" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="473.5,-361 415.5,-361 415.5,-337 473.5,-337 473.5,-361"/>
+<text text-anchor="middle" x="444.5" y="-346.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge23" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.2759,-318.9905C513.2625,-323.766 497.4538,-329.5674 483.2174,-334.7918"/>
+<polygon fill="#000000" stroke="#000000" points="481.8484,-331.5659 473.6664,-338.2968 484.26,-338.1374 481.8484,-331.5659"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge24" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8896,-399.168C242.1006,-400.3825 233.097,-401.6266 224.4691,-402.8188"/>
+<polygon fill="#000000" stroke="#000000" points="223.9752,-399.3537 214.5485,-404.1897 224.9335,-406.2878 223.9752,-399.3537"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge25" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.7624,-231C258.4775,-231 233.7931,-231 213.1757,-231"/>
+<polygon fill="#000000" stroke="#000000" points="213.1198,-227.5001 203.1198,-231 213.1197,-234.5001 213.1198,-227.5001"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge26" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.6713,-458.9863C272.6994,-454.5948 261.3356,-449.5814 251,-445 237.1687,-438.869 221.9798,-432.1044 208.6782,-426.1697"/>
+<polygon fill="#000000" stroke="#000000" points="209.9308,-422.896 199.3725,-422.0159 207.0775,-429.2881 209.9308,-422.896"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge27" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.005,-458.8558C280.6933,-447.9523 262.1741,-430.8042 251,-412 222.12,-363.3996 239.8745,-340.7672 215,-290 208.2505,-276.2247 198.3328,-262.2334 189.7754,-251.335"/>
+<polygon fill="#000000" stroke="#000000" points="192.3018,-248.8931 183.2906,-243.3209 186.8602,-253.2964 192.3018,-248.8931"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node21" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="213,-483 132,-483 132,-459 213,-459 213,-483"/>
+<text text-anchor="middle" x="172.5" y="-468.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge28" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-471C258.813,-471 240.4926,-471 223.6759,-471"/>
+<polygon fill="#000000" stroke="#000000" points="223.4389,-467.5001 213.4389,-471 223.4389,-474.5001 223.4389,-467.5001"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node18" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node18"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="477.5,-127 411.5,-127 411.5,-103 477.5,-103 477.5,-127"/>
+<text text-anchor="middle" x="444.5" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge29" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M519.907,-115C509.7628,-115 498.4795,-115 487.7965,-115"/>
+<polygon fill="#000000" stroke="#000000" points="487.7947,-111.5001 477.7947,-115 487.7947,-118.5001 487.7947,-111.5001"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node19" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node19"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="484,-85 405,-85 405,-61 484,-61 484,-85"/>
+<text text-anchor="middle" x="444.5" y="-70.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge30" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522.265,-102.9645C510.7487,-98.527 497.5263,-93.4322 485.29,-88.7173"/>
+<polygon fill="#000000" stroke="#000000" points="486.3293,-85.3669 475.7396,-85.0373 483.8124,-91.8988 486.3293,-85.3669"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge31" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.9892,-357.791C272.8455,-361.3064 261.2857,-365.571 251,-370 234.9812,-376.8977 217.6589,-385.5863 203.3721,-393.102"/>
+<polygon fill="#000000" stroke="#000000" points="201.6501,-390.0536 194.4662,-397.8409 204.9384,-396.2332 201.6501,-390.0536"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge32" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7596,-350.8444C246.5977,-352.3188 181.3322,-351.5551 130,-332 105.6656,-322.7297 82.1599,-304.2689 66.4137,-290.0724"/>
+<polygon fill="#000000" stroke="#000000" points="68.6304,-287.3543 58.9234,-283.1086 63.864,-292.481 68.6304,-287.3543"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge33" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7735,-339.9771C272.2703,-335.7585 260.5188,-330.0834 251,-323 224.1228,-302.9995 200.2536,-272.19 186.0843,-251.8159"/>
+<polygon fill="#000000" stroke="#000000" points="188.7927,-249.5739 180.2807,-243.2654 183.0008,-253.5051 188.7927,-249.5739"/>
+</g>
+<!-- mpi -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node20" class="node">
+<title>mpi</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node20"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199.5,-323 145.5,-323 145.5,-299 199.5,-299 199.5,-323"/>
+<text text-anchor="middle" x="172.5" y="-308.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge34" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-341.4924C261.8362,-335.6893 232.5476,-327.595 209.4233,-321.2043"/>
+<polygon fill="#000000" stroke="#000000" points="210.1802,-317.7823 199.6091,-318.492 208.3155,-324.5294 210.1802,-317.7823"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge35" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-240.7851C127.617,-245.3053 110.4491,-250.7772 94.6413,-255.8155"/>
+<polygon fill="#000000" stroke="#000000" points="93.4782,-252.5127 85.0134,-258.8842 95.604,-259.1821 93.4782,-252.5127"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge37" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.9315,-102.8771C415.6442,-100.045 410.0936,-96.9825 405,-94 381.3454,-80.1491 355.1839,-63.2268 336.314,-50.7226"/>
+<polygon fill="#000000" stroke="#000000" points="338.1996,-47.7732 327.9363,-45.1438 334.3198,-53.5997 338.1996,-47.7732"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge38" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.2793,-127.072C408.5426,-146.6997 359.6704,-184.0475 310,-191"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-191C276.4499,-195.6961 239.6585,-206.7261 212.5822,-216.0165"/>
+<polygon fill="#000000" stroke="#000000" points="211.3526,-212.7385 203.0703,-219.3456 213.6651,-219.3456 211.3526,-212.7385"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_node22" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~get_ab_initio_density~~UsesGraph_node22"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="353.5,-125 266.5,-125 266.5,-101 353.5,-101 353.5,-125"/>
+<text text-anchor="middle" x="310" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge36" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.2528,-114.5056C396.9586,-114.2931 379.8831,-114.0392 363.8637,-113.8009"/>
+<polygon fill="#000000" stroke="#000000" points="363.5799,-110.2964 353.529,-113.6473 363.4758,-117.2957 363.5799,-110.2964"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge40" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.873,-61.215C388.7021,-56.4058 369.9521,-50.8296 353.4119,-45.9106"/>
+<polygon fill="#000000" stroke="#000000" points="354.0245,-42.4413 343.4416,-42.9455 352.029,-49.1509 354.0245,-42.4413"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge41" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.6974,-66.8119C362.9449,-62.48 297.1047,-61.972 251,-92 229.2292,-106.1793 197.2407,-174.1482 181.679,-209.5109"/>
+<polygon fill="#000000" stroke="#000000" points="178.354,-208.3806 177.5765,-218.9468 184.7735,-211.1717 178.354,-208.3806"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_ab_initio_density~~UsesGraph_edge39" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.873,-84.785C391.0219,-88.9043 375.2786,-93.5863 360.6525,-97.936"/>
+<polygon fill="#000000" stroke="#000000" points="359.3296,-94.6779 350.7423,-100.8833 361.3251,-101.3875 359.3296,-94.6779"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_ab_initio_densityUsesGraph = svgPanZoom('#procget_ab_initio_densityUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief  this will calculatte the density matrix</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-alpha_density"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>alpha_density</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-alpha_orbital"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>alpha_orbital</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta_density"></span>
+              real(kind=dp),
+            </td>
+<td></td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta_density</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta_orbital"></span>
+              real(kind=dp),
+            </td>
+<td></td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta_orbital</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~18"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~34"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_ab_initio_density~~CallsGraph Pages: 1 -->
+<svg id="procget_ab_initio_densityCallsGraph" width="641pt" height="123pt"
+ viewBox="0.00 0.00 641.00 122.93" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_ab_initio_density~~CallsGraph" class="graph" transform="scale(.8781 .8781) rotate(0) translate(4 136)">
+<title>proc~~get_ab_initio_density~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-136 726,-136 726,4 -4,4"/>
+<!-- proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node1" class="node">
+<title>proc~get_ab_initio_density</title>
+<polygon fill="none" stroke="#000000" points="124,-105 0,-105 0,-81 124,-81 124,-105"/>
+<text text-anchor="middle" x="62" y="-90.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_ab_initio_density</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="722,-87 629,-87 629,-63 722,-63 722,-87"/>
+<text text-anchor="middle" x="675.5" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;interface~show_message -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge1" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M111.7036,-105.0195C163.506,-116.4786 247.201,-132 320.5,-132 320.5,-132 320.5,-132 436,-132 507.8253,-132 588.5552,-107.4384 635.5493,-90.5614"/>
+<polygon fill="#000000" stroke="#000000" points="636.8596,-93.809 645.0499,-87.0882 634.4561,-87.2345 636.8596,-93.809"/>
+</g>
+<!-- proc~orb_to_dens -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node3" class="node">
+<title>proc~orb_to_dens</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node3"><a xlink:href="../proc/orb_to_dens.html" xlink:title="orb_to_dens">
+<polygon fill="#d9534f" stroke="#d9534f" points="237,-85 160,-85 160,-61 237,-61 237,-85"/>
+<text text-anchor="middle" x="198.5" y="-70.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orb_to_dens</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge2" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens</title>
+<path fill="none" stroke="#000000" d="M124.2583,-83.8779C132.7619,-82.632 141.3904,-81.3677 149.6105,-80.1633"/>
+<polygon fill="#000000" stroke="#000000" points="150.377,-83.5884 159.7639,-78.6756 149.3622,-76.6624 150.377,-83.5884"/>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node4" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node4"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="359.5,-34 281.5,-34 281.5,-10 359.5,-10 359.5,-34"/>
+<text text-anchor="middle" x="320.5" y="-19.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~orb_to_dens&#45;&gt;interface~pack_matrix -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge3" class="edge">
+<title>proc~orb_to_dens&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M227.4123,-60.9137C243.7025,-54.1039 264.2607,-45.5099 281.9113,-38.1313"/>
+<polygon fill="#000000" stroke="#000000" points="283.4961,-41.2624 291.3724,-34.1763 280.7962,-34.804 283.4961,-41.2624"/>
+</g>
+<!-- proc~oqp_dsyr2k_i64 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node5" class="node">
+<title>proc~oqp_dsyr2k_i64</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node5"><a xlink:href="../proc/oqp_dsyr2k_i64.html" xlink:title="oqp_dsyr2k_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="368,-85 273,-85 273,-61 368,-61 368,-85"/>
+<text text-anchor="middle" x="320.5" y="-70.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsyr2k_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge4" class="edge">
+<title>proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64</title>
+<path fill="none" stroke="#000000" d="M237.1016,-73C245.2299,-73 253.9745,-73 262.6346,-73"/>
+<polygon fill="#000000" stroke="#000000" points="262.72,-76.5001 272.72,-73 262.72,-69.5001 262.72,-76.5001"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node7" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node7"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="468,-24 404,-24 404,0 468,0 468,-24"/>
+<text text-anchor="middle" x="436" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge5" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M359.603,-18.6145C370.6263,-17.6601 382.665,-16.6178 393.8579,-15.6487"/>
+<polygon fill="#000000" stroke="#000000" points="394.1852,-19.1335 403.846,-14.7839 393.5813,-12.1596 394.1852,-19.1335"/>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge7" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M368.1855,-74.3392C379.8961,-74.6137 392.4003,-74.8611 404,-75 478.1662,-75.8881 563.7369,-75.6844 618.6694,-75.3956"/>
+<polygon fill="#000000" stroke="#000000" points="618.917,-78.8943 628.8975,-75.3389 618.8782,-71.8945 618.917,-78.8943"/>
+</g>
+<!-- dsyr2k -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node6" class="node">
+<title>dsyr2k</title>
+<polygon fill="#777777" stroke="#777777" points="463,-66 409,-66 409,-42 463,-42 463,-66"/>
+<text text-anchor="middle" x="436" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyr2k</text>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge6" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k</title>
+<path fill="none" stroke="#000000" d="M368.1451,-65.1623C378.3672,-63.4807 389.0252,-61.7275 398.7838,-60.1221"/>
+<polygon fill="#000000" stroke="#000000" points="399.6576,-63.5255 408.9568,-58.4487 398.5213,-56.6184 399.6576,-63.5255"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge8" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M468.3119,-23.6434C479.5365,-27.4973 492.2544,-31.6524 504,-35 541.9706,-45.822 585.2748,-55.9046 618.8689,-63.2398"/>
+<polygon fill="#000000" stroke="#000000" points="618.452,-66.7306 628.9662,-65.4258 619.9332,-59.8891 618.452,-66.7306"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node8" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~get_ab_initio_density~~CallsGraph_node8"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="593,-26 504,-26 504,-2 593,-2 593,-26"/>
+<text text-anchor="middle" x="548.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge9" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M468.238,-12.5731C476.1715,-12.7142 484.8895,-12.8691 493.5657,-13.0234"/>
+<polygon fill="#000000" stroke="#000000" points="493.6215,-16.5248 503.6822,-13.2032 493.746,-9.5259 493.6215,-16.5248"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge11" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M573.5911,-26.0516C592.9859,-35.3672 620.0378,-48.3607 641.3963,-58.6195"/>
+<polygon fill="#000000" stroke="#000000" points="639.9315,-61.7987 650.461,-62.9734 642.9623,-55.4888 639.9315,-61.7987"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_node9" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="702.5,-26 648.5,-26 648.5,-2 702.5,-2 702.5,-26"/>
+<text text-anchor="middle" x="675.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~get_ab_initio_density~~CallsGraph_edge10" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M593.2754,-14C607.9578,-14 624.1068,-14 638.1772,-14"/>
+<polygon fill="#000000" stroke="#000000" points="638.4731,-17.5001 648.4731,-14 638.473,-10.5001 638.4731,-17.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_ab_initio_densityCallsGraph = svgPanZoom('#procget_ab_initio_densityCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_ab_initio_density~~CalledByGraph Pages: 1 -->
+<svg id="procget_ab_initio_densityCalledByGraph" width="385pt" height="158pt"
+ viewBox="0.00 0.00 385.00 158.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_ab_initio_density~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 154)">
+<title>proc~~get_ab_initio_density~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-154 381,-154 381,4 -4,4"/>
+<!-- proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node1" class="node">
+<title>proc~get_ab_initio_density</title>
+<polygon fill="none" stroke="#000000" points="377,-87 253,-87 253,-63 377,-63 377,-87"/>
+<text text-anchor="middle" x="315" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_ab_initio_density</text>
+</g>
+<!-- proc~guess_hcore -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node2" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node2"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="214.5,-150 135.5,-150 135.5,-126 214.5,-126 214.5,-150"/>
+<text text-anchor="middle" x="175" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge1" class="edge">
+<title>proc~guess_hcore&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M201.9934,-125.853C223.8791,-116.0044 254.922,-102.0351 278.9359,-91.2289"/>
+<polygon fill="#000000" stroke="#000000" points="280.4065,-94.4052 288.0895,-87.1097 277.5339,-88.0217 280.4065,-94.4052"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node3" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node3"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-108 133,-108 133,-84 217,-84 217,-108"/>
+<text text-anchor="middle" x="175" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge2" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M217.0046,-89.6993C225.1973,-88.4704 234.0026,-87.1496 242.8536,-85.822"/>
+<polygon fill="#000000" stroke="#000000" points="243.4659,-89.2694 252.836,-84.3246 242.4274,-82.3468 243.4659,-89.2694"/>
+</g>
+<!-- proc~guess_json -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node4" class="node">
+<title>proc~guess_json</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node4"><a xlink:href="../proc/guess_json.html" xlink:title="guess_json">
+<polygon fill="#d9534f" stroke="#d9534f" points="210,-66 140,-66 140,-42 210,-42 210,-66"/>
+<text text-anchor="middle" x="175" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge3" class="edge">
+<title>proc~guess_json&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M210.3279,-59.2992C220.3521,-60.8028 231.6454,-62.4968 243.0087,-64.2013"/>
+<polygon fill="#000000" stroke="#000000" points="242.574,-67.6752 252.9826,-65.6974 243.6124,-60.7526 242.574,-67.6752"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node5" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node5"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="207,-24 143,-24 143,0 207,0 207,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge4" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M201.9934,-24.147C223.8791,-33.9956 254.922,-47.9649 278.9359,-58.7711"/>
+<polygon fill="#000000" stroke="#000000" points="277.5339,-61.9783 288.0895,-62.8903 280.4065,-55.5948 277.5339,-61.9783"/>
+</g>
+<!-- proc~guess_hcore_c -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node6" class="node">
+<title>proc~guess_hcore_c</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node6"><a xlink:href="../proc/guess_hcore_c.html" xlink:title="guess_hcore_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="94.5,-150 2.5,-150 2.5,-126 94.5,-126 94.5,-150"/>
+<text text-anchor="middle" x="48.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore_c&#45;&gt;proc~guess_hcore -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge5" class="edge">
+<title>proc~guess_hcore_c&#45;&gt;proc~guess_hcore</title>
+<path fill="none" stroke="#000000" d="M94.5272,-138C104.4891,-138 115.0679,-138 125.1682,-138"/>
+<polygon fill="#000000" stroke="#000000" points="125.4747,-141.5001 135.4747,-138 125.4746,-134.5001 125.4747,-141.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node7" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node7"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-108 0,-108 0,-84 97,-84 97,-108"/>
+<text text-anchor="middle" x="48.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge6" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-96C105.4673,-96 114.2563,-96 122.7704,-96"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-99.5001 132.9762,-96 122.9762,-92.5001 122.9762,-99.5001"/>
+</g>
+<!-- proc~guess_json_c -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node8" class="node">
+<title>proc~guess_json_c</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node8"><a xlink:href="../proc/guess_json_c.html" xlink:title="guess_json_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="90,-66 7,-66 7,-42 90,-42 90,-66"/>
+<text text-anchor="middle" x="48.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json_c&#45;&gt;proc~guess_json -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge7" class="edge">
+<title>proc~guess_json_c&#45;&gt;proc~guess_json</title>
+<path fill="none" stroke="#000000" d="M90.2714,-54C102.8779,-54 116.776,-54 129.6064,-54"/>
+<polygon fill="#000000" stroke="#000000" points="129.6221,-57.5001 139.6221,-54 129.6221,-50.5001 129.6221,-57.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_node9" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~get_ab_initio_density~~CalledByGraph_node9"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="81.5,-24 15.5,-24 15.5,0 81.5,0 81.5,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~get_ab_initio_density~~CalledByGraph_edge8" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M81.7364,-12C97.3766,-12 116.2042,-12 132.8355,-12"/>
+<polygon fill="#000000" stroke="#000000" points="132.8589,-15.5001 142.8589,-12 132.8589,-8.5001 132.8589,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="k">subroutine </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">alpha_density</span><span class="p">,</span><span class="n">alpha_orbital</span><span class="p">,</span><span class="n">beta_density</span><span class="p">,</span><span class="n">beta_orbital</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">)</span>
+<span class="w">   </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">orb_to_dens</span>
+<span class="w">   </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<span class="w">   </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">   </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">   </span><span class="k">implicit none</span>
+<span class="k">   type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">   </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">   </span><span class="kt">integer</span><span class="w">    </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+<span class="w">   </span><span class="kt">integer</span><span class="w">    </span><span class="kd">::</span><span class="w"> </span><span class="n">scftype</span><span class="p">,</span><span class="w"> </span><span class="n">nocc</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">nbasis</span><span class="p">,</span><span class="w"> </span><span class="n">na2</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">)</span><span class="w">   </span><span class="kd">::</span><span class="w"> </span><span class="n">alpha_density</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                 </span><span class="n">alpha_orbital</span><span class="p">(:,:)</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">optional</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">beta_density</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="n">beta_orbital</span><span class="p">(:,:)</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">occno</span>
+<span class="c">!</span>
+<span class="w">   </span><span class="n">scftype</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span>
+<span class="w">   </span><span class="n">na</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_a</span>
+<span class="w">   </span><span class="n">nb</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_b</span>
+<span class="w">   </span><span class="n">nbasis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">   </span><span class="n">nocc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nocc</span>
+
+<span class="w">   </span><span class="k">allocate</span><span class="p">(</span><span class="n">occno</span><span class="p">(</span><span class="n">nocc</span><span class="p">),</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">   </span><span class="k">if</span><span class="p">(</span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;allocation of occno fails&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+
+<span class="w">   </span><span class="n">occno</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">   </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">scftype</span><span class="o">/=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">occno</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+
+<span class="w">   </span><span class="n">na2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocc</span>
+<span class="w">   </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">scftype</span><span class="o">/=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">na2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">na</span>
+
+<span class="c">!  alpha density is always calculated for RHF/ROHF/UHF</span>
+<span class="w">   </span><span class="k">call </span><span class="n">orb_to_dens</span><span class="p">(</span><span class="n">alpha_density</span><span class="p">,</span><span class="n">alpha_orbital</span><span class="p">,</span><span class="n">occno</span><span class="p">,</span><span class="n">na2</span><span class="p">,</span><span class="n">nbasis</span><span class="p">,</span><span class="n">nbasis</span><span class="p">)</span>
+
+<span class="w">   </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nb</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">     </span><span class="n">beta_density</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">     </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="n">beta_orbital</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="w">   </span><span class="k">else</span>
+<span class="k">     select case</span><span class="w"> </span><span class="p">(</span><span class="n">scftype</span><span class="p">)</span>
+<span class="w">     </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="w">     </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">       </span><span class="k">call </span><span class="n">orb_to_dens</span><span class="p">(</span><span class="n">beta_density</span><span class="p">,</span><span class="n">beta_orbital</span><span class="p">,</span><span class="n">occno</span><span class="p">,</span><span class="n">nb</span><span class="p">,</span><span class="n">nbasis</span><span class="p">,</span><span class="n">nbasis</span><span class="p">)</span>
+
+<span class="w">     </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="w">       </span><span class="k">call </span><span class="n">orb_to_dens</span><span class="p">(</span><span class="n">beta_density</span><span class="p">,</span><span class="n">alpha_orbital</span><span class="p">,</span><span class="n">occno</span><span class="p">,</span><span class="n">nb</span><span class="p">,</span><span class="n">nbasis</span><span class="p">,</span><span class="n">nbasis</span><span class="p">)</span>
+<span class="w">     </span><span class="k">end select</span>
+<span class="k">   end if</span>
+
+<span class="k">end subroutine </span><span class="n">get_ab_initio_density</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

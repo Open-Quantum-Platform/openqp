@@ -1,0 +1,1349 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>dft_gridint_grad.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>dft_gridint_grad.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for source files.">158 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_gridint_grad.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">dft_gridint_grad.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint_grad.html">mod_dft_gridint_grad</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/dft_gridint_grad.f90.html#src">dft_gridint_grad.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~dft_gridint_grad.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefiledft_gridint_gradf90EfferentGraph" width="641pt" height="475pt"
+ viewBox="0.00 0.00 641.00 474.76" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph" class="graph" transform="scale(.6449 .6449) rotate(0) translate(4 732.2161)">
+<title>sourcefile~~dft_gridint_grad.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-732.2161 990,-732.2161 990,4 -4,4"/>
+<!-- sourcefile~dft_gridint_grad.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~dft_gridint_grad.f90</title>
+<polygon fill="none" stroke="#000000" points="986,-414.2161 867,-414.2161 867,-390.2161 986,-390.2161 986,-414.2161"/>
+<text text-anchor="middle" x="926.5" y="-399.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">dft_gridint_grad.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="571.5,-573.2161 478.5,-573.2161 478.5,-549.2161 571.5,-549.2161 571.5,-573.2161"/>
+<text text-anchor="middle" x="525" y="-558.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M786.5,-700.2161C731.131,-715.0952 713.169,-713.93 657.5,-700.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-700.2161C596.8413,-685.2729 553.9929,-617.7332 535.381,-582.6007"/>
+<polygon fill="#000000" stroke="#000000" points="538.455,-580.9247 530.7795,-573.6215 532.2253,-584.1172 538.455,-580.9247"/>
+</g>
+<!-- sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~dft_gridint.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/dft_gridint.f90.html" xlink:title="dft_gridint.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="831,-414.2161 742,-414.2161 742,-390.2161 831,-390.2161 831,-414.2161"/>
+<text text-anchor="middle" x="786.5" y="-399.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M866.7213,-402.2161C858.2675,-402.2161 849.6104,-402.2161 841.2576,-402.2161"/>
+<polygon fill="#000000" stroke="#000000" points="841.2541,-398.7162 831.2541,-402.2161 841.254,-405.7162 841.2541,-398.7162"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~dft_molgrid.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/dft_molgrid.f90.html" xlink:title="dft_molgrid.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="573,-116.2161 477,-116.2161 477,-92.2161 573,-92.2161 573,-116.2161"/>
+<text text-anchor="middle" x="525" y="-101.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_molgrid.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M920.8413,-390.0382C899.753,-346.182 820.9945,-195.4678 706,-130.2161 668.774,-109.0928 620.5551,-103.0074 583.2476,-101.9792"/>
+<polygon fill="#000000" stroke="#000000" points="583.0875,-98.4762 573.0325,-101.815 582.9749,-105.4753 583.0875,-98.4762"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-257.2161 25.5,-257.2161 25.5,-233.2161 109.5,-233.2161 109.5,-257.2161"/>
+<text text-anchor="middle" x="67.5" y="-242.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-700.2161C509.9002,-663.8551 456.7447,-738.6506 316,-681.2161 236.6818,-648.8482 218.4732,-625.5278 171,-554.2161 107.4857,-458.8082 79.6796,-320.8908 70.8416,-267.4954"/>
+<polygon fill="#000000" stroke="#000000" points="74.2678,-266.7546 69.2376,-257.43 67.3551,-267.8563 74.2678,-266.7546"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="689.5,-533.2161 625.5,-533.2161 625.5,-509.2161 689.5,-509.2161 689.5,-533.2161"/>
+<text text-anchor="middle" x="657.5" y="-518.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M923.3825,-414.2419C909.1442,-467.9062 848.3269,-683.6015 786.5,-700.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M786.5,-700.2161C711.2103,-720.4484 674.0993,-595.3745 662.0484,-543.2474"/>
+<polygon fill="#000000" stroke="#000000" points="665.4278,-542.319 659.8525,-533.3098 658.5926,-543.8294 665.4278,-542.319"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-540.2161C311.8017,-526.9745 288.7615,-565.1555 225.5,-540.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-540.2161C112.7941,-495.7842 78.8661,-328.0113 70.158,-267.3083"/>
+<polygon fill="#000000" stroke="#000000" points="73.6105,-266.7196 68.8122,-257.2736 66.6726,-267.6501 73.6105,-266.7196"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="441,-672.2161 316,-672.2161 316,-648.2161 441,-648.2161 441,-672.2161"/>
+<text text-anchor="middle" x="378.5" y="-657.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M513.4614,-573.4361C498.1118,-589.1463 469.5751,-616.5058 441,-634.2161 435.2281,-637.7933 428.8778,-641.0803 422.5041,-644.0258"/>
+<polygon fill="#000000" stroke="#000000" points="420.9722,-640.8757 413.2139,-648.091 423.7783,-647.2886 420.9722,-640.8757"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="428.5,-592.2161 328.5,-592.2161 328.5,-568.2161 428.5,-568.2161 428.5,-592.2161"/>
+<text text-anchor="middle" x="378.5" y="-577.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.2437,-567.28C465.6319,-568.9157 451.809,-570.7084 438.5789,-572.4243"/>
+<polygon fill="#000000" stroke="#000000" points="438.074,-568.9603 428.6072,-573.7175 438.9743,-575.9022 438.074,-568.9603"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268.5,-474.2161 182.5,-474.2161 182.5,-450.2161 268.5,-450.2161 268.5,-474.2161"/>
+<text text-anchor="middle" x="225.5" y="-459.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.2686,-555.815C449.3899,-552.1566 411.6408,-546.7955 378.5,-540.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-540.2161C329.4699,-530.4822 279.0379,-500.0434 250.0694,-480.1942"/>
+<polygon fill="#000000" stroke="#000000" points="251.9948,-477.2698 241.7936,-474.4087 247.9841,-483.0069 251.9948,-477.2698"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="118,-552.2161 17,-552.2161 17,-528.2161 118,-528.2161 118,-552.2161"/>
+<text text-anchor="middle" x="67.5" y="-537.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-540.2161C194.892,-528.1495 158.2821,-527.3898 128.0132,-529.9908"/>
+<polygon fill="#000000" stroke="#000000" points="127.6115,-526.5134 118.0089,-530.9902 128.3074,-533.4787 127.6115,-526.5134"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268,-706.2161 183,-706.2161 183,-682.2161 268,-682.2161 268,-706.2161"/>
+<text text-anchor="middle" x="225.5" y="-691.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.8765,-573.3778C485.2302,-581.8468 462.0849,-593.0436 441,-601.2161 386.8587,-622.2012 369.005,-615.507 316,-639.2161 292.9898,-649.5085 268.669,-664.5516 251.0412,-676.3048"/>
+<polygon fill="#000000" stroke="#000000" points="248.7909,-673.6017 242.4754,-682.1085 252.7173,-679.3968 248.7909,-673.6017"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node18" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node18"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="269.5,-297.2161 181.5,-297.2161 181.5,-273.2161 269.5,-273.2161 269.5,-297.2161"/>
+<text text-anchor="middle" x="225.5" y="-282.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M497.4662,-549.0549C446.7121,-526.1518 341.2704,-476.1486 316,-445.2161 282.3846,-404.0686 309.4651,-375.4305 280,-331.2161 272.9369,-320.6173 262.7503,-311.109 253.0908,-303.526"/>
+<polygon fill="#000000" stroke="#000000" points="254.9417,-300.5406 244.8297,-297.3788 250.7629,-306.1565 254.9417,-300.5406"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node20" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node20"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="416.5,-436.2161 340.5,-436.2161 340.5,-412.2161 416.5,-412.2161 416.5,-436.2161"/>
+<text text-anchor="middle" x="378.5" y="-421.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.5134,-548.9219C499.459,-540.4351 486.5063,-528.5029 477,-516.2161 456.5535,-489.7891 465.8354,-472.5689 441,-450.2161 436.5232,-446.1868 431.3341,-442.7288 425.8971,-439.7748"/>
+<polygon fill="#000000" stroke="#000000" points="427.1206,-436.4785 416.5952,-435.2674 424.0681,-442.7778 427.1206,-436.4785"/>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M783.4907,-414.5702C775.9234,-442.7053 753.2379,-511.4845 706,-542.2161 669.5658,-565.919 620.0223,-569.6341 581.9795,-567.9984"/>
+<polygon fill="#000000" stroke="#000000" points="581.7573,-564.4802 571.5749,-567.4073 581.3603,-571.4689 581.7573,-564.4802"/>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M784.8667,-390.0548C778.3548,-347.0018 749.9407,-201.3476 657.5,-144.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-144.2161C634.954,-130.2818 607.2382,-120.9293 582.9934,-114.7972"/>
+<polygon fill="#000000" stroke="#000000" points="583.7335,-111.3754 573.1925,-112.4424 582.0981,-118.1817 583.7335,-111.3754"/>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-144.2161C616.6205,-118.9512 271.3739,-150.8973 225.5,-165.2161"/>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M525,-384.2161C369.0582,-351.3875 310.1005,-363.4561 171,-441.2161 134.6259,-461.5499 101.5199,-497.6886 82.9917,-520.2245"/>
+<polygon fill="#000000" stroke="#000000" points="80.1695,-518.1489 76.628,-528.1343 85.6235,-522.5369 80.1695,-518.1489"/>
+</g>
+<!-- sourcefile~dft_xc_libxc.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~dft_xc_libxc.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/dft_xc_libxc.f90.html" xlink:title="dft_xc_libxc.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="706,-336.2161 609,-336.2161 609,-312.2161 706,-312.2161 706,-336.2161"/>
+<text text-anchor="middle" x="657.5" y="-321.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_xc_libxc.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_xc_libxc.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_xc_libxc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M766.6265,-390.1995C745.1937,-377.2402 710.8665,-356.4842 686.4387,-341.7139"/>
+<polygon fill="#000000" stroke="#000000" points="687.977,-338.554 677.6087,-336.3748 684.355,-344.5441 687.977,-338.554"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="425.5,-356.2161 331.5,-356.2161 331.5,-332.2161 425.5,-332.2161 425.5,-356.2161"/>
+<text text-anchor="middle" x="378.5" y="-341.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M741.9855,-412.2759C717.2467,-417.0677 685.8268,-421.8448 657.5,-422.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-422.2161C596.2424,-423.0189 584.9488,-396.8364 525,-384.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M525,-384.2161C492.1131,-377.2928 455.6544,-367.3467 427.3348,-359.1046"/>
+<polygon fill="#000000" stroke="#000000" points="428.2575,-355.7279 417.6764,-356.2681 426.285,-362.4442 428.2575,-355.7279"/>
+</g>
+<!-- sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node19" class="node">
+<title>sourcefile~oqp_linalg.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node19"><a xlink:href="../sourcefile/oqp_linalg.f90.html" xlink:title="oqp_linalg.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="570,-196.2161 480,-196.2161 480,-172.2161 570,-172.2161 570,-196.2161"/>
+<text text-anchor="middle" x="525" y="-181.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-144.2161C640.9427,-133.9831 592.2768,-152.7214 558.7727,-167.8607"/>
+<polygon fill="#000000" stroke="#000000" points="556.957,-164.8437 549.3396,-172.2075 559.8865,-171.2012 556.957,-164.8437"/>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-422.2161C576.9657,-428.422 482.97,-427.3917 427.2201,-425.9191"/>
+<polygon fill="#000000" stroke="#000000" points="427.0256,-422.4123 416.9314,-425.6306 426.8293,-429.4096 427.0256,-422.4123"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M506.0902,-92.0579C479.0913,-75.664 427.3443,-47.7638 378.5,-41.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-41.2161C286.6285,-28.9004 249.0471,29.7909 171,-20.2161 99.275,-66.1722 76.5777,-175.7535 69.9806,-222.9577"/>
+<polygon fill="#000000" stroke="#000000" points="66.4877,-222.6791 68.6874,-233.043 73.4309,-223.5694 66.4877,-222.6791"/>
+</g>
+<!-- sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~bragg_slater.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/bragg_slater.f90.html" xlink:title="bragg_slater.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="276,-137.2161 175,-137.2161 175,-113.2161 276,-113.2161 276,-137.2161"/>
+<text text-anchor="middle" x="225.5" y="-122.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bragg_slater.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-41.2161C326.9944,-34.3116 326.3689,-80.7551 280,-104.2161 276.6354,-105.9184 273.0982,-107.5694 269.5097,-109.1478"/>
+<polygon fill="#000000" stroke="#000000" points="267.8448,-106.0505 259.9738,-113.1426 270.5495,-112.5069 267.8448,-106.0505"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M513.2238,-116.5642C502.756,-127.9992 487.5234,-145.8155 477,-163.2161 455.9806,-197.9718 467.6204,-216.5382 441,-247.2161 398.3875,-296.3234 362.6785,-277.9559 316,-323.2161 279.3836,-358.7198 250.1142,-411.632 235.5529,-440.8692"/>
+<polygon fill="#000000" stroke="#000000" points="232.2617,-439.6334 231.0279,-450.1561 238.5545,-442.6996 232.2617,-439.6334"/>
+</g>
+<!-- sourcefile~dft_partfunc.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~dft_partfunc.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/dft_partfunc.f90.html" xlink:title="dft_partfunc.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="275.5,-53.2161 175.5,-53.2161 175.5,-29.2161 275.5,-29.2161 275.5,-53.2161"/>
+<text text-anchor="middle" x="225.5" y="-38.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_partfunc.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~dft_partfunc.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~dft_partfunc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-41.2161C348.1355,-37.1456 314.0756,-36.7429 285.8135,-37.5292"/>
+<polygon fill="#000000" stroke="#000000" points="285.5584,-34.0357 275.681,-37.8682 285.7925,-41.0318 285.5584,-34.0357"/>
+</g>
+<!-- sourcefile~grid_storage.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~grid_storage.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/grid_storage.f90.html" xlink:title="grid_storage.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="276.5,-95.2161 174.5,-95.2161 174.5,-71.2161 276.5,-71.2161 276.5,-95.2161"/>
+<text text-anchor="middle" x="225.5" y="-80.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grid_storage.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~grid_storage.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~grid_storage.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-41.2161C357.1978,-38.3604 305.0122,-54.5934 267.5114,-67.7038"/>
+<polygon fill="#000000" stroke="#000000" points="266.1004,-64.4904 257.8423,-71.1278 268.4371,-71.0889 266.1004,-64.4904"/>
+</g>
+<!-- sourcefile~lebedev.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node17" class="node">
+<title>sourcefile~lebedev.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node17"><a xlink:href="../sourcefile/lebedev.f90.html" xlink:title="lebedev.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="417,-116.2161 340,-116.2161 340,-92.2161 417,-92.2161 417,-116.2161"/>
+<text text-anchor="middle" x="378.5" y="-101.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lebedev.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~lebedev.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~lebedev.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M476.6244,-104.2161C460.763,-104.2161 443.1358,-104.2161 427.247,-104.2161"/>
+<polygon fill="#000000" stroke="#000000" points="427.093,-100.7162 417.0929,-104.2161 427.0929,-107.7162 427.093,-100.7162"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.4254,-530.8989C610.1878,-535.499 591.6285,-541.1018 574.6299,-546.2335"/>
+<polygon fill="#000000" stroke="#000000" points="573.4003,-542.9486 564.8386,-549.1893 575.4234,-549.6499 573.4003,-542.9486"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M525,-502.2161C430.6627,-482.9651 398.0451,-495.6018 316,-445.2161 264.9205,-413.847 279.8446,-370.5103 225.5,-345.2161"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M642.9724,-533.4012C626.6951,-546.638 599.1515,-567.8161 573,-582.2161 525.0097,-608.6412 466.1797,-630.9669 425.867,-644.8728"/>
+<polygon fill="#000000" stroke="#000000" points="424.6249,-641.5984 416.2895,-648.1384 426.884,-648.2238 424.6249,-641.5984"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M638.3232,-509.0501C589.9255,-478.3462 462.6762,-397.6181 406.1918,-361.784"/>
+<polygon fill="#000000" stroke="#000000" points="407.7611,-358.6347 397.4421,-356.2331 404.0112,-364.5456 407.7611,-358.6347"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.4589,-517.6938C598.5102,-514.4755 559.0404,-509.1625 525,-502.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M525,-502.2161C481.9788,-493.4369 479.7183,-470.9233 441,-450.2161 434.4453,-446.7105 427.3143,-443.35 420.2919,-440.277"/>
+<polygon fill="#000000" stroke="#000000" points="421.4208,-436.9542 410.8476,-436.2779 418.6914,-443.4001 421.4208,-436.9542"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node25" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node25"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-686.2161 32.5,-686.2161 32.5,-662.2161 102.5,-662.2161 102.5,-686.2161"/>
+<text text-anchor="middle" x="67.5" y="-671.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M362.8727,-672.307C344.3128,-685.8315 311.8435,-706.928 280,-715.2161 233.1175,-727.4184 217.8956,-727.3679 171,-715.2161 153.2818,-710.6248 151.8273,-702.4171 135,-695.2161 127.7806,-692.1266 119.9534,-689.2696 112.2731,-686.7219"/>
+<polygon fill="#000000" stroke="#000000" points="113.2707,-683.3665 102.6801,-683.666 111.146,-690.0363 113.2707,-683.3665"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M342.5247,-568.1216C333.4957,-564.3268 324.0839,-559.6747 316,-554.2161 286.1055,-534.0299 258.0178,-502.846 241.2883,-482.4816"/>
+<polygon fill="#000000" stroke="#000000" points="243.8411,-480.0713 234.8418,-474.48 238.3901,-484.463 243.8411,-480.0713"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M328.1669,-574.0492C286.1347,-568.8658 224.6426,-561.2046 171,-554.2161 157.1101,-552.4065 142.1785,-550.4142 128.0987,-548.5143"/>
+<polygon fill="#000000" stroke="#000000" points="128.403,-545.0236 118.024,-547.1511 127.4643,-551.9604 128.403,-545.0236"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M338.5661,-592.2647C330.523,-595.8949 322.5411,-600.4851 316,-606.2161 292.0335,-627.2141 303.4243,-646.6149 280,-668.2161 276.3851,-671.5496 272.2652,-674.5345 267.9467,-677.1865"/>
+<polygon fill="#000000" stroke="#000000" points="265.9728,-674.2778 258.9017,-682.1677 269.3497,-680.4095 265.9728,-674.2778"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M338.7957,-592.2167C280.7816,-609.7515 173.1588,-642.2806 112.3572,-660.6579"/>
+<polygon fill="#000000" stroke="#000000" points="111.2144,-657.3469 102.6547,-663.5905 113.2397,-664.0475 111.2144,-657.3469"/>
+</g>
+<!-- sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge38" class="edge">
+<title>sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M196.0708,-137.3343C187.6938,-141.2885 178.7464,-146.0155 171,-151.2161 138.2638,-173.1933 105.4003,-205.1265 85.7513,-225.5327"/>
+<polygon fill="#000000" stroke="#000000" points="83.0073,-223.3394 78.6562,-232.9995 88.0818,-228.1612 83.0073,-223.3394"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge39" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M216.5525,-449.9274C190.5352,-414.1948 114.709,-310.0537 82.381,-265.6539"/>
+<polygon fill="#000000" stroke="#000000" points="85.065,-263.3939 76.3493,-257.3699 79.4061,-267.5142 85.065,-263.3939"/>
+</g>
+<!-- sourcefile~dft_partfunc.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge40" class="edge">
+<title>sourcefile~dft_partfunc.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M184.716,-53.2655C179.7888,-55.7479 175.0688,-58.7051 171,-62.2161 118.7128,-107.3343 87.1775,-185.7269 74.2816,-223.5603"/>
+<polygon fill="#000000" stroke="#000000" points="70.9455,-222.5013 71.1369,-233.0944 77.5933,-224.694 70.9455,-222.5013"/>
+</g>
+<!-- sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge43" class="edge">
+<title>sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M638.9533,-312.1624C622.4157,-302.1801 597.1553,-288.7668 573,-283.2161 531.4171,-273.6606 519.4316,-278.7432 477,-283.2161 465.8713,-284.3892 389.4701,-302.0066 378.5,-304.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-304.2161C369.8296,-305.7202 233.4781,-348.9294 225.5,-345.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-345.2161C175.4084,-321.9013 122.0846,-285.3864 91.9675,-263.5288"/>
+<polygon fill="#000000" stroke="#000000" points="93.888,-260.5971 83.7525,-257.5112 89.7515,-266.2441 93.888,-260.5971"/>
+</g>
+<!-- sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge42" class="edge">
+<title>sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.9019,-327.6998C560.7018,-331.155 486.8567,-336.4485 435.8194,-340.1071"/>
+<polygon fill="#000000" stroke="#000000" points="435.3357,-336.6327 425.6116,-340.8389 435.8363,-343.6148 435.3357,-336.6327"/>
+</g>
+<!-- sourcefile~dft_xclib.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node22" class="node">
+<title>sourcefile~dft_xclib.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node22"><a xlink:href="../sourcefile/dft_xclib.f90.html" xlink:title="dft_xclib.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="564.5,-316.2161 485.5,-316.2161 485.5,-292.2161 564.5,-292.2161 564.5,-316.2161"/>
+<text text-anchor="middle" x="525" y="-301.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_xclib.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~dft_xclib.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge41" class="edge">
+<title>sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~dft_xclib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.9143,-316.8824C597.8309,-315.2094 586.036,-313.429 574.8987,-311.7479"/>
+<polygon fill="#000000" stroke="#000000" points="575.3051,-308.2697 564.8947,-310.2379 574.2603,-315.1913 575.3051,-308.2697"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node24" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node24"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-728.2161 0,-728.2161 0,-704.2161 135,-704.2161 135,-728.2161"/>
+<text text-anchor="middle" x="67.5" y="-713.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge44" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-700.1696C171.2048,-701.7762 158.3497,-703.5661 145.5288,-705.3513"/>
+<polygon fill="#000000" stroke="#000000" points="144.7015,-701.9326 135.2798,-706.7784 145.667,-708.8657 144.7015,-701.9326"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge45" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-688.8038C161.0464,-686.0574 134.6935,-682.7216 112.6669,-679.9334"/>
+<polygon fill="#000000" stroke="#000000" points="112.9234,-676.438 102.563,-678.6544 112.0443,-683.3826 112.9234,-676.438"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge47" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M331.4423,-354.6179C299.991,-359.2061 258.4927,-360.5723 225.5,-345.2161"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge46" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M347.169,-332.1342C323.7572,-323.1061 291.5521,-310.6871 266.1564,-300.894"/>
+<polygon fill="#000000" stroke="#000000" points="267.3788,-297.6142 256.7891,-297.2818 264.8601,-304.1454 267.3788,-297.6142"/>
+</g>
+<!-- sourcefile~grid_storage.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge48" class="edge">
+<title>sourcefile~grid_storage.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M185.943,-95.3265C180.6566,-97.8227 175.5112,-100.7675 171,-104.2161 127.6804,-137.3319 94.2096,-193.3636 78.0846,-223.8702"/>
+<polygon fill="#000000" stroke="#000000" points="74.9435,-222.3249 73.4683,-232.8166 81.1642,-225.5349 74.9435,-222.3249"/>
+</g>
+<!-- sourcefile~lebedev.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge50" class="edge">
+<title>sourcefile~lebedev.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M349.1863,-116.2404C338.6941,-120.5892 326.7957,-125.5723 316,-130.2161 299.9158,-137.1347 296.2805,-139.7731 280,-146.2161 256.1479,-155.6555 249.9869,-157.5729 225.5,-165.2161"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-165.2161C201.0131,-172.8592 194.2737,-173.4291 171,-184.2161 143.801,-196.8223 114.518,-214.5017 94.0649,-227.5838"/>
+<polygon fill="#000000" stroke="#000000" points="92.0965,-224.6886 85.6003,-233.0582 95.898,-230.5665 92.0965,-224.6886"/>
+</g>
+<!-- sourcefile~lebedev.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge49" class="edge">
+<title>sourcefile~lebedev.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M363.4081,-116.2506C349.9408,-127.4744 330.2099,-145.1569 316,-163.2161 296.0581,-188.5601 299.0634,-200.2047 280,-226.2161 269.7852,-240.1538 256.6891,-254.423 245.8948,-265.4367"/>
+<polygon fill="#000000" stroke="#000000" points="243.1029,-263.2795 238.5158,-272.8298 248.0574,-268.2245 243.1029,-263.2795"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge52" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M181.4882,-274.0738C162.2723,-269.2091 139.5955,-263.4681 119.5491,-258.3931"/>
+<polygon fill="#000000" stroke="#000000" points="120.1964,-254.9466 109.6433,-255.8852 118.4784,-261.7325 120.1964,-254.9466"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge51" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M217.6495,-297.2651C206.9782,-313.6877 187.3495,-344.0519 171,-370.2161 137.6456,-423.5931 99.3556,-487.0805 80.0412,-519.2655"/>
+<polygon fill="#000000" stroke="#000000" points="76.823,-517.8267 74.6828,-528.2032 82.8267,-521.4262 76.823,-517.8267"/>
+</g>
+<!-- sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node21" class="node">
+<title>sourcefile~blas_wrap.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node21"><a xlink:href="../sourcefile/blas_wrap.f90.html" xlink:title="blas_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="422.5,-196.2161 334.5,-196.2161 334.5,-172.2161 422.5,-172.2161 422.5,-196.2161"/>
+<text text-anchor="middle" x="378.5" y="-181.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge53" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M479.8498,-184.2161C465.095,-184.2161 448.5474,-184.2161 433.1696,-184.2161"/>
+<polygon fill="#000000" stroke="#000000" points="432.7467,-180.7162 422.7467,-184.2161 432.7467,-187.7162 432.7467,-180.7162"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node23" class="node">
+<title>sourcefile~lapack_wrap.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node23"><a xlink:href="../sourcefile/lapack_wrap.f90.html" xlink:title="lapack_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="429.5,-238.2161 327.5,-238.2161 327.5,-214.2161 429.5,-214.2161 429.5,-238.2161"/>
+<text text-anchor="middle" x="378.5" y="-223.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge54" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M483.019,-196.2516C466.6212,-200.9526 447.6498,-206.3915 430.4071,-211.3348"/>
+<polygon fill="#000000" stroke="#000000" points="429.1353,-208.0584 420.4872,-214.1788 431.0645,-214.7873 429.1353,-208.0584"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge55" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M356.486,-412.1243C327.0109,-396.1025 272.9294,-367.2917 225.5,-345.2161"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge58" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M345.2496,-172.18C313.7631,-162.6146 265.487,-152.7348 225.5,-165.2161"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge57" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M335.1475,-196.2528C328.5388,-198.8003 321.9465,-201.7795 316,-205.2161 287.8162,-221.5038 260.5374,-247.4525 243.4283,-265.3578"/>
+<polygon fill="#000000" stroke="#000000" points="240.5954,-263.2626 236.3163,-272.9549 245.7056,-268.0465 240.5954,-263.2626"/>
+</g>
+<!-- sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node26" class="node">
+<title>sourcefile~mathlib_types.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~EfferentGraph_node26"><a xlink:href="../sourcefile/mathlib_types.f90.html" xlink:title="mathlib_types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="280,-217.2161 171,-217.2161 171,-193.2161 280,-193.2161 280,-217.2161"/>
+<text text-anchor="middle" x="225.5" y="-202.8161" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge56" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M334.2461,-190.2901C320.5499,-192.17 305.1659,-194.2815 290.3755,-196.3116"/>
+<polygon fill="#000000" stroke="#000000" points="289.69,-192.8728 280.2588,-197.7001 290.6419,-199.8077 289.69,-192.8728"/>
+</g>
+<!-- sourcefile~dft_xclib.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge60" class="edge">
+<title>sourcefile~dft_xclib.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M485.4078,-300.0185C455.6883,-297.8764 414.1547,-297.0348 378.5,-304.2161"/>
+</g>
+<!-- sourcefile~dft_xclib.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge59" class="edge">
+<title>sourcefile~dft_xclib.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M485.355,-315.0406C469.1333,-319.4698 450.1044,-324.6654 432.6351,-329.4351"/>
+<polygon fill="#000000" stroke="#000000" points="431.2876,-326.1749 422.5627,-332.1853 433.1315,-332.9277 431.2876,-326.1749"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge63" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M327.4929,-229.3322C270.108,-232.8381 177.3867,-238.5027 119.5698,-242.0349"/>
+<polygon fill="#000000" stroke="#000000" points="119.3162,-238.5438 109.5483,-242.6472 119.7432,-245.5308 119.3162,-238.5438"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge62" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M347.169,-238.298C323.7572,-247.326 291.5521,-259.745 266.1564,-269.5381"/>
+<polygon fill="#000000" stroke="#000000" points="264.8601,-266.2867 256.7891,-273.1503 267.3788,-272.8179 264.8601,-266.2867"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~EfferentGraph_edge61" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M327.1276,-219.1649C315.3265,-217.5452 302.6279,-215.8022 290.3403,-214.1157"/>
+<polygon fill="#000000" stroke="#000000" points="290.5272,-210.6086 280.1442,-212.7162 289.5753,-217.5436 290.5272,-210.6086"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefiledft_gridint_gradf90EfferentGraph = svgPanZoom('#sourcefiledft_gridint_gradf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Files dependent on this one</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~dft_gridint_grad.f90~~AfferentGraph Pages: 1 -->
+<svg id="sourcefiledft_gridint_gradf90AfferentGraph" width="480pt" height="225pt"
+ viewBox="0.00 0.00 480.00 225.26" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 221.2645)">
+<title>sourcefile~~dft_gridint_grad.f90~~AfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-221.2645 476,-221.2645 476,4 -4,4"/>
+<!-- sourcefile~dft_gridint_grad.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node1" class="node">
+<title>sourcefile~dft_gridint_grad.f90</title>
+<polygon fill="none" stroke="#000000" points="119,-129 0,-129 0,-105 119,-105 119,-129"/>
+<text text-anchor="middle" x="59.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">dft_gridint_grad.F90</text>
+</g>
+<!-- sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node2" class="node">
+<title>sourcefile~dft.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/dft.f90.html" xlink:title="dft.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="209,-129 155,-129 155,-105 209,-105 209,-129"/>
+<text text-anchor="middle" x="182" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge1" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M154.8133,-117C147.1313,-117 138.4011,-117 129.4169,-117"/>
+<polygon fill="#000000" stroke="#000000" points="129.2081,-113.5001 119.2081,-117 129.208,-120.5001 129.2081,-113.5001"/>
+</g>
+<!-- sourcefile~hf_energy.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node3" class="node">
+<title>sourcefile~hf_energy.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="472,-212 387,-212 387,-188 472,-188 472,-212"/>
+<text text-anchor="middle" x="429.5" y="-197.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge2" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M386.7423,-210.7125C347.6766,-218.1536 289.4076,-223.2038 245,-201 218.938,-187.969 200.8604,-158.4624 190.957,-138.1349"/>
+<polygon fill="#000000" stroke="#000000" points="194.1149,-136.6247 186.7528,-129.0057 187.7567,-139.5529 194.1149,-136.6247"/>
+</g>
+<!-- sourcefile~scf.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node5" class="node">
+<title>sourcefile~scf.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/scf.f90.html" xlink:title="scf.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="325,-192 271,-192 271,-168 325,-168 325,-192"/>
+<text text-anchor="middle" x="298" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge8" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M386.8057,-193.5066C370.1956,-190.9803 351.3378,-188.1122 335.2852,-185.6708"/>
+<polygon fill="#000000" stroke="#000000" points="335.6059,-182.1794 325.1933,-184.1359 334.5533,-189.0998 335.6059,-182.1794"/>
+</g>
+<!-- sourcefile~hf_gradient.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node4" class="node">
+<title>sourcefile~hf_gradient.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="346,-150 250,-150 250,-126 346,-126 346,-150"/>
+<text text-anchor="middle" x="298" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge3" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.8133,-129.2765C239.665,-127.4394 229.1038,-125.5274 219.4217,-123.7746"/>
+<polygon fill="#000000" stroke="#000000" points="219.7853,-120.2836 209.3217,-121.9462 218.5382,-127.1717 219.7853,-120.2836"/>
+</g>
+<!-- sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge4" class="edge">
+<title>sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M270.8179,-170.4963C262.3772,-167.2114 253.1532,-163.2719 245,-159 231.6388,-151.9993 217.5976,-142.836 206.1707,-134.8553"/>
+<polygon fill="#000000" stroke="#000000" points="208.1735,-131.9848 197.9966,-129.0384 204.1148,-137.6881 208.1735,-131.9848"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node6" class="node">
+<title>sourcefile~tdhf_energy.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="346.5,-108 249.5,-108 249.5,-84 346.5,-84 346.5,-108"/>
+<text text-anchor="middle" x="298" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge5" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.4777,-104.7842C239.356,-106.6166 228.8386,-108.5206 219.2037,-110.2648"/>
+<polygon fill="#000000" stroke="#000000" points="218.3722,-106.8584 209.1556,-112.0839 219.6192,-113.7464 218.3722,-106.8584"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node7" class="node">
+<title>sourcefile~tdhf_gradient.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="351,-66 245,-66 245,-42 351,-42 351,-66"/>
+<text text-anchor="middle" x="298" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge6" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M264.4398,-66.0561C257.8803,-68.7575 251.1368,-71.7846 245,-75 231.6388,-82.0007 217.5976,-91.164 206.1707,-99.1447"/>
+<polygon fill="#000000" stroke="#000000" points="204.1148,-96.3119 197.9966,-104.9616 208.1735,-102.0152 204.1148,-96.3119"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node8" class="node">
+<title>sourcefile~tdhf_z_vector.f90</title>
+<g id="a_sourcefile~~dft_gridint_grad.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="350.5,-24 245.5,-24 245.5,0 350.5,0 350.5,-24"/>
+<text text-anchor="middle" x="298" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~dft_gridint_grad.f90~~AfferentGraph_edge7" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M260.1158,-24.0014C254.7773,-26.5321 249.562,-29.5156 245,-33 222.5686,-50.133 204.2245,-77.2706 193.2296,-96.0425"/>
+<polygon fill="#000000" stroke="#000000" points="190.18,-94.325 188.3019,-104.7521 196.2725,-97.7721 190.18,-94.325"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">mod_dft_gridint_grad</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w">  </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">fp</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a><span class="w">  </span><span class="k">use </span><span class="n">mod_dft_gridint</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">xc_engine_t</span><span class="p">,</span><span class="w"> </span><span class="n">xc_consumer_t</span>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="w">  </span><span class="k">use </span><span class="n">mod_dft_gridint</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">OQP_FUNTYP_LDA</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_FUNTYP_MGGA</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a><span class="w">  </span><span class="k">use </span><span class="n">mod_dft_gridint</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">compAtGradRho</span><span class="p">,</span><span class="w"> </span><span class="n">compAtGradDRho</span><span class="p">,</span><span class="w"> </span><span class="n">compAtGradTau</span>
+<a id="ln-7" name="ln-7" href="#ln-7"></a>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="w">  </span><span class="k">implicit none</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="w">  </span><span class="k">type</span><span class="p">,</span><span class="w"> </span><span class="k">extends</span><span class="p">(</span><span class="n">xc_consumer_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xc_consumer_grad_t</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bfgrad</span><span class="p">(:,:,:)</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tmp_</span><span class="p">(:,:)</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">d1dsx</span><span class="p">(:,:,:)</span><span class="w"> </span><span class="c">!&lt; Temporary storage for dE/d\sigma</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">  </span><span class="k">contains</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a><span class="k">    procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">parallel_start</span>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">    </span><span class="k">procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">parallel_stop</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">    </span><span class="k">procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">resetGradPointers</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">    </span><span class="k">procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">update</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">    </span><span class="k">procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">postUpdate</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">    </span><span class="k">procedure</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">clean</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">  </span><span class="k">end type</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">  </span><span class="k">private</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="k">  public </span><span class="n">derexc_blk</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="k">contains</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a>
+<a id="ln-34" name="ln-34" href="#ln-34"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-35" name="ln-35" href="#ln-35"></a>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">parallel_start</span><span class="p">(</span><span class="n">self</span><span class="p">,</span><span class="w"> </span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">nthreads</span><span class="p">)</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a><span class="k">    class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_engine_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xce</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nthreads</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="w">    </span><span class="k">call </span><span class="n">self</span><span class="p">%</span><span class="n">clean</span><span class="p">()</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">numAOs</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">nthreads</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">            </span><span class="p">,</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">d1dsx</span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">maxPts</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">nthreads</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">            </span><span class="p">,</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">tmp_</span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">numAOs</span><span class="o">*</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">nthreads</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">            </span><span class="p">,</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0d0</span><span class="p">)</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="w">  </span><span class="k">end subroutine</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">parallel_stop</span><span class="p">(</span><span class="n">self</span><span class="p">)</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="k">    class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">ubound</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a><span class="k">      </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(:,:,</span><span class="nb">lbound</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">,</span><span class="w"> </span><span class="nb">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="k">    call </span><span class="n">self</span><span class="p">%</span><span class="n">pe</span><span class="p">%</span><span class="n">allreduce</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(:,:,</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="w">              </span><span class="n">size</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(:,:,</span><span class="mi">1</span><span class="p">)))</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="w">  </span><span class="k">end subroutine</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">clean</span><span class="p">(</span><span class="n">self</span><span class="p">)</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="k">    class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">allocated</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">))</span><span class="w"> </span><span class="k">deallocate</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">)</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">allocated</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">d1dsx</span><span class="p">))</span><span class="w"> </span><span class="k">deallocate</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">d1dsx</span><span class="p">)</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">allocated</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">tmp_</span><span class="p">))</span><span class="w"> </span><span class="k">deallocate</span><span class="p">(</span><span class="n">self</span><span class="p">%</span><span class="n">tmp_</span><span class="p">)</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">  </span><span class="k">end subroutine</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="c">!&gt; @brief Adjust internal memory storage for a given</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="c">!&gt;  number of pruned grid points</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="c">!&gt; @author Konstantin Komarov</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a><span class="w"> </span><span class="k">subroutine </span><span class="n">resetGradPointers</span><span class="p">(</span><span class="n">self</span><span class="p">,</span><span class="w"> </span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">tmp</span><span class="p">,</span><span class="w"> </span><span class="n">myThread</span><span class="p">)</span>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_engine_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xce</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tmp</span><span class="p">(:,:)</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">myThread</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a>
+<a id="ln-81" name="ln-81" href="#ln-81"></a><span class="c">!   pruned AOs or no pruned AOs</span>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="k">associate</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">numAOs</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">numAOs_p</span><span class="w"> </span><span class="p">&amp;</span><span class="w">  </span><span class="c">! number of pruned AOs</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">      </span><span class="p">)</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">      </span><span class="n">tmp</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">numAOs</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">tmp_</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">numAOs</span><span class="o">*</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">myThread</span><span class="p">)</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">    </span><span class="k">end associate</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="k"> end subroutine</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w"> </span><span class="k">subroutine </span><span class="n">update</span><span class="p">(</span><span class="n">self</span><span class="p">,</span><span class="w"> </span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">mythread</span><span class="p">)</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_engine_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xce</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mythread</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tmpGrad</span><span class="p">(:,:)</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="w">    </span><span class="k">call </span><span class="n">self</span><span class="p">%</span><span class="n">resetGradPointers</span><span class="p">(</span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">tmpGrad</span><span class="p">,</span><span class="w">  </span><span class="n">myThread</span><span class="p">)</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">    </span><span class="k">associate</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">bfgrad</span><span class="w">  </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">bfgrad</span><span class="p">(:,:,</span><span class="n">mythread</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">d1dsx</span><span class="w">   </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">d1dsx</span><span class="p">(:,:,</span><span class="n">mythread</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">aoG1</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">aoG1</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">aoG2</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">aoG2</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">moVA</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">moVA</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">moVB</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">moVB</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">moG1A</span><span class="w">   </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">moG1A</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">moG1B</span><span class="w">   </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">moG1B</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">hasBeta</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">hasBeta</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="w">  </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">numPts</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">xc</span><span class="w">      </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">XCLib</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">drho</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">xclib</span><span class="p">%</span><span class="n">drho</span><span class="w">  </span><span class="p">&amp;</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="w">     </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">XCLib</span><span class="p">%</span><span class="n">ids</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">d1ds</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">XCLib</span><span class="p">%</span><span class="n">d1ds</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">d1dr</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">XCLib</span><span class="p">%</span><span class="n">d1dr</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">d1dt</span><span class="w">    </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">XCLib</span><span class="p">%</span><span class="n">d1dt</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="w">      </span><span class="p">)</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a><span class="w">      </span><span class="n">tmpGrad</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0d0</span>
+<a id="ln-118" name="ln-118" href="#ln-118"></a>
+<a id="ln-119" name="ln-119" href="#ln-119"></a><span class="c">!     LDA gradient</span>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="w">      </span><span class="k">call </span><span class="n">compAtGradRho</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dr</span><span class="p">(</span><span class="mi">1</span><span class="p">,:),</span><span class="w"> </span><span class="n">moVA</span><span class="p">,</span><span class="w"> </span><span class="n">aoG1</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="c">!     GGA gradient</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">funTyp</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="n">OQP_FUNTYP_LDA</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="k">          do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a><span class="w">            </span><span class="n">d1dsx</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="o">*</span><span class="n">d1ds</span><span class="p">(</span><span class="n">ids</span><span class="p">%</span><span class="n">ga</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">drho</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">+</span><span class="n">d1ds</span><span class="p">(</span><span class="n">ids</span><span class="p">%</span><span class="n">gc</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">drho</span><span class="p">(</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="w">          </span><span class="k">end do</span>
+<a id="ln-127" name="ln-127" href="#ln-127"></a>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="k">          call </span><span class="n">compAtGradDRho</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dsx</span><span class="p">,</span><span class="w"> </span><span class="n">moVA</span><span class="p">,</span><span class="w"> </span><span class="n">moG1A</span><span class="p">,</span><span class="w"> </span><span class="n">aoG1</span><span class="p">,</span><span class="w"> </span><span class="n">aoG2</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a><span class="w">      </span><span class="k">end if</span>
+<a id="ln-130" name="ln-130" href="#ln-130"></a>
+<a id="ln-131" name="ln-131" href="#ln-131"></a><span class="c">!     Meta-GGA gradient</span>
+<a id="ln-132" name="ln-132" href="#ln-132"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">funTyp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">OQP_FUNTYP_MGGA</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-133" name="ln-133" href="#ln-133"></a><span class="w">        </span><span class="k">call </span><span class="n">compAtGradTau</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dt</span><span class="p">(</span><span class="mi">1</span><span class="p">,:),</span><span class="w"> </span><span class="n">moG1A</span><span class="p">,</span><span class="w"> </span><span class="n">aoG2</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-134" name="ln-134" href="#ln-134"></a>
+<a id="ln-135" name="ln-135" href="#ln-135"></a>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">hasBeta</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-137" name="ln-137" href="#ln-137"></a><span class="k">        call </span><span class="n">compAtGradRho</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dr</span><span class="p">(</span><span class="mi">2</span><span class="p">,:),</span><span class="w"> </span><span class="n">moVB</span><span class="p">,</span><span class="w"> </span><span class="n">aoG1</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-138" name="ln-138" href="#ln-138"></a>
+<a id="ln-139" name="ln-139" href="#ln-139"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">funTyp</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="n">OQP_FUNTYP_LDA</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-140" name="ln-140" href="#ln-140"></a><span class="k">            do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span>
+<a id="ln-141" name="ln-141" href="#ln-141"></a><span class="w">              </span><span class="n">d1dsx</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="o">*</span><span class="n">d1ds</span><span class="p">(</span><span class="n">ids</span><span class="p">%</span><span class="n">gb</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">drho</span><span class="p">(</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">+</span><span class="n">d1ds</span><span class="p">(</span><span class="n">ids</span><span class="p">%</span><span class="n">gc</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">drho</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-142" name="ln-142" href="#ln-142"></a><span class="w">            </span><span class="k">end do</span>
+<a id="ln-143" name="ln-143" href="#ln-143"></a><span class="k">            call </span><span class="n">compAtGradDRho</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dsx</span><span class="p">,</span><span class="w"> </span><span class="n">moVB</span><span class="p">,</span><span class="w"> </span><span class="n">moG1B</span><span class="p">,</span><span class="w"> </span><span class="n">aoG1</span><span class="p">,</span><span class="w"> </span><span class="n">aoG2</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-144" name="ln-144" href="#ln-144"></a><span class="w">        </span><span class="k">end if</span>
+<a id="ln-145" name="ln-145" href="#ln-145"></a>
+<a id="ln-146" name="ln-146" href="#ln-146"></a><span class="k">        if</span><span class="w"> </span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">funTyp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">OQP_FUNTYP_MGGA</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-147" name="ln-147" href="#ln-147"></a><span class="w">          </span><span class="k">call </span><span class="n">compAtGradTau</span><span class="p">(</span><span class="n">tmpGrad</span><span class="p">,</span><span class="w"> </span><span class="n">d1dt</span><span class="p">(</span><span class="mi">2</span><span class="p">,:),</span><span class="w"> </span><span class="n">moG1B</span><span class="p">,</span><span class="w"> </span><span class="n">aoG2</span><span class="p">,</span><span class="w"> </span><span class="n">numPts</span><span class="p">)</span>
+<a id="ln-148" name="ln-148" href="#ln-148"></a><span class="w">      </span><span class="k">end if</span>
+<a id="ln-149" name="ln-149" href="#ln-149"></a>
+<a id="ln-150" name="ln-150" href="#ln-150"></a><span class="k">    end associate</span>
+<a id="ln-151" name="ln-151" href="#ln-151"></a><span class="k"> end subroutine</span>
+<a id="ln-152" name="ln-152" href="#ln-152"></a>
+<a id="ln-153" name="ln-153" href="#ln-153"></a><span class="k"> subroutine </span><span class="n">postUpdate</span><span class="p">(</span><span class="n">self</span><span class="p">,</span><span class="w"> </span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">mythread</span><span class="p">)</span>
+<a id="ln-154" name="ln-154" href="#ln-154"></a>
+<a id="ln-155" name="ln-155" href="#ln-155"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">self</span>
+<a id="ln-156" name="ln-156" href="#ln-156"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">xc_engine_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xce</span>
+<a id="ln-157" name="ln-157" href="#ln-157"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mythread</span>
+<a id="ln-158" name="ln-158" href="#ln-158"></a>
+<a id="ln-159" name="ln-159" href="#ln-159"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tmpGrad</span><span class="p">(:,:)</span>
+<a id="ln-160" name="ln-160" href="#ln-160"></a>
+<a id="ln-161" name="ln-161" href="#ln-161"></a><span class="w">    </span><span class="k">call </span><span class="n">self</span><span class="p">%</span><span class="n">resetGradPointers</span><span class="p">(</span><span class="n">xce</span><span class="p">,</span><span class="w"> </span><span class="n">tmpGrad</span><span class="p">,</span><span class="w">  </span><span class="n">myThread</span><span class="p">)</span>
+<a id="ln-162" name="ln-162" href="#ln-162"></a>
+<a id="ln-163" name="ln-163" href="#ln-163"></a><span class="w">    </span><span class="k">associate</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">numAOs</span><span class="w">  </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">numAOs_p</span><span class="w"> </span><span class="p">&amp;</span><span class="w">  </span><span class="c">! number of pruned AOs</span>
+<a id="ln-164" name="ln-164" href="#ln-164"></a><span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">indices</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">xce</span><span class="p">%</span><span class="n">indices_p</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-165" name="ln-165" href="#ln-165"></a><span class="w">      </span><span class="p">)</span>
+<a id="ln-166" name="ln-166" href="#ln-166"></a>
+<a id="ln-167" name="ln-167" href="#ln-167"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">xce</span><span class="p">%</span><span class="n">skip_p</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-168" name="ln-168" href="#ln-168"></a><span class="k">        </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(:,:,</span><span class="n">myThread</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(:,:,</span><span class="n">myThread</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">tmpGrad</span>
+<a id="ln-169" name="ln-169" href="#ln-169"></a><span class="w">      </span><span class="k">else</span>
+<a id="ln-170" name="ln-170" href="#ln-170"></a><span class="k">        </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">indices</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">numAOs</span><span class="p">),</span><span class="w"> </span><span class="p">:,</span><span class="w"> </span><span class="n">mythread</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-171" name="ln-171" href="#ln-171"></a><span class="w">          </span><span class="n">self</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">indices</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">numAOs</span><span class="p">),</span><span class="w"> </span><span class="p">:,</span><span class="w"> </span><span class="n">mythread</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">tmpGrad</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">numAOs</span><span class="p">,</span><span class="w"> </span><span class="p">:)</span>
+<a id="ln-172" name="ln-172" href="#ln-172"></a><span class="w">      </span><span class="k">end if</span>
+<a id="ln-173" name="ln-173" href="#ln-173"></a>
+<a id="ln-174" name="ln-174" href="#ln-174"></a><span class="k">   end associate</span>
+<a id="ln-175" name="ln-175" href="#ln-175"></a>
+<a id="ln-176" name="ln-176" href="#ln-176"></a><span class="k"> end subroutine</span>
+<a id="ln-177" name="ln-177" href="#ln-177"></a>
+<a id="ln-178" name="ln-178" href="#ln-178"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-179" name="ln-179" href="#ln-179"></a>
+<a id="ln-180" name="ln-180" href="#ln-180"></a><span class="c">!&gt; @brief Compute grid XC contribution to the nuclear gradient</span>
+<a id="ln-181" name="ln-181" href="#ln-181"></a><span class="c">!&gt; @note  Weight derivatives are not applied here. The gradient seems</span>
+<a id="ln-182" name="ln-182" href="#ln-182"></a><span class="c">!&gt;  to be good enough even using fairly poor grids. However, I do</span>
+<a id="ln-183" name="ln-183" href="#ln-183"></a><span class="c">!&gt;  not recomment to use it for numerical Hessian calculation until</span>
+<a id="ln-184" name="ln-184" href="#ln-184"></a><span class="c">!&gt;  weight derivatives are implemented</span>
+<a id="ln-185" name="ln-185" href="#ln-185"></a><span class="c">!&gt; @param[in]    da        density matrix, alpha-spin</span>
+<a id="ln-186" name="ln-186" href="#ln-186"></a><span class="c">!&gt; @param[in]    db        density matrix, beta-spin</span>
+<a id="ln-187" name="ln-187" href="#ln-187"></a><span class="c">!&gt; @param[inout] dedft     nuclear gradient</span>
+<a id="ln-188" name="ln-188" href="#ln-188"></a><span class="c">!&gt; @param[out]   totele    electronic denisty integral</span>
+<a id="ln-189" name="ln-189" href="#ln-189"></a><span class="c">!&gt; @param[out]   totkin    kinetic energy integral</span>
+<a id="ln-190" name="ln-190" href="#ln-190"></a><span class="c">!&gt; @param[in]    mxAngMom  max. needed ang. mom. value (incl. derivatives)</span>
+<a id="ln-191" name="ln-191" href="#ln-191"></a><span class="c">!&gt; @param[in]    nbf        basis set size</span>
+<a id="ln-192" name="ln-192" href="#ln-192"></a><span class="c">!&gt; @param[in]    isGGA     .TRUE. if GGA/mGGA functional used</span>
+<a id="ln-193" name="ln-193" href="#ln-193"></a><span class="c">!&gt; @param[in]    urohf     .TRUE. if open-shell calculation</span>
+<a id="ln-194" name="ln-194" href="#ln-194"></a><span class="c">!&gt; @author Vladimir Mironov</span>
+<a id="ln-195" name="ln-195" href="#ln-195"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">derexc_blk</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">molGrid</span><span class="p">,</span><span class="w"> </span><span class="n">da</span><span class="p">,</span><span class="w"> </span><span class="n">db</span><span class="p">,</span><span class="w"> </span><span class="n">dedft</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-196" name="ln-196" href="#ln-196"></a><span class="w">                        </span><span class="n">totele</span><span class="p">,</span><span class="w"> </span><span class="n">totkin</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-197" name="ln-197" href="#ln-197"></a><span class="w">                        </span><span class="n">mxAngMom</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">dft_threshold</span><span class="p">,</span><span class="w"> </span><span class="n">urohf</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">)</span>
+<a id="ln-198" name="ln-198" href="#ln-198"></a><span class="c">!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num</span>
+<a id="ln-199" name="ln-199" href="#ln-199"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-200" name="ln-200" href="#ln-200"></a><span class="w">    </span><span class="k">use </span><span class="n">mod_dft_gridint</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">xc_options_t</span><span class="p">,</span><span class="w"> </span><span class="n">run_xc</span>
+<a id="ln-201" name="ln-201" href="#ln-201"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-202" name="ln-202" href="#ln-202"></a><span class="w">    </span><span class="k">use </span><span class="n">mod_dft_molgrid</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dft_grid_t</span>
+<a id="ln-203" name="ln-203" href="#ln-203"></a>
+<a id="ln-204" name="ln-204" href="#ln-204"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-205" name="ln-205" href="#ln-205"></a>
+<a id="ln-206" name="ln-206" href="#ln-206"></a><span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-207" name="ln-207" href="#ln-207"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">dft_grid_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">molGrid</span>
+<a id="ln-208" name="ln-208" href="#ln-208"></a>
+<a id="ln-209" name="ln-209" href="#ln-209"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-210" name="ln-210" href="#ln-210"></a><span class="w">    </span><span class="kt">logical</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">IN</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">urohf</span>
+<a id="ln-211" name="ln-211" href="#ln-211"></a><span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">IN</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mxAngMom</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<a id="ln-212" name="ln-212" href="#ln-212"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">KIND</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">INOUT</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">totele</span><span class="p">,</span><span class="w"> </span><span class="n">totkin</span>
+<a id="ln-213" name="ln-213" href="#ln-213"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">KIND</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">INOUT</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">da</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">db</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">dedft</span><span class="p">(:,</span><span class="w"> </span><span class="p">:)</span>
+<a id="ln-214" name="ln-214" href="#ln-214"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dft_threshold</span>
+<a id="ln-215" name="ln-215" href="#ln-215"></a>
+<a id="ln-216" name="ln-216" href="#ln-216"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">xc_consumer_grad_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dat</span>
+<a id="ln-217" name="ln-217" href="#ln-217"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">xc_options_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xc_opts</span>
+<a id="ln-218" name="ln-218" href="#ln-218"></a>
+<a id="ln-219" name="ln-219" href="#ln-219"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">j</span>
+<a id="ln-220" name="ln-220" href="#ln-220"></a>
+<a id="ln-221" name="ln-221" href="#ln-221"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nat</span>
+<a id="ln-222" name="ln-222" href="#ln-222"></a>
+<a id="ln-223" name="ln-223" href="#ln-223"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">KIND</span><span class="o">=</span><span class="n">fp</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">da2</span><span class="p">(:,</span><span class="w"> </span><span class="p">:),</span><span class="w"> </span><span class="n">db2</span><span class="p">(:,</span><span class="w"> </span><span class="p">:)</span>
+<a id="ln-224" name="ln-224" href="#ln-224"></a>
+<a id="ln-225" name="ln-225" href="#ln-225"></a>
+<a id="ln-226" name="ln-226" href="#ln-226"></a><span class="w">    </span><span class="n">nat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">natom</span>
+<a id="ln-227" name="ln-227" href="#ln-227"></a>
+<a id="ln-228" name="ln-228" href="#ln-228"></a><span class="w">    </span><span class="k">allocate</span><span class="w"> </span><span class="p">(</span><span class="n">da2</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">))</span>
+<a id="ln-229" name="ln-229" href="#ln-229"></a><span class="w">    </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<a id="ln-230" name="ln-230" href="#ln-230"></a><span class="w">      </span><span class="n">da2</span><span class="p">(:,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">da</span><span class="p">(:,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="n">j</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-231" name="ln-231" href="#ln-231"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-232" name="ln-232" href="#ln-232"></a><span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-233" name="ln-233" href="#ln-233"></a><span class="k">      allocate</span><span class="w"> </span><span class="p">(</span><span class="n">db2</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">))</span>
+<a id="ln-234" name="ln-234" href="#ln-234"></a><span class="w">      </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<a id="ln-235" name="ln-235" href="#ln-235"></a><span class="w">        </span><span class="n">db2</span><span class="p">(:,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">db</span><span class="p">(:,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="n">j</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-236" name="ln-236" href="#ln-236"></a><span class="w">      </span><span class="k">end do</span>
+<a id="ln-237" name="ln-237" href="#ln-237"></a><span class="k">    end if</span>
+<a id="ln-238" name="ln-238" href="#ln-238"></a>
+<a id="ln-239" name="ln-239" href="#ln-239"></a><span class="k">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">isGGA</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">functional</span><span class="p">%</span><span class="n">needGrd</span>
+<a id="ln-240" name="ln-240" href="#ln-240"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">needTau</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">functional</span><span class="p">%</span><span class="n">needTau</span>
+<a id="ln-241" name="ln-241" href="#ln-241"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">functional</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">functional</span>
+<a id="ln-242" name="ln-242" href="#ln-242"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">hasBeta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">urohf</span>
+<a id="ln-243" name="ln-243" href="#ln-243"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">isWFVecs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<a id="ln-244" name="ln-244" href="#ln-244"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">numAOs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span>
+<a id="ln-245" name="ln-245" href="#ln-245"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">maxPts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">molGrid</span><span class="p">%</span><span class="n">maxSlicePts</span>
+<a id="ln-246" name="ln-246" href="#ln-246"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">limPts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">molGrid</span><span class="p">%</span><span class="n">maxNRadTimesNAng</span>
+<a id="ln-247" name="ln-247" href="#ln-247"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">numAtoms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">natom</span>
+<a id="ln-248" name="ln-248" href="#ln-248"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">maxAngMom</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mxAngMom</span>
+<a id="ln-249" name="ln-249" href="#ln-249"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">nDer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-250" name="ln-250" href="#ln-250"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">numOccAlpha</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_A</span>
+<a id="ln-251" name="ln-251" href="#ln-251"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">numOccBeta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_B</span>
+<a id="ln-252" name="ln-252" href="#ln-252"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">wfAlpha</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">da2</span>
+<a id="ln-253" name="ln-253" href="#ln-253"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">wfBeta</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">db2</span>
+<a id="ln-254" name="ln-254" href="#ln-254"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">dft_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dft_threshold</span>
+<a id="ln-255" name="ln-255" href="#ln-255"></a><span class="w">    </span><span class="n">xc_opts</span><span class="p">%</span><span class="n">molGrid</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">molGrid</span>
+<a id="ln-256" name="ln-256" href="#ln-256"></a>
+<a id="ln-257" name="ln-257" href="#ln-257"></a><span class="w">    </span><span class="k">call </span><span class="n">dat</span><span class="p">%</span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<a id="ln-258" name="ln-258" href="#ln-258"></a>
+<a id="ln-259" name="ln-259" href="#ln-259"></a><span class="w">    </span><span class="k">call </span><span class="n">run_xc</span><span class="p">(</span><span class="n">xc_opts</span><span class="p">,</span><span class="w"> </span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">)</span>
+<a id="ln-260" name="ln-260" href="#ln-260"></a>
+<a id="ln-261" name="ln-261" href="#ln-261"></a><span class="w">    </span><span class="n">totele</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dat</span><span class="p">%</span><span class="n">N_elec</span>
+<a id="ln-262" name="ln-262" href="#ln-262"></a><span class="w">    </span><span class="n">totkin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dat</span><span class="p">%</span><span class="n">E_kin</span>
+<a id="ln-263" name="ln-263" href="#ln-263"></a>
+<a id="ln-264" name="ln-264" href="#ln-264"></a><span class="w">    </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span>
+<a id="ln-265" name="ln-265" href="#ln-265"></a><span class="w">      </span><span class="k">associate</span><span class="w"> </span><span class="p">(</span><span class="n">atom</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">origin</span><span class="p">(</span><span class="n">j</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-266" name="ln-266" href="#ln-266"></a><span class="w">                 </span><span class="n">offset</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">ao_offset</span><span class="p">(</span><span class="n">j</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-267" name="ln-267" href="#ln-267"></a><span class="w">                 </span><span class="n">naos</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">naos</span><span class="p">(</span><span class="n">j</span><span class="p">))</span>
+<a id="ln-268" name="ln-268" href="#ln-268"></a><span class="w">        </span><span class="n">dedft</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dedft</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="o">-</span><span class="nb">sum</span><span class="p">(</span><span class="n">dat</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">offset</span><span class="p">:</span><span class="n">offset</span><span class="o">+</span><span class="n">naos</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span>
+<a id="ln-269" name="ln-269" href="#ln-269"></a><span class="w">        </span><span class="n">dedft</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dedft</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="o">-</span><span class="nb">sum</span><span class="p">(</span><span class="n">dat</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">offset</span><span class="p">:</span><span class="n">offset</span><span class="o">+</span><span class="n">naos</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span>
+<a id="ln-270" name="ln-270" href="#ln-270"></a><span class="w">        </span><span class="n">dedft</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dedft</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">atom</span><span class="p">)</span><span class="o">-</span><span class="nb">sum</span><span class="p">(</span><span class="n">dat</span><span class="p">%</span><span class="n">bfGrad</span><span class="p">(</span><span class="n">offset</span><span class="p">:</span><span class="n">offset</span><span class="o">+</span><span class="n">naos</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span>
+<a id="ln-271" name="ln-271" href="#ln-271"></a><span class="w">      </span><span class="k">end associate</span>
+<a id="ln-272" name="ln-272" href="#ln-272"></a><span class="k">    end do</span>
+<a id="ln-273" name="ln-273" href="#ln-273"></a>
+<a id="ln-274" name="ln-274" href="#ln-274"></a><span class="k">    deallocate</span><span class="w"> </span><span class="p">(</span><span class="n">da2</span><span class="p">)</span>
+<a id="ln-275" name="ln-275" href="#ln-275"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">deallocate</span><span class="w"> </span><span class="p">(</span><span class="n">db2</span><span class="p">)</span>
+<a id="ln-276" name="ln-276" href="#ln-276"></a>
+<a id="ln-277" name="ln-277" href="#ln-277"></a><span class="w">    </span><span class="k">call </span><span class="n">dat</span><span class="p">%</span><span class="n">clean</span><span class="p">()</span>
+<a id="ln-278" name="ln-278" href="#ln-278"></a>
+<a id="ln-279" name="ln-279" href="#ln-279"></a><span class="w">  </span><span class="k">end subroutine</span>
+<a id="ln-280" name="ln-280" href="#ln-280"></a>
+<a id="ln-281" name="ln-281" href="#ln-281"></a><span class="c">!-------------------------------------------------------------------------------</span>
+<a id="ln-282" name="ln-282" href="#ln-282"></a>
+<a id="ln-283" name="ln-283" href="#ln-283"></a><span class="k">end module </span><span class="n">mod_dft_gridint_grad</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,3917 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mod_dft_xclib &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mod_dft_xclib
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for modules and submodules.">172 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_xclib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/dft_xclib.f90.html'>dft_xclib.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mod_dft_xclib</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_xclib.html#variable-xclib_libxc">XCLIB_LIBXC</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_xclib.html#type-xc_pack_t">xc_pack_t</a>
+            <a class="list-group-item" href="../module/mod_dft_xclib.html#type-xc_lib_t">xc_lib_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='functionals.html'>functionals</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_xclib~~UsesGraph Pages: 1 -->
+<svg id="modulemod_dft_xclibUsesGraph" width="451pt" height="116pt"
+ viewBox="0.00 0.00 451.00 116.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_xclib~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 112)">
+<title>module~~mod_dft_xclib~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-112 447,-112 447,4 -4,4"/>
+<!-- module~mod_dft_xclib -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node1" class="node">
+<title>module~mod_dft_xclib</title>
+<polygon fill="none" stroke="#000000" points="443,-86 357,-86 357,-62 443,-62 443,-86"/>
+<text text-anchor="middle" x="400" y="-71.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_xclib</text>
+</g>
+<!-- module~functionals -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node2" class="node">
+<title>module~functionals</title>
+<g id="a_module~~mod_dft_xclib~~UsesGraph_node2"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="321,-66 250,-66 250,-42 321,-42 321,-66"/>
+<text text-anchor="middle" x="285.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~functionals -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge1" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M356.7125,-66.4389C348.3382,-64.9761 339.5395,-63.4392 331.0941,-61.964"/>
+<polygon fill="#000000" stroke="#000000" points="331.4733,-58.4773 321.0202,-60.2044 330.2687,-65.3729 331.4733,-58.4773"/>
+</g>
+<!-- module~precision -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_module~~mod_dft_xclib~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-108 141.5,-108 141.5,-84 202.5,-84 202.5,-108"/>
+<text text-anchor="middle" x="172" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~precision -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge2" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M356.8469,-78.1639C315.3988,-82.1633 253.2495,-88.1601 212.6581,-92.0768"/>
+<polygon fill="#000000" stroke="#000000" points="212.1933,-88.6053 202.5757,-93.0497 212.8657,-95.573 212.1933,-88.6053"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge4" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M252.9755,-66.0355C240.2192,-70.7559 225.4526,-76.2202 212.0501,-81.1797"/>
+<polygon fill="#000000" stroke="#000000" points="210.7442,-77.9309 202.5804,-84.6839 213.1736,-84.4959 210.7442,-77.9309"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node4" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~mod_dft_xclib~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-66 130,-66 130,-42 214,-42 214,-66"/>
+<text text-anchor="middle" x="172" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge3" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.8993,-54C241.7688,-54 232.9625,-54 224.2955,-54"/>
+<polygon fill="#000000" stroke="#000000" points="224.2343,-50.5001 214.2342,-54 224.2342,-57.5001 224.2343,-50.5001"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node6" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-24 131.5,-24 131.5,0 212.5,0 212.5,-24"/>
+<text text-anchor="middle" x="172" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge5" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M252.9755,-41.9645C240.865,-37.4831 226.9427,-32.3312 214.0959,-27.5773"/>
+<polygon fill="#000000" stroke="#000000" points="215.1225,-24.2253 204.5293,-24.0373 212.6931,-30.7903 215.1225,-24.2253"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~mod_dft_xclib~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~mod_dft_xclib~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-108 0,-108 0,-84 94,-84 94,-108"/>
+<text text-anchor="middle" x="47" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_xclib~~UsesGraph_edge6" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-96C130.2434,-96 117.203,-96 104.4454,-96"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-92.5001 94.3156,-96 104.3156,-99.5001 104.3156,-92.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_xclib~~UsedByGraph Pages: 1 -->
+<svg id="modulemod_dft_xclibUsedByGraph" width="641pt" height="397pt"
+ viewBox="0.00 0.00 641.00 396.88" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_xclib~~UsedByGraph" class="graph" transform="scale(.7488 .7488) rotate(0) translate(4 526)">
+<title>module~~mod_dft_xclib~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-526 852,-526 852,4 -4,4"/>
+<!-- module~mod_dft_xclib -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node1" class="node">
+<title>module~mod_dft_xclib</title>
+<polygon fill="none" stroke="#000000" points="86,-255 0,-255 0,-231 86,-231 86,-255"/>
+<text text-anchor="middle" x="43" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_xclib</text>
+</g>
+<!-- module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node2" class="node">
+<title>module~mod_dft_xc_libxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node2"><a xlink:href="../module/mod_dft_xc_libxc.html" xlink:title="mod_dft_xc_libxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="225,-255 122,-255 122,-231 225,-231 225,-255"/>
+<text text-anchor="middle" x="173.5" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_xc_libxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge1" class="edge">
+<title>module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M121.9229,-243C113.515,-243 104.79,-243 96.3407,-243"/>
+<polygon fill="#000000" stroke="#000000" points="96.2111,-239.5001 86.2111,-243 96.211,-246.5001 96.2111,-239.5001"/>
+</g>
+<!-- module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node3" class="node">
+<title>module~mod_dft_gridint</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node3"><a xlink:href="../module/mod_dft_gridint.html" xlink:title="mod_dft_gridint">
+<polygon fill="#337ab7" stroke="#337ab7" points="357,-255 261,-255 261,-231 357,-231 357,-255"/>
+<text text-anchor="middle" x="309" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge2" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M260.8462,-243C252.5359,-243 243.7951,-243 235.1859,-243"/>
+<polygon fill="#000000" stroke="#000000" points="235.1738,-239.5001 225.1737,-243 235.1737,-246.5001 235.1738,-239.5001"/>
+</g>
+<!-- module~mod_dft_gridint_energy -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node4" class="node">
+<title>module~mod_dft_gridint_energy</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node4"><a xlink:href="../module/mod_dft_gridint_energy.html" xlink:title="mod_dft_gridint_energy">
+<polygon fill="#337ab7" stroke="#337ab7" points="539.5,-503 400.5,-503 400.5,-479 539.5,-479 539.5,-503"/>
+<text text-anchor="middle" x="470" y="-488.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_energy</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge3" class="edge">
+<title>module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M435.8779,-478.9883C421.0923,-472.3585 404.5587,-462.8253 393,-450 343.2911,-394.8443 320.9526,-306.4159 312.8475,-265.3269"/>
+<polygon fill="#000000" stroke="#000000" points="316.2473,-264.4664 310.967,-255.2812 309.3668,-265.7545 316.2473,-264.4664"/>
+</g>
+<!-- module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node5" class="node">
+<title>module~mod_dft_gridint_fxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node5"><a xlink:href="../module/mod_dft_gridint_fxc.html" xlink:title="mod_dft_gridint_fxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="528.5,-441 411.5,-441 411.5,-417 528.5,-417 528.5,-441"/>
+<text text-anchor="middle" x="470" y="-426.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_fxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge4" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.2214,-416.874C409.1531,-413.1382 400.2989,-408.2864 393,-402 349.6694,-364.68 325.3409,-299.3618 315.0059,-265.2197"/>
+<polygon fill="#000000" stroke="#000000" points="318.2785,-263.9375 312.1357,-255.3051 311.5545,-265.884 318.2785,-263.9375"/>
+</g>
+<!-- module~mod_dft_gridint_grad -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node6" class="node">
+<title>module~mod_dft_gridint_grad</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node6"><a xlink:href="../module/mod_dft_gridint_grad.html" xlink:title="mod_dft_gridint_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="533,-360 407,-360 407,-336 533,-336 533,-360"/>
+<text text-anchor="middle" x="470" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge5" class="edge">
+<title>module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.7084,-335.9918C405.8448,-333.5141 399.1121,-330.547 393,-327 364.8468,-310.6621 339.4797,-282.5416 324.1641,-263.3768"/>
+<polygon fill="#000000" stroke="#000000" points="326.7641,-261.0187 317.8606,-255.276 321.2396,-265.3176 326.7641,-261.0187"/>
+</g>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node7" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node7"><a xlink:href="../module/mod_dft_gridint_gxc.html" xlink:title="mod_dft_gridint_gxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="703,-400 583,-400 583,-376 703,-376 703,-400"/>
+<text text-anchor="middle" x="643" y="-385.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_gxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge6" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M582.8572,-397.5014C529.3206,-402.8485 450.7655,-402.7934 393,-369 352.7809,-345.4715 327.9889,-294.1286 316.5404,-264.7617"/>
+<polygon fill="#000000" stroke="#000000" points="319.6875,-263.1827 312.9224,-255.0289 313.1262,-265.6218 319.6875,-263.1827"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge16" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M592.03,-400.0796C572.8456,-404.6262 550.839,-409.8416 530.8436,-414.5804"/>
+<polygon fill="#000000" stroke="#000000" points="529.8277,-411.2241 520.9044,-416.936 531.442,-418.0355 529.8277,-411.2241"/>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node8" class="node">
+<title>module~mod_dft_gridint_tdxc_grad</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node8"><a xlink:href="../module/mod_dft_gridint_tdxc_grad.html" xlink:title="mod_dft_gridint_tdxc_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="547,-318 393,-318 393,-294 547,-294 547,-318"/>
+<text text-anchor="middle" x="470" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_tdxc_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge7" class="edge">
+<title>module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.2428,-293.9803C411.0795,-291.3308 401.6723,-288.3134 393,-285 374.7111,-278.0124 355.0981,-268.3395 339.427,-260.0376"/>
+<polygon fill="#000000" stroke="#000000" points="340.6899,-256.7425 330.226,-255.082 337.3705,-262.9054 340.6899,-256.7425"/>
+</g>
+<!-- proc~derexc_blk -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node9" class="node">
+<title>proc~derexc_blk</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node9"><a xlink:href="../proc/derexc_blk.html" xlink:title="derexc_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="505,-276 435,-276 435,-252 505,-252 505,-276"/>
+<text text-anchor="middle" x="470" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">derexc_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~derexc_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge8" class="edge">
+<title>proc~derexc_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.6679,-259.3915C414.9213,-256.8158 389.8135,-253.5409 367.2401,-250.5965"/>
+<polygon fill="#000000" stroke="#000000" points="367.444,-247.0936 357.0753,-249.2707 366.5386,-254.0348 367.444,-247.0936"/>
+</g>
+<!-- proc~dmatd_blk -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node10" class="node">
+<title>proc~dmatd_blk</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node10"><a xlink:href="../proc/dmatd_blk.html" xlink:title="dmatd_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="504,-234 436,-234 436,-210 504,-210 504,-234"/>
+<text text-anchor="middle" x="470" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dmatd_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge9" class="edge">
+<title>proc~dmatd_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M435.856,-226.4536C415.9153,-229.0545 390.2178,-232.4064 367.1716,-235.4124"/>
+<polygon fill="#000000" stroke="#000000" points="366.605,-231.9566 357.1417,-236.7206 367.5104,-238.8978 366.605,-231.9566"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node11" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node11"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="499,-192 441,-192 441,-168 499,-168 499,-192"/>
+<text text-anchor="middle" x="470" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge10" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.6801,-186.5494C426.1242,-190.1636 408.4031,-195.115 393,-201 374.7111,-207.9876 355.0981,-217.6605 339.427,-225.9624"/>
+<polygon fill="#000000" stroke="#000000" points="337.3705,-223.0946 330.226,-230.918 340.6899,-229.2575 337.3705,-223.0946"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node12" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node12"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="500.5,-150 439.5,-150 439.5,-126 500.5,-126 500.5,-150"/>
+<text text-anchor="middle" x="470" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge11" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.3257,-142.5736C424.6062,-145.6904 407.1417,-150.7933 393,-159 364.8468,-175.3379 339.4797,-203.4584 324.1641,-222.6232"/>
+<polygon fill="#000000" stroke="#000000" points="321.2396,-220.6824 317.8606,-230.724 326.7641,-224.9813 321.2396,-220.6824"/>
+</g>
+<!-- proc~tddft_xc_gradient -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node13" class="node">
+<title>proc~tddft_xc_gradient</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node13"><a xlink:href="../proc/tddft_xc_gradient.html" xlink:title="tddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="522.5,-108 417.5,-108 417.5,-84 522.5,-84 522.5,-108"/>
+<text text-anchor="middle" x="470" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge12" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M417.1713,-104.9687C408.6037,-107.9097 400.1941,-111.8148 393,-117 355.5795,-143.9712 329.9955,-193.1574 317.6007,-221.4389"/>
+<polygon fill="#000000" stroke="#000000" points="314.2998,-220.2588 313.6335,-230.8327 320.7483,-222.9822 314.2998,-220.2588"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node14" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node14"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="502.5,-66 437.5,-66 437.5,-42 502.5,-42 502.5,-66"/>
+<text text-anchor="middle" x="470" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge13" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M437.2544,-56.8293C422.4053,-59.5426 405.4302,-64.8097 393,-75 346.1494,-113.4083 323.0597,-184.5477 313.918,-220.684"/>
+<polygon fill="#000000" stroke="#000000" points="310.4446,-220.1596 311.5178,-230.7 317.2519,-221.7909 310.4446,-220.1596"/>
+</g>
+<!-- proc~utddft_xc_gradient -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node15" class="node">
+<title>proc~utddft_xc_gradient</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node15"><a xlink:href="../proc/utddft_xc_gradient.html" xlink:title="utddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="526,-24 414,-24 414,0 526,0 526,-24"/>
+<text text-anchor="middle" x="470" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge14" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.8305,-20.6551C406.2306,-23.6478 398.998,-27.651 393,-33 336.2371,-83.6217 317.2824,-177.8573 311.4183,-220.731"/>
+<polygon fill="#000000" stroke="#000000" points="307.9113,-220.5693 310.1421,-230.9266 314.8571,-221.4388 307.9113,-220.5693"/>
+</g>
+<!-- proc~dftder -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node16" class="node">
+<title>proc~dftder</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node16"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="670,-358 616,-358 616,-334 670,-334 670,-358"/>
+<text text-anchor="middle" x="643" y="-343.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;module~mod_dft_gridint_grad -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge19" class="edge">
+<title>proc~dftder&#45;&gt;module~mod_dft_gridint_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M615.9688,-346.3125C596.4212,-346.5385 569.0204,-346.8553 543.2314,-347.1534"/>
+<polygon fill="#000000" stroke="#000000" points="543.0277,-343.6554 533.0688,-347.2709 543.1086,-350.655 543.0277,-343.6554"/>
+</g>
+<!-- proc~dftexcor -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node17" class="node">
+<title>proc~dftexcor</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node17"><a xlink:href="../proc/dftexcor.html" xlink:title="dftexcor">
+<polygon fill="#d9534f" stroke="#d9534f" points="671.5,-522 614.5,-522 614.5,-498 671.5,-498 671.5,-522"/>
+<text text-anchor="middle" x="643" y="-507.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftexcor</text>
+</a>
+</g>
+</g>
+<!-- proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge15" class="edge">
+<title>proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M614.4326,-506.8625C596.7095,-504.9161 572.9814,-502.3101 549.8859,-499.7736"/>
+<polygon fill="#000000" stroke="#000000" points="550.0181,-496.2672 539.6958,-498.6544 549.2539,-503.2253 550.0181,-496.2672"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node18" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node18"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="848,-441 739,-441 739,-417 848,-417 848,-441"/>
+<text text-anchor="middle" x="793.5" y="-426.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge17" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M752.8816,-441.0588C737.4161,-445.0706 719.5362,-449.0189 703,-451 650.0453,-457.3441 636.087,-456.1197 583,-451 565.9486,-449.3556 547.6482,-446.3461 530.8465,-443.0701"/>
+<polygon fill="#000000" stroke="#000000" points="531.0977,-439.5504 520.6033,-441.0057 529.7147,-446.4124 531.0977,-439.5504"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge20" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.159,-416.9204C732.8507,-412.4776 714.1982,-407.3962 697.1245,-402.7449"/>
+<polygon fill="#000000" stroke="#000000" points="697.8522,-399.3156 687.2839,-400.064 696.0123,-406.0695 697.8522,-399.3156"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node19" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node19"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="681,-442 605,-442 605,-418 681,-418 681,-442"/>
+<text text-anchor="middle" x="643" y="-427.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge18" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M604.6057,-429.7781C585.269,-429.6663 561.2296,-429.5273 538.8392,-429.3979"/>
+<polygon fill="#000000" stroke="#000000" points="538.7107,-425.8972 528.6906,-429.3393 538.6701,-432.8971 538.7107,-425.8972"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_node20" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~mod_dft_xclib~~UsedByGraph_node20"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="685,-316 601,-316 601,-292 685,-292 685,-316"/>
+<text text-anchor="middle" x="643" y="-301.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~mod_dft_xclib~~UsedByGraph_edge21" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M600.6794,-304.4893C587.594,-304.6405 572.6647,-304.8131 557.6879,-304.9863"/>
+<polygon fill="#000000" stroke="#000000" points="557.2927,-301.4905 547.3339,-305.106 557.3737,-308.49 557.2927,-301.4905"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulemod_dft_xclibUsedByGraph = svgPanZoom('#modulemod_dft_xclibUsedByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xclib_libxc"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XCLIB_LIBXC</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_pack_t"></span>
+      <h3>
+        type, public&nbsp;::&nbsp;
+        <a href='../type/xc_pack_t.html'>xc_pack_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ra"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ra</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ta</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rara"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rara</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-raga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>raga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbga</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgc</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ratb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ratb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbta</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbtb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gaga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gaga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gcgc</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgc</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gcta</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gctb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbta</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tbtb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarara"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarara</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rararb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rararb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbrb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbrb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbrb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbrb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagaga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagaga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagagc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagagc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagagb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagagb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagcgc</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagbgc</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagbgb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gcgcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gcgcgc</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgcgc</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgbgc</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgbgb</strong></td>
+<td> =</td>
+                <td>10</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-raraga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>raraga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-raragc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>raragc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-raragb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>raragb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbga</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbgc</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbgb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbga</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbgc</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbgb</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragaga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragaga</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragagc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragagc</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragagb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragagb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragcgc</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragbgc</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragbgb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgaga"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgaga</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgagc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgagc</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgagb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgagb</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgcgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgcgc</strong></td>
+<td> =</td>
+                <td>10</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgbgc"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgbgc</strong></td>
+<td> =</td>
+                <td>11</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgbgb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgbgb</strong></td>
+<td> =</td>
+                <td>12</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tatata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tatata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tatatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tatatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tatbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tatbtb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tbtbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tbtbtb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-raratb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>raratb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbta</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rarbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rarbtb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbta</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbrbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbrbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ratata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ratata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ratatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ratatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ratbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ratbtb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbtata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbtata</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbtatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbtatb</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbtbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbtbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragcta</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragctb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragbta</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ragbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ragbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgata</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgatb</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgcta</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgctb</strong></td>
+<td> =</td>
+                <td>10</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgbta</strong></td>
+<td> =</td>
+                <td>11</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rbgbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rbgbtb</strong></td>
+<td> =</td>
+                <td>12</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagcta</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagctb</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagbta</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gagbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gagbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gcgcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gcgcta</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gcgctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gcgctb</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgcta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgcta</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgctb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgctb</strong></td>
+<td> =</td>
+                <td>10</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgbta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgbta</strong></td>
+<td> =</td>
+                <td>11</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbgbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbgbtb</strong></td>
+<td> =</td>
+                <td>12</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gatata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gatata</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gatatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gatatb</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gatbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gatbtb</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gctata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gctata</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gctatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gctatb</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gctbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gctbtb</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbtata"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbtata</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbtatb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbtatb</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gbtbtb"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gbtbtb</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_lib_t"></span>
+      <h3>
+        type, public, abstract&nbsp;::&nbsp;
+        <a href='../type/xc_lib_t.html'>xc_lib_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqsigma"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqSigma</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqtau"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqTau</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqlapl"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqLapl</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqbeta"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqBeta</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nder"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_xc"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_xc</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_exch"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_exch</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_corr"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_corr</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesexc"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEXC</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesex"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEX</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesec"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEC</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xclibid"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xclibID</strong></td>
+<td> =</td>
+                <td>XCLIB_LIBXC</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ids~3"></span>
+              type(<a href='../type/xc_pack_t.html'>xc_pack_t</a>),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ids</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-memory_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>memory_</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rho~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>rho</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-drho"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>drho</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sig"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>sig</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lapl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>lapl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-exc"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>exc</strong>(:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dr"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dr</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1ds"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1ds</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dt"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dt</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2r2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2r2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2s2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2s2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2t2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2t2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rs"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rs</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rt"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rt</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2st"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2st</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2sl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2sl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2tl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2tl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2l2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2l2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2s"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2s</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rs2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rs2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3t3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3t3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2t"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2t</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s2t"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s2t</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rt2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rt2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3st2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3st2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rst"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rst</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rsl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rsl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rtl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rtl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3sl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3sl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3stl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3stl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3t2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3t2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3tl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3tl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3l3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3l3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure(init_xc_lib), public, deferred ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-init~13'>init</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(compute_xc_lib), public, deferred ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-compute~2'>compute</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(setPts_xc_lib), public, deferred ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-setpts'>setPts</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-clean~13'>clean</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-scalexc'>scalexc</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public, non_overridable ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-echo'>echo</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public, non_overridable ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-getenergy'>getEnergy</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public, non_overridable ::
+  <strong><a href='../type/xc_lib_t.html#boundprocedure-resetenergy'>resetEnergy</a></strong></td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

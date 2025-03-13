@@ -1,0 +1,788 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>symmetrize_matrices &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>symmetrize_matrices
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">10 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_lib.f90.html'>tdhf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_lib.html'>tdhf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">symmetrize_matrices</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine symmetrize_matrices(a, lda, nmtx)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~symmetrize_matrices~~UsesGraph Pages: 1 -->
+<svg id="procsymmetrize_matricesUsesGraph" width="641pt" height="164pt"
+ viewBox="0.00 0.00 641.00 163.58" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~symmetrize_matrices~~UsesGraph" class="graph" transform="scale(.7846 .7846) rotate(0) translate(4 204.4982)">
+<title>proc~~symmetrize_matrices~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-204.4982 813,-204.4982 813,4 -4,4"/>
+<!-- proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node1" class="node">
+<title>proc~symmetrize_matrices</title>
+<polygon fill="none" stroke="#000000" points="809,-37.4982 682,-37.4982 682,-13.4982 809,-13.4982 809,-37.4982"/>
+<text text-anchor="middle" x="745.5" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">symmetrize_matrices</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-37.4982 592,-37.4982 592,-13.4982 646,-13.4982 646,-37.4982"/>
+<text text-anchor="middle" x="619" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrices&#45;&gt;module~mathlib -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge1" class="edge">
+<title>proc~symmetrize_matrices&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.8794,-25.4982C673.1524,-25.4982 664.4348,-25.4982 656.3912,-25.4982"/>
+<polygon fill="#000000" stroke="#000000" points="656.2613,-21.9983 646.2613,-25.4982 656.2612,-28.9983 656.2613,-21.9983"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node3" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node3"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-57.4982 489,-57.4982 489,-33.4982 556,-33.4982 556,-57.4982"/>
+<text text-anchor="middle" x="522.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge2" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-31.1225C583.9291,-32.7668 575.0471,-34.6076 566.3567,-36.4087"/>
+<polygon fill="#000000" stroke="#000000" points="565.393,-33.034 556.3114,-38.4907 566.8136,-39.8883 565.393,-33.034"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-74.4982 142,-74.4982 142,-50.4982 203,-50.4982 203,-74.4982"/>
+<text text-anchor="middle" x="172.5" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge3" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9443,-20.2584C536.0998,-10.2278 404.1189,9.4224 294.5,-5.4982"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-5.4982C258.8005,-10.6557 221.8177,-30.3009 198.0658,-45.0973"/>
+<polygon fill="#000000" stroke="#000000" points="196.176,-42.1512 189.6407,-50.4904 199.9499,-48.0468 196.176,-42.1512"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node6" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node6"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-57.4982 380.5,-57.4982 380.5,-33.4982 446.5,-33.4982 446.5,-57.4982"/>
+<text text-anchor="middle" x="413.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge4" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-45.4982C478.7628,-45.4982 467.4795,-45.4982 456.7965,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="456.7947,-41.9983 446.7947,-45.4982 456.7947,-48.9983 456.7947,-41.9983"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node7" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node7"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-99.4982 374,-99.4982 374,-75.4982 453,-75.4982 453,-99.4982"/>
+<text text-anchor="middle" x="413.5" y="-85.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge5" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-57.5337C479.7487,-61.9712 466.5263,-67.066 454.29,-71.7809"/>
+<polygon fill="#000000" stroke="#000000" points="452.8124,-68.5994 444.7396,-75.4609 455.3293,-75.1313 452.8124,-68.5994"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-74.4982 0,-74.4982 0,-50.4982 94,-50.4982 94,-74.4982"/>
+<text text-anchor="middle" x="47" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge6" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-62.4982C130.4618,-62.4982 117.2165,-62.4982 104.2832,-62.4982"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-58.9983 94.0202,-62.4982 104.0202,-65.9983 104.0203,-58.9983"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge9" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-33.2968C371.6437,-19.7798 331.214,-.5009 294.5,-5.4982"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node8" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node8"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-57.4982 251,-57.4982 251,-33.4982 338,-33.4982 338,-57.4982"/>
+<text text-anchor="middle" x="294.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge7" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-45.4982C370.4498,-45.4982 359.3275,-45.4982 348.4544,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-41.9983 338.1539,-45.4982 348.1539,-48.9983 348.154,-41.9983"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node9" class="node">
+<title>module~messages</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node9"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-137.4982 261.5,-137.4982 261.5,-113.4982 327.5,-113.4982 327.5,-137.4982"/>
+<text text-anchor="middle" x="294.5" y="-123.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge8" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-57.5933C384.2087,-60.3782 378.8585,-63.4281 374,-66.4982 354.1394,-79.0481 332.823,-95.0165 317.2673,-107.175"/>
+<polygon fill="#000000" stroke="#000000" points="314.945,-104.5491 309.2638,-113.4919 319.2818,-110.0438 314.945,-104.5491"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge12" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-83.3979C329.6221,-78.7972 258.0316,-71.3708 213.2045,-66.7206"/>
+<polygon fill="#000000" stroke="#000000" points="213.5495,-63.2377 203.2418,-65.6872 212.8272,-70.2004 213.5495,-63.2377"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge10" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-75.4627C366.5776,-70.9374 351.8187,-65.7283 338.2399,-60.9358"/>
+<polygon fill="#000000" stroke="#000000" points="339.2004,-57.5633 328.6056,-57.5355 336.8706,-64.1642 339.2004,-57.5633"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge11" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-99.5216C363.7049,-103.3992 350.1523,-107.7269 337.6451,-111.7208"/>
+<polygon fill="#000000" stroke="#000000" points="336.347,-108.4611 327.8856,-114.8373 338.4764,-115.1294 336.347,-108.4611"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge16" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-113.3863C256.0979,-104.9064 234.3205,-93.3727 215,-83.4982 212.2312,-82.0831 209.354,-80.6283 206.4607,-79.1763"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-75.9276 197.2773,-74.6004 204.6667,-82.1929 207.7887,-75.9276"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node10" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-200.4982 130,-200.4982 130,-176.4982 215,-176.4982 215,-200.4982"/>
+<text text-anchor="middle" x="172.5" y="-186.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-137.6101C256.0979,-146.09 234.3205,-157.6237 215,-167.4982 212.2312,-168.9133 209.354,-170.3681 206.4607,-171.82"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-168.8035 197.2773,-176.396 207.7887,-175.0687 204.6667,-168.8035"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node11" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-158.4982 136.5,-158.4982 136.5,-134.4982 208.5,-134.4982 208.5,-158.4982"/>
+<text text-anchor="middle" x="172.5" y="-144.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-131.1811C248.3109,-133.4488 232.9133,-136.0992 218.6653,-138.5517"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-135.1485 208.5419,-140.2943 218.9907,-142.0471 217.8032,-135.1485"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~symmetrize_matrices~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-116.4982 133,-116.4982 133,-92.4982 212,-92.4982 212,-116.4982"/>
+<text text-anchor="middle" x="172.5" y="-102.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~symmetrize_matrices~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-119.8153C249.3385,-117.7245 235.302,-115.3084 222.0189,-113.0219"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-109.5535 212.052,-111.3063 221.3133,-116.452 222.5008,-109.5535"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocsymmetrize_matricesUsesGraph = svgPanZoom('#procsymmetrize_matricesUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~162"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,lda,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~91"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nmtx"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nmtx</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~symmetrize_matrices~~CallsGraph Pages: 1 -->
+<svg id="procsymmetrize_matricesCallsGraph" width="286pt" height="32pt"
+ viewBox="0.00 0.00 286.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~symmetrize_matrices~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~symmetrize_matrices~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 282,-28 282,4 -4,4"/>
+<!-- proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrices~~CallsGraph_node1" class="node">
+<title>proc~symmetrize_matrices</title>
+<polygon fill="none" stroke="#000000" points="127,-24 0,-24 0,0 127,0 127,-24"/>
+<text text-anchor="middle" x="63.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">symmetrize_matrices</text>
+</g>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrices~~CallsGraph_node2" class="node">
+<title>proc~symmetrize_matrix</title>
+<g id="a_proc~~symmetrize_matrices~~CallsGraph_node2"><a xlink:href="../proc/symmetrize_matrix.html" xlink:title="symmetrize_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="278,-24 163,-24 163,0 278,0 278,-24"/>
+<text text-anchor="middle" x="220.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrices&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrices~~CallsGraph_edge1" class="edge">
+<title>proc~symmetrize_matrices&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M127.3579,-12C135.6869,-12 144.2439,-12 152.6357,-12"/>
+<polygon fill="#000000" stroke="#000000" points="152.7636,-15.5001 162.7635,-12 152.7635,-8.5001 152.7636,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~symmetrize_matrices~~CalledByGraph Pages: 1 -->
+<svg id="procsymmetrize_matricesCalledByGraph" width="466pt" height="32pt"
+ viewBox="0.00 0.00 466.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~symmetrize_matrices~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~symmetrize_matrices~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 462,-28 462,4 -4,4"/>
+<!-- proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrices~~CalledByGraph_node1" class="node">
+<title>proc~symmetrize_matrices</title>
+<polygon fill="none" stroke="#000000" points="458,-24 331,-24 331,0 458,0 458,-24"/>
+<text text-anchor="middle" x="394.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">symmetrize_matrices</text>
+</g>
+<!-- proc~int2_rpagrd_data_t_parallel_stop -->
+<g id="proc~~symmetrize_matrices~~CalledByGraph_node2" class="node">
+<title>proc~int2_rpagrd_data_t_parallel_stop</title>
+<g id="a_proc~~symmetrize_matrices~~CalledByGraph_node2"><a xlink:href="../proc/int2_rpagrd_data_t_parallel_stop.html" xlink:title="int2_rpagrd_data_t%int2_rpagrd_data_t_parallel_stop">
+<polygon fill="#d9534f" stroke="#d9534f" points="295,-24 0,-24 0,0 295,0 295,-24"/>
+<text text-anchor="middle" x="147.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_rpagrd_data_t%int2_rpagrd_data_t_parallel_stop</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_rpagrd_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrices~~CalledByGraph_edge1" class="edge">
+<title>proc~int2_rpagrd_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrices</title>
+<path fill="none" stroke="#000000" d="M295.1033,-12C303.8688,-12 312.4657,-12 320.708,-12"/>
+<polygon fill="#000000" stroke="#000000" points="320.9447,-15.5001 330.9446,-12 320.9446,-8.5001 320.9447,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,624 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>c_f_char &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>c_f_char
+      <small>Function</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">15 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/strings.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/strings.f90.html'>strings.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/strings.html'>strings</a></li>
+            <li class="breadcrumb-item active" aria-current="page">c_f_char</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/c_f_char.html#src">c_f_char</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  function c_f_char(cchar) result(fstr)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_c_binding'>iso_c_binding</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~c_f_char~~UsesGraph Pages: 1 -->
+<svg id="procc_f_charUsesGraph" width="185pt" height="32pt"
+ viewBox="0.00 0.00 185.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~c_f_char~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~c_f_char~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 181,-28 181,4 -4,4"/>
+<!-- proc~c_f_char -->
+<g id="proc~~c_f_char~~UsesGraph_node1" class="node">
+<title>proc~c_f_char</title>
+<polygon fill="none" stroke="#000000" points="177,-24 120,-24 120,0 177,0 177,-24"/>
+<text text-anchor="middle" x="148.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">c_f_char</text>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~c_f_char~~UsesGraph_node2" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~c_f_char~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="84,-24 0,-24 0,0 84,0 84,-24"/>
+<text text-anchor="middle" x="42" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- proc~c_f_char&#45;&gt;iso_c_binding -->
+<g id="proc~~c_f_char~~UsesGraph_edge1" class="edge">
+<title>proc~c_f_char&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M119.96,-12C112.0772,-12 103.2661,-12 94.4829,-12"/>
+<polygon fill="#000000" stroke="#000000" points="94.2422,-8.5001 84.2422,-12 94.2422,-15.5001 94.2422,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Convert raw null-terminated C-string to Fortran string</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>No boundary checks for c-string are performed, use at your own risk!</p>
+</div>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cchar"></span>
+              character(kind=c_char, len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cchar</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+      <h3>Return Value
+        <small>
+          <span class="anchor" id="variable-fstr"></span>
+          character(len=:), allocatable
+        </small>
+      </h3>
+      
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~c_f_char~~CalledByGraph Pages: 1 -->
+<svg id="procc_f_charCalledByGraph" width="455pt" height="200pt"
+ viewBox="0.00 0.00 455.00 200.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~c_f_char~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 196)">
+<title>proc~~c_f_char~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-196 451,-196 451,4 -4,4"/>
+<!-- proc~c_f_char -->
+<g id="proc~~c_f_char~~CalledByGraph_node1" class="node">
+<title>proc~c_f_char</title>
+<polygon fill="none" stroke="#000000" points="447,-108 390,-108 390,-84 447,-84 447,-108"/>
+<text text-anchor="middle" x="418.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">c_f_char</text>
+</g>
+<!-- proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_node2" class="node">
+<title>proc~dft_initialize</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node2"><a xlink:href="../proc/dft_initialize.html" xlink:title="dft_initialize">
+<polygon fill="#d9534f" stroke="#d9534f" points="354,-108 278,-108 278,-84 354,-84 354,-108"/>
+<text text-anchor="middle" x="316" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_initialize</text>
+</a>
+</g>
+</g>
+<!-- proc~dft_initialize&#45;&gt;proc~c_f_char -->
+<g id="proc~~c_f_char~~CalledByGraph_edge1" class="edge">
+<title>proc~dft_initialize&#45;&gt;proc~c_f_char</title>
+<path fill="none" stroke="#000000" d="M354.1672,-96C362.4915,-96 371.3093,-96 379.6595,-96"/>
+<polygon fill="#000000" stroke="#000000" points="379.914,-99.5001 389.914,-96 379.9139,-92.5001 379.914,-99.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~c_f_char~~CalledByGraph_node3" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node3"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="220.5,-192 154.5,-192 154.5,-168 220.5,-168 220.5,-192"/>
+<text text-anchor="middle" x="187.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M220.6183,-169.296C227.8824,-166.3903 235.3765,-162.9392 242,-159 262.5561,-146.7747 283.036,-128.7725 297.2217,-115.139"/>
+<polygon fill="#000000" stroke="#000000" points="299.7301,-117.5812 304.4156,-108.0787 294.8269,-112.5852 299.7301,-117.5812"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~c_f_char~~CalledByGraph_node4" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node4"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="224,-150 151,-150 151,-126 224,-126 224,-150"/>
+<text text-anchor="middle" x="187.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_edge3" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.3229,-125.9645C238.4371,-121.3513 254.7251,-116.0276 269.6209,-111.1589"/>
+<polygon fill="#000000" stroke="#000000" points="270.7539,-114.4709 279.1717,-108.0373 268.5791,-107.8173 270.7539,-114.4709"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~c_f_char~~CalledByGraph_node5" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node5"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="242,-108 133,-108 133,-84 242,-84 242,-108"/>
+<text text-anchor="middle" x="187.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_edge4" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M242.3683,-96C250.8099,-96 259.4722,-96 267.7556,-96"/>
+<polygon fill="#000000" stroke="#000000" points="267.9999,-99.5001 277.9999,-96 267.9998,-92.5001 267.9999,-99.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~c_f_char~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="225.5,-66 149.5,-66 149.5,-42 225.5,-42 225.5,-66"/>
+<text text-anchor="middle" x="187.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.3229,-66.0355C238.4371,-70.6487 254.7251,-75.9724 269.6209,-80.8411"/>
+<polygon fill="#000000" stroke="#000000" points="268.5791,-84.1827 279.1717,-83.9627 270.7539,-77.5291 268.5791,-84.1827"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~c_f_char~~CalledByGraph_node7" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node7"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="229.5,-24 145.5,-24 145.5,0 229.5,0 229.5,-24"/>
+<text text-anchor="middle" x="187.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~dft_initialize -->
+<g id="proc~~c_f_char~~CalledByGraph_edge6" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.0721,-24.121C230.2272,-26.7117 236.4223,-29.6828 242,-33 262.5561,-45.2253 283.036,-63.2275 297.2217,-76.861"/>
+<polygon fill="#000000" stroke="#000000" points="294.8269,-79.4148 304.4156,-83.9213 299.7301,-74.4188 294.8269,-79.4148"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~c_f_char~~CalledByGraph_node8" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node8"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="93,-66 4,-66 4,-42 93,-42 93,-66"/>
+<text text-anchor="middle" x="48.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~c_f_char~~CalledByGraph_edge8" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M93.2456,-54C107.9477,-54 124.3498,-54 139.2971,-54"/>
+<polygon fill="#000000" stroke="#000000" points="139.3741,-57.5001 149.374,-54 139.374,-50.5001 139.3741,-57.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~c_f_char~~CalledByGraph_node9" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node9"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~c_f_char~~CalledByGraph_edge9" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.1155,-12C109.348,-12 122.5321,-12 134.9477,-12"/>
+<polygon fill="#000000" stroke="#000000" points="135.1584,-15.5001 145.1584,-12 135.1583,-8.5001 135.1584,-15.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~c_f_char~~CalledByGraph_node10" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~c_f_char~~CalledByGraph_node10"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="96.5,-108 .5,-108 .5,-84 96.5,-84 96.5,-108"/>
+<text text-anchor="middle" x="48.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~c_f_char~~CalledByGraph_edge7" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M96.7254,-96C105.0663,-96 113.8598,-96 122.5576,-96"/>
+<polygon fill="#000000" stroke="#000000" points="122.6914,-99.5001 132.6914,-96 122.6913,-92.5001 122.6914,-99.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">function </span><span class="n">c_f_char</span><span class="p">(</span><span class="n">cchar</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">fstr</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use</span><span class="p">,</span><span class="w"> </span><span class="k">intrinsic</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="nb">iso_c_binding</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="kt">c_char</span><span class="p">,</span><span class="w"> </span><span class="nb">c_null_char</span>
+<span class="nb">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cchar</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fstr</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">strlen</span>
+
+<span class="w">    </span><span class="n">strlen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">do</span>
+<span class="k">        if</span><span class="w"> </span><span class="p">(</span><span class="n">cchar</span><span class="p">(</span><span class="n">strlen</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb">c_null_char</span><span class="p">)</span><span class="w"> </span><span class="k">exit</span>
+<span class="k">        </span><span class="n">strlen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">strlen</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    allocate</span><span class="p">(</span><span class="kt">character</span><span class="p">(</span><span class="n">strlen</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fstr</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">strlen</span>
+<span class="w">        </span><span class="n">fstr</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cchar</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="k">  end function </span><span class="n">c_f_char</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

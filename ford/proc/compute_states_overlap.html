@@ -1,0 +1,1246 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>compute_states_overlap &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>compute_states_overlap
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.8% of total for procedures.">123 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/get_states_overlap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/get_states_overlap.f90.html'>get_states_overlap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/get_state_overlap_mod.html'>get_state_overlap_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">compute_states_overlap</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/compute_states_overlap.html#src">compute_states_overlap</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine compute_states_overlap(infos, s_mo, s_st, mo_a, mo_a_old, nbf, noca, nocb, nstates, ndtlf)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~compute_states_overlap~~UsesGraph Pages: 1 -->
+<svg id="proccompute_states_overlapUsesGraph" width="641pt" height="283pt"
+ viewBox="0.00 0.00 641.00 282.51" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~compute_states_overlap~~UsesGraph" class="graph" transform="scale(.8547 .8547) rotate(0) translate(4 326.554)">
+<title>proc~~compute_states_overlap~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-326.554 746,-326.554 746,4 -4,4"/>
+<!-- proc~compute_states_overlap -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node1" class="node">
+<title>proc~compute_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="742,-287.9784 600,-287.9784 600,-263.9784 742,-263.9784 742,-287.9784"/>
+<text text-anchor="middle" x="671" y="-273.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">compute_states_overlap</text>
+</g>
+<!-- module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node2" class="node">
+<title>module~precision</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node2"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-226.9784 141.5,-226.9784 141.5,-202.9784 202.5,-202.9784 202.5,-226.9784"/>
+<text text-anchor="middle" x="172" y="-212.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~compute_states_overlap&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge1" class="edge">
+<title>proc~compute_states_overlap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M629.5218,-288.026C562.0149,-305.9634 424.3205,-335.5827 309,-315.9784"/>
+</g>
+<!-- module~types -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node3" class="node">
+<title>module~types</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node3"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="564,-247.9784 510,-247.9784 510,-223.9784 564,-223.9784 564,-247.9784"/>
+<text text-anchor="middle" x="537" y="-233.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~compute_states_overlap&#45;&gt;module~types -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge2" class="edge">
+<title>proc~compute_states_overlap&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M630.7956,-263.9771C612.7515,-258.5908 591.603,-252.2778 573.9594,-247.0111"/>
+<polygon fill="#000000" stroke="#000000" points="574.6095,-243.5526 564.0262,-244.0459 572.6072,-250.2601 574.6095,-243.5526"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-196.9784 0,-196.9784 0,-172.9784 94,-172.9784 94,-196.9784"/>
+<text text-anchor="middle" x="47" y="-182.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge3" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-207.6396C130.1327,-204.9303 116.9446,-201.7651 104.0665,-198.6744"/>
+<polygon fill="#000000" stroke="#000000" points="104.8563,-195.2646 94.3156,-196.3342 103.2227,-202.0713 104.8563,-195.2646"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge9" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-235.9784C421.7122,-239.7754 417.7656,-243.8522 404,-254.9784 384.8793,-270.4329 388.4719,-283.3643 368,-296.9784 345.0609,-312.2333 336.1587,-320.5954 309,-315.9784"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-315.9784C281.8413,-311.3615 272.9391,-312.2333 250,-296.9784 229.5281,-283.3643 230.9233,-272.8123 214,-254.9784 207.424,-248.0486 199.9535,-240.7612 193.1548,-234.3332"/>
+<polygon fill="#000000" stroke="#000000" points="195.2734,-231.5228 185.5762,-227.2549 190.4954,-236.6385 195.2734,-231.5228"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node4" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-43.9784 130,-43.9784 130,-19.9784 214,-19.9784 214,-43.9784"/>
+<text text-anchor="middle" x="172" y="-29.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge4" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M535.5689,-223.8854C530.484,-187.0632 509.6224,-76.1484 439,-31.9784"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-31.9784C367.3439,12.8381 333.7873,.1033 250,-10.9784 239.7814,-12.3299 229.0009,-14.6364 218.8234,-17.2382"/>
+<polygon fill="#000000" stroke="#000000" points="217.6355,-13.9333 208.8901,-19.9139 219.4563,-20.6924 217.6355,-13.9333"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node6" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node6"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-43.9784 250,-43.9784 250,-19.9784 368,-19.9784 368,-43.9784"/>
+<text text-anchor="middle" x="309" y="-29.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge5" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-31.9784C418.6645,-19.2598 392.8094,-17.101 369.522,-18.9264"/>
+<polygon fill="#000000" stroke="#000000" points="368.9646,-15.4653 359.3785,-19.9772 369.6859,-22.428 368.9646,-15.4653"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node7" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node7"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-167.9784 404,-167.9784 404,-143.9784 474,-143.9784 474,-167.9784"/>
+<text text-anchor="middle" x="439" y="-153.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge6" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522.1159,-223.8281C506.0498,-210.713 480.2696,-189.6679 461.6784,-174.4914"/>
+<polygon fill="#000000" stroke="#000000" points="463.663,-171.5934 453.7031,-167.9809 459.2364,-177.016 463.663,-171.5934"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node8" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node8"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-287.9784 273.5,-287.9784 273.5,-263.9784 344.5,-263.9784 344.5,-287.9784"/>
+<text text-anchor="middle" x="309" y="-273.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge7" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.6242,-232.8629C489.7806,-231.3548 462.4311,-230.8321 439,-235.9784"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-235.9784C409.68,-242.4182 377.4224,-252.3259 352.3748,-260.6694"/>
+<polygon fill="#000000" stroke="#000000" points="351.1617,-257.3848 342.805,-263.8976 353.3992,-264.0176 351.1617,-257.3848"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node9" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node9"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-85.9784 282,-85.9784 282,-61.9784 336,-61.9784 336,-85.9784"/>
+<text text-anchor="middle" x="309" y="-71.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge8" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-31.9784C436.9291,-30.6832 383.6663,-48.4555 345.9694,-61.2862"/>
+<polygon fill="#000000" stroke="#000000" points="344.6182,-58.049 336.2839,-64.5904 346.8784,-64.6741 344.6182,-58.049"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node10" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="468,-287.9784 410,-287.9784 410,-263.9784 468,-263.9784 468,-287.9784"/>
+<text text-anchor="middle" x="439" y="-273.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge10" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.9616,-247.0145C499.8832,-251.1281 488.2419,-255.8797 477.3404,-260.3293"/>
+<polygon fill="#000000" stroke="#000000" points="475.9444,-257.1187 468.0086,-264.1382 478.5897,-263.5996 475.9444,-257.1187"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge11" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-31.9784C241.1722,-31.9784 232.4436,-31.9784 224.0637,-31.9784"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-28.4785 214.0516,-31.9784 224.0516,-35.4785 224.0516,-28.4785"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge17" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.5494,-168.234C417.2507,-183.0679 394.2098,-207.2655 368,-216.9784 317.0712,-235.8517 253.4605,-230.414 212.7776,-223.6432"/>
+<polygon fill="#000000" stroke="#000000" points="213.155,-220.1556 202.6981,-221.8598 211.9354,-227.0486 213.155,-220.1556"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.6995,-150.3202C351.8846,-143.2722 252.6465,-134.5785 172,-155.9784"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.6472,-143.6416C423.7439,-122.2015 400.5631,-77.9708 368,-52.9784 366.1429,-51.5531 364.1809,-50.219 362.1446,-48.9708"/>
+<polygon fill="#000000" stroke="#000000" points="363.3114,-45.6277 352.8373,-44.0324 360.0304,-51.8113 363.3114,-45.6277"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.4953,-143.6824C414.2586,-130.1484 391.3318,-108.5197 368,-94.9784 361.0575,-90.9492 353.2124,-87.4973 345.5626,-84.625"/>
+<polygon fill="#000000" stroke="#000000" points="346.6548,-81.2992 336.0599,-81.2968 344.3409,-87.9057 346.6548,-81.2992"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node11" class="node">
+<title>module~constants</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node11"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-207.9784 277,-207.9784 277,-183.9784 341,-183.9784 341,-207.9784"/>
+<text text-anchor="middle" x="309" y="-193.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-166.803C387.4769,-171.8317 367.9225,-177.8484 350.8282,-183.1082"/>
+<polygon fill="#000000" stroke="#000000" points="349.619,-179.8183 341.0905,-186.1044 351.6776,-186.5087 349.619,-179.8183"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-127.9784 269.5,-127.9784 269.5,-103.9784 348.5,-103.9784 348.5,-127.9784"/>
+<text text-anchor="middle" x="309" y="-113.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-145.1538C389.7562,-140.8265 373.3144,-135.7675 358.1087,-131.0888"/>
+<polygon fill="#000000" stroke="#000000" points="358.9194,-127.6763 348.3322,-128.0806 356.8607,-134.3668 358.9194,-127.6763"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge19" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.6653,-263.9782C271.6928,-259.5882 260.3301,-254.5721 250,-249.9784 236.2494,-243.8636 221.1557,-237.1023 207.9397,-231.1658"/>
+<polygon fill="#000000" stroke="#000000" points="209.2502,-227.9175 198.6943,-227.0098 206.3802,-234.3022 209.2502,-227.9175"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge18" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292.3959,-263.8129C278.8946,-253.0194 260.4315,-236.0395 250,-216.9784 214.1746,-151.516 259.8487,-111.857 214,-52.9784 213.3238,-52.1101 212.6022,-51.2749 211.8417,-50.4718"/>
+<polygon fill="#000000" stroke="#000000" points="214.0632,-47.7672 204.13,-44.0817 209.5968,-53.1572 214.0632,-47.7672"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node14" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-287.9784 131.5,-287.9784 131.5,-263.9784 212.5,-263.9784 212.5,-287.9784"/>
+<text text-anchor="middle" x="172" y="-273.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge20" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-275.9784C257.9991,-275.9784 239.7453,-275.9784 222.9899,-275.9784"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-272.4785 212.79,-275.9784 222.79,-279.4785 222.7901,-272.4785"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge23" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9942,-78.8736C271.0349,-81.9774 258.8913,-86.9795 250,-94.9784 222.5121,-119.7075 234.8537,-139.4459 214,-169.9784 207.8917,-178.9217 200.0376,-187.8364 192.7771,-195.3436"/>
+<polygon fill="#000000" stroke="#000000" points="189.8427,-193.3279 185.2425,-202.872 194.7904,-198.2797 189.8427,-193.3279"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge21" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-65.6806C264.5765,-60.3595 241.5349,-53.2957 221.0312,-47.0099"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-43.5825 211.2057,-43.9977 219.7406,-50.2751 221.7924,-43.5825"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge22" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7791,-81.6339C271.5029,-85.0418 259.9079,-89.5293 250,-94.9784 211.4382,-116.1865 214.5369,-144.6911 172,-155.9784"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-155.9784C149.8795,-161.8482 125.3832,-167.677 103.9801,-172.5525"/>
+<polygon fill="#000000" stroke="#000000" points="103.0478,-169.1748 94.0656,-174.7935 104.5912,-176.0026 103.0478,-169.1748"/>
+</g>
+<!-- mpi -->
+<g id="proc~~compute_states_overlap~~UsesGraph_node13" class="node">
+<title>mpi</title>
+<g id="a_proc~~compute_states_overlap~~UsesGraph_node13"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-85.9784 145,-85.9784 145,-61.9784 199,-61.9784 199,-85.9784"/>
+<text text-anchor="middle" x="172" y="-71.5784" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge24" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-73.9784C261.1051,-73.9784 232.0908,-73.9784 209.0994,-73.9784"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-70.4785 199.0106,-73.9784 209.0105,-77.4785 209.0106,-70.4785"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~compute_states_overlap~~UsesGraph_edge25" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-200.4331C257.6649,-203.0979 233.0702,-206.5088 212.5278,-209.3578"/>
+<polygon fill="#000000" stroke="#000000" points="211.9328,-205.9067 202.5084,-210.7473 212.8945,-212.8403 211.9328,-205.9067"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panproccompute_states_overlapUsesGraph = svgPanZoom('#proccompute_states_overlapUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Compute overlap integrals between MRSF response states
+       at different MD time steps</p>
+<p>@details Fast overlap evaluations using the TLF approximation
+         introduced in JCTC 15 882 (2019)</p>
+<p>@author Seunghoon Lee, Konstantin Komarov</p>
+<p>@param[in] infos     Information structure
+@param[in] s_mo      Overlap matrix in MO basis
+@param[out] s_st     State overlap matrix
+@param[in] mo_a      MO coefficients at current time step
+@param[in] mo_a_old  MO coefficients at previous time step
+@param[in] nbf       Number of basis functions
+@param[in] noca      Number of occupied alpha orbitals
+@param[in] nocb      Number of occupied beta orbitals
+@param[in] nstates   Number of states
+@param[in] ndtlf     TLF approximation order</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~44"></span>
+              type(<a href='../type/information.html'>information</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s_mo"></span>
+              real(kind=dp),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>s_mo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s_st"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>s_st</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_a~8"></span>
+              real(kind=dp),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(noca,nbf-nocb,*)
+            </td>
+            <td>::</td>
+            <td><strong>mo_a</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_a_old~3"></span>
+              real(kind=dp),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(noca,nbf-nocb,*)
+            </td>
+            <td>::</td>
+            <td><strong>mo_a_old</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~63"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~13"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~13"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nstates~3"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nstates</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ndtlf~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ndtlf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~compute_states_overlap~~CallsGraph Pages: 1 -->
+<svg id="proccompute_states_overlapCallsGraph" width="437pt" height="74pt"
+ viewBox="0.00 0.00 437.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~compute_states_overlap~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~compute_states_overlap~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 433,-70 433,4 -4,4"/>
+<!-- proc~compute_states_overlap -->
+<g id="proc~~compute_states_overlap~~CallsGraph_node1" class="node">
+<title>proc~compute_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="142,-45 0,-45 0,-21 142,-21 142,-45"/>
+<text text-anchor="middle" x="71" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">compute_states_overlap</text>
+</g>
+<!-- proc~mrsf_tlf -->
+<g id="proc~~compute_states_overlap~~CallsGraph_node2" class="node">
+<title>proc~mrsf_tlf</title>
+<g id="a_proc~~compute_states_overlap~~CallsGraph_node2"><a xlink:href="../proc/mrsf_tlf.html" xlink:title="mrsf_tlf">
+<polygon fill="#d9534f" stroke="#d9534f" points="232,-45 178,-45 178,-21 232,-21 232,-45"/>
+<text text-anchor="middle" x="205" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mrsf_tlf</text>
+</a>
+</g>
+</g>
+<!-- proc~compute_states_overlap&#45;&gt;proc~mrsf_tlf -->
+<g id="proc~~compute_states_overlap~~CallsGraph_edge1" class="edge">
+<title>proc~compute_states_overlap&#45;&gt;proc~mrsf_tlf</title>
+<path fill="none" stroke="#000000" d="M142.3157,-33C151.0944,-33 159.7739,-33 167.7479,-33"/>
+<polygon fill="#000000" stroke="#000000" points="167.7734,-36.5001 177.7734,-33 167.7733,-29.5001 167.7734,-36.5001"/>
+</g>
+<!-- proc~ov_exact -->
+<g id="proc~~compute_states_overlap~~CallsGraph_node3" class="node">
+<title>proc~ov_exact</title>
+<g id="a_proc~~compute_states_overlap~~CallsGraph_node3"><a xlink:href="../proc/ov_exact.html" xlink:title="ov_exact">
+<polygon fill="#d9534f" stroke="#d9534f" points="328,-66 268,-66 268,-42 328,-42 328,-66"/>
+<text text-anchor="middle" x="298" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ov_exact</text>
+</a>
+</g>
+</g>
+<!-- proc~mrsf_tlf&#45;&gt;proc~ov_exact -->
+<g id="proc~~compute_states_overlap~~CallsGraph_edge2" class="edge">
+<title>proc~mrsf_tlf&#45;&gt;proc~ov_exact</title>
+<path fill="none" stroke="#000000" d="M232.4001,-39.1871C240.4102,-40.9959 249.3356,-43.0113 257.9587,-44.9584"/>
+<polygon fill="#000000" stroke="#000000" points="257.3444,-48.4078 267.8698,-47.1964 258.8863,-41.5797 257.3444,-48.4078"/>
+</g>
+<!-- proc~tlf_exp -->
+<g id="proc~~compute_states_overlap~~CallsGraph_node4" class="node">
+<title>proc~tlf_exp</title>
+<g id="a_proc~~compute_states_overlap~~CallsGraph_node4"><a xlink:href="../proc/tlf_exp.html" xlink:title="tlf_exp">
+<polygon fill="#d9534f" stroke="#d9534f" points="325,-24 271,-24 271,0 325,0 325,-24"/>
+<text text-anchor="middle" x="298" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tlf_exp</text>
+</a>
+</g>
+</g>
+<!-- proc~mrsf_tlf&#45;&gt;proc~tlf_exp -->
+<g id="proc~~compute_states_overlap~~CallsGraph_edge3" class="edge">
+<title>proc~mrsf_tlf&#45;&gt;proc~tlf_exp</title>
+<path fill="none" stroke="#000000" d="M232.4001,-26.8129C241.2926,-24.8049 251.3131,-22.5422 260.7958,-20.4009"/>
+<polygon fill="#000000" stroke="#000000" points="261.8123,-23.7596 270.7958,-18.1429 260.2704,-16.9315 261.8123,-23.7596"/>
+</g>
+<!-- proc~comp_det -->
+<g id="proc~~compute_states_overlap~~CallsGraph_node5" class="node">
+<title>proc~comp_det</title>
+<g id="a_proc~~compute_states_overlap~~CallsGraph_node5"><a xlink:href="../proc/comp_det.html" xlink:title="comp_det">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="429,-66 364,-66 364,-42 429,-42 429,-66"/>
+<text text-anchor="middle" x="396.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_det</text>
+</a>
+</g>
+</g>
+<!-- proc~ov_exact&#45;&gt;proc~comp_det -->
+<g id="proc~~compute_states_overlap~~CallsGraph_edge4" class="edge">
+<title>proc~ov_exact&#45;&gt;proc~comp_det</title>
+<path fill="none" stroke="#000000" d="M328.0885,-54C336.1329,-54 344.9854,-54 353.5767,-54"/>
+<polygon fill="#000000" stroke="#000000" points="353.8549,-57.5001 363.8548,-54 353.8548,-50.5001 353.8549,-57.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~compute_states_overlap~~CalledByGraph Pages: 1 -->
+<svg id="proccompute_states_overlapCalledByGraph" width="454pt" height="32pt"
+ viewBox="0.00 0.00 454.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~compute_states_overlap~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~compute_states_overlap~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 450,-28 450,4 -4,4"/>
+<!-- proc~compute_states_overlap -->
+<g id="proc~~compute_states_overlap~~CalledByGraph_node1" class="node">
+<title>proc~compute_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="446,-24 304,-24 304,0 446,0 446,-24"/>
+<text text-anchor="middle" x="375" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">compute_states_overlap</text>
+</g>
+<!-- proc~get_states_overlap -->
+<g id="proc~~compute_states_overlap~~CalledByGraph_node2" class="node">
+<title>proc~get_states_overlap</title>
+<g id="a_proc~~compute_states_overlap~~CalledByGraph_node2"><a xlink:href="../proc/get_states_overlap.html" xlink:title="get_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="268,-24 156,-24 156,0 268,0 268,-24"/>
+<text text-anchor="middle" x="212" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~compute_states_overlap -->
+<g id="proc~~compute_states_overlap~~CalledByGraph_edge1" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~compute_states_overlap</title>
+<path fill="none" stroke="#000000" d="M268.0954,-12C276.3691,-12 285.0309,-12 293.6899,-12"/>
+<polygon fill="#000000" stroke="#000000" points="293.83,-15.5001 303.83,-12 293.83,-8.5001 293.83,-15.5001"/>
+</g>
+<!-- proc~get_state_overlap_c -->
+<g id="proc~~compute_states_overlap~~CalledByGraph_node3" class="node">
+<title>proc~get_state_overlap_c</title>
+<g id="a_proc~~compute_states_overlap~~CalledByGraph_node3"><a xlink:href="../proc/get_state_overlap_c.html" xlink:title="get_state_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="120,-24 0,-24 0,0 120,0 120,-24"/>
+<text text-anchor="middle" x="60" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_state_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap -->
+<g id="proc~~compute_states_overlap~~CalledByGraph_edge2" class="edge">
+<title>proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap</title>
+<path fill="none" stroke="#000000" d="M120.0744,-12C128.4517,-12 137.0992,-12 145.5848,-12"/>
+<polygon fill="#000000" stroke="#000000" points="145.826,-15.5001 155.8259,-12 145.8259,-8.5001 145.826,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">compute_states_overlap</span><span class="p">(&amp;</span>
+<span class="w">              </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">s_mo</span><span class="p">,</span><span class="w"> </span><span class="n">s_st</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">              </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">ndtlf</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="c">!$  use omp_lib</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">s_st</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(</span><span class="n">noca</span><span class="p">,</span><span class="n">nbf</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mo_a</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a_old</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">s_mo</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span><span class="p">,</span><span class="w"> </span><span class="n">ndtlf</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ni</span><span class="p">,</span><span class="w"> </span><span class="n">oi</span><span class="p">,</span><span class="w"> </span><span class="n">pi</span><span class="p">,</span><span class="w"> </span><span class="n">qi</span><span class="p">,</span><span class="w"> </span><span class="n">ri</span><span class="p">,</span><span class="w"> </span><span class="n">si</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="n">ioc</span><span class="p">,</span><span class="w"> </span><span class="n">ioc1</span><span class="p">,</span><span class="w"> </span><span class="n">ioc2</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="n">ivir</span><span class="p">,</span><span class="w"> </span><span class="n">joc</span><span class="p">,</span><span class="w"> </span><span class="n">jvir</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">sqrt2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">/</span><span class="nb">sqrt</span><span class="p">(</span><span class="mf">2.0_dp</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">alpham</span><span class="p">,</span><span class="w"> </span><span class="n">betam</span><span class="p">,</span><span class="w"> </span><span class="n">deltam</span><span class="p">,</span><span class="w"> </span><span class="n">gammam</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">s_ij</span><span class="p">,</span><span class="w"> </span><span class="n">s_ab</span><span class="p">,</span><span class="w"> </span><span class="n">s_ia</span>
+
+<span class="w">    </span><span class="n">nvirb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">nocb</span>
+
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">alpham</span><span class="p">(</span><span class="n">nstates</span><span class="p">,</span><span class="n">noca</span><span class="p">,</span><span class="n">nvirb</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">betam</span><span class="p">(</span><span class="n">nstates</span><span class="p">,</span><span class="n">noca</span><span class="p">,</span><span class="n">nvirb</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">deltam</span><span class="p">(</span><span class="n">nstates</span><span class="p">,</span><span class="n">noca</span><span class="p">,</span><span class="n">noca</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">gammam</span><span class="p">(</span><span class="n">nstates</span><span class="p">,</span><span class="n">noca</span><span class="p">,</span><span class="n">noca</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">s_ij</span><span class="p">(</span><span class="n">noca</span><span class="p">,</span><span class="n">noca</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">s_ab</span><span class="p">(</span><span class="n">nvirb</span><span class="p">,</span><span class="n">nvirb</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">s_ia</span><span class="p">(</span><span class="n">noca</span><span class="p">,</span><span class="n">nvirb</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">)</span>
+
+<span class="c">!   get S_ij, S_ab, S_ia</span>
+<span class="w">    </span><span class="k">call </span><span class="n">mrsf_tlf</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">s_mo</span><span class="p">,</span><span class="w"> </span><span class="n">s_ij</span><span class="p">,</span><span class="w"> </span><span class="n">s_ab</span><span class="p">,</span><span class="w"> </span><span class="n">s_ia</span><span class="p">,</span><span class="w"> </span><span class="n">ndtlf</span><span class="p">)</span>
+
+<span class="c">!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(oi, ioc, ivir, jvir, ni, ioc1, ioc2, pi, qi, ri, si)</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ioc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ivir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">          </span><span class="n">alpham</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="w"> </span><span class="n">ioc</span><span class="p">,</span><span class="w"> </span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">          </span><span class="k">do </span><span class="n">jvir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">            </span><span class="k">if</span><span class="p">((</span><span class="n">ioc</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">jvir</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">            </span><span class="n">alpham</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="w"> </span><span class="n">ioc</span><span class="p">,</span><span class="w"> </span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">alpham</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="w"> </span><span class="n">ioc</span><span class="p">,</span><span class="w"> </span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                   </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(</span><span class="n">ioc</span><span class="p">,</span><span class="n">jvir</span><span class="p">,</span><span class="n">oi</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ab</span><span class="p">(</span><span class="n">jvir</span><span class="p">,</span><span class="n">ivir</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ioc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ivir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">          </span><span class="n">betam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="w"> </span><span class="n">ioc</span><span class="p">,</span><span class="w"> </span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">          </span><span class="k">do </span><span class="n">joc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">            </span><span class="k">if</span><span class="p">((</span><span class="n">joc</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">ivir</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">            </span><span class="n">betam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc</span><span class="p">,</span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">betam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc</span><span class="p">,</span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">joc</span><span class="p">,</span><span class="n">ivir</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ij</span><span class="p">(</span><span class="n">ioc</span><span class="p">,</span><span class="n">joc</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ioc1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ioc2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="n">gammam</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="w"> </span><span class="n">ioc1</span><span class="p">,</span><span class="w"> </span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">          </span><span class="k">do </span><span class="n">jvir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">            </span><span class="k">if</span><span class="p">((</span><span class="n">ioc1</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">jvir</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">            </span><span class="n">gammam</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gammam</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                  </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(</span><span class="n">ioc1</span><span class="p">,</span><span class="n">jvir</span><span class="p">,</span><span class="n">oi</span><span class="p">)</span><span class="o">*</span><span class="n">s_ia</span><span class="p">(</span><span class="n">ioc2</span><span class="p">,</span><span class="n">jvir</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ioc1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ioc2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="n">deltam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="w"> </span><span class="n">ioc1</span><span class="p">,</span><span class="w"> </span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">          </span><span class="k">do </span><span class="n">jvir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">            </span><span class="k">if</span><span class="p">((</span><span class="n">ioc2</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">jvir</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">            </span><span class="n">deltam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deltam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                  </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">ioc2</span><span class="p">,</span><span class="n">jvir</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ia</span><span class="p">(</span><span class="n">ioc1</span><span class="p">,</span><span class="n">jvir</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3) REDUCTION(+:s_st)</span>
+<span class="w">   </span><span class="c">! 4 index summation</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">        </span><span class="k">do </span><span class="n">pi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">noca</span>
+<span class="w">          </span><span class="k">do </span><span class="n">qi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">noca</span>
+<span class="w">            </span><span class="k">do </span><span class="n">ri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">noca</span>
+<span class="w">              </span><span class="k">do </span><span class="n">si</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">                </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                             </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">oi</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ij</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">ri</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                              </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">ri</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ab</span><span class="p">(</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span>
+<span class="w">              </span><span class="k">end do</span>
+<span class="k">            end do</span>
+<span class="k">          end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3) REDUCTION(+:s_st)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">        </span><span class="k">do </span><span class="n">pi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="k">do </span><span class="n">qi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">            </span><span class="k">do </span><span class="n">ri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">              </span><span class="k">do </span><span class="n">si</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">                </span><span class="k">if</span><span class="p">((</span><span class="n">ri</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">si</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">noca</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">                </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                             </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">oi</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">ri</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                              </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">s_ij</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">ri</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ab</span><span class="p">(</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                </span><span class="o">+</span><span class="w"> </span><span class="n">s_ia</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ia</span><span class="p">(</span><span class="n">ri</span><span class="p">,</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sqrt2</span>
+<span class="w">              </span><span class="k">end do</span>
+<span class="k">            end do</span>
+<span class="k">          end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3) REDUCTION(+:s_st)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">        </span><span class="k">do </span><span class="n">pi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="k">do </span><span class="n">qi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">            </span><span class="k">if</span><span class="p">((</span><span class="n">pi</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">qi</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">noca</span><span class="p">))</span><span class="w"> </span><span class="k">cycle</span>
+<span class="k">            do </span><span class="n">ri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">              </span><span class="k">do </span><span class="n">si</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">                </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                             </span><span class="o">+</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">oi</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">ri</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                              </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">s_ij</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">ri</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ab</span><span class="p">(</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                </span><span class="o">+</span><span class="w"> </span><span class="n">s_ia</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="n">si</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">s_ia</span><span class="p">(</span><span class="n">ri</span><span class="p">,</span><span class="n">qi</span><span class="o">-</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sqrt2</span>
+<span class="w">              </span><span class="k">end do</span>
+<span class="k">            end do</span>
+<span class="k">          end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3) REDUCTION(+:s_st)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ioc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="k">do </span><span class="n">ivir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nvirb</span>
+<span class="w">            </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="o">+</span><span class="w"> </span><span class="n">alpham</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ioc</span><span class="p">,</span><span class="n">ivir</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">betam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc</span><span class="p">,</span><span class="n">ivir</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+
+<span class="c">!$OMP DO SCHEDULE(GUIDED) COLLAPSE(3) REDUCTION(+:s_st)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">oi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ni</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">        </span><span class="k">do </span><span class="n">ioc1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">          </span><span class="k">do </span><span class="n">ioc2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">            </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ni</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="o">+</span><span class="w"> </span><span class="n">gammam</span><span class="p">(</span><span class="n">oi</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">deltam</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span><span class="n">ioc1</span><span class="p">,</span><span class="n">ioc2</span><span class="p">)</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">        end do</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="c">!$OMP END DO</span>
+<span class="c">!$OMP END PARALLEL</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="n">s_st</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s_st</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">norm2</span><span class="p">(</span><span class="n">s_st</span><span class="p">(:,</span><span class="n">i</span><span class="p">))</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">  end subroutine </span><span class="n">compute_states_overlap</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

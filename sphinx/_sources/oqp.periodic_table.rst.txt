@@ -1,0 +1,10 @@
+oqp.periodic\_table package
+===========================
+
+Module contents
+---------------
+
+.. automodule:: oqp.periodic_table
+   :members:
+   :undoc-members:
+   :show-inheritance:

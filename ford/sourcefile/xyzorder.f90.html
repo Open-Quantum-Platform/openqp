@@ -1,0 +1,550 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>xyzorder.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>xyzorder.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.0% of total for source files.">5 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/xyzorder.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">xyzorder.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/xyz_order.html">xyz_order</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/xyzorder.f90.html#src">xyzorder.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Files dependent on this one</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~xyzorder.f90~~AfferentGraph Pages: 1 -->
+<svg id="sourcefilexyzorderf90AfferentGraph" width="641pt" height="344pt"
+ viewBox="0.00 0.00 641.00 343.86" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph" class="graph" transform="scale(.9344 .9344) rotate(0) translate(4 364)">
+<title>sourcefile~~xyzorder.f90~~AfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-364 682,-364 682,4 -4,4"/>
+<!-- sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node1" class="node">
+<title>sourcefile~xyzorder.f90</title>
+<polygon fill="none" stroke="#000000" points="81,-254 0,-254 0,-230 81,-230 81,-254"/>
+<text text-anchor="middle" x="40.5" y="-239.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">xyzorder.F90</text>
+</g>
+<!-- sourcefile~electric_moments.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node2" class="node">
+<title>sourcefile~electric_moments.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/electric_moments.f90.html" xlink:title="electric_moments.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="515,-360 385,-360 385,-336 515,-336 515,-360"/>
+<text text-anchor="middle" x="450" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge1" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~xyzorder.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.4238,-335.9437C325.9267,-315.8834 171.1314,-275.8142 91.0672,-255.0894"/>
+<polygon fill="#000000" stroke="#000000" points="91.7743,-251.6572 81.2162,-252.5395 90.0201,-258.4338 91.7743,-251.6572"/>
+</g>
+<!-- sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node5" class="node">
+<title>sourcefile~int1.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/int1.f90.html" xlink:title="int1.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="346.5,-234 291.5,-234 291.5,-210 346.5,-210 346.5,-234"/>
+<text text-anchor="middle" x="319" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge7" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M399.8972,-335.8594C394.5866,-333.4174 389.4932,-330.4948 385,-327 356.8711,-305.1211 337.5269,-267.6442 327.3659,-243.883"/>
+<polygon fill="#000000" stroke="#000000" points="330.4843,-242.2615 323.4596,-234.3303 324.0051,-244.9111 330.4843,-242.2615"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node3" class="node">
+<title>sourcefile~mod_1e_primitives.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/mod_1e_primitives.f90.html" xlink:title="mod_1e_primitives.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="253,-234 117,-234 117,-210 253,-210 253,-234"/>
+<text text-anchor="middle" x="185" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge2" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M116.9812,-231.4144C108.2383,-232.6245 99.4125,-233.846 91.0182,-235.0079"/>
+<polygon fill="#000000" stroke="#000000" points="90.4533,-231.5526 81.0276,-236.3906 91.413,-238.4865 90.4533,-231.5526"/>
+</g>
+<!-- sourcefile~grd1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node4" class="node">
+<title>sourcefile~grd1.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/grd1.f90.html" xlink:title="grd1.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="349,-66 289,-66 289,-42 349,-42 349,-66"/>
+<text text-anchor="middle" x="319" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd1.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge3" class="edge">
+<title>sourcefile~grd1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309.3631,-66.0821C286.6812,-94.519 229.7138,-165.941 201.4422,-201.3859"/>
+<polygon fill="#000000" stroke="#000000" points="198.4106,-199.5738 194.9112,-209.5741 203.883,-203.9388 198.4106,-199.5738"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge4" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M291.2351,-222C282.8409,-222 273.1782,-222 263.1733,-222"/>
+<polygon fill="#000000" stroke="#000000" points="263.0888,-218.5001 253.0887,-222 263.0887,-225.5001 263.0888,-218.5001"/>
+</g>
+<!-- sourcefile~get_basis_overlap.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node6" class="node">
+<title>sourcefile~get_basis_overlap.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/get_basis_overlap.f90.html" xlink:title="get_basis_overlap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="515,-192 385,-192 385,-168 515,-168 515,-192"/>
+<text text-anchor="middle" x="450" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_basis_overlap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge8" class="edge">
+<title>sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.4607,-192.0355C394.8905,-197.6687 374.0159,-204.3613 356.4562,-209.9911"/>
+<polygon fill="#000000" stroke="#000000" points="355.0044,-206.781 346.5505,-213.167 357.1416,-213.4468 355.0044,-206.781"/>
+</g>
+<!-- sourcefile~hf_gradient.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node7" class="node">
+<title>sourcefile~hf_gradient.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="498,-24 402,-24 402,0 498,0 498,-24"/>
+<text text-anchor="middle" x="450" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge5" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.4607,-24.0355C395.649,-29.4255 375.8119,-35.7855 358.7482,-41.2563"/>
+<polygon fill="#000000" stroke="#000000" points="357.5196,-37.9747 349.0656,-44.3606 359.6567,-44.6404 357.5196,-37.9747"/>
+</g>
+<!-- sourcefile~huckel.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node8" class="node">
+<title>sourcefile~huckel.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/huckel.f90.html" xlink:title="huckel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="485,-150 415,-150 415,-126 485,-126 485,-150"/>
+<text text-anchor="middle" x="450" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge9" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.6819,-146.2536C404.6861,-149.4137 394.0672,-153.5978 385,-159 365.8888,-170.3863 347.8835,-188.2394 335.5221,-202.0375"/>
+<polygon fill="#000000" stroke="#000000" points="332.8539,-199.7719 328.9304,-209.6135 338.1349,-204.3667 332.8539,-199.7719"/>
+</g>
+<!-- sourcefile~int1e.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node9" class="node">
+<title>sourcefile~int1e.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node9"><a xlink:href="../sourcefile/int1e.f90.html" xlink:title="int1e.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="481,-108 419,-108 419,-84 481,-84 481,-108"/>
+<text text-anchor="middle" x="450" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1e.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge10" class="edge">
+<title>sourcefile~int1e.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.7627,-101.4101C407.2882,-104.5422 394.7353,-109.4278 385,-117 356.8711,-138.8789 337.5269,-176.3558 327.3659,-200.117"/>
+<polygon fill="#000000" stroke="#000000" points="324.0051,-199.0889 323.4596,-209.6697 330.4843,-201.7385 324.0051,-199.0889"/>
+</g>
+<!-- sourcefile~resp.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node10" class="node">
+<title>sourcefile~resp.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node10"><a xlink:href="../sourcefile/resp.f90.html" xlink:title="resp.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="479,-318 421,-318 421,-294 479,-294 479,-318"/>
+<text text-anchor="middle" x="450" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">resp.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~resp.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge11" class="edge">
+<title>sourcefile~resp.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.9773,-299.6322C409.2908,-296.3173 396.003,-291.5555 385,-285 365.8888,-273.6137 347.8835,-255.7606 335.5221,-241.9625"/>
+<polygon fill="#000000" stroke="#000000" points="338.1349,-239.6333 328.9304,-234.3865 332.8539,-244.2281 338.1349,-239.6333"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node11" class="node">
+<title>sourcefile~tdhf_energy.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node11"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="498.5,-276 401.5,-276 401.5,-252 498.5,-252 498.5,-276"/>
+<text text-anchor="middle" x="450" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge12" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.4607,-251.9645C394.8905,-246.3313 374.0159,-239.6387 356.4562,-234.0089"/>
+<polygon fill="#000000" stroke="#000000" points="357.1416,-230.5532 346.5505,-230.833 355.0044,-237.219 357.1416,-230.5532"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node12" class="node">
+<title>sourcefile~tdhf_gradient.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node12"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="503,-66 397,-66 397,-42 503,-42 503,-66"/>
+<text text-anchor="middle" x="450" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge6" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.7173,-54C384.2258,-54 371.1197,-54 359.3041,-54"/>
+<polygon fill="#000000" stroke="#000000" points="359.3009,-50.5001 349.3009,-54 359.3008,-57.5001 359.3009,-50.5001"/>
+</g>
+<!-- sourcefile~tdhf_sf_lib.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node13" class="node">
+<title>sourcefile~tdhf_sf_lib.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node13"><a xlink:href="../sourcefile/tdhf_sf_lib.f90.html" xlink:title="tdhf_sf_lib.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="494,-234 406,-234 406,-210 494,-210 494,-234"/>
+<text text-anchor="middle" x="450" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_lib.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge13" class="edge">
+<title>sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.6494,-222C389.7277,-222 371.9384,-222 356.6408,-222"/>
+<polygon fill="#000000" stroke="#000000" points="356.5018,-218.5001 346.5018,-222 356.5018,-225.5001 356.5018,-218.5001"/>
+</g>
+<!-- sourcefile~guess_huckel.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node14" class="node">
+<title>sourcefile~guess_huckel.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node14"><a xlink:href="../sourcefile/guess_huckel.f90.html" xlink:title="guess_huckel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="667.5,-150 561.5,-150 561.5,-126 667.5,-126 667.5,-150"/>
+<text text-anchor="middle" x="614.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge14" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561.0916,-138C539.8412,-138 515.6498,-138 495.279,-138"/>
+<polygon fill="#000000" stroke="#000000" points="495.0105,-134.5001 485.0105,-138 495.0104,-141.5001 495.0105,-134.5001"/>
+</g>
+<!-- sourcefile~tdhf_mrsf_energy.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node15" class="node">
+<title>sourcefile~tdhf_mrsf_energy.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node15"><a xlink:href="../sourcefile/tdhf_mrsf_energy.f90.html" xlink:title="tdhf_mrsf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="678,-234 551,-234 551,-210 678,-210 678,-234"/>
+<text text-anchor="middle" x="614.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge15" class="edge">
+<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M550.9,-222C535.4737,-222 519.1234,-222 504.1782,-222"/>
+<polygon fill="#000000" stroke="#000000" points="504.0847,-218.5001 494.0847,-222 504.0846,-225.5001 504.0847,-218.5001"/>
+</g>
+<!-- sourcefile~tdhf_sf_energy.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node16" class="node">
+<title>sourcefile~tdhf_sf_energy.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node16"><a xlink:href="../sourcefile/tdhf_sf_energy.f90.html" xlink:title="tdhf_sf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="670.5,-192 558.5,-192 558.5,-168 670.5,-168 670.5,-192"/>
+<text text-anchor="middle" x="614.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge16" class="edge">
+<title>sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M567.3609,-192.0355C547.5347,-197.0975 524.3577,-203.015 503.8616,-208.2481"/>
+<polygon fill="#000000" stroke="#000000" points="502.8649,-204.8902 494.0416,-210.7553 504.5966,-211.6726 502.8649,-204.8902"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_node17" class="node">
+<title>sourcefile~tdhf_z_vector.f90</title>
+<g id="a_sourcefile~~xyzorder.f90~~AfferentGraph_node17"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="667,-276 562,-276 562,-252 667,-252 667,-276"/>
+<text text-anchor="middle" x="614.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
+<g id="sourcefile~~xyzorder.f90~~AfferentGraph_edge17" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M567.3609,-251.9645C547.5347,-246.9025 524.3577,-240.985 503.8616,-235.7519"/>
+<polygon fill="#000000" stroke="#000000" points="504.5966,-232.3274 494.0416,-233.2447 502.8649,-239.1098 504.5966,-232.3274"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefilexyzorderf90AfferentGraph = svgPanZoom('#sourcefilexyzorderf90AfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">xyz_order</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w"> </span><span class="k">implicit none</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="k"> private</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="k"> </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="p">,</span><span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="w">     </span><span class="n">X__</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="w">     </span><span class="n">Y__</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="w">     </span><span class="n">Z__</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="w">     </span><span class="n">XX_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">     </span><span class="n">YY_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">     </span><span class="n">ZZ_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">     </span><span class="n">XY_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">     </span><span class="n">XZ_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a><span class="w">     </span><span class="n">YZ_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-18" name="ln-18" href="#ln-18"></a>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">     </span><span class="n">XXX</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">     </span><span class="n">YYY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">     </span><span class="n">ZZZ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">     </span><span class="n">XXY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">     </span><span class="n">XXZ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">     </span><span class="n">YYX</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">     </span><span class="n">YYZ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">     </span><span class="n">ZZX</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">     </span><span class="n">ZZY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">9</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">     </span><span class="n">XYZ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="k">end module </span><span class="n">xyz_order</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,648 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>add_ecpint &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>add_ecpint
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">30 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/ecp.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/ecp.f90.html'>ecp.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/ecp_tool.html'>ecp_tool</a></li>
+            <li class="breadcrumb-item active" aria-current="page">add_ecpint</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/add_ecpint.html#src">add_ecpint</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine add_ecpint(basis, coord, hcore)  
+</h2>
+    
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~28"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coord"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>coord</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hcore~2"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>hcore</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~add_ecpint~~CallsGraph Pages: 1 -->
+<svg id="procadd_ecpintCallsGraph" width="253pt" height="284pt"
+ viewBox="0.00 0.00 253.00 284.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~add_ecpint~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 280)">
+<title>proc~~add_ecpint~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-280 249,-280 249,4 -4,4"/>
+<!-- proc~add_ecpint -->
+<g id="proc~~add_ecpint~~CallsGraph_node1" class="node">
+<title>proc~add_ecpint</title>
+<polygon fill="none" stroke="#000000" points="71,-150 0,-150 0,-126 71,-126 71,-150"/>
+<text text-anchor="middle" x="35.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">add_ecpint</text>
+</g>
+<!-- interface~compute_integrals -->
+<g id="proc~~add_ecpint~~CallsGraph_node2" class="node">
+<title>interface~compute_integrals</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node2"><a xlink:href="../interface/compute_integrals.html" xlink:title="compute_integrals">
+<polygon fill="#a7506f" stroke="#a7506f" points="232,-276 120,-276 120,-252 232,-252 232,-276"/>
+<text text-anchor="middle" x="176" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">compute_integrals</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~compute_integrals -->
+<g id="proc~~add_ecpint~~CallsGraph_edge1" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~compute_integrals</title>
+<path fill="none" stroke="#000000" d="M40.425,-150.0427C49.9678,-171.8762 73.0676,-218.0402 107,-243 109.1182,-244.5581 111.3532,-246.0019 113.6716,-247.3396"/>
+<polygon fill="#000000" stroke="#000000" points="112.4479,-250.6412 122.9564,-251.9912 115.5834,-244.3827 112.4479,-250.6412"/>
+</g>
+<!-- interface~free_integrator -->
+<g id="proc~~add_ecpint~~CallsGraph_node3" class="node">
+<title>interface~free_integrator</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node3"><a xlink:href="../interface/free_integrator.html" xlink:title="free_integrator">
+<polygon fill="#a7506f" stroke="#a7506f" points="222.5,-234 129.5,-234 129.5,-210 222.5,-210 222.5,-234"/>
+<text text-anchor="middle" x="176" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">free_integrator</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~free_integrator -->
+<g id="proc~~add_ecpint~~CallsGraph_edge2" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~free_integrator</title>
+<path fill="none" stroke="#000000" d="M46.4331,-150.4148C59.5199,-164.5587 82.727,-187.4589 107,-201 110.9828,-203.2219 115.229,-205.2366 119.583,-207.0581"/>
+<polygon fill="#000000" stroke="#000000" points="118.6359,-210.443 129.2265,-210.7426 121.1343,-203.904 118.6359,-210.443"/>
+</g>
+<!-- interface~free_result -->
+<g id="proc~~add_ecpint~~CallsGraph_node4" class="node">
+<title>interface~free_result</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node4"><a xlink:href="../interface/free_result.html" xlink:title="free_result">
+<polygon fill="#a7506f" stroke="#a7506f" points="211,-192 141,-192 141,-168 211,-168 211,-192"/>
+<text text-anchor="middle" x="176" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">free_result</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~free_result -->
+<g id="proc~~add_ecpint~~CallsGraph_edge3" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~free_result</title>
+<path fill="none" stroke="#000000" d="M71.3176,-148.707C89.4569,-154.1295 111.6652,-160.7683 130.952,-166.5337"/>
+<polygon fill="#000000" stroke="#000000" points="130.1508,-169.9472 140.7343,-169.458 132.1557,-163.2404 130.1508,-169.9472"/>
+</g>
+<!-- interface~init_integrator -->
+<g id="proc~~add_ecpint~~CallsGraph_node5" class="node">
+<title>interface~init_integrator</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node5"><a xlink:href="../interface/init_integrator.html" xlink:title="init_integrator">
+<polygon fill="#a7506f" stroke="#a7506f" points="220,-150 132,-150 132,-126 220,-126 220,-150"/>
+<text text-anchor="middle" x="176" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">init_integrator</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~init_integrator -->
+<g id="proc~~add_ecpint~~CallsGraph_edge4" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~init_integrator</title>
+<path fill="none" stroke="#000000" d="M71.3176,-138C86.6011,-138 104.7734,-138 121.6528,-138"/>
+<polygon fill="#000000" stroke="#000000" points="121.9583,-141.5001 131.9582,-138 121.9582,-134.5001 121.9583,-141.5001"/>
+</g>
+<!-- interface~init_integrator_instance -->
+<g id="proc~~add_ecpint~~CallsGraph_node6" class="node">
+<title>interface~init_integrator_instance</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node6"><a xlink:href="../interface/init_integrator_instance.html" xlink:title="init_integrator_instance">
+<polygon fill="#a7506f" stroke="#a7506f" points="245,-108 107,-108 107,-84 245,-84 245,-108"/>
+<text text-anchor="middle" x="176" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">init_integrator_instance</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~init_integrator_instance -->
+<g id="proc~~add_ecpint~~CallsGraph_edge5" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~init_integrator_instance</title>
+<path fill="none" stroke="#000000" d="M71.3176,-127.293C87.9185,-122.3304 107.9275,-116.3491 125.9861,-110.9508"/>
+<polygon fill="#000000" stroke="#000000" points="127.2053,-114.2394 135.7839,-108.0219 125.2004,-107.5327 127.2053,-114.2394"/>
+</g>
+<!-- interface~set_ecp_basis -->
+<g id="proc~~add_ecpint~~CallsGraph_node7" class="node">
+<title>interface~set_ecp_basis</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node7"><a xlink:href="../interface/set_ecp_basis.html" xlink:title="set_ecp_basis">
+<polygon fill="#a7506f" stroke="#a7506f" points="218.5,-66 133.5,-66 133.5,-42 218.5,-42 218.5,-66"/>
+<text text-anchor="middle" x="176" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">set_ecp_basis</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;interface~set_ecp_basis -->
+<g id="proc~~add_ecpint~~CallsGraph_edge6" class="edge">
+<title>proc~add_ecpint&#45;&gt;interface~set_ecp_basis</title>
+<path fill="none" stroke="#000000" d="M46.4331,-125.5852C59.5199,-111.4413 82.727,-88.5411 107,-75 112.184,-72.108 117.8141,-69.567 123.5475,-67.3461"/>
+<polygon fill="#000000" stroke="#000000" points="124.9817,-70.551 133.2331,-63.9054 122.6384,-63.9549 124.9817,-70.551"/>
+</g>
+<!-- none~bf_to_shell -->
+<g id="proc~~add_ecpint~~CallsGraph_node8" class="node">
+<title>none~bf_to_shell</title>
+<g id="a_proc~~add_ecpint~~CallsGraph_node8"><a xlink:href="../type/basis_set.html#boundprocedure-bf_to_shell" xlink:title="basis_set%bf_to_shell">
+<polygon fill="#a7506f" stroke="#a7506f" points="239.5,-24 112.5,-24 112.5,0 239.5,0 239.5,-24"/>
+<text text-anchor="middle" x="176" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_set%bf_to_shell</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpint&#45;&gt;none~bf_to_shell -->
+<g id="proc~~add_ecpint~~CallsGraph_edge7" class="edge">
+<title>proc~add_ecpint&#45;&gt;none~bf_to_shell</title>
+<path fill="none" stroke="#000000" d="M40.425,-125.9573C49.9678,-104.1238 73.0676,-57.9598 107,-33 109.1182,-31.4419 111.3532,-29.9981 113.6716,-28.6604"/>
+<polygon fill="#000000" stroke="#000000" points="115.5834,-31.6173 122.9564,-24.0088 112.4479,-25.3588 115.5834,-31.6173"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~add_ecpint~~CalledByGraph Pages: 1 -->
+<svg id="procadd_ecpintCalledByGraph" width="263pt" height="32pt"
+ viewBox="0.00 0.00 263.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~add_ecpint~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~add_ecpint~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 259,-28 259,4 -4,4"/>
+<!-- proc~add_ecpint -->
+<g id="proc~~add_ecpint~~CalledByGraph_node1" class="node">
+<title>proc~add_ecpint</title>
+<polygon fill="none" stroke="#000000" points="255,-24 184,-24 184,0 255,0 255,-24"/>
+<text text-anchor="middle" x="219.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">add_ecpint</text>
+</g>
+<!-- proc~omp_hst -->
+<g id="proc~~add_ecpint~~CalledByGraph_node2" class="node">
+<title>proc~omp_hst</title>
+<g id="a_proc~~add_ecpint~~CalledByGraph_node2"><a xlink:href="../proc/omp_hst.html" xlink:title="omp_hst">
+<polygon fill="#d9534f" stroke="#d9534f" points="148,-24 90,-24 90,0 148,0 148,-24"/>
+<text text-anchor="middle" x="119" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">omp_hst</text>
+</a>
+</g>
+</g>
+<!-- proc~omp_hst&#45;&gt;proc~add_ecpint -->
+<g id="proc~~add_ecpint~~CalledByGraph_edge1" class="edge">
+<title>proc~omp_hst&#45;&gt;proc~add_ecpint</title>
+<path fill="none" stroke="#000000" d="M148.0688,-12C156.0688,-12 164.9457,-12 173.6454,-12"/>
+<polygon fill="#000000" stroke="#000000" points="173.7137,-15.5001 183.7137,-12 173.7136,-8.5001 173.7137,-15.5001"/>
+</g>
+<!-- proc~int1e -->
+<g id="proc~~add_ecpint~~CalledByGraph_node3" class="node">
+<title>proc~int1e</title>
+<g id="a_proc~~add_ecpint~~CalledByGraph_node3"><a xlink:href="../proc/int1e.html" xlink:title="int1e">
+<polygon fill="#d9534f" stroke="#d9534f" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e</text>
+</a>
+</g>
+</g>
+<!-- proc~int1e&#45;&gt;proc~omp_hst -->
+<g id="proc~~add_ecpint~~CalledByGraph_edge2" class="edge">
+<title>proc~int1e&#45;&gt;proc~omp_hst</title>
+<path fill="none" stroke="#000000" d="M54.1054,-12C62.094,-12 71.0028,-12 79.5978,-12"/>
+<polygon fill="#000000" stroke="#000000" points="79.8433,-15.5001 89.8432,-12 79.8432,-8.5001 79.8433,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">    </span><span class="k">subroutine </span><span class="n">add_ecpint</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="n">hcore</span><span class="p">)</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">coord</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">hcore</span><span class="p">(:)</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">integrator</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="n">ecp_result</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">result_ptr</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="kt">c_double</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">(:)</span>
+<span class="w">        </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">c</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">driv_order</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.(</span><span class="n">basis</span><span class="p">%</span><span class="n">ecp_params</span><span class="p">%</span><span class="n">is_ecp</span><span class="p">))</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            return</span>
+<span class="k">        end if</span>
+<span class="k">        </span><span class="n">driv_order</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="w">        </span><span class="k">call </span><span class="n">set_integrator</span><span class="p">(</span><span class="n">integrator</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="n">driv_order</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">result_ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">compute_integrals</span><span class="p">(</span><span class="n">integrator</span><span class="p">)</span>
+<span class="w">        </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">result_ptr</span><span class="p">%</span><span class="k">data</span><span class="p">,</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">result_ptr</span><span class="p">%</span><span class="n">size</span><span class="p">])</span>
+
+
+<span class="w">        </span><span class="k">call </span><span class="n">transform_matrix</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">        </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">            </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<span class="w">                </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">                </span><span class="n">hcore</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">hcore</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<span class="w">            </span><span class="k">end do</span>
+<span class="k">        end do</span>
+
+<span class="k">        </span><span class="n">result_ptr</span><span class="p">%</span><span class="k">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_null_ptr</span>
+<span class="nb">        </span><span class="n">result_ptr</span><span class="p">%</span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">        </span><span class="k">nullify</span><span class="p">(</span><span class="n">libecp_res</span><span class="p">)</span>
+
+<span class="w">        </span><span class="k">call </span><span class="n">free_integrator</span><span class="p">(</span><span class="n">integrator</span><span class="p">)</span>
+<span class="w">        </span><span class="k">call </span><span class="n">free_result</span><span class="p">(</span><span class="n">result_ptr</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">end subroutine </span><span class="n">add_ecpint</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

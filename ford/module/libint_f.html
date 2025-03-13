@@ -1,0 +1,1095 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>libint_f &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>libint_f
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for modules and submodules.">208 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/libint_f.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/libint_f.f90.html'>libint_f.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">libint_f</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/libint_f.html#variable-libint2_active">libint2_active</a>
+            <a class="list-group-item" href="../module/libint_f.html#variable-libint2_build_eri">libint2_build_eri</a>
+            <a class="list-group-item" href="../module/libint_f.html#variable-libint2_build_eri1">libint2_build_eri1</a>
+            <a class="list-group-item" href="../module/libint_f.html#variable-libint2_build_eri2">libint2_build_eri2</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/libint_f.html#type-libint_t">libint_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/libint_f.html#proc-libint2_init_eri">libint2_init_eri</a>
+            <a class="list-group-item" href="../module/libint_f.html#proc-libint2_cleanup_eri">libint2_cleanup_eri</a>
+            <a class="list-group-item" href="../module/libint_f.html#proc-libint2_build">libint2_build</a>
+            <a class="list-group-item" href="../module/libint_f.html#proc-libint2_static_init">libint2_static_init</a>
+            <a class="list-group-item" href="../module/libint_f.html#proc-libint2_static_cleanup">libint2_static_cleanup</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_c_binding'>iso_c_binding</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~libint_f~~UsesGraph Pages: 1 -->
+<svg id="modulelibint_fUsesGraph" width="182pt" height="32pt"
+ viewBox="0.00 0.00 182.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~libint_f~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>module~~libint_f~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 178,-28 178,4 -4,4"/>
+<!-- module~libint_f -->
+<g id="module~~libint_f~~UsesGraph_node1" class="node">
+<title>module~libint_f</title>
+<polygon fill="none" stroke="#000000" points="174,-24 120,-24 120,0 174,0 174,-24"/>
+<text text-anchor="middle" x="147" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">libint_f</text>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~libint_f~~UsesGraph_node2" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~libint_f~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="84,-24 0,-24 0,0 84,0 84,-24"/>
+<text text-anchor="middle" x="42" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~libint_f&#45;&gt;iso_c_binding -->
+<g id="module~~libint_f~~UsesGraph_edge1" class="edge">
+<title>module~libint_f&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M119.9599,-12C112.0132,-12 103.0397,-12 94.0823,-12"/>
+<polygon fill="#000000" stroke="#000000" points="94.0317,-8.5001 84.0317,-12 94.0317,-15.5001 94.0317,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~libint_f~~UsedByGraph Pages: 1 -->
+<svg id="modulelibint_fUsedByGraph" width="586pt" height="494pt"
+ viewBox="0.00 0.00 586.00 494.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~libint_f~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 490)">
+<title>module~~libint_f~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-490 582,-490 582,4 -4,4"/>
+<!-- module~libint_f -->
+<g id="module~~libint_f~~UsedByGraph_node1" class="node">
+<title>module~libint_f</title>
+<polygon fill="none" stroke="#000000" points="54,-188 0,-188 0,-164 54,-164 54,-188"/>
+<text text-anchor="middle" x="27" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">libint_f</text>
+</g>
+<!-- module~int2e_libint -->
+<g id="module~~libint_f~~UsedByGraph_node2" class="node">
+<title>module~int2e_libint</title>
+<g id="a_module~~libint_f~~UsedByGraph_node2"><a xlink:href="../module/int2e_libint.html" xlink:title="int2e_libint">
+<polygon fill="#337ab7" stroke="#337ab7" points="161,-188 90,-188 90,-164 161,-164 161,-188"/>
+<text text-anchor="middle" x="125.5" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_libint</text>
+</a>
+</g>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~libint_f -->
+<g id="module~~libint_f~~UsedByGraph_edge1" class="edge">
+<title>module~int2e_libint&#45;&gt;module~libint_f</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M89.9392,-176C81.6475,-176 72.7935,-176 64.4238,-176"/>
+<polygon fill="#000000" stroke="#000000" points="64.16,-172.5001 54.16,-176 64.16,-179.5001 64.16,-172.5001"/>
+</g>
+<!-- module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_node3" class="node">
+<title>module~int2_compute</title>
+<g id="a_module~~libint_f~~UsedByGraph_node3"><a xlink:href="../module/int2_compute.html" xlink:title="int2_compute">
+<polygon fill="#337ab7" stroke="#337ab7" points="284,-209 199,-209 199,-185 284,-185 284,-209"/>
+<text text-anchor="middle" x="241.5" y="-194.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_libint -->
+<g id="module~~libint_f~~UsedByGraph_edge2" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M198.9646,-189.2996C189.9444,-187.6667 180.3858,-185.9362 171.2519,-184.2827"/>
+<polygon fill="#000000" stroke="#000000" points="171.6348,-180.7952 161.1712,-182.4577 170.3878,-187.6832 171.6348,-180.7952"/>
+</g>
+<!-- proc~ints_exchange -->
+<g id="module~~libint_f~~UsedByGraph_node4" class="node">
+<title>proc~ints_exchange</title>
+<g id="a_module~~libint_f~~UsedByGraph_node4"><a xlink:href="../proc/ints_exchange.html" xlink:title="ints_exchange">
+<polygon fill="#d9534f" stroke="#d9534f" points="286,-167 197,-167 197,-143 286,-143 286,-167"/>
+<text text-anchor="middle" x="241.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ints_exchange</text>
+</a>
+</g>
+</g>
+<!-- proc~ints_exchange&#45;&gt;module~int2e_libint -->
+<g id="module~~libint_f~~UsedByGraph_edge3" class="edge">
+<title>proc~ints_exchange&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M196.9831,-163.0591C188.5344,-164.5886 179.6816,-166.1913 171.1971,-167.7273"/>
+<polygon fill="#000000" stroke="#000000" points="170.2988,-164.3329 161.0823,-169.5584 171.5458,-171.2209 170.2988,-164.3329"/>
+</g>
+<!-- module~grd2 -->
+<g id="module~~libint_f~~UsedByGraph_node5" class="node">
+<title>module~grd2</title>
+<g id="a_module~~libint_f~~UsedByGraph_node5"><a xlink:href="../module/grd2.html" xlink:title="grd2">
+<polygon fill="#337ab7" stroke="#337ab7" points="389.5,-444 335.5,-444 335.5,-420 389.5,-420 389.5,-444"/>
+<text text-anchor="middle" x="362.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2</text>
+</a>
+</g>
+</g>
+<!-- module~grd2&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge4" class="edge">
+<title>module~grd2&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M355.6236,-419.7672C347.4515,-405.1543 333.4778,-379.9286 322,-358 295.9772,-308.2831 266.8544,-249.0992 251.7838,-218.1903"/>
+<polygon fill="#000000" stroke="#000000" points="254.9296,-216.6561 247.4062,-209.1962 248.6356,-219.7195 254.9296,-216.6561"/>
+</g>
+<!-- module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_node6" class="node">
+<title>module~tdhf_lib</title>
+<g id="a_module~~libint_f~~UsedByGraph_node6"><a xlink:href="../module/tdhf_lib.html" xlink:title="tdhf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="389.5,-269 335.5,-269 335.5,-245 389.5,-245 389.5,-269"/>
+<text text-anchor="middle" x="362.5" y="-254.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_lib</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge5" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M338.0138,-244.8581C319.891,-235.8716 294.9895,-223.5237 275.0199,-213.6215"/>
+<polygon fill="#000000" stroke="#000000" points="276.4637,-210.4307 265.9497,-209.1238 273.3539,-216.7021 276.4637,-210.4307"/>
+</g>
+<!-- module~tdhf_mrsf_lib -->
+<g id="module~~libint_f~~UsedByGraph_node7" class="node">
+<title>module~tdhf_mrsf_lib</title>
+<g id="a_module~~libint_f~~UsedByGraph_node7"><a xlink:href="../module/tdhf_mrsf_lib.html" xlink:title="tdhf_mrsf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="403,-66 322,-66 322,-42 403,-42 403,-66"/>
+<text text-anchor="middle" x="362.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_lib</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge6" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M339.052,-66.1063C332.8659,-70.1744 326.6325,-75.1828 322,-81 293.8724,-116.3207 316.6467,-142.8414 286,-176 285.1194,-176.9528 284.1866,-177.8665 283.211,-178.7423"/>
+<polygon fill="#000000" stroke="#000000" points="281.0359,-175.9971 275.0468,-184.7368 285.1789,-181.6395 281.0359,-175.9971"/>
+</g>
+<!-- module~tdhf_z_vector_mod -->
+<g id="module~~libint_f~~UsedByGraph_node8" class="node">
+<title>module~tdhf_z_vector_mod</title>
+<g id="a_module~~libint_f~~UsedByGraph_node8"><a xlink:href="../module/tdhf_z_vector_mod.html" xlink:title="tdhf_z_vector_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="564.5,-402 452.5,-402 452.5,-378 564.5,-378 564.5,-402"/>
+<text text-anchor="middle" x="508.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_mod</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_z_vector_mod&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge7" class="edge">
+<title>module~tdhf_z_vector_mod&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M460.1086,-377.9007C452.8584,-375.3728 445.6059,-372.4159 439,-369 361.9757,-329.1702 290.1052,-253.2288 258.456,-217.0839"/>
+<polygon fill="#000000" stroke="#000000" points="260.8255,-214.4731 251.6377,-209.1973 255.5301,-219.0512 260.8255,-214.4731"/>
+</g>
+<!-- module~tdhf_z_vector_mod&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge15" class="edge">
+<title>module~tdhf_z_vector_mod&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M454.722,-377.8664C449.1446,-375.4262 443.7782,-372.5021 439,-369 422.0219,-356.5561 391.4454,-306.8651 374.5457,-278.023"/>
+<polygon fill="#000000" stroke="#000000" points="377.4269,-276.0148 369.3782,-269.1249 371.3736,-279.5302 377.4269,-276.0148"/>
+</g>
+<!-- proc~fock_jk -->
+<g id="module~~libint_f~~UsedByGraph_node9" class="node">
+<title>proc~fock_jk</title>
+<g id="a_module~~libint_f~~UsedByGraph_node9"><a xlink:href="../proc/fock_jk.html" xlink:title="fock_jk">
+<polygon fill="#d9534f" stroke="#d9534f" points="389.5,-189 335.5,-189 335.5,-165 389.5,-165 389.5,-189"/>
+<text text-anchor="middle" x="362.5" y="-174.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">fock_jk</text>
+</a>
+</g>
+</g>
+<!-- proc~fock_jk&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge8" class="edge">
+<title>proc~fock_jk&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M335.3452,-181.4884C323.2344,-183.4902 308.5311,-185.9205 294.3912,-188.2576"/>
+<polygon fill="#000000" stroke="#000000" points="293.5352,-184.8516 284.2399,-189.9356 294.6768,-191.7579 293.5352,-184.8516"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="module~~libint_f~~UsedByGraph_node10" class="node">
+<title>proc~scf_driver</title>
+<g id="a_module~~libint_f~~UsedByGraph_node10"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="394.5,-147 330.5,-147 330.5,-123 394.5,-123 394.5,-147"/>
+<text text-anchor="middle" x="362.5" y="-132.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge9" class="edge">
+<title>proc~scf_driver&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M338.8826,-147.101C333.3289,-149.9867 327.4429,-153.0777 322,-156 305.8739,-164.658 302.2853,-167.6453 286,-176 283.1117,-177.4818 280.1003,-178.9864 277.0661,-180.4743"/>
+<polygon fill="#000000" stroke="#000000" points="275.4819,-177.3525 267.995,-184.849 278.5227,-183.6576 275.4819,-177.3525"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~libint_f~~UsedByGraph_node11" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~libint_f~~UsedByGraph_node11"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="546.5,-150 470.5,-150 470.5,-126 546.5,-126 546.5,-150"/>
+<text text-anchor="middle" x="508.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge10" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M470.4984,-145.55C459.8054,-148.6946 448.5082,-153.0467 439,-159 419.0066,-171.5183 424.6087,-188.539 403,-198 369.0464,-212.8659 327.095,-212.1123 294.4593,-207.9063"/>
+<polygon fill="#000000" stroke="#000000" points="294.6086,-204.3919 284.2126,-206.4349 293.6135,-211.3209 294.6086,-204.3919"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge20" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M470.3937,-143.6119C459.3371,-146.7128 447.8672,-151.5268 439,-159 411.6429,-182.0562 426.9083,-204.3844 403,-231 400.449,-233.8399 397.5186,-236.4942 394.4254,-238.9388"/>
+<polygon fill="#000000" stroke="#000000" points="392.143,-236.2664 386.0065,-244.9031 396.1896,-241.9783 392.143,-236.2664"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="module~~libint_f~~UsedByGraph_node12" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_module~~libint_f~~UsedByGraph_node12"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="561.5,-66 455.5,-66 455.5,-42 561.5,-42 561.5,-66"/>
+<text text-anchor="middle" x="508.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge11" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M455.1861,-65.0498C426.9515,-71.868 392.0914,-81.8466 362.5,-95"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M362.5,-95C344.3316,-103.0758 336.6598,-100.5687 322,-114 298.5059,-135.5252 309.4697,-154.4481 286,-176 284.7455,-177.152 283.4165,-178.2519 282.0322,-179.3009"/>
+<polygon fill="#000000" stroke="#000000" points="280.1105,-176.3756 273.633,-184.7597 283.925,-182.2449 280.1105,-176.3756"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge22" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M455.2285,-63.885C449.2219,-66.7149 443.6145,-70.3452 439,-75 398.8989,-115.4517 427.4237,-146.542 403,-198 396.5265,-211.6389 387.0734,-225.6233 378.928,-236.5521"/>
+<polygon fill="#000000" stroke="#000000" points="376.0665,-234.5319 372.7577,-244.5968 381.6209,-238.7921 376.0665,-234.5319"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge25" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M455.3776,-54C441.7336,-54 427.0866,-54 413.55,-54"/>
+<polygon fill="#000000" stroke="#000000" points="413.4498,-50.5001 403.4498,-54 413.4498,-57.5001 413.4498,-50.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="module~~libint_f~~UsedByGraph_node13" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_module~~libint_f~~UsedByGraph_node13"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="554,-108 463,-108 463,-84 554,-84 554,-108"/>
+<text text-anchor="middle" x="508.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~int2_compute -->
+<g id="module~~libint_f~~UsedByGraph_edge12" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M462.7701,-86.271C432.9491,-82.1468 393.8854,-81.0492 362.5,-95"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge23" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M462.9466,-103.6449C454.2797,-106.7072 445.8049,-110.9953 439,-117 409.4605,-143.0656 422.2284,-163.6159 403,-198 395.5355,-211.3479 385.8857,-225.5005 377.878,-236.5978"/>
+<polygon fill="#000000" stroke="#000000" points="374.9762,-234.6362 371.8811,-244.7689 380.6194,-238.778 374.9762,-234.6362"/>
+</g>
+<!-- module~hf_gradient_mod -->
+<g id="module~~libint_f~~UsedByGraph_node14" class="node">
+<title>module~hf_gradient_mod</title>
+<g id="a_module~~libint_f~~UsedByGraph_node14"><a xlink:href="../module/hf_gradient_mod.html" xlink:title="hf_gradient_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="560,-486 457,-486 457,-462 560,-462 560,-486"/>
+<text text-anchor="middle" x="508.5" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient_mod</text>
+</a>
+</g>
+</g>
+<!-- module~hf_gradient_mod&#45;&gt;module~grd2 -->
+<g id="module~~libint_f~~UsedByGraph_edge13" class="edge">
+<title>module~hf_gradient_mod&#45;&gt;module~grd2</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M466.6623,-461.9645C445.3727,-455.8401 419.7298,-448.4634 399.2144,-442.5617"/>
+<polygon fill="#000000" stroke="#000000" points="400.1745,-439.196 389.5966,-439.7949 398.2393,-445.9232 400.1745,-439.196"/>
+</g>
+<!-- module~tdhf_gradient_mod -->
+<g id="module~~libint_f~~UsedByGraph_node15" class="node">
+<title>module~tdhf_gradient_mod</title>
+<g id="a_module~~libint_f~~UsedByGraph_node15"><a xlink:href="../module/tdhf_gradient_mod.html" xlink:title="tdhf_gradient_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="565,-444 452,-444 452,-420 565,-420 565,-444"/>
+<text text-anchor="middle" x="508.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_mod</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_gradient_mod&#45;&gt;module~grd2 -->
+<g id="module~~libint_f~~UsedByGraph_edge14" class="edge">
+<title>module~tdhf_gradient_mod&#45;&gt;module~grd2</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M451.6345,-432C434.33,-432 415.7522,-432 400.0595,-432"/>
+<polygon fill="#000000" stroke="#000000" points="399.7074,-428.5001 389.7074,-432 399.7074,-435.5001 399.7074,-428.5001"/>
+</g>
+<!-- proc~get_states_overlap -->
+<g id="module~~libint_f~~UsedByGraph_node16" class="node">
+<title>proc~get_states_overlap</title>
+<g id="a_module~~libint_f~~UsedByGraph_node16"><a xlink:href="../proc/get_states_overlap.html" xlink:title="get_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="564.5,-24 452.5,-24 452.5,0 564.5,0 564.5,-24"/>
+<text text-anchor="middle" x="508.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge24" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M466.6623,-24.0355C449.9683,-28.8379 430.5976,-34.4103 413.1214,-39.4377"/>
+<polygon fill="#000000" stroke="#000000" points="411.7277,-36.1966 403.085,-42.3249 413.6629,-42.9238 411.7277,-36.1966"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="module~~libint_f~~UsedByGraph_node17" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_module~~libint_f~~UsedByGraph_node17"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="578,-318 439,-318 439,-294 578,-294 578,-318"/>
+<text text-anchor="middle" x="508.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge16" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M467.2163,-293.9519C457.9037,-291.116 448.0868,-288.033 439,-285 425.9798,-280.6541 411.8365,-275.579 399.2932,-270.9521"/>
+<polygon fill="#000000" stroke="#000000" points="400.2216,-267.5633 389.6287,-267.3601 397.7828,-274.1248 400.2216,-267.5633"/>
+</g>
+<!-- proc~get_transition_density -->
+<g id="module~~libint_f~~UsedByGraph_node18" class="node">
+<title>proc~get_transition_density</title>
+<g id="a_module~~libint_f~~UsedByGraph_node18"><a xlink:href="../proc/get_transition_density.html" xlink:title="get_transition_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="573,-276 444,-276 444,-252 573,-252 573,-276"/>
+<text text-anchor="middle" x="508.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_density&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge17" class="edge">
+<title>proc~get_transition_density&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M443.612,-260.8889C428.5886,-260.1686 413.1012,-259.4261 399.7374,-258.7854"/>
+<polygon fill="#000000" stroke="#000000" points="399.6809,-255.2787 389.5247,-258.2957 399.3456,-262.2707 399.6809,-255.2787"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~libint_f~~UsedByGraph_node19" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~libint_f~~UsedByGraph_node19"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="563,-234 454,-234 454,-210 563,-210 563,-234"/>
+<text text-anchor="middle" x="508.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge18" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M458.2551,-234.045C439.0862,-238.6403 417.5915,-243.7931 399.8313,-248.0507"/>
+<polygon fill="#000000" stroke="#000000" points="398.7603,-244.7082 389.8517,-250.4431 400.3921,-251.5154 398.7603,-244.7082"/>
+</g>
+<!-- proc~sfdmat -->
+<g id="module~~libint_f~~UsedByGraph_node20" class="node">
+<title>proc~sfdmat</title>
+<g id="a_module~~libint_f~~UsedByGraph_node20"><a xlink:href="../proc/sfdmat.html" xlink:title="sfdmat">
+<polygon fill="#d9534f" stroke="#d9534f" points="535.5,-192 481.5,-192 481.5,-168 535.5,-168 535.5,-192"/>
+<text text-anchor="middle" x="508.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sfdmat</text>
+</a>
+</g>
+</g>
+<!-- proc~sfdmat&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge19" class="edge">
+<title>proc~sfdmat&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M481.4371,-185.4941C468.1518,-188.8489 452.2057,-193.8867 439,-201 420.6636,-210.8769 419.7955,-218.6839 403,-231 399.2604,-233.7422 395.2387,-236.5175 391.2331,-239.1825"/>
+<polygon fill="#000000" stroke="#000000" points="389.086,-236.4035 382.6053,-244.7851 392.8983,-242.2743 389.086,-236.4035"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~libint_f~~UsedByGraph_node21" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~libint_f~~UsedByGraph_node21"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="550.5,-360 466.5,-360 466.5,-336 550.5,-336 550.5,-360"/>
+<text text-anchor="middle" x="508.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~tdhf_lib -->
+<g id="module~~libint_f~~UsedByGraph_edge21" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M466.4537,-338.596C457.0848,-335.6114 447.436,-331.7993 439,-327 415.8151,-313.8098 393.841,-292.4382 379.4431,-276.7746"/>
+<polygon fill="#000000" stroke="#000000" points="381.9174,-274.2911 372.6383,-269.1774 376.7032,-278.9615 381.9174,-274.2911"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint2_active"></span>
+              logical,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>libint2_active</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint2_build_eri"></span>
+              type(C_FUNPTR),
+            </td>
+              <td>public,</td>
+            <td>
+              DIMENSION(0:libint2_max_am_eri, 0:libint2_max_am_eri, 0:libint2_max_am_eri, 0:libint2_max_am_eri), BIND(C)
+            </td>
+            <td>::</td>
+            <td><strong>libint2_build_eri</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint2_build_eri1"></span>
+              type(C_FUNPTR),
+            </td>
+              <td>public,</td>
+            <td>
+              DIMENSION(0:libint2_max_am_eri1, 0:libint2_max_am_eri1, 0:libint2_max_am_eri1, 0:libint2_max_am_eri1), BIND(C)
+            </td>
+            <td>::</td>
+            <td><strong>libint2_build_eri1</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint2_build_eri2"></span>
+              type(C_FUNPTR),
+            </td>
+              <td>public,</td>
+            <td>
+              DIMENSION(0:libint2_max_am_eri2, 0:libint2_max_am_eri2, 0:libint2_max_am_eri2, 0:libint2_max_am_eri2), BIND(C)
+            </td>
+            <td>::</td>
+            <td><strong>libint2_build_eri2</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-libint_t"></span>
+      <h3>
+        type, public, bind(C)&nbsp;::&nbsp;
+        <a href='../type/libint_t.html'>libint_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-targets"></span>
+              type(c_ptr),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>targets</strong>(1)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-libint2_init_eri"></span> <h3>public  subroutine <a href='../proc/libint2_init_eri.html'>libint2_init_eri</a>(libint, max_am, buf) bind(c)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint~22"></span>
+              type(<a href='../type/libint_t.html'>libint_t</a>),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(*)
+            </td>
+            <td>::</td>
+            <td><strong>libint</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_am~21"></span>
+              integer(kind=c_int),
+            </td>
+<td></td>
+              <td></td>            <td>
+              value
+            </td>
+            <td>::</td>
+            <td><strong>max_am</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-buf~15"></span>
+              type(c_ptr),
+            </td>
+<td></td>
+              <td></td>            <td>
+              value
+            </td>
+            <td>::</td>
+            <td><strong>buf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-libint2_cleanup_eri"></span> <h3>public  subroutine <a href='../proc/libint2_cleanup_eri.html'>libint2_cleanup_eri</a>(libint) bind(c)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint~23"></span>
+              type(<a href='../type/libint_t.html'>libint_t</a>),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(*)
+            </td>
+            <td>::</td>
+            <td><strong>libint</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-libint2_build"></span> <h3>public  subroutine <a href='../proc/libint2_build.html'>libint2_build</a>(libint) bind(c)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-libint~24"></span>
+              type(<a href='../type/libint_t.html'>libint_t</a>),
+            </td>
+<td></td>
+              <td></td>            <td>
+              dimension(*)
+            </td>
+            <td>::</td>
+            <td><strong>libint</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-libint2_static_init"></span> <h3>public  subroutine <a href='../proc/libint2_static_init.html'>libint2_static_init</a>() bind(c)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+    <em>None</em>
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-libint2_static_cleanup"></span> <h3>public  subroutine <a href='../proc/libint2_static_cleanup.html'>libint2_static_cleanup</a>() bind(c)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+    <em>None</em>
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

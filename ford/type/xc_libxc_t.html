@@ -1,0 +1,2099 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>xc_libxc_t &ndash; OPENQP </title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>xc_libxc_t
+      <small>Derived Type</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title="<p> 0.8% of total for derived types.</p>Including implementation: 213 statements,  3.0% of total for derived types.">8 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_xc_libxc.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/dft_xc_libxc.f90.html'>dft_xc_libxc.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mod_dft_xc_libxc.html'>mod_dft_xc_libxc</a></li>
+            <li class="breadcrumb-item active" aria-current="page">xc_libxc_t</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-reqsigma">reqSigma</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-reqtau">reqTau</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-reqlapl">reqLapl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-reqbeta">reqBeta</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-maxpts">maxPts</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-numpts">numPts</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-nder">nDer</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-e_xc">E_xc</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-e_exch">E_exch</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-e_corr">E_corr</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-providesexc">providesEXC</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-providesex">providesEX</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-providesec">providesEC</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-xclibid">xclibID</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-ids~3">ids</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-memory_">memory_</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-rho~3">rho</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-drho">drho</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-sig">sig</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-tau">tau</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-lapl">lapl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-exc">exc</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d1dr">d1dr</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d1ds">d1ds</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d1dt">d1dt</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d1dl">d1dl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2r2">d2r2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2s2">d2s2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2t2">d2t2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2rs">d2rs</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2rt">d2rt</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2st">d2st</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2rl">d2rl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2sl">d2sl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2tl">d2tl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d2l2">d2l2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3r3">d3r3</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3r2s">d3r2s</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rs2">d3rs2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3s3">d3s3</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3t3">d3t3</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3r2t">d3r2t</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3s2t">d3s2t</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rt2">d3rt2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3st2">d3st2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rst">d3rst</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3r2l">d3r2l</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rl2">d3rl2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rsl">d3rsl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3rtl">d3rtl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3s2l">d3s2l</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3sl2">d3sl2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3stl">d3stl</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3t2l">d3t2l</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3tl2">d3tl2</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-d3l3">d3l3</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-nspin~3">nSpin</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#variable-lib_output">lib_output</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#boundprocs-0"
+         aria-expanded="false" aria-controls="boundprocs-0">
+         <h4 class="card-header bg-primary text-white">Type-Bound Procedures</h4>
+      </a>
+      <div id="boundprocs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-clean~13">clean</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-scalexc">scalexc</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-echo">echo</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-getenergy">getEnergy</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-resetenergy">resetEnergy</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-init~17">init</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-setpts~2">setPts</a>
+            <a class="list-group-item" href="../type/xc_libxc_t.html#boundprocedure-compute~3">compute</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+      <h2 id="type-def-statement">
+        type, public, extends(<a href='xc_lib_t.html'>xc_lib_t</a>) :: xc_libxc_t</h2>
+    
+<br>      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inherits</h3>
+        </div>
+        <div class="card-body">
+          <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: type~~xc_libxc_t~~InheritsGraph Pages: 1 -->
+<svg id="typexc_libxc_tInheritsGraph" width="278pt" height="32pt"
+ viewBox="0.00 0.00 278.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="type~~xc_libxc_t~~InheritsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>type~~xc_libxc_t~~InheritsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 274,-28 274,4 -4,4"/>
+<!-- type~xc_libxc_t -->
+<g id="type~~xc_libxc_t~~InheritsGraph_node1" class="node">
+<title>type~xc_libxc_t</title>
+<polygon fill="none" stroke="#000000" points="270,-24 206,-24 206,0 270,0 270,-24"/>
+<text text-anchor="middle" x="238" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">xc_libxc_t</text>
+</g>
+<!-- type~xc_lib_t -->
+<g id="type~~xc_libxc_t~~InheritsGraph_node2" class="node">
+<title>type~xc_lib_t</title>
+<g id="a_type~~xc_libxc_t~~InheritsGraph_node2"><a xlink:href="../type/xc_lib_t.html" xlink:title="xc_lib_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="169,-24 115,-24 115,0 169,0 169,-24"/>
+<text text-anchor="middle" x="142" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_lib_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_libxc_t&#45;&gt;type~xc_lib_t -->
+<g id="type~~xc_libxc_t~~InheritsGraph_edge1" class="edge">
+<title>type~xc_libxc_t&#45;&gt;type~xc_lib_t</title>
+<path fill="none" stroke="#000000" d="M205.7663,-12C197.3242,-12 188.1501,-12 179.4608,-12"/>
+<polygon fill="#000000" stroke="#000000" points="179.1839,-8.5001 169.1839,-12 179.1838,-15.5001 179.1839,-8.5001"/>
+</g>
+<!-- type~xc_pack_t -->
+<g id="type~~xc_libxc_t~~InheritsGraph_node3" class="node">
+<title>type~xc_pack_t</title>
+<g id="a_type~~xc_libxc_t~~InheritsGraph_node3"><a xlink:href="../type/xc_pack_t.html" xlink:title="xc_pack_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="64,-24 0,-24 0,0 64,0 64,-24"/>
+<text text-anchor="middle" x="32" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_pack_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_lib_t&#45;&gt;type~xc_pack_t -->
+<g id="type~~xc_libxc_t~~InheritsGraph_edge2" class="edge">
+<title>type~xc_lib_t&#45;&gt;type~xc_pack_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M114.809,-12C102.6414,-12 88.0096,-12 74.4523,-12"/>
+<polygon fill="#000000" stroke="#000000" points="74.3531,-8.5001 64.353,-12 74.353,-15.5001 74.3531,-8.5001"/>
+<text text-anchor="middle" x="89.5" y="-14.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">ids</text>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#InheritsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="InheritsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="184pt" height="32pt"
+ viewBox="0.00 0.00 184.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 180,-28 180,4 -4,4"/>
+<!-- Type -->
+<g id="node1" class="node">
+<title>Type</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="176,-24 72,-24 72,0 176,0 176,-24"/>
+<text text-anchor="middle" x="124" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a derived type to the parent type which it
+extends. Dashed arrows point from a derived type to the other
+types it contains as a components, with a label listing the name(s) of
+said component(s).
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inherited by</h3>
+        </div>
+        <div class="card-body">
+          <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: type~~xc_libxc_t~~InheritedByGraph Pages: 1 -->
+<svg id="typexc_libxc_tInheritedByGraph" width="212pt" height="32pt"
+ viewBox="0.00 0.00 212.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="type~~xc_libxc_t~~InheritedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>type~~xc_libxc_t~~InheritedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 208,-28 208,4 -4,4"/>
+<!-- type~xc_libxc_t -->
+<g id="type~~xc_libxc_t~~InheritedByGraph_node1" class="node">
+<title>type~xc_libxc_t</title>
+<polygon fill="none" stroke="#000000" points="64,-24 0,-24 0,0 64,0 64,-24"/>
+<text text-anchor="middle" x="32" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">xc_libxc_t</text>
+</g>
+<!-- type~xc_engine_t -->
+<g id="type~~xc_libxc_t~~InheritedByGraph_node2" class="node">
+<title>type~xc_engine_t</title>
+<g id="a_type~~xc_libxc_t~~InheritedByGraph_node2"><a xlink:href="../type/xc_engine_t.html" xlink:title="xc_engine_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="204,-24 128,-24 128,0 204,0 204,-24"/>
+<text text-anchor="middle" x="166" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_engine_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_engine_t&#45;&gt;type~xc_libxc_t -->
+<g id="type~~xc_libxc_t~~InheritedByGraph_edge1" class="edge">
+<title>type~xc_engine_t&#45;&gt;type~xc_libxc_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M127.9594,-12C111.2995,-12 91.6815,-12 74.5396,-12"/>
+<polygon fill="#000000" stroke="#000000" points="74.2349,-8.5001 64.2349,-12 74.2348,-15.5001 74.2349,-8.5001"/>
+<text text-anchor="middle" x="96" y="-14.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">XCLib</text>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#InheritedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="InheritedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="184pt" height="32pt"
+ viewBox="0.00 0.00 184.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 180,-28 180,4 -4,4"/>
+<!-- Type -->
+<g id="node1" class="node">
+<title>Type</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="176,-24 72,-24 72,0 176,0 176,-24"/>
+<text text-anchor="middle" x="124" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a derived type to the parent type which it
+extends. Dashed arrows point from a derived type to the other
+types it contains as a components, with a label listing the name(s) of
+said component(s).
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    <br>
+
+    <section>
+    <h2>Components</h2>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqsigma"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqSigma</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqtau"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqTau</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqlapl"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqLapl</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-reqbeta"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqBeta</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nder"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_xc"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_xc</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_exch"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_exch</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_corr"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_corr</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesexc"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEXC</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesex"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEX</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-providesec"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>providesEC</strong></td>
+<td> =</td>
+                <td>.FALSE.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xclibid"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xclibID</strong></td>
+<td> =</td>
+                <td>XCLIB_LIBXC</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ids~3"></span>
+              type(<a href='xc_pack_t.html'>xc_pack_t</a>),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ids</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-memory_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>memory_</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rho~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>rho</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-drho"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>drho</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sig"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>sig</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lapl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>lapl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-exc"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>exc</strong>(:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dr"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dr</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1ds"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1ds</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dt"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dt</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d1dl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d1dl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2r2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2r2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2s2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2s2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2t2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2t2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rs"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rs</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rt"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rt</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2st"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2st</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2rl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2rl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2sl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2sl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2tl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2tl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2l2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d2l2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2s"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2s</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rs2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rs2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3t3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3t3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2t"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2t</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s2t"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s2t</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rt2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rt2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3st2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3st2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rst"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rst</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3r2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3r2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rsl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rsl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3rtl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3rtl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3s2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3s2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3sl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3sl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3stl"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3stl</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3t2l"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3t2l</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3tl2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3tl2</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3l3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3l3</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>NULL()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nspin~3"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nSpin</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lib_output"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>lib_output</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    </section>
+    <br>
+    
+
+
+      <section>
+        <h2>Type-Bound Procedures</h2>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-clean~13"></span>
+      <h3>
+          procedure, public ::
+  <strong>clean</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    private  subroutine clean(self)  
+</h3>
+
+  <p>@brief Cleanup
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_lib_t.html'>xc_lib_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-scalexc"></span>
+      <h3>
+          procedure, public ::
+  <strong>scalexc</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    private  subroutine scalexc(self, wts)  
+</h3>
+
+  <p>@brief Scale XC values by grid weights
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_lib_t.html'>xc_lib_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              real(kind=fp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>wts</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-echo"></span>
+      <h3>
+          procedure, public, non_overridable ::
+  <strong>echo</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    private  subroutine echo(self)  
+</h3>
+
+  <p>@brief Print parameters of the xc_engine_t instance
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_lib_t.html'>xc_lib_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-getenergy"></span>
+      <h3>
+          procedure, public, non_overridable ::
+  <strong>getEnergy</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    private  subroutine getEnergy(self, E_xc, E_exch, E_corr)  
+</h3>
+
+  <p>@brief Get debug statistics
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_lib_t.html'>xc_lib_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_xc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_exch</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_corr</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-resetenergy"></span>
+      <h3>
+          procedure, public, non_overridable ::
+  <strong>resetEnergy</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    private  subroutine resetEnergy(self)  
+</h3>
+
+  <p>@brief Set debug statistics
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_lib_t.html'>xc_lib_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-init~17"></span>
+      <h3>
+          procedure, public ::
+  <strong>init</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    public  subroutine <a href='../proc/init.html'>init</a>(self, reqSigma, reqTau, reqLapl, reqBeta, maxPts, nDer)  
+</h3>
+    
+
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_libxc_t.html'>xc_libxc_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqSigma</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqTau</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqLapl</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>reqBeta</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nDer</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-setpts~2"></span>
+      <h3>
+          procedure, public ::
+  <strong>setPts</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    public  subroutine <a href='../proc/setpts.html'>setPts</a>(self, numPts)  
+</h3>
+    
+
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_libxc_t.html'>xc_libxc_t</a>),
+            </td>
+<td></td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numPts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+          <div class="row">
+              <div class="card mt-3">
+    <div class="card-header codesum">
+      <span class="anchor" id="boundprocedure-compute~3"></span>
+      <h3>
+          procedure, public ::
+  <strong>compute</strong>
+        
+      </h3>
+    </div>
+    <ul class="list-group">
+        <li class="list-group-item">
+                  <h3>
+    public  subroutine <a href='../proc/compute~2.html'>compute</a>(self, functional, wts)  
+</h3>
+    
+
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='xc_libxc_t.html'>xc_libxc_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              class(<a href='functional_t.html'>functional_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>functional</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" ></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>wts</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+        </li>
+    </ul>
+  </div>
+
+          </div>
+      </section>
+
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

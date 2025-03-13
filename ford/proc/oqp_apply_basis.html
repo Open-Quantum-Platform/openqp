@@ -1,0 +1,1380 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>oqp_apply_basis &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>oqp_apply_basis
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">41 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/apply_basis.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/apply_basis.f90.html'>apply_basis.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/apply_basis_mod.html'>apply_basis_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">oqp_apply_basis</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/oqp_apply_basis.html#src">oqp_apply_basis</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine oqp_apply_basis(infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/parallel.html'>parallel</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_c_binding'>iso_c_binding</a></li>
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/atomic_structure_m.html'>atomic_structure_m</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item">basis_api</li>
+                  <li class="list-inline-item"><a href='../module/strings.html'>strings</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_apply_basis~~UsesGraph Pages: 1 -->
+<svg id="procoqp_apply_basisUsesGraph" width="641pt" height="488pt"
+ viewBox="0.00 0.00 641.00 487.99" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_apply_basis~~UsesGraph" class="graph" transform="scale(.8271 .8271) rotate(0) translate(4 586)">
+<title>proc~~oqp_apply_basis~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-586 771,-586 771,4 -4,4"/>
+<!-- proc~oqp_apply_basis -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node1" class="node">
+<title>proc~oqp_apply_basis</title>
+<polygon fill="none" stroke="#000000" points="767,-365 667,-365 667,-341 767,-341 767,-365"/>
+<text text-anchor="middle" x="717" y="-350.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_apply_basis</text>
+</g>
+<!-- basis_api -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node2" class="node">
+<title>basis_api</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="601,-582 540,-582 540,-558 601,-558 601,-582"/>
+<text text-anchor="middle" x="570.5" y="-567.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_api</text>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;basis_api -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge1" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;basis_api</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M714.7529,-365.034C708.0025,-398.0258 684.9441,-490.975 631,-544 625.2101,-549.6913 617.9768,-554.2258 610.5465,-557.8073"/>
+<polygon fill="#000000" stroke="#000000" points="608.9335,-554.6907 601.1232,-561.8496 611.6931,-561.1238 608.9335,-554.6907"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node3" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node3"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-284 130,-284 130,-260 214,-260 214,-284"/>
+<text text-anchor="middle" x="172" y="-269.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge2" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570.5,-92C529.4548,-65.9931 314.6907,-46.29 309,-50"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node4" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node4"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-304 250,-304 250,-280 368,-280 368,-304"/>
+<text text-anchor="middle" x="309" y="-289.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge3" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570.5,-92C545.8641,-74.9596 386.2138,-219.9492 329.198,-273.0218"/>
+<polygon fill="#000000" stroke="#000000" points="326.7796,-270.4914 321.8588,-279.8742 331.5567,-275.608 326.7796,-270.4914"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node5" class="node">
+<title>module~messages</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node5"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="472,-104 406,-104 406,-80 472,-80 472,-104"/>
+<text text-anchor="middle" x="439" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~messages -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge4" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570.5,-92C544.9984,-74.3609 509.5417,-75.4385 481.8714,-80.3378"/>
+<polygon fill="#000000" stroke="#000000" points="481.1877,-76.9051 472.0622,-82.2881 482.5528,-83.7707 481.1877,-76.9051"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node6" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node6"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="631,-264 510,-264 510,-240 631,-240 631,-264"/>
+<text text-anchor="middle" x="570.5" y="-249.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge5" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M699.3287,-340.817C673.8105,-323.2243 626.4613,-290.5809 596.8206,-270.1459"/>
+<polygon fill="#000000" stroke="#000000" points="598.4537,-267.0207 588.234,-264.2262 594.4804,-272.7838 598.4537,-267.0207"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node7" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node7"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-544 282,-544 282,-520 336,-520 336,-544"/>
+<text text-anchor="middle" x="309" y="-529.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~parallel -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge6" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M702.5159,-365.1665C666.5085,-394.6955 568.98,-470.3462 474,-506 431.9268,-521.7935 380.328,-527.9935 346.1537,-530.4273"/>
+<polygon fill="#000000" stroke="#000000" points="345.8932,-526.9367 336.1371,-531.0682 346.3402,-533.9225 345.8932,-526.9367"/>
+</g>
+<!-- module~strings -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node8" class="node">
+<title>module~strings</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node8"><a xlink:href="../module/strings.html" xlink:title="strings">
+<polygon fill="#337ab7" stroke="#337ab7" points="466,-24 412,-24 412,0 466,0 466,-24"/>
+<text text-anchor="middle" x="439" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~strings -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge7" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~strings</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M714.2211,-340.8471C703.8307,-298.4198 663.0227,-155.9968 570.5,-92"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570.5,-92C536.882,-68.7468 496.4895,-44.7198 469.4209,-29.1457"/>
+<polygon fill="#000000" stroke="#000000" points="470.8529,-25.9327 460.435,-24.0046 467.3767,-32.0086 470.8529,-25.9327"/>
+</g>
+<!-- module~types -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node9" class="node">
+<title>module~types</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node9"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="597.5,-365 543.5,-365 543.5,-341 597.5,-341 597.5,-365"/>
+<text text-anchor="middle" x="570.5" y="-350.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;module~types -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge8" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M666.9928,-353C647.5912,-353 625.7627,-353 607.7809,-353"/>
+<polygon fill="#000000" stroke="#000000" points="607.6855,-349.5001 597.6854,-353 607.6854,-356.5001 607.6855,-349.5001"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge9" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-283.344C241.1722,-282.0981 232.4436,-280.8239 224.0637,-279.6005"/>
+<polygon fill="#000000" stroke="#000000" points="224.4523,-276.1203 214.0516,-278.1389 223.4411,-283.0468 224.4523,-276.1203"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node10" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-144 266.5,-144 266.5,-120 351.5,-120 351.5,-144"/>
+<text text-anchor="middle" x="309" y="-129.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge10" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-102.1972C391.2817,-106.6825 373.8641,-112.0418 357.8443,-116.971"/>
+<polygon fill="#000000" stroke="#000000" points="356.6167,-113.6867 348.0883,-119.9728 358.6754,-120.3771 356.6167,-113.6867"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node11" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-102 273,-102 273,-78 345,-78 345,-102"/>
+<text text-anchor="middle" x="309" y="-87.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge11" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-91.4901C390.5342,-91.2544 372.0702,-90.9703 355.3913,-90.7137"/>
+<polygon fill="#000000" stroke="#000000" points="355.3338,-87.2125 345.2811,-90.5582 355.226,-94.2117 355.3338,-87.2125"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node15" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node15"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-224 269.5,-224 269.5,-200 348.5,-200 348.5,-224"/>
+<text text-anchor="middle" x="309" y="-209.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge12" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.5349,-104.2258C415.8133,-108.4262 409.5131,-113.266 404,-118 396.223,-124.6779 353.9132,-166.9295 328.4531,-192.459"/>
+<polygon fill="#000000" stroke="#000000" points="325.7296,-190.2335 321.1495,-199.7872 330.6877,-195.175 325.7296,-190.2335"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node16" class="node">
+<title>module~precision</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node16"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-464 141.5,-464 141.5,-440 202.5,-440 202.5,-464"/>
+<text text-anchor="middle" x="172" y="-449.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M435.8852,-104.0712C422.7261,-154.9981 372.1735,-349.917 368,-355 327.9904,-403.7286 257.412,-430.0551 212.7601,-442.5387"/>
+<polygon fill="#000000" stroke="#000000" points="211.5738,-439.2332 202.8243,-445.208 213.39,-445.9935 211.5738,-439.2332"/>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge14" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M549.3624,-239.8742C496.7175,-211.3636 356.3306,-145.7767 250,-191 221.4634,-203.1369 198.3098,-231.3973 184.8456,-251.0997"/>
+<polygon fill="#000000" stroke="#000000" points="181.7508,-249.4367 179.1948,-259.7187 187.6048,-253.2748 181.7508,-249.4367"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node18" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="468,-264 410,-264 410,-240 468,-240 468,-264"/>
+<text text-anchor="middle" x="439" y="-249.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge15" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.754,-252C499.0792,-252 488.2275,-252 478.3332,-252"/>
+<polygon fill="#000000" stroke="#000000" points="478.0262,-248.5001 468.0261,-252 478.0261,-255.5001 478.0262,-248.5001"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge16" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292.4216,-519.8205C278.9359,-509.0184 260.4813,-492.0337 250,-473 214.8407,-409.1516 249.5433,-376.6354 214,-313 209.5,-304.9433 202.9277,-297.4559 196.3124,-291.1432"/>
+<polygon fill="#000000" stroke="#000000" points="198.4414,-288.3523 188.6486,-284.3086 193.7824,-293.5766 198.4414,-288.3523"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node12" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node12"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-464 0,-464 0,-440 94,-440 94,-464"/>
+<text text-anchor="middle" x="47" y="-449.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge17" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8645,-533.9344C245.8522,-535.5086 180.8925,-534.855 130,-515 105.315,-505.3695 81.7069,-486.1361 66.0239,-471.4408"/>
+<polygon fill="#000000" stroke="#000000" points="68.2034,-468.6796 58.5814,-464.2447 63.3376,-473.712 68.2034,-468.6796"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge18" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9056,-522.2413C271.5344,-517.9551 259.8407,-512.4264 250,-506 231.8268,-494.1321 231.8796,-485.3057 214,-473 212.0903,-471.6856 210.0866,-470.4041 208.0333,-469.1644"/>
+<polygon fill="#000000" stroke="#000000" points="209.2874,-465.8554 198.8519,-464.0245 205.8679,-471.9634 209.2874,-465.8554"/>
+</g>
+<!-- mpi -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node17" class="node">
+<title>mpi</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node17"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-506 145,-506 145,-482 199,-482 199,-506"/>
+<text text-anchor="middle" x="172" y="-491.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge19" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-524.4924C261.0113,-518.6893 231.8293,-510.595 208.789,-504.2043"/>
+<polygon fill="#000000" stroke="#000000" points="209.5823,-500.7922 199.0106,-501.492 207.7112,-507.5375 209.5823,-500.7922"/>
+</g>
+<!-- module~strings&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge20" class="edge">
+<title>module~strings&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.9394,-15.2332C384.2238,-19.5653 340.8116,-29.2608 309,-50"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-50C285.9227,-65.045 270.0107,-50.0663 250,-69 197.2449,-118.9157 179.731,-208.4362 174.2836,-249.858"/>
+<polygon fill="#000000" stroke="#000000" points="170.7865,-249.6252 173.0717,-259.9706 177.7368,-250.4581 170.7865,-249.6252"/>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge21" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M551.4093,-340.8453C526.6376,-325.8697 481.5395,-301.2719 439,-292"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-292C406.848,-284.9921 400.5673,-275.7153 368,-271 316.0968,-263.4851 302.4434,-270.6638 250,-271 241.629,-271.0537 232.7531,-271.1397 224.104,-271.2394"/>
+<polygon fill="#000000" stroke="#000000" points="224.0553,-267.7396 214.0988,-271.3615 224.1408,-274.7391 224.0553,-267.7396"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge22" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-292C419.5643,-287.7638 398.1024,-286.4445 378.313,-286.5358"/>
+<polygon fill="#000000" stroke="#000000" points="378.0773,-283.0391 368.1366,-286.7041 378.1931,-290.0381 378.0773,-283.0391"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge25" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-492C409.3287,-507.5561 372.6173,-518.1553 345.7821,-524.514"/>
+<polygon fill="#000000" stroke="#000000" points="344.9855,-521.1057 336.0161,-526.7449 346.5444,-527.9299 344.9855,-521.1057"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node13" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node13"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-424 404,-424 404,-400 474,-400 474,-424"/>
+<text text-anchor="middle" x="439" y="-409.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge23" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M543.5717,-365.0819C523.8044,-373.9509 496.7434,-386.0923 475.1025,-395.8019"/>
+<polygon fill="#000000" stroke="#000000" points="473.5833,-392.6473 465.8923,-399.9343 476.4488,-399.034 473.5833,-392.6473"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node14" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node14"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-346 273.5,-346 273.5,-322 344.5,-322 344.5,-346"/>
+<text text-anchor="middle" x="309" y="-331.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge24" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-292C434.5782,-291.0362 389.2077,-306.155 353.2948,-318.5196"/>
+<polygon fill="#000000" stroke="#000000" points="351.7668,-315.3444 343.4582,-321.9183 354.0529,-321.9606 351.7668,-315.3444"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge26" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M563.0877,-365.1977C545.4763,-392.9884 498.137,-460.9956 439,-492"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-492C387.8285,-518.8282 366.7763,-491.5833 309,-492"/>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge27" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M555.2035,-340.9461C536.2408,-326.0415 502.8891,-299.9525 474,-278 470.6099,-275.4239 467.0198,-272.7246 463.4812,-270.0806"/>
+<polygon fill="#000000" stroke="#000000" points="465.5489,-267.2565 455.4366,-264.0957 461.3706,-272.8728 465.5489,-267.2565"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge29" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.357,-399.8176C423.1674,-379.0962 399.7677,-336.9149 368,-313 366.1297,-311.592 364.1567,-310.2724 362.1114,-309.0361"/>
+<polygon fill="#000000" stroke="#000000" points="363.2569,-305.6845 352.776,-304.1346 360.0028,-311.8822 363.2569,-305.6845"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge32" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M432.4916,-424.2625C421.535,-443.8861 397.6682,-482.52 368,-506 361.3231,-511.2842 353.4047,-515.7238 345.5721,-519.3541"/>
+<polygon fill="#000000" stroke="#000000" points="343.9684,-516.2333 336.15,-523.3833 346.7208,-522.6695 343.9684,-516.2333"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge28" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.5506,-412.0403C345.8656,-412.5841 228.2461,-415.6878 130,-431 119.5382,-432.6305 108.472,-434.9796 97.9479,-437.5212"/>
+<polygon fill="#000000" stroke="#000000" points="96.9099,-434.173 88.0612,-439.9997 98.6122,-440.9629 96.9099,-434.173"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge31" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.4651,-399.9566C424.6251,-374.6661 399.6321,-314.7564 368,-271 357.3811,-256.3109 343.0477,-241.8861 331.1677,-230.9765"/>
+<polygon fill="#000000" stroke="#000000" points="333.1939,-228.0925 323.4109,-224.0251 328.5222,-233.3055 333.1939,-228.0925"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge33" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.5481,-424.0833C408.0615,-446.3485 360.1448,-491.6311 309,-492"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-492C273.0306,-492.2594 233.8,-479.3615 206.5739,-468.1454"/>
+<polygon fill="#000000" stroke="#000000" points="207.6864,-464.815 197.1146,-464.1166 204.9435,-471.2552 207.6864,-464.815"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node19" class="node">
+<title>module~constants</title>
+<g id="a_proc~~oqp_apply_basis~~UsesGraph_node19"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-464 277,-464 277,-440 341,-440 341,-464"/>
+<text text-anchor="middle" x="309" y="-449.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge30" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-422.8246C387.4769,-427.8533 367.9225,-433.87 350.8282,-439.1298"/>
+<polygon fill="#000000" stroke="#000000" points="349.619,-435.8398 341.0905,-442.126 351.6776,-442.5303 349.619,-435.8398"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge34" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.4259,-322.2589C265.6256,-319.4299 257.469,-316.2725 250,-313 233.7926,-305.8988 216.3081,-296.8449 202.009,-289.0524"/>
+<polygon fill="#000000" stroke="#000000" points="203.5645,-285.9133 193.1179,-284.147 200.1829,-292.0424 203.5645,-285.9133"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge35" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.4757,-346.0957C266.0516,-349.8678 257.355,-354.5088 250,-360 223.2263,-379.9892 199.5258,-410.8015 185.469,-431.1793"/>
+<polygon fill="#000000" stroke="#000000" points="182.3929,-429.4813 179.7126,-439.7315 188.2,-433.39 182.3929,-429.4813"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_node20" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-346 131.5,-346 131.5,-322 212.5,-322 212.5,-346"/>
+<text text-anchor="middle" x="172" y="-331.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge36" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-334C257.9991,-334 239.7453,-334 222.9899,-334"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-330.5001 212.79,-334 222.79,-337.5001 222.7901,-330.5001"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge37" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-452C130.2434,-452 117.203,-452 104.4454,-452"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-448.5001 94.3156,-452 104.3156,-455.5001 104.3156,-448.5001"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~oqp_apply_basis~~UsesGraph_edge38" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-452C257.6649,-452 233.0702,-452 212.5278,-452"/>
+<polygon fill="#000000" stroke="#000000" points="212.5085,-448.5001 202.5084,-452 212.5084,-455.5001 212.5085,-448.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocoqp_apply_basisUsesGraph = svgPanZoom('#procoqp_apply_basisUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~29"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_apply_basis~~CallsGraph Pages: 1 -->
+<svg id="procoqp_apply_basisCallsGraph" width="633pt" height="536pt"
+ viewBox="0.00 0.00 633.00 536.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_apply_basis~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 532)">
+<title>proc~~oqp_apply_basis~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-532 629,-532 629,4 -4,4"/>
+<!-- proc~oqp_apply_basis -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node1" class="node">
+<title>proc~oqp_apply_basis</title>
+<polygon fill="none" stroke="#000000" points="100,-297 0,-297 0,-273 100,-273 100,-297"/>
+<text text-anchor="middle" x="50" y="-282.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_apply_basis</text>
+</g>
+<!-- interface~data_has_tags -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node2" class="node">
+<title>interface~data_has_tags</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node2"><a xlink:href="../interface/data_has_tags.html" xlink:title="data_has_tags">
+<polygon fill="#a7506f" stroke="#a7506f" points="240.5,-402 152.5,-402 152.5,-378 240.5,-378 240.5,-402"/>
+<text text-anchor="middle" x="196.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">data_has_tags</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;interface~data_has_tags -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge1" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;interface~data_has_tags</title>
+<path fill="none" stroke="#000000" d="M59.5464,-297.2886C74.1838,-315.3667 103.8713,-349.1305 136,-369 138.7895,-370.7251 141.7395,-372.3316 144.776,-373.8237"/>
+<polygon fill="#000000" stroke="#000000" points="143.5116,-377.0919 154.0707,-377.9617 146.3587,-370.697 143.5116,-377.0919"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node3" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node3"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="251.5,-360 141.5,-360 141.5,-336 251.5,-336 251.5,-360"/>
+<text text-anchor="middle" x="196.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge2" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M73.0133,-297.1774C90.1374,-306.0067 114.2149,-317.938 136,-327 140.4495,-328.8508 145.1265,-330.677 149.8266,-332.4336"/>
+<polygon fill="#000000" stroke="#000000" points="148.8468,-335.8015 159.4409,-335.9276 151.2378,-329.2224 148.8468,-335.8015"/>
+</g>
+<!-- map_shell2basis_set -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node4" class="node">
+<title>map_shell2basis_set</title>
+<polygon fill="#777777" stroke="#777777" points="257,-318 136,-318 136,-294 257,-294 257,-318"/>
+<text text-anchor="middle" x="196.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">map_shell2basis_set</text>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;map_shell2basis_set -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge3" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;map_shell2basis_set</title>
+<path fill="none" stroke="#000000" d="M100.0072,-292.1683C108.2885,-293.3554 117.012,-294.6058 125.6897,-295.8497"/>
+<polygon fill="#000000" stroke="#000000" points="125.4309,-299.3483 135.8264,-297.3028 126.4242,-292.4191 125.4309,-299.3483"/>
+</g>
+<!-- none~bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node5" class="node">
+<title>none~bcast</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node5"><a xlink:href="../type/par_env_t.html#boundprocedure-bcast" xlink:title="par_env_t%bcast">
+<polygon fill="#a7506f" stroke="#a7506f" points="248,-276 145,-276 145,-252 248,-252 248,-276"/>
+<text text-anchor="middle" x="196.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%bcast</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;none~bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge4" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;none~bcast</title>
+<path fill="none" stroke="#000000" d="M100.0072,-277.8317C111.2266,-276.2235 123.2575,-274.4989 134.8869,-272.8319"/>
+<polygon fill="#000000" stroke="#000000" points="135.5706,-276.2698 144.9727,-271.3862 134.5772,-269.3406 135.5706,-276.2698"/>
+</g>
+<!-- none~init~14 -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node6" class="node">
+<title>none~init~14</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node6"><a xlink:href="../type/par_env_t.html#boundprocedure-init~14" xlink:title="par_env_t%init">
+<polygon fill="#a7506f" stroke="#a7506f" points="242,-150 151,-150 151,-126 242,-126 242,-150"/>
+<text text-anchor="middle" x="196.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%init</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;none~init~14 -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge5" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;none~init~14</title>
+<path fill="none" stroke="#000000" d="M61.9887,-272.9704C87.3139,-247.5587 146.4493,-188.2215 177.182,-157.3839"/>
+<polygon fill="#000000" stroke="#000000" points="179.7657,-159.7496 184.3456,-150.1958 174.8075,-154.8083 179.7657,-159.7496"/>
+</g>
+<!-- print_basis -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node7" class="node">
+<title>print_basis</title>
+<polygon fill="#777777" stroke="#777777" points="231.5,-108 161.5,-108 161.5,-84 231.5,-84 231.5,-108"/>
+<text text-anchor="middle" x="196.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_basis</text>
+</g>
+<!-- proc~oqp_apply_basis&#45;&gt;print_basis -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge6" class="edge">
+<title>proc~oqp_apply_basis&#45;&gt;print_basis</title>
+<path fill="none" stroke="#000000" d="M52.8453,-272.9025C60.6592,-242.2944 85.3189,-161.0829 136,-117 140.6217,-112.98 146.0563,-109.7176 151.7397,-107.073"/>
+<polygon fill="#000000" stroke="#000000" points="153.4625,-110.153 161.4399,-103.1808 150.8557,-103.6565 153.4625,-110.153"/>
+</g>
+<!-- none~par_env_t_bcast_byte -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node10" class="node">
+<title>none~par_env_t_bcast_byte</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node10"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_byte" xlink:title="par_env_t%par_env_t_bcast_byte">
+<polygon fill="#a7506f" stroke="#a7506f" points="501.5,-528 313.5,-528 313.5,-504 501.5,-504 501.5,-528"/>
+<text text-anchor="middle" x="407.5" y="-513.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_byte</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_byte -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge7" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_byte</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M246.3183,-276.0229C250.3228,-278.4799 253.9802,-281.4382 257,-285 318.2384,-357.2286 226.4305,-427.653 293,-495 296.5008,-498.5417 300.3885,-501.5961 304.5561,-504.2243"/>
+<polygon fill="#000000" stroke="#000000" points="303.0079,-507.366 313.4697,-509.04 306.3352,-501.2073 303.0079,-507.366"/>
+</g>
+<!-- none~par_env_t_bcast_c_bool -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node11" class="node">
+<title>none~par_env_t_bcast_c_bool</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node11"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_c_bool" xlink:title="par_env_t%par_env_t_bcast_c_bool">
+<polygon fill="#a7506f" stroke="#a7506f" points="507,-486 308,-486 308,-462 507,-462 507,-486"/>
+<text text-anchor="middle" x="407.5" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_c_bool</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_c_bool -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge8" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_c_bool</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M246.1654,-276.1553C250.2008,-278.5855 253.9072,-281.5014 257,-285 307.5751,-342.2125 238.2082,-399.812 293,-453 294.935,-454.8784 296.9794,-456.618 299.1165,-458.2282"/>
+<polygon fill="#000000" stroke="#000000" points="297.4829,-461.3394 307.7839,-463.8172 301.2764,-455.4564 297.4829,-461.3394"/>
+</g>
+<!-- none~par_env_t_bcast_dp_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node12" class="node">
+<title>none~par_env_t_bcast_dp_1d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node12"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_1d" xlink:title="par_env_t%par_env_t_bcast_dp_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="506,-444 309,-444 309,-420 506,-420 506,-444"/>
+<text text-anchor="middle" x="407.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge9" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M245.3371,-276.0396C249.6455,-278.4928 253.6387,-281.4457 257,-285 297.0177,-327.3153 249.8711,-371.8605 293,-411 295.2449,-413.0373 297.6198,-414.9079 300.1019,-416.6244"/>
+<polygon fill="#000000" stroke="#000000" points="298.5389,-419.7674 308.92,-421.8849 302.1252,-413.7559 298.5389,-419.7674"/>
+</g>
+<!-- none~par_env_t_bcast_dp_2d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node13" class="node">
+<title>none~par_env_t_bcast_dp_2d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node13"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_2d" xlink:title="par_env_t%par_env_t_bcast_dp_2d">
+<polygon fill="#a7506f" stroke="#a7506f" points="506,-402 309,-402 309,-378 506,-378 506,-402"/>
+<text text-anchor="middle" x="407.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_2d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_2d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge10" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_2d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M243.9857,-276.0141C248.7177,-278.4762 253.1765,-281.4381 257,-285 286.7193,-312.6864 261.2554,-343.6612 293,-369 295.2952,-370.8321 297.6988,-372.5238 300.1911,-374.0853"/>
+<polygon fill="#000000" stroke="#000000" points="298.527,-377.1645 308.9777,-378.9067 301.8945,-371.0277 298.527,-377.1645"/>
+</g>
+<!-- none~par_env_t_bcast_dp_3d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node14" class="node">
+<title>none~par_env_t_bcast_dp_3d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node14"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_3d" xlink:title="par_env_t%par_env_t_bcast_dp_3d">
+<polygon fill="#a7506f" stroke="#a7506f" points="506,-360 309,-360 309,-336 506,-336 506,-360"/>
+<text text-anchor="middle" x="407.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_3d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_3d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge11" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_3d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M240.1602,-276.0053C246.0655,-278.517 251.8547,-281.494 257,-285 277.3171,-298.8441 271.6861,-314.746 293,-327 296.2578,-328.873 299.6463,-330.5847 303.1295,-332.1486"/>
+<polygon fill="#000000" stroke="#000000" points="301.9628,-335.452 312.5458,-335.9527 304.5849,-328.9617 301.9628,-335.452"/>
+</g>
+<!-- none~par_env_t_bcast_dp_4d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node15" class="node">
+<title>none~par_env_t_bcast_dp_4d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node15"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_4d" xlink:title="par_env_t%par_env_t_bcast_dp_4d">
+<polygon fill="#a7506f" stroke="#a7506f" points="506,-318 309,-318 309,-294 506,-294 506,-318"/>
+<text text-anchor="middle" x="407.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_4d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_4d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge12" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_4d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M248.0179,-275.5393C262.5444,-278.7037 278.3743,-282.0682 293,-285 304.9615,-287.3977 317.6482,-289.8323 330.053,-292.153"/>
+<polygon fill="#000000" stroke="#000000" points="329.4505,-295.6009 339.9217,-293.9869 330.7295,-288.7187 329.4505,-295.6009"/>
+</g>
+<!-- none~par_env_t_bcast_dp_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node16" class="node">
+<title>none~par_env_t_bcast_dp_scalar</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node16"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_scalar" xlink:title="par_env_t%par_env_t_bcast_dp_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="515.5,-276 299.5,-276 299.5,-252 515.5,-252 515.5,-276"/>
+<text text-anchor="middle" x="407.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge13" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M248.1164,-264C260.8049,-264 274.9148,-264 289.3451,-264"/>
+<polygon fill="#000000" stroke="#000000" points="289.3731,-267.5001 299.373,-264 289.373,-260.5001 289.3731,-267.5001"/>
+</g>
+<!-- none~par_env_t_bcast_int32_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node17" class="node">
+<title>none~par_env_t_bcast_int32_1d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node17"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int32_1d" xlink:title="par_env_t%par_env_t_bcast_int32_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="513,-234 302,-234 302,-210 513,-210 513,-234"/>
+<text text-anchor="middle" x="407.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int32_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int32_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge14" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int32_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M248.0179,-252.4607C262.5444,-249.2963 278.3743,-245.9318 293,-243 304.9615,-240.6023 317.6482,-238.1677 330.053,-235.847"/>
+<polygon fill="#000000" stroke="#000000" points="330.7295,-239.2813 339.9217,-234.0131 329.4505,-232.3991 330.7295,-239.2813"/>
+</g>
+<!-- none~par_env_t_bcast_int32_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node18" class="node">
+<title>none~par_env_t_bcast_int32_scalar</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node18"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int32_scalar" xlink:title="par_env_t%par_env_t_bcast_int32_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="522,-192 293,-192 293,-168 522,-168 522,-192"/>
+<text text-anchor="middle" x="407.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int32_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int32_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge15" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int32_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M210.8424,-251.9718C228.8435,-237.5342 261.226,-213.6866 293,-201 298.8507,-198.6639 304.9743,-196.5854 311.2175,-194.7364"/>
+<polygon fill="#000000" stroke="#000000" points="312.3917,-198.0434 321.1047,-192.0155 310.5344,-191.2943 312.3917,-198.0434"/>
+</g>
+<!-- none~par_env_t_bcast_int64_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node19" class="node">
+<title>none~par_env_t_bcast_int64_1d</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node19"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int64_1d" xlink:title="par_env_t%par_env_t_bcast_int64_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="513,-150 302,-150 302,-126 513,-126 513,-150"/>
+<text text-anchor="middle" x="407.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int64_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int64_1d -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge16" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int64_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M203.7754,-251.9018C217.9114,-229.5507 251.3854,-181.9765 293,-159 296.4832,-157.0768 300.1078,-155.3253 303.8316,-153.7303"/>
+<polygon fill="#000000" stroke="#000000" points="305.2042,-156.9521 313.2677,-150.0796 302.6784,-150.4237 305.2042,-156.9521"/>
+</g>
+<!-- none~par_env_t_bcast_int64_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node20" class="node">
+<title>none~par_env_t_bcast_int64_scalar</title>
+<g id="a_proc~~oqp_apply_basis~~CallsGraph_node20"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int64_scalar" xlink:title="par_env_t%par_env_t_bcast_int64_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="522,-108 293,-108 293,-84 522,-84 522,-108"/>
+<text text-anchor="middle" x="407.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int64_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int64_scalar -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge17" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int64_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M202.8587,-251.8246C219.8259,-219.7978 266.6684,-134.4647 293,-117 295.4869,-115.3506 298.0678,-113.8215 300.7236,-112.4045"/>
+<polygon fill="#000000" stroke="#000000" points="302.4736,-115.4485 310.0142,-108.006 299.4783,-109.1217 302.4736,-115.4485"/>
+</g>
+<!-- mpi_comm_rank -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node8" class="node">
+<title>mpi_comm_rank</title>
+<polygon fill="#777777" stroke="#777777" points="458,-66 357,-66 357,-42 458,-42 458,-66"/>
+<text text-anchor="middle" x="407.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_comm_rank</text>
+</g>
+<!-- none~init~14&#45;&gt;mpi_comm_rank -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge18" class="edge">
+<title>none~init~14&#45;&gt;mpi_comm_rank</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M240.1602,-125.9947C246.0655,-123.483 251.8547,-120.506 257,-117 277.3171,-103.1559 271.6861,-87.254 293,-75 309.1875,-65.6933 328.6044,-60.369 346.8113,-57.3647"/>
+<polygon fill="#000000" stroke="#000000" points="347.3776,-60.8193 356.7736,-55.9238 346.3755,-53.8914 347.3776,-60.8193"/>
+</g>
+<!-- mpi_comm_size -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node9" class="node">
+<title>mpi_comm_size</title>
+<polygon fill="#777777" stroke="#777777" points="456,-24 359,-24 359,0 456,0 456,-24"/>
+<text text-anchor="middle" x="407.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_comm_size</text>
+</g>
+<!-- none~init~14&#45;&gt;mpi_comm_size -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge19" class="edge">
+<title>none~init~14&#45;&gt;mpi_comm_size</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242.1609,-126.9046C247.5689,-124.2703 252.6884,-121.0167 257,-117 286.7193,-89.3136 261.2554,-58.3388 293,-33 308.6699,-20.4921 329.3901,-14.5248 348.8931,-11.9072"/>
+<polygon fill="#000000" stroke="#000000" points="349.379,-15.3752 358.9477,-10.8267 348.631,-8.4153 349.379,-15.3752"/>
+</g>
+<!-- mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_node21" class="node">
+<title>mpi_bcast</title>
+<polygon fill="#777777" stroke="#777777" points="625,-318 558,-318 558,-294 625,-294 625,-318"/>
+<text text-anchor="middle" x="591.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_bcast</text>
+</g>
+<!-- none~par_env_t_bcast_byte&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge20" class="edge">
+<title>none~par_env_t_bcast_byte&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.5616,-507.3789C508.946,-504.1975 515.8938,-500.1422 522,-495 573.0868,-451.9785 586.6303,-367.9153 590.2142,-328.0228"/>
+<polygon fill="#000000" stroke="#000000" points="593.7069,-328.2521 590.9839,-318.0132 586.7275,-327.7154 593.7069,-328.2521"/>
+</g>
+<!-- none~par_env_t_bcast_c_bool&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge21" class="edge">
+<title>none~par_env_t_bcast_c_bool&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M507.2387,-462.0386C512.464,-459.4986 517.4331,-456.5099 522,-453 562.6209,-421.7805 580.5764,-360.9473 587.5876,-328.1782"/>
+<polygon fill="#000000" stroke="#000000" points="591.0494,-328.7144 589.5627,-318.2244 584.1832,-327.3519 591.0494,-328.7144"/>
+</g>
+<!-- none~par_env_t_bcast_dp_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge22" class="edge">
+<title>none~par_env_t_bcast_dp_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M504.9704,-419.9707C510.9497,-417.4719 516.688,-414.5087 522,-411 552.6443,-390.7584 572.9991,-351.8642 583.372,-327.5162"/>
+<polygon fill="#000000" stroke="#000000" points="586.6887,-328.6509 587.2073,-318.0688 580.2028,-326.0179 586.6887,-328.6509"/>
+</g>
+<!-- none~par_env_t_bcast_dp_2d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge23" class="edge">
+<title>none~par_env_t_bcast_dp_2d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M499.3068,-377.9327C507.1685,-375.4809 514.8429,-372.536 522,-369 542.871,-358.6884 562.1034,-340.2498 575.0198,-325.975"/>
+<polygon fill="#000000" stroke="#000000" points="577.9171,-327.9784 581.8595,-318.1444 572.645,-323.3734 577.9171,-327.9784"/>
+</g>
+<!-- none~par_env_t_bcast_dp_3d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge24" class="edge">
+<title>none~par_env_t_bcast_dp_3d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M480.1389,-335.9459C494.0917,-333.273 508.5444,-330.2559 522,-327 530.4533,-324.9545 539.3987,-322.4861 547.9569,-319.9713"/>
+<polygon fill="#000000" stroke="#000000" points="549.2038,-323.2512 557.7728,-317.0204 547.1885,-316.5476 549.2038,-323.2512"/>
+</g>
+<!-- none~par_env_t_bcast_dp_4d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge25" class="edge">
+<title>none~par_env_t_bcast_dp_4d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M506.2329,-306C520.7526,-306 535.0474,-306 547.6604,-306"/>
+<polygon fill="#000000" stroke="#000000" points="547.8277,-309.5001 557.8277,-306 547.8276,-302.5001 547.8277,-309.5001"/>
+</g>
+<!-- none~par_env_t_bcast_dp_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge26" class="edge">
+<title>none~par_env_t_bcast_dp_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M480.1389,-276.0541C494.0917,-278.727 508.5444,-281.7441 522,-285 530.4533,-287.0455 539.3987,-289.5139 547.9569,-292.0287"/>
+<polygon fill="#000000" stroke="#000000" points="547.1885,-295.4524 557.7728,-294.9796 549.2038,-288.7488 547.1885,-295.4524"/>
+</g>
+<!-- none~par_env_t_bcast_int32_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge27" class="edge">
+<title>none~par_env_t_bcast_int32_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M499.3068,-234.0673C507.1685,-236.5191 514.8429,-239.464 522,-243 542.871,-253.3116 562.1034,-271.7502 575.0198,-286.025"/>
+<polygon fill="#000000" stroke="#000000" points="572.645,-288.6266 581.8595,-293.8556 577.9171,-284.0216 572.645,-288.6266"/>
+</g>
+<!-- none~par_env_t_bcast_int32_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge28" class="edge">
+<title>none~par_env_t_bcast_int32_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M504.9704,-192.0293C510.9497,-194.5281 516.688,-197.4913 522,-201 552.6443,-221.2416 572.9991,-260.1358 583.372,-284.4838"/>
+<polygon fill="#000000" stroke="#000000" points="580.2028,-285.9821 587.2073,-293.9312 586.6887,-283.3491 580.2028,-285.9821"/>
+</g>
+<!-- none~par_env_t_bcast_int64_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge29" class="edge">
+<title>none~par_env_t_bcast_int64_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M507.5135,-150.0955C512.6382,-152.6064 517.5132,-155.5517 522,-159 562.6209,-190.2195 580.5764,-251.0527 587.5876,-283.8218"/>
+<polygon fill="#000000" stroke="#000000" points="584.1832,-284.6481 589.5627,-293.7756 591.0494,-283.2856 584.1832,-284.6481"/>
+</g>
+<!-- none~par_env_t_bcast_int64_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~oqp_apply_basis~~CallsGraph_edge30" class="edge">
+<title>none~par_env_t_bcast_int64_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M508.6962,-108.0538C513.4281,-110.5896 517.9034,-113.5502 522,-117 573.0868,-160.0215 586.6303,-244.0847 590.2142,-283.9772"/>
+<polygon fill="#000000" stroke="#000000" points="586.7275,-284.2846 590.9839,-293.9868 593.7069,-283.7479 586.7275,-284.2846"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_apply_basis~~CalledByGraph Pages: 1 -->
+<svg id="procoqp_apply_basisCalledByGraph" width="231pt" height="32pt"
+ viewBox="0.00 0.00 231.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_apply_basis~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~oqp_apply_basis~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 227,-28 227,4 -4,4"/>
+<!-- proc~oqp_apply_basis -->
+<g id="proc~~oqp_apply_basis~~CalledByGraph_node1" class="node">
+<title>proc~oqp_apply_basis</title>
+<polygon fill="none" stroke="#000000" points="223,-24 123,-24 123,0 223,0 223,-24"/>
+<text text-anchor="middle" x="173" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_apply_basis</text>
+</g>
+<!-- proc~apply_basis_c -->
+<g id="proc~~oqp_apply_basis~~CalledByGraph_node2" class="node">
+<title>proc~apply_basis_c</title>
+<g id="a_proc~~oqp_apply_basis~~CalledByGraph_node2"><a xlink:href="../proc/apply_basis_c.html" xlink:title="apply_basis_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="87,-24 0,-24 0,0 87,0 87,-24"/>
+<text text-anchor="middle" x="43.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">apply_basis_C</text>
+</a>
+</g>
+</g>
+<!-- proc~apply_basis_c&#45;&gt;proc~oqp_apply_basis -->
+<g id="proc~~oqp_apply_basis~~CalledByGraph_edge1" class="edge">
+<title>proc~apply_basis_c&#45;&gt;proc~oqp_apply_basis</title>
+<path fill="none" stroke="#000000" d="M87.3428,-12C95.5702,-12 104.302,-12 112.9229,-12"/>
+<polygon fill="#000000" stroke="#000000" points="112.9551,-15.5001 122.9551,-12 112.955,-8.5001 112.9551,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">oqp_apply_basis</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">with_abort</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">atomic_structure_m</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">atomic_structure</span>
+<span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">fstring</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">iso_c_binding</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="kt">c_char</span>
+<span class="kt">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_api</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">map_shell2basis_set</span><span class="p">,</span><span class="w"> </span><span class="n">print_basis</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+<span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="p">:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">err</span>
+<span class="w">  </span><span class="c">!</span>
+<span class="w">  </span><span class="c">! Section of Tagarray for the basis filename</span>
+<span class="w">  </span><span class="c">! We are getting basis file name from Python via tagarray</span>
+<span class="w">  </span><span class="c">!</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;oqp_apply_basis&quot;</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">OQP_basis_filename</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_basis_filename</span><span class="p">,</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">)</span>
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="kt">character</span><span class="p">(</span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span><span class="p">)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">       </span><span class="n">basis_file</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="c">!</span>
+<span class="c">!  ! Files open</span>
+<span class="c">!  ! 3. LOG: Write: Main output file</span>
+<span class="c">!  ! 5. BAS: read: Basis set library (internally)</span>
+<span class="c">!</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">newunit</span><span class="o">=</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+<span class="w">   </span><span class="c">!</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/,20x,&quot;++++++++++++++++++++++++++++++++++++++++&quot;)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(  22X,&quot;MODULE: apply_basis &quot;)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(  22X,&quot;Setting up basis set information&quot;)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(20x,&quot;++++++++++++++++++++++++++++++++++++++++&quot;)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">map_shell2basis_set</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">)</span>
+<span class="c">!    if (pe%rank == 0) then</span>
+<span class="c">!      call infos%basis%from_file(basis_file, infos%atoms, err)</span>
+<span class="c">!      infos%control%basis_set_issue = err</span>
+<span class="c">!    endif</span>
+
+<span class="c">!    call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">ecp_zn_num</span><span class="p">)</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_A</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_B</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nocc</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end if</span>
+
+<span class="c">! Checking error of basis set reading..</span>
+<span class="c">!    call pe%bcast(infos%control%basis_set_issue, 1)</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/5X,&quot;Basis Sets options&quot;/&amp;</span>
+<span class="s1">                  &amp;5X,18(&quot;-&quot;)/&amp;</span>
+<span class="s1">                  &amp;5X,&quot;Basis Sets: &quot;,A/&amp;</span>
+<span class="s1">                  &amp;5X,&quot;Number of Shells  =&quot;,I8,5X,&quot;Number of Primitives  =&quot;,I8/&amp;</span>
+<span class="s1">                  &amp;5X,&quot;Number of Basis Set functions  =&quot;,I8/&amp;</span>
+<span class="s1">                  &amp;5X,&quot;Maximum Angluar Momentum =&quot;,I8/)&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                    </span><span class="nb">trim</span><span class="p">(</span><span class="n">basis_file</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                    </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">nprim</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                    </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">mxam</span>
+<span class="w">    </span><span class="k">close</span><span class="w"> </span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">print_basis</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">oqp_apply_basis</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,658 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>oqp_dorgqr_i64 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>oqp_dorgqr_i64
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">22 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/lapack_wrap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/lapack_wrap.f90.html'>lapack_wrap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/lapack_wrap.html'>lapack_wrap</a></li>
+            <li class="breadcrumb-item active" aria-current="page">oqp_dorgqr_i64</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine oqp_dorgqr_i64(m, n, k, a, lda, tau, work, lwork, info)  
+</h2>
+    
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~50"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~235"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-k~71"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>k</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~155"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~85"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau~10"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~9"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~6"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~12"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dorgqr_i64~~CallsGraph Pages: 1 -->
+<svg id="procoqp_dorgqr_i64CallsGraph" width="233pt" height="74pt"
+ viewBox="0.00 0.00 233.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~oqp_dorgqr_i64~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 229,-70 229,4 -4,4"/>
+<!-- proc~oqp_dorgqr_i64 -->
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph_node1" class="node">
+<title>proc~oqp_dorgqr_i64</title>
+<polygon fill="none" stroke="#000000" points="96,-45 0,-45 0,-21 96,-21 96,-45"/>
+<text text-anchor="middle" x="48" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dorgqr_i64</text>
+</g>
+<!-- dorgqr -->
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph_node2" class="node">
+<title>dorgqr</title>
+<polygon fill="#777777" stroke="#777777" points="205.5,-66 151.5,-66 151.5,-42 205.5,-42 205.5,-66"/>
+<text text-anchor="middle" x="178.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dorgqr</text>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;dorgqr -->
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph_edge1" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;dorgqr</title>
+<path fill="none" stroke="#000000" d="M96.2226,-40.76C111.0344,-43.1435 127.1047,-45.7295 141.0794,-47.9783"/>
+<polygon fill="#000000" stroke="#000000" points="140.8727,-51.49 151.3018,-49.6233 141.9849,-44.5789 140.8727,-51.49"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="225,-24 132,-24 132,0 225,0 225,-24"/>
+<text text-anchor="middle" x="178.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~oqp_dorgqr_i64~~CallsGraph_edge2" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M96.2226,-25.24C104.5724,-23.8964 113.3221,-22.4884 121.8709,-21.1127"/>
+<polygon fill="#000000" stroke="#000000" points="122.4612,-24.5628 131.7781,-19.5185 121.349,-17.6518 122.4612,-24.5628"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dorgqr_i64~~CalledByGraph Pages: 1 -->
+<svg id="procoqp_dorgqr_i64CalledByGraph" width="641pt" height="26pt"
+ viewBox="0.00 0.00 641.00 25.90" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph" class="graph" transform="scale(.8093 .8093) rotate(0) translate(4 28)">
+<title>proc~~oqp_dorgqr_i64~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 788,-28 788,4 -4,4"/>
+<!-- proc~oqp_dorgqr_i64 -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node1" class="node">
+<title>proc~oqp_dorgqr_i64</title>
+<polygon fill="none" stroke="#000000" points="784,-24 688,-24 688,0 784,0 784,-24"/>
+<text text-anchor="middle" x="736" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dorgqr_i64</text>
+</g>
+<!-- proc~schmd -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node2" class="node">
+<title>proc~schmd</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CalledByGraph_node2"><a xlink:href="../proc/schmd.html" xlink:title="schmd">
+<polygon fill="#d9534f" stroke="#d9534f" points="652,-24 598,-24 598,0 652,0 652,-24"/>
+<text text-anchor="middle" x="625" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">schmd</text>
+</a>
+</g>
+</g>
+<!-- proc~schmd&#45;&gt;proc~oqp_dorgqr_i64 -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_edge1" class="edge">
+<title>proc~schmd&#45;&gt;proc~oqp_dorgqr_i64</title>
+<path fill="none" stroke="#000000" d="M652.1537,-12C659.9879,-12 668.8523,-12 677.8103,-12"/>
+<polygon fill="#000000" stroke="#000000" points="677.914,-15.5001 687.914,-12 677.914,-8.5001 677.914,-15.5001"/>
+</g>
+<!-- proc~corresponding_orbital_projection -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node3" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CalledByGraph_node3"><a xlink:href="../proc/corresponding_orbital_projection.html" xlink:title="corresponding_orbital_projection">
+<polygon fill="#d9534f" stroke="#d9534f" points="562,-24 373,-24 373,0 562,0 562,-24"/>
+<text text-anchor="middle" x="467.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">corresponding_orbital_projection</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~schmd -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_edge2" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~schmd</title>
+<path fill="none" stroke="#000000" d="M562.2993,-12C571.1677,-12 579.7525,-12 587.5777,-12"/>
+<polygon fill="#000000" stroke="#000000" points="587.7328,-15.5001 597.7328,-12 587.7327,-8.5001 587.7328,-15.5001"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node4" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CalledByGraph_node4"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="337,-24 253,-24 253,0 337,0 337,-24"/>
+<text text-anchor="middle" x="295" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_edge3" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection</title>
+<path fill="none" stroke="#000000" d="M337.1982,-12C345.1699,-12 353.8278,-12 362.7635,-12"/>
+<polygon fill="#000000" stroke="#000000" points="362.9485,-15.5001 372.9485,-12 362.9484,-8.5001 362.9485,-15.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node5" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CalledByGraph_node5"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_edge4" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M217.3075,-12C225.4629,-12 234.0971,-12 242.5298,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6701,-15.5001 252.6701,-12 242.67,-8.5001 242.6701,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_node6" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~oqp_dorgqr_i64~~CalledByGraph_node6"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~oqp_dorgqr_i64~~CalledByGraph_edge5" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocoqp_dorgqr_i64CalledByGraph = svgPanZoom('#procoqp_dorgqr_i64CalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

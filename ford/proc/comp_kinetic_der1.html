@@ -1,0 +1,570 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>comp_kinetic_der1 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>comp_kinetic_der1
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">35 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mod_1e_primitives.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mod_1e_primitives.f90.html'>mod_1e_primitives.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mod_1e_primitives.html'>mod_1e_primitives</a></li>
+            <li class="breadcrumb-item active" aria-current="page">comp_kinetic_der1</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine comp_kinetic_der1(cp, dij, de)  
+</h2>
+    
+
+    <p>@brief Compute 1e kinetic contribution to the gradient
+@param[in]       cp          shell pair data
+@param[in]       dij         density matrix block
+@param[inout]    de          dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~10"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~6"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-de~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>de</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~comp_kinetic_der1~~CallsGraph Pages: 1 -->
+<svg id="proccomp_kinetic_der1CallsGraph" width="377pt" height="32pt"
+ viewBox="0.00 0.00 377.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~comp_kinetic_der1~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~comp_kinetic_der1~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 373,-28 373,4 -4,4"/>
+<!-- proc~comp_kinetic_der1 -->
+<g id="proc~~comp_kinetic_der1~~CallsGraph_node1" class="node">
+<title>proc~comp_kinetic_der1</title>
+<polygon fill="none" stroke="#000000" points="113,-24 0,-24 0,0 113,0 113,-24"/>
+<text text-anchor="middle" x="56.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">comp_kinetic_der1</text>
+</g>
+<!-- proc~doquadgausshermite -->
+<g id="proc~~comp_kinetic_der1~~CallsGraph_node2" class="node">
+<title>proc~doquadgausshermite</title>
+<g id="a_proc~~comp_kinetic_der1~~CallsGraph_node2"><a xlink:href="../proc/doquadgausshermite.html" xlink:title="doQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="279,-24 149,-24 149,0 279,0 279,-24"/>
+<text text-anchor="middle" x="214" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">doQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_kinetic_der1&#45;&gt;proc~doquadgausshermite -->
+<g id="proc~~comp_kinetic_der1~~CallsGraph_edge1" class="edge">
+<title>proc~comp_kinetic_der1&#45;&gt;proc~doquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M113.3611,-12C121.6575,-12 130.306,-12 138.8965,-12"/>
+<polygon fill="#000000" stroke="#000000" points="138.9299,-15.5001 148.9298,-12 138.9298,-8.5001 138.9299,-15.5001"/>
+</g>
+<!-- abrt -->
+<g id="proc~~comp_kinetic_der1~~CallsGraph_node3" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="369,-24 315,-24 315,0 369,0 369,-24"/>
+<text text-anchor="middle" x="342" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~doquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~comp_kinetic_der1~~CallsGraph_edge2" class="edge">
+<title>proc~doquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M279.1249,-12C287.8851,-12 296.6171,-12 304.6643,-12"/>
+<polygon fill="#000000" stroke="#000000" points="304.7933,-15.5001 314.7933,-12 304.7933,-8.5001 304.7933,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~comp_kinetic_der1~~CalledByGraph Pages: 1 -->
+<svg id="proccomp_kinetic_der1CalledByGraph" width="625pt" height="74pt"
+ viewBox="0.00 0.00 625.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~comp_kinetic_der1~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~comp_kinetic_der1~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 621,-70 621,4 -4,4"/>
+<!-- proc~comp_kinetic_der1 -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node1" class="node">
+<title>proc~comp_kinetic_der1</title>
+<polygon fill="none" stroke="#000000" points="617,-45 504,-45 504,-21 617,-21 617,-45"/>
+<text text-anchor="middle" x="560.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">comp_kinetic_der1</text>
+</g>
+<!-- proc~grad_ee_kinetic -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node2" class="node">
+<title>proc~grad_ee_kinetic</title>
+<g id="a_proc~~comp_kinetic_der1~~CalledByGraph_node2"><a xlink:href="../proc/grad_ee_kinetic.html" xlink:title="grad_ee_kinetic">
+<polygon fill="#d9534f" stroke="#d9534f" points="468,-45 371,-45 371,-21 468,-21 468,-45"/>
+<text text-anchor="middle" x="419.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_ee_kinetic</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_ee_kinetic&#45;&gt;proc~comp_kinetic_der1 -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_edge1" class="edge">
+<title>proc~grad_ee_kinetic&#45;&gt;proc~comp_kinetic_der1</title>
+<path fill="none" stroke="#000000" d="M468.0242,-33C476.2691,-33 484.9595,-33 493.5784,-33"/>
+<polygon fill="#000000" stroke="#000000" points="493.6325,-36.5001 503.6325,-33 493.6325,-29.5001 493.6325,-36.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node3" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~comp_kinetic_der1~~CalledByGraph_node3"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="330.5,-66 257.5,-66 257.5,-42 330.5,-42 330.5,-66"/>
+<text text-anchor="middle" x="294" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M330.6372,-47.8695C340.0788,-46.2896 350.4804,-44.5491 360.7393,-42.8325"/>
+<polygon fill="#000000" stroke="#000000" points="361.6245,-46.2331 370.9097,-41.1307 360.4691,-39.3291 361.6245,-46.2331"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node4" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~comp_kinetic_der1~~CalledByGraph_node4"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="335,-24 253,-24 253,0 335,0 335,-24"/>
+<text text-anchor="middle" x="294" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_edge3" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M335.0934,-18.8762C343.3143,-20.2518 352.1005,-21.722 360.7833,-23.1749"/>
+<polygon fill="#000000" stroke="#000000" points="360.4481,-26.6674 370.8886,-24.8658 361.6034,-19.7634 360.4481,-26.6674"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~comp_kinetic_der1~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_edge4" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M217.29,-12C225.459,-12 234.1015,-12 242.5254,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6458,-15.5001 252.6458,-12 242.6457,-8.5001 242.6458,-15.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~comp_kinetic_der1~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~comp_kinetic_der1~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

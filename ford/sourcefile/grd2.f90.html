@@ -1,0 +1,1495 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>grd2.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>grd2.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for source files.">199 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/grd2.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">grd2.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/grd2.html">grd2</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/grd2.f90.html#src">grd2.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~grd2.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefilegrd2f90EfferentGraph" width="641pt" height="661pt"
+ viewBox="0.00 0.00 641.00 660.76" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~grd2.f90~~EfferentGraph" class="graph" transform="scale(.614 .614) rotate(0) translate(4 1072.1852)">
+<title>sourcefile~~grd2.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-1072.1852 1040,-1072.1852 1040,4 -4,4"/>
+<!-- sourcefile~grd2.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~grd2.f90</title>
+<polygon fill="none" stroke="#000000" points="1036,-715.6972 976,-715.6972 976,-691.6972 1036,-691.6972 1036,-715.6972"/>
+<text text-anchor="middle" x="1006" y="-701.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">grd2.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="563.5,-251.6972 470.5,-251.6972 470.5,-227.6972 563.5,-227.6972 563.5,-251.6972"/>
+<text text-anchor="middle" x="517" y="-237.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-83.6972C701.4626,-83.3848 668.1417,-88.387 600,-145.6972 573.8292,-167.708 587.957,-189.2955 564,-213.6972 560.9867,-216.7665 557.5335,-219.5737 553.8967,-222.1138"/>
+<polygon fill="#000000" stroke="#000000" points="551.8212,-219.2836 545.1983,-227.5533 555.5327,-225.2187 551.8212,-219.2836"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="265,-715.6972 179,-715.6972 179,-691.6972 265,-691.6972 265,-715.6972"/>
+<text text-anchor="middle" x="222" y="-701.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-703.6972C818.2764,-715.481 913.1425,-837.6781 849,-907.6972 830.0168,-928.4196 816.2433,-920.4251 790.5,-931.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-931.6972C746.5865,-950.9255 738.5913,-901.6996 696,-879.6972 660.414,-861.3138 411.2513,-717.7836 371.5,-722.6972"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="272.5,-464.6972 171.5,-464.6972 171.5,-440.6972 272.5,-440.6972 272.5,-464.6972"/>
+<text text-anchor="middle" x="222" y="-450.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-703.6972C637.7916,-738.0528 332.5495,-533.7275 246.0162,-470.75"/>
+<polygon fill="#000000" stroke="#000000" points="248.016,-467.8762 237.8846,-464.7769 243.872,-473.5178 248.016,-467.8762"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~dft_molgrid.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/dft_molgrid.f90.html" xlink:title="dft_molgrid.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="696,-945.6972 600,-945.6972 600,-921.6972 696,-921.6972 696,-945.6972"/>
+<text text-anchor="middle" x="648" y="-931.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_molgrid.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-931.6972C764.3738,-943.137 732.8831,-944.6799 706.1564,-942.9193"/>
+<polygon fill="#000000" stroke="#000000" points="706.421,-939.4294 696.1675,-942.0966 705.8464,-946.4058 706.421,-939.4294"/>
+</g>
+<!-- sourcefile~grd2_rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~grd2_rys.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/grd2_rys.f90.html" xlink:title="grd2_rys.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="831,-755.6972 750,-755.6972 750,-731.6972 831,-731.6972 831,-755.6972"/>
+<text text-anchor="middle" x="790.5" y="-741.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2_rys.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~grd2_rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~grd2_rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-703.6972C882.0599,-706.4199 849.2306,-717.7001 825.303,-727.5903"/>
+<polygon fill="#000000" stroke="#000000" points="823.7789,-724.4352 815.9494,-731.5731 826.5213,-730.8756 823.7789,-724.4352"/>
+</g>
+<!-- sourcefile~int2.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~int2.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/int2.f90.html" xlink:title="int2.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="940,-135.6972 885,-135.6972 885,-111.6972 940,-111.6972 940,-135.6972"/>
+<text text-anchor="middle" x="912.5" y="-121.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~int2.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~int2.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1004.0471,-691.5831C992.3424,-618.9764 931.4759,-241.4087 916.0543,-145.7455"/>
+<polygon fill="#000000" stroke="#000000" points="919.4891,-145.0602 914.4421,-135.7447 912.5784,-146.1743 919.4891,-145.0602"/>
+</g>
+<!-- sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~int2_pairs.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/int2_pairs.f90.html" xlink:title="int2_pairs.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="691.5,-211.6972 604.5,-211.6972 604.5,-187.6972 691.5,-187.6972 691.5,-211.6972"/>
+<text text-anchor="middle" x="648" y="-197.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-83.6972C900.264,-75.2728 894.508,-91.2828 885,-102.6972 860.0458,-132.6553 880.8197,-160.1649 849,-182.6972 806.5331,-212.7692 745.6489,-213.6594 702.0336,-209.1124"/>
+<polygon fill="#000000" stroke="#000000" points="702.2342,-205.6121 691.8952,-207.9263 701.4207,-212.5647 702.2342,-205.6121"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="415.5,-504.6972 327.5,-504.6972 327.5,-480.6972 415.5,-480.6972 415.5,-504.6972"/>
+<text text-anchor="middle" x="371.5" y="-490.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M975.6207,-702.331C957.3013,-701.8467 933.5185,-701.8173 912.5,-703.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-703.6972C873.5211,-707.1836 883.8348,-660.5309 849,-642.6972 787.4658,-611.1948 764.1233,-626.4479 696,-614.6972 616.58,-600.998 592.1561,-614.7967 517,-585.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-585.6972C470.9164,-565.4967 422.7192,-531.8099 394.9876,-511.003"/>
+<polygon fill="#000000" stroke="#000000" points="396.8122,-507.9938 386.7315,-504.7334 392.5788,-513.5686 396.8122,-507.9938"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="409.5,-55.6972 333.5,-55.6972 333.5,-31.6972 409.5,-31.6972 409.5,-55.6972"/>
+<text text-anchor="middle" x="371.5" y="-41.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1005.2718,-691.5473C1000.3634,-610.9685 971.3537,-155.2664 940,-102.6972 932.3904,-89.9385 924.6918,-92.1855 912.5,-83.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-83.6972C865.892,-51.2476 840.9348,-71.8049 790.5,-45.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-45.6972C750.2985,-24.8868 740.4438,-16.2984 696,-7.6972 597.0374,11.4548 569.543,-10.8356 470,-26.6972 453.6928,-29.2957 435.8993,-32.3112 419.9776,-35.0748"/>
+<polygon fill="#000000" stroke="#000000" points="419.0689,-31.6804 409.8195,-36.8475 420.2723,-38.5762 419.0689,-31.6804"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-770.6972 25.5,-770.6972 25.5,-746.6972 109.5,-746.6972 109.5,-770.6972"/>
+<text text-anchor="middle" x="67.5" y="-756.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1003.4858,-716.109C996.9611,-746.1651 977.3381,-824.3763 940,-878.6972 889.6241,-951.9861 872.1141,-976.3684 790.5,-1011.6972"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="849,-675.6972 732,-675.6972 732,-651.6972 849,-651.6972 849,-675.6972"/>
+<text text-anchor="middle" x="790.5" y="-661.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-703.6972C895.9943,-705.1736 857.5047,-691.4406 828.1372,-679.6681"/>
+<polygon fill="#000000" stroke="#000000" points="829.1541,-676.3033 818.5724,-675.7757 826.5155,-682.787 829.1541,-676.3033"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="680,-55.6972 616,-55.6972 616,-31.6972 680,-31.6972 680,-55.6972"/>
+<text text-anchor="middle" x="648" y="-41.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.5,-83.6972C868.0007,-52.7156 844.7219,-83.8875 790.5,-83.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-83.6972C753.1485,-83.5662 712.2703,-70.6873 683.9132,-59.5797"/>
+<polygon fill="#000000" stroke="#000000" points="685.0144,-56.2498 674.4314,-55.7485 682.3919,-62.74 685.0144,-56.2498"/>
+</g>
+<!-- sourcefile~util.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~util.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/util.f90.html" xlink:title="util.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="939.5,-869.6972 885.5,-869.6972 885.5,-845.6972 939.5,-845.6972 939.5,-869.6972"/>
+<text text-anchor="middle" x="912.5" y="-855.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~util.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~util.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M998.6632,-715.7814C982.7551,-741.9829 944.9282,-804.286 925.1076,-836.9318"/>
+<polygon fill="#000000" stroke="#000000" points="922.0008,-835.3049 919.8027,-845.6693 927.9843,-838.9378 922.0008,-835.3049"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M505.0225,-251.8166C465.3642,-292.1289 339.1393,-421.9645 309,-471.6972 265.8278,-542.9355 238.1893,-639.1454 227.2864,-681.7884"/>
+<polygon fill="#000000" stroke="#000000" points="223.8497,-681.1046 224.8204,-691.6549 230.6408,-682.802 223.8497,-681.1046"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M481.9478,-251.83C438.3179,-268.0803 362.9785,-300.0102 309,-343.6972 277.4314,-369.2471 249.8817,-408.1098 234.6369,-431.8713"/>
+<polygon fill="#000000" stroke="#000000" points="231.5916,-430.1394 229.2358,-440.4691 237.519,-433.8631 231.5916,-430.1394"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.9822,-251.9C486.8375,-292.1448 412.7365,-420.9938 383.5128,-471.809"/>
+<polygon fill="#000000" stroke="#000000" points="380.3987,-470.2034 378.4474,-480.617 386.4668,-473.6931 380.3987,-470.2034"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M505.0548,-227.5511C494.5262,-216.2522 479.4343,-198.5221 470,-180.6972 444.7478,-132.9866 471.7246,-103.3085 434,-64.6972 429.7977,-60.3962 424.6884,-56.9761 419.2211,-54.2564"/>
+<polygon fill="#000000" stroke="#000000" points="420.3555,-50.9371 409.7793,-50.3089 417.6553,-57.3954 420.3555,-50.9371"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M487.1189,-227.6832C451.0673,-213.9239 392.6601,-194.1892 371.5,-201.6972"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="434,-97.6972 309,-97.6972 309,-73.6972 434,-73.6972 434,-97.6972"/>
+<text text-anchor="middle" x="371.5" y="-83.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M506.1878,-227.5615C496.1566,-215.9847 481.1408,-197.8217 470,-180.6972 451.1373,-151.7034 459.4951,-135.0733 434,-111.6972 430.1995,-108.2126 425.8658,-105.1587 421.2934,-102.4902"/>
+<polygon fill="#000000" stroke="#000000" points="422.7727,-99.3148 412.2836,-97.8218 419.5523,-105.53 422.7727,-99.3148"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="421.5,-253.6972 321.5,-253.6972 321.5,-229.6972 421.5,-229.6972 421.5,-253.6972"/>
+<text text-anchor="middle" x="371.5" y="-239.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M470.162,-240.3411C457.9039,-240.5096 444.5168,-240.6936 431.6696,-240.8702"/>
+<polygon fill="#000000" stroke="#000000" points="431.4649,-237.3725 421.514,-241.0098 431.5612,-244.3719 431.4649,-237.3725"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node19" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node19"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="264.5,-137.6972 179.5,-137.6972 179.5,-113.6972 264.5,-113.6972 264.5,-137.6972"/>
+<text text-anchor="middle" x="222" y="-123.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M500.5975,-227.5094C484.3807,-215.932 458.5085,-198.7038 434,-187.6972 381.7498,-164.232 318.3015,-147.0425 274.5095,-136.7936"/>
+<polygon fill="#000000" stroke="#000000" points="275.1785,-133.3561 264.6483,-134.5252 273.6092,-140.178 275.1785,-133.3561"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M188.0943,-715.7672C165.4538,-723.827 135.4689,-734.5012 111.0629,-743.1894"/>
+<polygon fill="#000000" stroke="#000000" points="109.5736,-740.0043 101.3266,-746.6554 111.9213,-746.5989 109.5736,-740.0043"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M621.0172,-921.5614C584.6424,-904.4872 518.8154,-871.0237 470,-831.6972 419.1533,-790.7342 436.1675,-713.6708 371.5,-722.6972"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.5,-973.6972C305.2024,-969.2823 279.0904,-1007.6906 222,-973.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M222,-973.6972C201.2167,-961.3222 189.1726,-970.6611 171,-954.6972 115.6525,-906.0766 85.2032,-820.5609 73.3663,-780.5252"/>
+<polygon fill="#000000" stroke="#000000" points="76.6802,-779.3826 70.5751,-770.7236 69.9478,-781.2999 76.6802,-779.3826"/>
+</g>
+<!-- sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node17" class="node">
+<title>sourcefile~bragg_slater.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node17"><a xlink:href="../sourcefile/bragg_slater.f90.html" xlink:title="bragg_slater.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="272.5,-945.6972 171.5,-945.6972 171.5,-921.6972 272.5,-921.6972 272.5,-945.6972"/>
+<text text-anchor="middle" x="222" y="-931.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bragg_slater.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-973.6972C452.3397,-974.6047 436.0238,-977.9941 371.5,-973.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.5,-973.6972C333.6854,-971.1791 292.1546,-959.2921 262.4832,-949.1251"/>
+<polygon fill="#000000" stroke="#000000" points="263.4926,-945.7701 252.8978,-945.7591 261.1733,-952.3748 263.4926,-945.7701"/>
+</g>
+<!-- sourcefile~dft_partfunc.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node18" class="node">
+<title>sourcefile~dft_partfunc.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node18"><a xlink:href="../sourcefile/dft_partfunc.f90.html" xlink:title="dft_partfunc.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="421.5,-945.6972 321.5,-945.6972 321.5,-921.6972 421.5,-921.6972 421.5,-945.6972"/>
+<text text-anchor="middle" x="371.5" y="-931.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_partfunc.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~dft_partfunc.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~dft_partfunc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-973.6972C478.4033,-974.2389 436.0362,-960.9062 407.0249,-949.4908"/>
+<polygon fill="#000000" stroke="#000000" points="408.3052,-946.2332 397.723,-945.7158 405.6729,-952.7194 408.3052,-946.2332"/>
+</g>
+<!-- sourcefile~grid_storage.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node21" class="node">
+<title>sourcefile~grid_storage.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node21"><a xlink:href="../sourcefile/grid_storage.f90.html" xlink:title="grid_storage.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="273,-865.6972 171,-865.6972 171,-841.6972 273,-841.6972 273,-865.6972"/>
+<text text-anchor="middle" x="222" y="-851.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grid_storage.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~grid_storage.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~grid_storage.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M623.5641,-945.6973C597.7467,-957.2822 555.5192,-973.1567 517,-973.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-973.6972C494.471,-974.0134 488.2961,-967.8467 470,-954.6972 450.0358,-940.3489 454.7408,-925.8981 434,-912.6972 409.0202,-896.7984 336.5639,-878.5216 283.2843,-866.5757"/>
+<polygon fill="#000000" stroke="#000000" points="283.7604,-863.0963 273.2397,-864.3472 282.2442,-869.9301 283.7604,-863.0963"/>
+</g>
+<!-- sourcefile~lebedev.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node25" class="node">
+<title>sourcefile~lebedev.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node25"><a xlink:href="../sourcefile/lebedev.f90.html" xlink:title="lebedev.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="555.5,-945.6972 478.5,-945.6972 478.5,-921.6972 555.5,-921.6972 555.5,-945.6972"/>
+<text text-anchor="middle" x="517" y="-931.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lebedev.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~lebedev.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~lebedev.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M599.9643,-933.6972C588.7828,-933.6972 576.8687,-933.6972 565.6605,-933.6972"/>
+<polygon fill="#000000" stroke="#000000" points="565.6069,-930.1973 555.6068,-933.6972 565.6068,-937.1973 565.6069,-930.1973"/>
+</g>
+<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.6488,-731.2597C762.9106,-720.0411 744.6609,-702.5976 732,-684.6972 626.8869,-536.0854 548.3365,-328.1764 524.5111,-261.3121"/>
+<polygon fill="#000000" stroke="#000000" points="527.7905,-260.0873 521.1614,-251.8225 521.1896,-262.4173 527.7905,-260.0873"/>
+</g>
+<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.5922,-755.7812C757.8657,-769.2992 726.7898,-790.3896 696,-798.6972 654.8065,-809.812 640.7498,-811.3423 600,-798.6972 557.2604,-785.4347 560.1655,-753.5002 517,-741.6972"/>
+</g>
+<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.0764,-731.632C759.3024,-721.0173 740.9539,-704.236 732,-684.6972 689.3758,-591.6855 751.755,-311.4841 696,-225.6972 694.1407,-222.8365 691.8552,-220.2662 689.3,-217.9612"/>
+<polygon fill="#000000" stroke="#000000" points="691.1052,-214.9434 680.9821,-211.817 686.9461,-220.5738 691.1052,-214.9434"/>
+</g>
+<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M785.6197,-755.7489C770.8597,-790.0251 723.0461,-886.086 648,-893.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M648,-893.6972C524.5891,-906.2137 493.3969,-878.677 371.5,-855.6972"/>
+</g>
+<!-- sourcefile~rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node26" class="node">
+<title>sourcefile~rys.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node26"><a xlink:href="../sourcefile/rys.f90.html" xlink:title="rys.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="675,-789.6972 621,-789.6972 621,-765.6972 675,-765.6972 675,-789.6972"/>
+<text text-anchor="middle" x="648" y="-775.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.6652,-753.4403C729.355,-758.2862 704.9856,-764.1007 685.1978,-768.822"/>
+<polygon fill="#000000" stroke="#000000" points="684.2281,-765.455 675.3134,-771.1804 685.8527,-772.2639 684.2281,-765.455"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-239.6972C730.1928,-259.0403 711.1795,-244.1093 648,-239.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M648,-239.6972C623.8003,-238.0073 597.0245,-237.7256 574.0206,-237.972"/>
+<polygon fill="#000000" stroke="#000000" points="573.6882,-234.4763 563.7394,-238.1192 573.7885,-241.4756 573.6882,-234.4763"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M912.129,-135.9169C910.0727,-196.1626 898.3091,-461.17 849,-523.6972 736.1002,-666.8618 638.082,-610.0509 470,-680.6972 426.1264,-699.1377 418.6021,-715.8908 371.5,-722.6972"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M910.7327,-135.7614C901.5774,-196.3467 857.3798,-466.2203 790.5,-509.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-509.6972C773.8007,-520.5531 453.8226,-473.6418 434,-471.6972 383.0372,-466.6978 325.1288,-461.5436 282.7269,-457.867"/>
+<polygon fill="#000000" stroke="#000000" points="282.8317,-454.3631 272.5673,-456.9887 282.2287,-461.3371 282.8317,-454.3631"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge38" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M907.0088,-135.8051C897.6725,-155.1604 876.963,-193.1774 849,-215.6972 827.1124,-233.3243 817.2602,-231.1141 790.5,-239.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-239.6972C771.154,-245.9023 721.3359,-229.1791 686.0729,-215.4859"/>
+<polygon fill="#000000" stroke="#000000" points="687.1369,-212.1431 676.5503,-211.7256 684.5659,-218.6539 687.1369,-212.1431"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge42" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-509.6972C761.7989,-530.7265 532.5979,-509.7251 425.8506,-498.6222"/>
+<polygon fill="#000000" stroke="#000000" points="425.9164,-495.11 415.6059,-497.5479 425.1863,-502.0718 425.9164,-495.11"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge43" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M899.373,-111.6756C884.0608,-97.8089 859.5059,-76.0954 849,-69.6972 824.9978,-55.0796 815.4574,-58.6165 790.5,-45.6972"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge44" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M911.9307,-135.8494C907.927,-219.5462 883.1652,-708.907 849,-764.6972 793.5647,-855.2206 751.6924,-870.994 648,-893.6972"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge45" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M911.7178,-135.7706C906.8576,-209.3697 879.9827,-595.8878 849,-637.6972 846.715,-640.7807 843.982,-643.5054 840.9636,-645.912"/>
+<polygon fill="#000000" stroke="#000000" points="838.8257,-643.1298 832.4181,-651.5674 842.6889,-648.9672 838.8257,-643.1298"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge46" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-121.6972C763.7316,-113.1399 756.3157,-111.7872 732,-97.6972 714.4619,-87.5346 712.969,-80.7841 696,-69.6972 691.3388,-66.6518 686.289,-63.6348 681.2745,-60.7936"/>
+<polygon fill="#000000" stroke="#000000" points="682.8269,-57.6531 672.3779,-55.9012 679.4538,-63.7868 682.8269,-57.6531"/>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M884.6292,-127.7287C859.4106,-130.3368 821.5733,-131.6308 790.5,-121.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-121.6972C763.7316,-113.1399 752.4416,-116.9824 732,-97.6972 705.1054,-72.3242 727.2946,-42.3889 696,-22.6972 659.8876,.0259 642.2812,-16.9753 600,-22.6972 565.378,-27.3827 476.1532,-53.5703 419.9942,-70.6739"/>
+<polygon fill="#000000" stroke="#000000" points="418.7958,-67.3802 410.2551,-73.6498 420.8415,-74.0747 418.7958,-67.3802"/>
+</g>
+<!-- sourcefile~int_libint.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node22" class="node">
+<title>sourcefile~int_libint.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node22"><a xlink:href="../sourcefile/int_libint.f90.html" xlink:title="int_libint.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="830.5,-291.6972 750.5,-291.6972 750.5,-267.6972 830.5,-267.6972 830.5,-291.6972"/>
+<text text-anchor="middle" x="790.5" y="-277.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int_libint.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~int_libint.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge39" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~int_libint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M909.6114,-135.7558C903.0201,-160.8802 884.6161,-219.3459 849,-253.6972 845.4852,-257.0873 841.4536,-260.0795 837.1862,-262.7107"/>
+<polygon fill="#000000" stroke="#000000" points="835.2912,-259.7573 828.1856,-267.6161 838.6411,-265.9037 835.2912,-259.7573"/>
+</g>
+<!-- sourcefile~int_rotaxis.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node23" class="node">
+<title>sourcefile~int_rotaxis.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node23"><a xlink:href="../sourcefile/int_rotaxis.f90.html" xlink:title="int_rotaxis.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="835.5,-173.6972 745.5,-173.6972 745.5,-149.6972 835.5,-149.6972 835.5,-173.6972"/>
+<text text-anchor="middle" x="790.5" y="-159.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int_rotaxis.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~int_rotaxis.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge40" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~int_rotaxis.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M884.8163,-132.32C871.1929,-136.5634 854.3714,-141.8029 838.7241,-146.6766"/>
+<polygon fill="#000000" stroke="#000000" points="837.679,-143.3362 829.1723,-149.6518 839.7607,-150.0195 837.679,-143.3362"/>
+</g>
+<!-- sourcefile~int_rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node24" class="node">
+<title>sourcefile~int_rys.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node24"><a xlink:href="../sourcefile/int_rys.f90.html" xlink:title="int_rys.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="825.5,-370.6972 755.5,-370.6972 755.5,-346.6972 825.5,-346.6972 825.5,-370.6972"/>
+<text text-anchor="middle" x="790.5" y="-356.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int_rys.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int2.f90&#45;&gt;sourcefile~int_rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge41" class="edge">
+<title>sourcefile~int2.f90&#45;&gt;sourcefile~int_rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M910.0394,-136.1277C903.6692,-166.2537 884.5996,-244.7974 849,-300.6972 839.5746,-315.4974 825.7472,-329.433 813.9019,-339.9335"/>
+<polygon fill="#000000" stroke="#000000" points="811.4121,-337.4578 806.0965,-346.6226 815.9672,-342.773 811.4121,-337.4578"/>
+</g>
+<!-- sourcefile~int2_pairs.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge47" class="edge">
+<title>sourcefile~int2_pairs.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.6957,-211.6986C595.475,-215.7354 580.5496,-220.2928 566.6396,-224.5401"/>
+<polygon fill="#000000" stroke="#000000" points="565.2713,-221.2983 556.7294,-227.5661 567.3156,-227.9932 565.2713,-221.2983"/>
+</g>
+<!-- sourcefile~int2_pairs.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge48" class="edge">
+<title>sourcefile~int2_pairs.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M604.429,-195.07C578.7011,-193.479 545.6613,-193.43 517,-199.6972"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge49" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M327.4537,-480.9123C311.6904,-476.6947 293.7224,-471.8872 277.1398,-467.4504"/>
+<polygon fill="#000000" stroke="#000000" points="277.5908,-463.948 267.026,-464.7443 275.7815,-470.7101 277.5908,-463.948"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge50" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M357.6478,-504.8179C309.2793,-547.1404 147.6635,-688.5542 89.0048,-739.8806"/>
+<polygon fill="#000000" stroke="#000000" points="86.6546,-737.2863 81.4336,-746.5054 91.2641,-742.5543 86.6546,-737.2863"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge51" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M333.3759,-43.8847C287.5847,-46.3152 211.8473,-57.7666 171,-104.6972 86.1625,-202.1696 70.5106,-632.8399 67.9565,-736.2959"/>
+<polygon fill="#000000" stroke="#000000" points="64.4524,-736.4386 67.7215,-746.5165 71.4505,-736.5996 64.4524,-736.4386"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge52" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M731.9161,-652.2571C675.3076,-639.9953 587.9443,-617.8505 517,-585.6972"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge54" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M636.7846,-56.1203C626.1237,-68.4582 610.2394,-88.2881 600,-107.6972 576.7845,-151.7029 595.9172,-175.5299 564,-213.6972 561.4483,-216.7486 558.442,-219.505 555.2035,-221.98"/>
+<polygon fill="#000000" stroke="#000000" points="553.1955,-219.112 546.8017,-227.5601 557.0683,-224.9431 553.1955,-219.112"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge56" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M624.9314,-55.9165C616.9873,-60.1974 608.0633,-65.0879 600,-69.6972 562.6123,-91.0696 559.3079,-111.6564 517,-119.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-119.6972C473.5253,-127.9599 473.7568,-84.1321 434,-64.6972 429.3626,-62.4303 424.4197,-60.3104 419.4229,-58.3561"/>
+<polygon fill="#000000" stroke="#000000" points="420.4064,-54.9883 409.8131,-54.8068 417.9811,-61.5547 420.4064,-54.9883"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge57" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-119.6972C345.4811,-152.2954 261.3598,-156.3102 171,-305.6972 125.5403,-380.8534 82.5309,-655.9188 70.6955,-736.4222"/>
+<polygon fill="#000000" stroke="#000000" points="67.213,-736.0492 69.2354,-746.4492 74.14,-737.058 67.213,-736.0492"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge53" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-119.6972C498.1896,-123.2723 452.6915,-111.4186 417.5391,-100.7412"/>
+<polygon fill="#000000" stroke="#000000" points="418.517,-97.3802 407.9295,-97.7746 416.4521,-104.0687 418.517,-97.3802"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node20" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node20"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="564,-171.6972 470,-171.6972 470,-147.6972 564,-147.6972 564,-171.6972"/>
+<text text-anchor="middle" x="517" y="-157.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge55" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M619.5462,-55.7109C612.6231,-59.5067 605.6065,-64.1796 600,-69.6972 576.7396,-92.5892 587.1587,-110.7024 564,-133.6972 560.9478,-136.7278 557.4697,-139.5104 553.8183,-142.0359"/>
+<polygon fill="#000000" stroke="#000000" points="551.7447,-139.2038 545.1025,-147.458 555.4423,-145.1475 551.7447,-139.2038"/>
+</g>
+<!-- sourcefile~util.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge58" class="edge">
+<title>sourcefile~util.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M908.4294,-869.8305C896.597,-902.6422 858.6545,-991.9881 790.5,-1011.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M790.5,-1011.6972C547.237,-1082.0448 439.5808,-1103.2514 222,-973.6972"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node30" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node30"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-158.6972 32.5,-158.6972 32.5,-134.6972 102.5,-134.6972 102.5,-158.6972"/>
+<text text-anchor="middle" x="67.5" y="-144.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge59" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M308.6822,-84.7526C268.4451,-85.8142 215.6014,-90.3473 171,-104.6972 153.3669,-110.3705 151.9521,-118.2314 135,-125.6972 127.8134,-128.8623 120.0026,-131.757 112.3284,-134.3189"/>
+<polygon fill="#000000" stroke="#000000" points="111.1997,-131.0051 102.7383,-137.3812 113.3291,-137.6734 111.1997,-131.0051"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge60" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M362.2606,-253.8919C348.6871,-272.3651 323.4107,-308.9785 309,-343.6972 295.753,-375.6124 243.4089,-607.7673 226.9684,-681.3732"/>
+<polygon fill="#000000" stroke="#000000" points="223.4914,-680.8846 224.7305,-691.4068 230.3236,-682.4085 223.4914,-680.8846"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge61" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M330.2067,-253.7752C322.5262,-257.3654 315.0324,-261.9324 309,-267.6972 296.2374,-279.8937 250.7658,-384.869 231.1339,-431.0486"/>
+<polygon fill="#000000" stroke="#000000" points="227.8283,-429.8788 227.1483,-440.4518 234.2733,-432.6106 227.8283,-429.8788"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge62" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M355.7834,-229.5025C329.4697,-209.0851 276.3598,-167.8761 245.5605,-143.9783"/>
+<polygon fill="#000000" stroke="#000000" points="247.5522,-141.0937 237.506,-137.7286 243.261,-146.6242 247.5522,-141.0937"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge63" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M332.9982,-229.6654C276.8141,-212.1079 172.5633,-179.5295 112.7769,-160.8463"/>
+<polygon fill="#000000" stroke="#000000" points="113.4539,-157.391 102.8651,-157.7488 111.3659,-164.0723 113.4539,-157.391"/>
+</g>
+<!-- sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge64" class="edge">
+<title>sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M192.3871,-921.6922C184.9426,-917.873 177.2896,-913.1867 171,-907.6972 128.1754,-870.3208 94.294,-811.5943 78.029,-780.1942"/>
+<polygon fill="#000000" stroke="#000000" points="81.022,-778.3576 73.3781,-771.0213 74.7787,-781.5232 81.022,-778.3576"/>
+</g>
+<!-- sourcefile~dft_partfunc.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge65" class="edge">
+<title>sourcefile~dft_partfunc.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M321.2368,-922.2565C270.4405,-910.1065 195.9884,-890.5115 171,-874.6972 131.4221,-849.6497 97.9414,-805.2554 80.4788,-779.2543"/>
+<polygon fill="#000000" stroke="#000000" points="83.3997,-777.3258 74.9864,-770.8863 77.5476,-781.1669 83.3997,-777.3258"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node28" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node28"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-116.6972 0,-116.6972 0,-92.6972 135,-92.6972 135,-116.6972"/>
+<text text-anchor="middle" x="67.5" y="-102.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge66" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.3732,-119.9033C168.8036,-118.4667 157.1437,-116.8818 145.4621,-115.294"/>
+<polygon fill="#000000" stroke="#000000" points="145.598,-111.7804 135.2177,-113.9016 144.6551,-118.7166 145.598,-111.7804"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge67" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.3732,-131.4912C158.6485,-134.3081 133.7319,-137.6948 112.6791,-140.5564"/>
+<polygon fill="#000000" stroke="#000000" points="112.1273,-137.0991 102.6898,-141.9142 113.0701,-144.0353 112.1273,-137.0991"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge68" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M505.2413,-171.9447C494.8381,-183.3118 479.8258,-201.0851 470,-218.6972 421.1045,-306.3397 388.8064,-422.8393 376.7702,-470.7251"/>
+<polygon fill="#000000" stroke="#000000" points="373.3262,-470.0728 374.328,-480.6202 380.1223,-471.7502 373.3262,-470.0728"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge69" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M470.024,-171.7213C441.2988,-179.4519 403.9595,-190.1799 371.5,-201.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.5,-201.6972C344.1384,-211.4057 333.4041,-204.9697 309,-220.6972 259.7634,-252.4285 268.1705,-283.6501 222,-319.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M222,-319.6972C152.5071,-373.953 89.218,-654.7371 72.0577,-736.3979"/>
+<polygon fill="#000000" stroke="#000000" points="68.5549,-736.0517 69.9466,-746.5547 75.4085,-737.4762 68.5549,-736.0517"/>
+</g>
+<!-- sourcefile~grid_storage.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge70" class="edge">
+<title>sourcefile~grid_storage.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M196.785,-841.5734C188.4634,-837.3797 179.2332,-832.5182 171,-827.6972 143.4422,-811.5606 113.1869,-791.0433 92.5456,-776.5905"/>
+<polygon fill="#000000" stroke="#000000" points="94.5146,-773.6963 84.3238,-770.7982 90.483,-779.4188 94.5146,-773.6963"/>
+</g>
+<!-- sourcefile~int_libint.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge71" class="edge">
+<title>sourcefile~int_libint.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M761.1054,-267.6387C732.7227,-256.9155 688.2443,-242.5076 648,-239.6972"/>
+</g>
+<!-- sourcefile~int_libint.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge72" class="edge">
+<title>sourcefile~int_libint.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M778.1538,-292.0265C756.4808,-313.6172 712.3417,-357.3408 696,-371.6972 655.1171,-407.6134 640.8612,-411.7563 600,-447.6972 561.2972,-481.7396 555.2861,-494.1869 517,-528.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-528.6972C439.32,-603.4091 478.0026,-706.1674 371.5,-722.6972"/>
+</g>
+<!-- sourcefile~int_libint.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge73" class="edge">
+<title>sourcefile~int_libint.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M759.734,-267.694C750.5767,-263.6815 740.6767,-258.894 732,-253.6972 714.6106,-243.2822 712.969,-236.7841 696,-225.6972 691.3388,-222.6518 686.289,-219.6348 681.2745,-216.7936"/>
+<polygon fill="#000000" stroke="#000000" points="682.8269,-213.6531 672.3779,-211.9012 679.4538,-219.7868 682.8269,-213.6531"/>
+</g>
+<!-- sourcefile~int_libint.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge75" class="edge">
+<title>sourcefile~int_libint.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M750.3135,-290.2903C733.6307,-294.2522 713.9993,-298.3557 696,-300.6972 643.7315,-307.497 261.6073,-284.9194 222,-319.6972"/>
+</g>
+<!-- sourcefile~libint_f.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node27" class="node">
+<title>sourcefile~libint_f.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node27"><a xlink:href="../sourcefile/libint_f.f90.html" xlink:title="libint_f.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="683,-291.6972 613,-291.6972 613,-267.6972 683,-267.6972 683,-291.6972"/>
+<text text-anchor="middle" x="648" y="-277.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">libint_f.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int_libint.f90&#45;&gt;sourcefile~libint_f.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge74" class="edge">
+<title>sourcefile~int_libint.f90&#45;&gt;sourcefile~libint_f.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M750.4266,-279.6972C732.7277,-279.6972 711.8318,-279.6972 693.5448,-279.6972"/>
+<polygon fill="#000000" stroke="#000000" points="693.4078,-276.1973 683.4078,-279.6972 693.4078,-283.1973 693.4078,-276.1973"/>
+</g>
+<!-- sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge76" class="edge">
+<title>sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M745.3811,-152.0059C716.4236,-147.934 678.6447,-146.7231 648,-159.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M648,-159.6972C626.8717,-168.6424 619.2654,-166.2367 600,-178.6972 581.2624,-190.8165 581.9217,-200.401 564,-213.6972 559.8015,-216.8122 555.1878,-219.8097 550.5422,-222.5919"/>
+<polygon fill="#000000" stroke="#000000" points="548.6231,-219.6571 541.6698,-227.651 552.0905,-225.738 548.6231,-219.6571"/>
+</g>
+<!-- sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge77" class="edge">
+<title>sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M648,-159.6972C626.8717,-168.6424 616.3912,-162.6427 600,-178.6972 588.2909,-190.1659 387.6961,-720.1835 371.5,-722.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.5,-722.6972C339.5342,-727.3164 303.6343,-723.0628 275.0273,-717.4194"/>
+<polygon fill="#000000" stroke="#000000" points="275.7349,-713.9917 265.2311,-715.3775 274.3066,-720.8445 275.7349,-713.9917"/>
+</g>
+<!-- sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge78" class="edge">
+<title>sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M745.4121,-173.7207C731.4995,-177.4307 716.0414,-181.5529 701.613,-185.4004"/>
+<polygon fill="#000000" stroke="#000000" points="700.5808,-182.0533 691.8203,-188.0118 702.3845,-188.817 700.5808,-182.0533"/>
+</g>
+<!-- sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge79" class="edge">
+<title>sourcefile~int_rotaxis.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M756.0563,-149.6804C716.7757,-138.0091 651.3553,-124.8476 600,-145.6972 579.3237,-154.0916 582.6935,-168.5101 564,-180.6972 545.1257,-193.0023 539.0111,-194.8842 517,-199.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-199.6972C452.7741,-207.2866 432.4498,-180.071 371.5,-201.6972"/>
+</g>
+<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge80" class="edge">
+<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M755.4429,-351.7677C716.1731,-343.1673 651.3043,-326.4149 600,-300.6972 577.2652,-289.3008 554.1761,-271.7419 538.1421,-258.384"/>
+<polygon fill="#000000" stroke="#000000" points="540.3257,-255.6466 530.4397,-251.8365 535.792,-260.98 540.3257,-255.6466"/>
+</g>
+<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge81" class="edge">
+<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M779.919,-370.9857C763.465,-389.5171 730.0785,-424.8705 696,-447.6972 623.45,-496.2933 585.5069,-474.5504 517,-528.6972"/>
+</g>
+<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~int2_pairs.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge82" class="edge">
+<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~int2_pairs.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.6218,-346.5266C762.8662,-335.5342 744.6063,-318.4076 732,-300.6972 710.5585,-270.5746 721.4979,-252.4735 696,-225.6972 693.0222,-222.5701 689.5839,-219.7326 685.9434,-217.1805"/>
+<polygon fill="#000000" stroke="#000000" points="687.5428,-214.0535 677.2032,-211.742 683.8446,-219.9969 687.5428,-214.0535"/>
+</g>
+<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge83" class="edge">
+<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M755.1673,-364.7252C737.4633,-367.4475 715.6613,-370.3512 696,-371.6972 653.433,-374.6114 642.5768,-374.4654 600,-371.6972 469.8434,-363.235 438.0683,-352.5049 309,-333.6972 270.2452,-328.0499 252.8699,-295.5959 222,-319.6972"/>
+</g>
+<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~rys.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge84" class="edge">
+<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M784.6952,-370.9749C773.594,-394.7231 748.953,-448.75 732,-495.6972 697.6339,-590.8654 666.1616,-707.5828 653.6779,-755.5323"/>
+<polygon fill="#000000" stroke="#000000" points="650.2302,-754.885 651.1139,-765.4429 657.007,-756.6383 650.2302,-754.885"/>
+</g>
+<!-- sourcefile~lebedev.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge85" class="edge">
+<title>sourcefile~lebedev.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M512.9566,-921.4421C493.0116,-860.99 405.021,-594.297 378.8603,-515.0058"/>
+<polygon fill="#000000" stroke="#000000" points="382.0498,-513.502 375.5928,-505.1022 375.4023,-515.6953 382.0498,-513.502"/>
+</g>
+<!-- sourcefile~lebedev.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge86" class="edge">
+<title>sourcefile~lebedev.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.7132,-921.5594C484.415,-917.5741 476.6359,-912.8352 470,-907.6972 451.6049,-893.4545 454.2309,-881.1839 434,-869.6972 409.2456,-855.6422 399.6907,-859.6478 371.5,-855.6972"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge87" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.9091,-770.2307C594.4222,-762.9357 552.9466,-751.5263 517,-741.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517,-741.6972C454.0936,-724.4965 436.0895,-713.6817 371.5,-722.6972"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge88" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.7401,-788.4273C561.1679,-811.3753 420.7708,-862.6019 371.5,-855.6972"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.5,-855.6972C273.7776,-836.9604 163.5377,-796.7676 106.4479,-774.4489"/>
+<polygon fill="#000000" stroke="#000000" points="107.6731,-771.1699 97.0861,-770.7625 105.1083,-777.6831 107.6731,-771.1699"/>
+</g>
+<!-- sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_node29" class="node">
+<title>sourcefile~rys_lut.f90</title>
+<g id="a_sourcefile~~grd2.f90~~EfferentGraph_node29"><a xlink:href="../sourcefile/rys_lut.f90.html" xlink:title="rys_lut.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="552,-713.6972 482,-713.6972 482,-689.6972 552,-689.6972 552,-713.6972"/>
+<text text-anchor="middle" x="517" y="-699.2972" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~grd2.f90~~EfferentGraph_edge89" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M624.8084,-765.6876C616.8544,-761.4235 607.9556,-756.49 600,-751.6972 583.5285,-741.7741 580.4273,-737.6933 564,-727.6972 559.1208,-724.7282 553.8858,-721.6916 548.7447,-718.7896"/>
+<polygon fill="#000000" stroke="#000000" points="550.13,-715.5552 539.6891,-713.7552 546.7286,-721.6733 550.13,-715.5552"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefilegrd2f90EfferentGraph = svgPanZoom('#sourcefilegrd2f90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Files dependent on this one</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~grd2.f90~~AfferentGraph Pages: 1 -->
+<svg id="sourcefilegrd2f90AfferentGraph" width="210pt" height="74pt"
+ viewBox="0.00 0.00 210.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~grd2.f90~~AfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>sourcefile~~grd2.f90~~AfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 206,-70 206,4 -4,4"/>
+<!-- sourcefile~grd2.f90 -->
+<g id="sourcefile~~grd2.f90~~AfferentGraph_node1" class="node">
+<title>sourcefile~grd2.f90</title>
+<polygon fill="none" stroke="#000000" points="60,-45 0,-45 0,-21 60,-21 60,-45"/>
+<text text-anchor="middle" x="30" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">grd2.F90</text>
+</g>
+<!-- sourcefile~hf_gradient.f90 -->
+<g id="sourcefile~~grd2.f90~~AfferentGraph_node2" class="node">
+<title>sourcefile~hf_gradient.f90</title>
+<g id="a_sourcefile~~grd2.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="197,-66 101,-66 101,-42 197,-42 197,-66"/>
+<text text-anchor="middle" x="149" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
+<g id="sourcefile~~grd2.f90~~AfferentGraph_edge1" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M100.9412,-45.519C90.6958,-43.711 79.9802,-41.82 70.072,-40.0715"/>
+<polygon fill="#000000" stroke="#000000" points="70.5485,-36.6016 60.0924,-38.3104 69.332,-43.4951 70.5485,-36.6016"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90 -->
+<g id="sourcefile~~grd2.f90~~AfferentGraph_node3" class="node">
+<title>sourcefile~tdhf_gradient.f90</title>
+<g id="a_sourcefile~~grd2.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="202,-24 96,-24 96,0 202,0 202,-24"/>
+<text text-anchor="middle" x="149" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
+<g id="sourcefile~~grd2.f90~~AfferentGraph_edge2" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M95.765,-21.3944C87.1497,-22.9148 78.3572,-24.4664 70.1208,-25.9199"/>
+<polygon fill="#000000" stroke="#000000" points="69.2803,-22.514 60.0407,-27.6987 70.4968,-29.4075 69.2803,-22.514"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">grd2</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="c">!###############################################################################</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="w">  </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a><span class="w">  </span><span class="k">use </span><span class="n">constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">tol_int</span>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="w">  </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="w">  </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="w">  </span><span class="k">use </span><span class="n">grd2_rys</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">grd2_int_data_t</span><span class="p">,</span><span class="w"> </span><span class="n">grd2_rys_compute</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="w">  </span><span class="k">use </span><span class="n">constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">BAS_MXANG</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a><span class="w">  </span><span class="k">use </span><span class="n">int2_compute</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">int2_compute_data_t</span><span class="p">,</span><span class="w"> </span><span class="n">ints_exchange</span>
+<a id="ln-12" name="ln-12" href="#ln-12"></a>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="c">!###############################################################################</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">  </span><span class="k">implicit none</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a>
+<a id="ln-17" name="ln-17" href="#ln-17"></a><span class="c">!###############################################################################</span>
+<a id="ln-18" name="ln-18" href="#ln-18"></a>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">  </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">module_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;grd2&quot;</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="c">!###############################################################################</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">  </span><span class="kt">character</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bfchars</span><span class="p">(</span><span class="mi">0</span><span class="p">:</span><span class="mi">6</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;S&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;P&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;D&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;F&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;G&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;H&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;I&#39;</span><span class="p">]</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="c">!###############################################################################</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">  </span><span class="k">type</span><span class="p">,</span><span class="w"> </span><span class="k">abstract</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">grd2_compute_data_t</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">attenuated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d99</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">hfscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span><span class="w"> </span><span class="c">! can be used in Responce calculations</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">coulscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cur_pass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a><span class="w">  </span><span class="k">contains</span>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="k">    procedure</span><span class="p">(</span><span class="n">grd2_compute_data_t_init</span><span class="p">),</span><span class="w"> </span><span class="k">deferred</span><span class="p">,</span><span class="w"> </span><span class="k">pass</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">init</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">    </span><span class="k">procedure</span><span class="p">(</span><span class="n">grd2_compute_data_t_clean</span><span class="p">),</span><span class="w"> </span><span class="k">deferred</span><span class="p">,</span><span class="w"> </span><span class="k">pass</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">clean</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="w">    </span><span class="k">procedure</span><span class="p">(</span><span class="n">grd2_compute_data_t_get_density</span><span class="p">),</span><span class="w"> </span><span class="k">deferred</span><span class="p">,</span><span class="w"> </span><span class="k">pass</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">get_density</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a><span class="w">  </span><span class="k">end type</span>
+<a id="ln-39" name="ln-39" href="#ln-39"></a>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="c">!###############################################################################</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">  </span><span class="k">abstract interface</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="k">    subroutine </span><span class="n">grd2_compute_data_t_init</span><span class="p">(</span><span class="n">this</span><span class="p">)</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">      </span><span class="k">import</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="k">      implicit none</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="k">      class</span><span class="p">(</span><span class="n">grd2_compute_data_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">this</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">    </span><span class="k">end subroutine</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="k">    subroutine </span><span class="n">grd2_compute_data_t_clean</span><span class="p">(</span><span class="n">this</span><span class="p">)</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">      </span><span class="k">import</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="k">      implicit none</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="k">      class</span><span class="p">(</span><span class="n">grd2_compute_data_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">this</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a><span class="w">    </span><span class="k">end subroutine</span>
+<a id="ln-55" name="ln-55" href="#ln-55"></a>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="k">    subroutine </span><span class="n">grd2_compute_data_t_get_density</span><span class="p">(</span><span class="n">this</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">dab</span><span class="p">,</span><span class="w"> </span><span class="n">dabmax</span><span class="p">)</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">      </span><span class="k">import</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="k">      implicit none</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="k">      class</span><span class="p">(</span><span class="n">grd2_compute_data_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">this</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">      </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">      </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">id</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a><span class="w">      </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dab</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">      </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dabmax</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="k">end subroutine</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="k">  end interface</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="k">  private</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="k">  public</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">grd2_driver</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">  </span><span class="k">public</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">grd2_compute_data_t</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="c">!###############################################################################</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="k">contains</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a>
+<a id="ln-75" name="ln-75" href="#ln-75"></a><span class="c">!&gt; @brief The driver for the two electron gradient</span>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">grd2_driver</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">de</span><span class="p">,</span><span class="w"> </span><span class="n">gcomp</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">                         </span><span class="n">cam</span><span class="p">,</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">mu</span><span class="p">)</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">de</span><span class="p">(:,:)</span>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">grd2_compute_data_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">gcomp</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a><span class="w">    </span><span class="kt">logical</span><span class="p">,</span><span class="w"> </span><span class="k">optional</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cam</span>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">optional</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">mu</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">de_internal</span><span class="p">(:,:)</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">do_cam</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">    </span><span class="n">do_cam</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">dft</span><span class="p">%</span><span class="n">cam_flag</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">present</span><span class="p">(</span><span class="n">cam</span><span class="p">))</span><span class="w"> </span><span class="n">do_cam</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cam</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">do_cam</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a><span class="k">      allocate</span><span class="p">(</span><span class="n">de_internal</span><span class="p">,</span><span class="w"> </span><span class="n">mold</span><span class="o">=</span><span class="n">de</span><span class="p">)</span>
+<a id="ln-100" name="ln-100" href="#ln-100"></a>
+<a id="ln-101" name="ln-101" href="#ln-101"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">cur_pass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">    </span><span class="c">! Regular Coulomb and exchange</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">      </span><span class="n">de_internal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">attenuated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">coulscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">dft</span><span class="p">%</span><span class="n">cam_alpha</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">cam_alpha</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">present</span><span class="p">(</span><span class="n">alpha</span><span class="p">))</span><span class="w"> </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">alpha</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">      </span><span class="k">call </span><span class="n">grd2_driver_gen</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">de_internal</span><span class="p">,</span><span class="w"> </span><span class="n">gcomp</span><span class="p">)</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="w">      </span><span class="n">de</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">de</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">de_internal</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">cur_pass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">    </span><span class="c">! Short-range exchange:</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="w">      </span><span class="n">de_internal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">attenuated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">coulscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0d0</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">dft</span><span class="p">%</span><span class="n">cam_beta</span>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">cam_beta</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">present</span><span class="p">(</span><span class="n">beta</span><span class="p">))</span><span class="w"> </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">beta</span>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">dft</span><span class="p">%</span><span class="n">cam_mu</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">present</span><span class="p">(</span><span class="n">mu</span><span class="p">))</span><span class="w"> </span><span class="n">gcomp</span><span class="p">%</span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mu</span>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="w">      </span><span class="k">call </span><span class="n">grd2_driver_gen</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">de_internal</span><span class="p">,</span><span class="w"> </span><span class="n">gcomp</span><span class="p">)</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a><span class="w">      </span><span class="n">de</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">de</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">de_internal</span>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">    </span><span class="k">else</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a><span class="k">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">dft</span><span class="p">%</span><span class="n">hfscale</span>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="w">      </span><span class="n">gcomp</span><span class="p">%</span><span class="n">hfscale2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">hfscale</span>
+<a id="ln-127" name="ln-127" href="#ln-127"></a><span class="w">      </span><span class="k">call </span><span class="n">grd2_driver_gen</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">de</span><span class="p">,</span><span class="w"> </span><span class="n">gcomp</span><span class="p">)</span>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a>
+<a id="ln-130" name="ln-130" href="#ln-130"></a><span class="k">  end subroutine</span>
+<a id="ln-131" name="ln-131" href="#ln-131"></a>
+<a id="ln-132" name="ln-132" href="#ln-132"></a><span class="c">!&gt; @brief The driver for the two electron gradient</span>
+<a id="ln-133" name="ln-133" href="#ln-133"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">grd2_driver_gen</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">de</span><span class="p">,</span><span class="w"> </span><span class="n">gcomp</span><span class="p">)</span>
+<a id="ln-134" name="ln-134" href="#ln-134"></a>
+<a id="ln-135" name="ln-135" href="#ln-135"></a><span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<a id="ln-137" name="ln-137" href="#ln-137"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-138" name="ln-138" href="#ln-138"></a><span class="w">    </span><span class="k">use </span><span class="n">mod_dft_molgrid</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dft_grid_t</span>
+<a id="ln-139" name="ln-139" href="#ln-139"></a><span class="w">    </span><span class="k">use </span><span class="n">int2_pairs</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">int2_pair_storage</span><span class="p">,</span><span class="w"> </span><span class="n">int2_cutoffs_t</span>
+<a id="ln-140" name="ln-140" href="#ln-140"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-141" name="ln-141" href="#ln-141"></a><span class="w">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+<a id="ln-142" name="ln-142" href="#ln-142"></a>
+<a id="ln-143" name="ln-143" href="#ln-143"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-144" name="ln-144" href="#ln-144"></a>
+<a id="ln-145" name="ln-145" href="#ln-145"></a><span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;grd2_driver_gen&quot;</span>
+<a id="ln-146" name="ln-146" href="#ln-146"></a>
+<a id="ln-147" name="ln-147" href="#ln-147"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-148" name="ln-148" href="#ln-148"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-149" name="ln-149" href="#ln-149"></a><span class="w">    </span><span class="k">class</span><span class="p">(</span><span class="n">grd2_compute_data_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">gcomp</span>
+<a id="ln-150" name="ln-150" href="#ln-150"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">de</span><span class="p">(:,:)</span>
+<a id="ln-151" name="ln-151" href="#ln-151"></a>
+<a id="ln-152" name="ln-152" href="#ln-152"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dab</span>
+<a id="ln-153" name="ln-153" href="#ln-153"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">schwarz_ints</span><span class="p">(:,:)</span>
+<a id="ln-154" name="ln-154" href="#ln-154"></a>
+<a id="ln-155" name="ln-155" href="#ln-155"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">emu2</span>
+<a id="ln-156" name="ln-156" href="#ln-156"></a>
+<a id="ln-157" name="ln-157" href="#ln-157"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cutoff</span><span class="p">,</span><span class="w"> </span><span class="n">cutoff2</span><span class="p">,</span><span class="w"> </span><span class="n">dabcut</span>
+<a id="ln-158" name="ln-158" href="#ln-158"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dabmax</span><span class="p">,</span><span class="w"> </span><span class="n">gmax</span>
+<a id="ln-159" name="ln-159" href="#ln-159"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">zbig</span>
+<a id="ln-160" name="ln-160" href="#ln-160"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">numint</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">ij</span><span class="p">,</span><span class="w"> </span><span class="n">skip1</span><span class="p">,</span><span class="w"> </span><span class="n">skip2</span><span class="p">,</span><span class="w"> </span><span class="n">mpi_ij</span>
+<a id="ln-161" name="ln-161" href="#ln-161"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">iok</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">l</span><span class="p">,</span><span class="w"> </span><span class="n">kl</span>
+<a id="ln-162" name="ln-162" href="#ln-162"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">maxnbf</span><span class="p">,</span><span class="w"> </span><span class="n">maxl</span>
+<a id="ln-163" name="ln-163" href="#ln-163"></a>
+<a id="ln-164" name="ln-164" href="#ln-164"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">rtol</span><span class="p">,</span><span class="w"> </span><span class="n">dtol</span>
+<a id="ln-165" name="ln-165" href="#ln-165"></a>
+<a id="ln-166" name="ln-166" href="#ln-166"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">grd2_int_data_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">gdat</span>
+<a id="ln-167" name="ln-167" href="#ln-167"></a>
+<a id="ln-168" name="ln-168" href="#ln-168"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">int2_pair_storage</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ppairs</span>
+<a id="ln-169" name="ln-169" href="#ln-169"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">int2_cutoffs_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cutoffs</span>
+<a id="ln-170" name="ln-170" href="#ln-170"></a>
+<a id="ln-171" name="ln-171" href="#ln-171"></a><span class="w">    </span><span class="c">! tagarray</span>
+<a id="ln-172" name="ln-172" href="#ln-172"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">status</span>
+<a id="ln-173" name="ln-173" href="#ln-173"></a>
+<a id="ln-174" name="ln-174" href="#ln-174"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<a id="ln-175" name="ln-175" href="#ln-175"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<a id="ln-176" name="ln-176" href="#ln-176"></a>
+<a id="ln-177" name="ln-177" href="#ln-177"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">gcomp</span><span class="p">%</span><span class="n">attenuated</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-178" name="ln-178" href="#ln-178"></a><span class="k">      </span><span class="n">emu2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gcomp</span><span class="p">%</span><span class="n">mu</span><span class="o">**</span><span class="mi">2</span>
+<a id="ln-179" name="ln-179" href="#ln-179"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-180" name="ln-180" href="#ln-180"></a>
+<a id="ln-181" name="ln-181" href="#ln-181"></a><span class="c">!    `cutoff` is the Schwarz screening cutoff</span>
+<a id="ln-182" name="ln-182" href="#ln-182"></a><span class="c">!    `dabcut` is the two particle density cutoff</span>
+<a id="ln-183" name="ln-183" href="#ln-183"></a><span class="w">    </span><span class="n">cutoff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d-10</span>
+<a id="ln-184" name="ln-184" href="#ln-184"></a><span class="w">    </span><span class="n">cutoff2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cutoff</span><span class="o">/</span><span class="mf">2.0d+00</span>
+<a id="ln-185" name="ln-185" href="#ln-185"></a>
+<a id="ln-186" name="ln-186" href="#ln-186"></a><span class="w">    </span><span class="n">zbig</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">maxval</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">ex</span><span class="p">)</span>
+<a id="ln-187" name="ln-187" href="#ln-187"></a><span class="w">    </span><span class="n">dabcut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d-11</span>
+<a id="ln-188" name="ln-188" href="#ln-188"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">zbig</span><span class="o">&gt;</span><span class="mf">1.0d+06</span><span class="p">)</span><span class="w"> </span><span class="n">dabcut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dabcut</span><span class="o">/</span><span class="mi">10</span>
+<a id="ln-189" name="ln-189" href="#ln-189"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">zbig</span><span class="o">&gt;</span><span class="mf">1.0d+07</span><span class="p">)</span><span class="w"> </span><span class="n">dabcut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dabcut</span><span class="o">/</span><span class="mi">10</span>
+<a id="ln-190" name="ln-190" href="#ln-190"></a>
+<a id="ln-191" name="ln-191" href="#ln-191"></a><span class="w">    </span><span class="n">dtol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="mf">0.0d0</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="n">tol_int</span><span class="p">)</span>
+<a id="ln-192" name="ln-192" href="#ln-192"></a><span class="w">    </span><span class="n">rtol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">log</span><span class="p">(</span><span class="mi">1</span><span class="mf">0.0_dp</span><span class="p">)</span><span class="o">*</span><span class="n">tol_int</span>
+<a id="ln-193" name="ln-193" href="#ln-193"></a>
+<a id="ln-194" name="ln-194" href="#ln-194"></a><span class="w">    </span><span class="k">call </span><span class="n">cutoffs</span><span class="p">%</span><span class="n">set</span><span class="p">(&amp;</span>
+<a id="ln-195" name="ln-195" href="#ln-195"></a><span class="w">            </span><span class="n">cutoff_integral_value</span><span class="o">=</span><span class="n">dabcut</span><span class="p">,&amp;</span>
+<a id="ln-196" name="ln-196" href="#ln-196"></a><span class="w">            </span><span class="n">cutoff_exp</span><span class="o">=</span><span class="n">rtol</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-197" name="ln-197" href="#ln-197"></a><span class="w">            </span><span class="n">cutoff_prefactor_pq</span><span class="o">=</span><span class="n">dtol</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-198" name="ln-198" href="#ln-198"></a><span class="w">            </span><span class="n">cutoff_prefactor_p</span><span class="o">=</span><span class="n">dtol</span><span class="p">)</span>
+<a id="ln-199" name="ln-199" href="#ln-199"></a><span class="w">    </span><span class="k">call </span><span class="n">ppairs</span><span class="p">%</span><span class="n">alloc</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">cutoffs</span><span class="p">)</span>
+<a id="ln-200" name="ln-200" href="#ln-200"></a><span class="w">    </span><span class="k">call </span><span class="n">ppairs</span><span class="p">%</span><span class="n">compute</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">cutoffs</span><span class="p">)</span>
+<a id="ln-201" name="ln-201" href="#ln-201"></a>
+<a id="ln-202" name="ln-202" href="#ln-202"></a><span class="w">    </span><span class="c">! integrals for screening</span>
+<a id="ln-203" name="ln-203" href="#ln-203"></a><span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">schwarz_ints</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span><span class="p">))</span>
+<a id="ln-204" name="ln-204" href="#ln-204"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">gcomp</span><span class="p">%</span><span class="n">attenuated</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-205" name="ln-205" href="#ln-205"></a><span class="k">      call </span><span class="n">ints_exchange</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">schwarz_ints</span><span class="p">,</span><span class="w"> </span><span class="n">emu2</span><span class="p">)</span>
+<a id="ln-206" name="ln-206" href="#ln-206"></a><span class="w">    </span><span class="k">else</span>
+<a id="ln-207" name="ln-207" href="#ln-207"></a><span class="k">      call </span><span class="n">ints_exchange</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">schwarz_ints</span><span class="p">)</span>
+<a id="ln-208" name="ln-208" href="#ln-208"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-209" name="ln-209" href="#ln-209"></a>
+<a id="ln-210" name="ln-210" href="#ln-210"></a><span class="c">!   Initialize the integral block counters to zero</span>
+<a id="ln-211" name="ln-211" href="#ln-211"></a><span class="w">    </span><span class="n">skip1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-212" name="ln-212" href="#ln-212"></a><span class="w">    </span><span class="n">skip2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-213" name="ln-213" href="#ln-213"></a><span class="w">    </span><span class="n">numint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-214" name="ln-214" href="#ln-214"></a>
+<a id="ln-215" name="ln-215" href="#ln-215"></a><span class="c">!   Check maximum angular momentum</span>
+<a id="ln-216" name="ln-216" href="#ln-216"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">mxam</span><span class="o">&gt;</span><span class="n">BAS_MXANG</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-217" name="ln-217" href="#ln-217"></a><span class="k">      call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;gradient integrals programmed up to &#39;</span><span class="p">&amp;</span>
+<a id="ln-218" name="ln-218" href="#ln-218"></a><span class="w">              </span><span class="o">//</span><span class="n">bfchars</span><span class="p">(</span><span class="n">BAS_MXANG</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">//</span><span class="s1">&#39; functions&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<a id="ln-219" name="ln-219" href="#ln-219"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-220" name="ln-220" href="#ln-220"></a>
+<a id="ln-221" name="ln-221" href="#ln-221"></a><span class="c">!   Calculate the largest shell type</span>
+<a id="ln-222" name="ln-222" href="#ln-222"></a><span class="w">    </span><span class="n">maxnbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">mxam</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">mxam</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+<a id="ln-223" name="ln-223" href="#ln-223"></a>
+<a id="ln-224" name="ln-224" href="#ln-224"></a><span class="c">!   Square dtol for use in grd2_rys_compute</span>
+<a id="ln-225" name="ln-225" href="#ln-225"></a><span class="w">    </span><span class="n">dtol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtol</span><span class="o">*</span><span class="n">dtol</span>
+<a id="ln-226" name="ln-226" href="#ln-226"></a>
+<a id="ln-227" name="ln-227" href="#ln-227"></a><span class="c">!$omp parallel &amp;</span>
+<a id="ln-228" name="ln-228" href="#ln-228"></a><span class="c">!$omp   private ( &amp;</span>
+<a id="ln-229" name="ln-229" href="#ln-229"></a><span class="c">!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij) &amp;</span>
+<a id="ln-230" name="ln-230" href="#ln-230"></a><span class="c">!$omp   reduction(+:skip1, skip2, numint, de)</span>
+<a id="ln-231" name="ln-231" href="#ln-231"></a>
+<a id="ln-232" name="ln-232" href="#ln-232"></a><span class="w">     </span><span class="k">allocate</span><span class="p">(</span><span class="n">dab</span><span class="p">(</span><span class="n">maxnbf</span><span class="o">**</span><span class="mi">4</span><span class="p">))</span>
+<a id="ln-233" name="ln-233" href="#ln-233"></a>
+<a id="ln-234" name="ln-234" href="#ln-234"></a><span class="w">    </span><span class="k">call </span><span class="n">gdat</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">mxam</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">dtol</span><span class="p">,</span><span class="w"> </span><span class="n">dabcut</span><span class="p">,</span><span class="w"> </span><span class="n">iok</span><span class="p">)</span>
+<a id="ln-235" name="ln-235" href="#ln-235"></a>
+<a id="ln-236" name="ln-236" href="#ln-236"></a><span class="c">!$omp barrier</span>
+<a id="ln-237" name="ln-237" href="#ln-237"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-238" name="ln-238" href="#ln-238"></a><span class="k">       </span><span class="n">mpi_ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-239" name="ln-239" href="#ln-239"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-240" name="ln-240" href="#ln-240"></a>
+<a id="ln-241" name="ln-241" href="#ln-241"></a><span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span>
+<a id="ln-242" name="ln-242" href="#ln-242"></a><span class="w">      </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-243" name="ln-243" href="#ln-243"></a><span class="w">        </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="o">*</span><span class="p">(</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">j</span>
+<a id="ln-244" name="ln-244" href="#ln-244"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">ij</span><span class="p">)</span><span class="o">==</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">cycle</span>
+<a id="ln-245" name="ln-245" href="#ln-245"></a><span class="k">        if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-246" name="ln-246" href="#ln-246"></a><span class="k">           </span><span class="n">mpi_ij</span><span class="o">=</span><span class="n">mpi_ij</span><span class="o">+</span><span class="mi">1</span>
+<a id="ln-247" name="ln-247" href="#ln-247"></a><span class="w">           </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">mod</span><span class="p">(</span><span class="n">mpi_ij</span><span class="p">,</span><span class="w"> </span><span class="n">pe</span><span class="p">%</span><span class="n">size</span><span class="p">)</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="p">)</span><span class="w"> </span><span class="k">cycle</span>
+<a id="ln-248" name="ln-248" href="#ln-248"></a><span class="k">        end if</span>
+<a id="ln-249" name="ln-249" href="#ln-249"></a>
+<a id="ln-250" name="ln-250" href="#ln-250"></a><span class="c">!$omp do schedule(dynamic,4) collapse(2)</span>
+<a id="ln-251" name="ln-251" href="#ln-251"></a><span class="w">        </span><span class="k">do </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-252" name="ln-252" href="#ln-252"></a><span class="w">          </span><span class="k">do </span><span class="n">l</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-253" name="ln-253" href="#ln-253"></a><span class="w">          </span><span class="n">maxl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">k</span>
+<a id="ln-254" name="ln-254" href="#ln-254"></a><span class="w">          </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">k</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="n">maxl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">j</span>
+<a id="ln-255" name="ln-255" href="#ln-255"></a><span class="w">          </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">l</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">maxl</span><span class="p">)</span><span class="w"> </span><span class="k">cycle</span>
+<a id="ln-256" name="ln-256" href="#ln-256"></a>
+<a id="ln-257" name="ln-257" href="#ln-257"></a><span class="k">            </span><span class="n">kl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">k</span><span class="o">*</span><span class="p">(</span><span class="n">k</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">l</span>
+<a id="ln-258" name="ln-258" href="#ln-258"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">kl</span><span class="p">)</span><span class="o">==</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">cycle</span>
+<a id="ln-259" name="ln-259" href="#ln-259"></a>
+<a id="ln-260" name="ln-260" href="#ln-260"></a><span class="k">            </span><span class="n">gmax</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">schwarz_ints</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span><span class="o">*</span><span class="n">schwarz_ints</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">l</span><span class="p">)</span>
+<a id="ln-261" name="ln-261" href="#ln-261"></a>
+<a id="ln-262" name="ln-262" href="#ln-262"></a><span class="c">!           Coarse screening, on just the integral value</span>
+<a id="ln-263" name="ln-263" href="#ln-263"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">gmax</span><span class="o">&lt;</span><span class="n">cutoff</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-264" name="ln-264" href="#ln-264"></a><span class="k">               </span><span class="n">skip1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">skip1</span><span class="o">+</span><span class="mi">1</span>
+<a id="ln-265" name="ln-265" href="#ln-265"></a><span class="w">               </span><span class="k">cycle</span>
+<a id="ln-266" name="ln-266" href="#ln-266"></a><span class="k">            end if</span>
+<a id="ln-267" name="ln-267" href="#ln-267"></a>
+<a id="ln-268" name="ln-268" href="#ln-268"></a><span class="c">!           Select centers for derivatives</span>
+<a id="ln-269" name="ln-269" href="#ln-269"></a><span class="w">            </span><span class="k">call </span><span class="n">gdat</span><span class="p">%</span><span class="n">set_ids</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">l</span><span class="p">)</span>
+<a id="ln-270" name="ln-270" href="#ln-270"></a>
+<a id="ln-271" name="ln-271" href="#ln-271"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="k">all</span><span class="p">(</span><span class="n">gdat</span><span class="p">%</span><span class="n">skip</span><span class="p">(:)))</span><span class="w"> </span><span class="k">cycle</span>
+<a id="ln-272" name="ln-272" href="#ln-272"></a>
+<a id="ln-273" name="ln-273" href="#ln-273"></a><span class="c">!           Obtain 2 body density for this shell block</span>
+<a id="ln-274" name="ln-274" href="#ln-274"></a><span class="w">            </span><span class="k">call </span><span class="n">gcomp</span><span class="p">%</span><span class="n">get_density</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="n">gdat</span><span class="p">%</span><span class="n">id</span><span class="p">,</span><span class="n">dab</span><span class="p">,</span><span class="n">dabmax</span><span class="p">)</span>
+<a id="ln-275" name="ln-275" href="#ln-275"></a>
+<a id="ln-276" name="ln-276" href="#ln-276"></a><span class="c">!           Fine screening, on integral value times density factor</span>
+<a id="ln-277" name="ln-277" href="#ln-277"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">dabmax</span><span class="o">*</span><span class="n">gmax</span><span class="o">&lt;</span><span class="n">cutoff2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-278" name="ln-278" href="#ln-278"></a><span class="k">               </span><span class="n">skip2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">skip2</span><span class="o">+</span><span class="mi">1</span>
+<a id="ln-279" name="ln-279" href="#ln-279"></a><span class="w">               </span><span class="k">cycle</span>
+<a id="ln-280" name="ln-280" href="#ln-280"></a><span class="k">            end if</span>
+<a id="ln-281" name="ln-281" href="#ln-281"></a>
+<a id="ln-282" name="ln-282" href="#ln-282"></a><span class="c">!           Evaluate derivative integral, and add to the gradient</span>
+<a id="ln-283" name="ln-283" href="#ln-283"></a><span class="w">            </span><span class="n">numint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">numint</span><span class="o">+</span><span class="mi">1</span>
+<a id="ln-284" name="ln-284" href="#ln-284"></a>
+<a id="ln-285" name="ln-285" href="#ln-285"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">gcomp</span><span class="p">%</span><span class="n">attenuated</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-286" name="ln-286" href="#ln-286"></a><span class="k">              call </span><span class="n">grd2_rys_compute</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ppairs</span><span class="p">,</span><span class="w"> </span><span class="n">dab</span><span class="p">,</span><span class="w"> </span><span class="n">dabmax</span><span class="p">,</span><span class="w"> </span><span class="n">emu2</span><span class="p">)</span>
+<a id="ln-287" name="ln-287" href="#ln-287"></a><span class="w">            </span><span class="k">else</span>
+<a id="ln-288" name="ln-288" href="#ln-288"></a><span class="k">              call </span><span class="n">grd2_rys_compute</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ppairs</span><span class="p">,</span><span class="w"> </span><span class="n">dab</span><span class="p">,</span><span class="w"> </span><span class="n">dabmax</span><span class="p">)</span>
+<a id="ln-289" name="ln-289" href="#ln-289"></a><span class="w">            </span><span class="k">end if</span>
+<a id="ln-290" name="ln-290" href="#ln-290"></a>
+<a id="ln-291" name="ln-291" href="#ln-291"></a><span class="k">            </span><span class="n">de</span><span class="p">(:,</span><span class="n">gdat</span><span class="p">%</span><span class="n">at</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">de</span><span class="p">(:,</span><span class="n">gdat</span><span class="p">%</span><span class="n">at</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">gdat</span><span class="p">%</span><span class="n">fd</span>
+<a id="ln-292" name="ln-292" href="#ln-292"></a>
+<a id="ln-293" name="ln-293" href="#ln-293"></a><span class="w">          </span><span class="k">end do</span>
+<a id="ln-294" name="ln-294" href="#ln-294"></a><span class="k">        end do</span>
+<a id="ln-295" name="ln-295" href="#ln-295"></a><span class="c">!$omp end do</span>
+<a id="ln-296" name="ln-296" href="#ln-296"></a>
+<a id="ln-297" name="ln-297" href="#ln-297"></a><span class="w">      </span><span class="k">end do</span>
+<a id="ln-298" name="ln-298" href="#ln-298"></a><span class="k">    end do</span>
+<a id="ln-299" name="ln-299" href="#ln-299"></a>
+<a id="ln-300" name="ln-300" href="#ln-300"></a><span class="k">    call </span><span class="n">gdat</span><span class="p">%</span><span class="n">clean</span><span class="p">()</span>
+<a id="ln-301" name="ln-301" href="#ln-301"></a><span class="c">!$omp end parallel</span>
+<a id="ln-302" name="ln-302" href="#ln-302"></a>
+<a id="ln-303" name="ln-303" href="#ln-303"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">allreduce</span><span class="p">(</span><span class="n">skip1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-304" name="ln-304" href="#ln-304"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">allreduce</span><span class="p">(</span><span class="n">skip2</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-305" name="ln-305" href="#ln-305"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">allreduce</span><span class="p">(</span><span class="n">numint</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-306" name="ln-306" href="#ln-306"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">allreduce</span><span class="p">(</span><span class="n">de</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">(</span><span class="n">de</span><span class="p">))</span>
+<a id="ln-307" name="ln-307" href="#ln-307"></a><span class="c">!   Finish up the final gradient</span>
+<a id="ln-308" name="ln-308" href="#ln-308"></a><span class="c">!   Project rotational contaminant from gradients</span>
+<a id="ln-309" name="ln-309" href="#ln-309"></a><span class="c">!   call dfinal(1)</span>
+<a id="ln-310" name="ln-310" href="#ln-310"></a>
+<a id="ln-311" name="ln-311" href="#ln-311"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="n">fmt</span><span class="o">=</span><span class="s2">&quot;( &amp;</span>
+<a id="ln-312" name="ln-312" href="#ln-312"></a><span class="s2">      &amp;/1X,&#39;The Coarse/fine Schwarz Screenings Skipped &#39;,I12,&#39;/&#39;I12,&#39; Blocks.&#39; &amp;</span>
+<a id="ln-313" name="ln-313" href="#ln-313"></a><span class="s2">      &amp;/1X,&#39;The Number of Gradient Integral Blocks Computed Was&#39;,I10 &amp;</span>
+<a id="ln-314" name="ln-314" href="#ln-314"></a><span class="s2">      &amp;)&quot;</span><span class="p">)</span><span class="w"> </span><span class="n">skip1</span><span class="p">,</span><span class="n">skip2</span><span class="p">,</span><span class="n">numint</span>
+<a id="ln-315" name="ln-315" href="#ln-315"></a>
+<a id="ln-316" name="ln-316" href="#ln-316"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">grd2_driver_gen</span>
+<a id="ln-317" name="ln-317" href="#ln-317"></a>
+<a id="ln-318" name="ln-318" href="#ln-318"></a><span class="c">!###############################################################################</span>
+<a id="ln-319" name="ln-319" href="#ln-319"></a>
+<a id="ln-320" name="ln-320" href="#ln-320"></a><span class="k">end module </span><span class="n">grd2</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

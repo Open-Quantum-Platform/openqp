@@ -1,0 +1,746 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>add_ecpder &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>add_ecpder
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for procedures.">56 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/ecp.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/ecp.f90.html'>ecp.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/ecp_tool.html'>ecp_tool</a></li>
+            <li class="breadcrumb-item active" aria-current="page">add_ecpder</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/add_ecpder.html#src">add_ecpder</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine add_ecpder(basis, coord, denab, de)  
+</h2>
+    
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~29"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coord~2"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>coord</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-denab"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>denab</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-de"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>de</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~add_ecpder~~CallsGraph Pages: 1 -->
+<svg id="procadd_ecpderCallsGraph" width="258pt" height="284pt"
+ viewBox="0.00 0.00 258.00 284.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~add_ecpder~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 280)">
+<title>proc~~add_ecpder~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-280 254,-280 254,4 -4,4"/>
+<!-- proc~add_ecpder -->
+<g id="proc~~add_ecpder~~CallsGraph_node1" class="node">
+<title>proc~add_ecpder</title>
+<polygon fill="none" stroke="#000000" points="76,-150 0,-150 0,-126 76,-126 76,-150"/>
+<text text-anchor="middle" x="38" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">add_ecpder</text>
+</g>
+<!-- interface~compute_first_derivs -->
+<g id="proc~~add_ecpder~~CallsGraph_node2" class="node">
+<title>interface~compute_first_derivs</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node2"><a xlink:href="../interface/compute_first_derivs.html" xlink:title="compute_first_derivs">
+<polygon fill="#a7506f" stroke="#a7506f" points="242.5,-276 119.5,-276 119.5,-252 242.5,-252 242.5,-276"/>
+<text text-anchor="middle" x="181" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">compute_first_derivs</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~compute_first_derivs -->
+<g id="proc~~add_ecpder~~CallsGraph_edge1" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~compute_first_derivs</title>
+<path fill="none" stroke="#000000" d="M43.2141,-150.0421C53.2805,-171.8747 77.4854,-218.0373 112,-243 114.1307,-244.541 116.3761,-245.9705 118.7031,-247.2964"/>
+<polygon fill="#000000" stroke="#000000" points="117.499,-250.606 128.0128,-251.9139 120.6093,-244.335 117.499,-250.606"/>
+</g>
+<!-- interface~free_integrator -->
+<g id="proc~~add_ecpder~~CallsGraph_node3" class="node">
+<title>interface~free_integrator</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node3"><a xlink:href="../interface/free_integrator.html" xlink:title="free_integrator">
+<polygon fill="#a7506f" stroke="#a7506f" points="227.5,-234 134.5,-234 134.5,-210 227.5,-210 227.5,-234"/>
+<text text-anchor="middle" x="181" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">free_integrator</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~free_integrator -->
+<g id="proc~~add_ecpder~~CallsGraph_edge2" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~free_integrator</title>
+<path fill="none" stroke="#000000" d="M49.4043,-150.3944C63.0322,-164.5191 87.1292,-187.4014 112,-201 116.0015,-203.1879 120.2611,-205.1784 124.6244,-206.9832"/>
+<polygon fill="#000000" stroke="#000000" points="123.6904,-210.3721 134.2818,-210.6425 126.1707,-203.8262 123.6904,-210.3721"/>
+</g>
+<!-- interface~free_result -->
+<g id="proc~~add_ecpder~~CallsGraph_node4" class="node">
+<title>interface~free_result</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node4"><a xlink:href="../interface/free_result.html" xlink:title="free_result">
+<polygon fill="#a7506f" stroke="#a7506f" points="216,-192 146,-192 146,-168 216,-168 216,-192"/>
+<text text-anchor="middle" x="181" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">free_result</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~free_result -->
+<g id="proc~~add_ecpder~~CallsGraph_edge3" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~free_result</title>
+<path fill="none" stroke="#000000" d="M76.3214,-149.2552C94.6386,-154.6351 116.6886,-161.1113 135.8178,-166.7297"/>
+<polygon fill="#000000" stroke="#000000" points="134.9386,-170.1193 145.5197,-169.5792 136.9113,-163.4029 134.9386,-170.1193"/>
+</g>
+<!-- interface~init_integrator -->
+<g id="proc~~add_ecpder~~CallsGraph_node5" class="node">
+<title>interface~init_integrator</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node5"><a xlink:href="../interface/init_integrator.html" xlink:title="init_integrator">
+<polygon fill="#a7506f" stroke="#a7506f" points="225,-150 137,-150 137,-126 225,-126 225,-150"/>
+<text text-anchor="middle" x="181" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">init_integrator</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~init_integrator -->
+<g id="proc~~add_ecpder~~CallsGraph_edge4" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~init_integrator</title>
+<path fill="none" stroke="#000000" d="M76.3214,-138C91.7365,-138 109.7954,-138 126.5322,-138"/>
+<polygon fill="#000000" stroke="#000000" points="126.747,-141.5001 136.747,-138 126.7469,-134.5001 126.747,-141.5001"/>
+</g>
+<!-- interface~init_integrator_instance -->
+<g id="proc~~add_ecpder~~CallsGraph_node6" class="node">
+<title>interface~init_integrator_instance</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node6"><a xlink:href="../interface/init_integrator_instance.html" xlink:title="init_integrator_instance">
+<polygon fill="#a7506f" stroke="#a7506f" points="250,-108 112,-108 112,-84 250,-84 250,-108"/>
+<text text-anchor="middle" x="181" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">init_integrator_instance</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~init_integrator_instance -->
+<g id="proc~~add_ecpder~~CallsGraph_edge5" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~init_integrator_instance</title>
+<path fill="none" stroke="#000000" d="M76.3214,-126.7448C92.9348,-121.8653 112.619,-116.0839 130.4095,-110.8587"/>
+<polygon fill="#000000" stroke="#000000" points="131.4584,-114.1986 140.0668,-108.0223 129.4858,-107.4823 131.4584,-114.1986"/>
+</g>
+<!-- interface~set_ecp_basis -->
+<g id="proc~~add_ecpder~~CallsGraph_node7" class="node">
+<title>interface~set_ecp_basis</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node7"><a xlink:href="../interface/set_ecp_basis.html" xlink:title="set_ecp_basis">
+<polygon fill="#a7506f" stroke="#a7506f" points="223.5,-66 138.5,-66 138.5,-42 223.5,-42 223.5,-66"/>
+<text text-anchor="middle" x="181" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">set_ecp_basis</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;interface~set_ecp_basis -->
+<g id="proc~~add_ecpder~~CallsGraph_edge6" class="edge">
+<title>proc~add_ecpder&#45;&gt;interface~set_ecp_basis</title>
+<path fill="none" stroke="#000000" d="M49.4043,-125.6056C63.0322,-111.4809 87.1292,-88.5986 112,-75 117.2084,-72.1522 122.8539,-69.639 128.5961,-67.4342"/>
+<polygon fill="#000000" stroke="#000000" points="130.0274,-70.6406 138.2909,-64.0099 127.6961,-64.0402 130.0274,-70.6406"/>
+</g>
+<!-- none~bf_to_shell -->
+<g id="proc~~add_ecpder~~CallsGraph_node8" class="node">
+<title>none~bf_to_shell</title>
+<g id="a_proc~~add_ecpder~~CallsGraph_node8"><a xlink:href="../type/basis_set.html#boundprocedure-bf_to_shell" xlink:title="basis_set%bf_to_shell">
+<polygon fill="#a7506f" stroke="#a7506f" points="244.5,-24 117.5,-24 117.5,0 244.5,0 244.5,-24"/>
+<text text-anchor="middle" x="181" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_set%bf_to_shell</text>
+</a>
+</g>
+</g>
+<!-- proc~add_ecpder&#45;&gt;none~bf_to_shell -->
+<g id="proc~~add_ecpder~~CallsGraph_edge7" class="edge">
+<title>proc~add_ecpder&#45;&gt;none~bf_to_shell</title>
+<path fill="none" stroke="#000000" d="M43.2141,-125.9579C53.2805,-104.1253 77.4854,-57.9627 112,-33 114.1307,-31.459 116.3761,-30.0295 118.7031,-28.7036"/>
+<polygon fill="#000000" stroke="#000000" points="120.6093,-31.665 128.0128,-24.0861 117.499,-25.394 120.6093,-31.665"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~add_ecpder~~CalledByGraph Pages: 1 -->
+<svg id="procadd_ecpderCalledByGraph" width="572pt" height="74pt"
+ viewBox="0.00 0.00 572.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~add_ecpder~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~add_ecpder~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 568,-70 568,4 -4,4"/>
+<!-- proc~add_ecpder -->
+<g id="proc~~add_ecpder~~CalledByGraph_node1" class="node">
+<title>proc~add_ecpder</title>
+<polygon fill="none" stroke="#000000" points="564,-45 488,-45 488,-21 564,-21 564,-45"/>
+<text text-anchor="middle" x="526" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">add_ecpder</text>
+</g>
+<!-- proc~grad_1e_ecp -->
+<g id="proc~~add_ecpder~~CalledByGraph_node2" class="node">
+<title>proc~grad_1e_ecp</title>
+<g id="a_proc~~add_ecpder~~CalledByGraph_node2"><a xlink:href="../proc/grad_1e_ecp.html" xlink:title="grad_1e_ecp">
+<polygon fill="#d9534f" stroke="#d9534f" points="452,-45 371,-45 371,-21 452,-21 452,-45"/>
+<text text-anchor="middle" x="411.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_1e_ecp</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_1e_ecp&#45;&gt;proc~add_ecpder -->
+<g id="proc~~add_ecpder~~CalledByGraph_edge1" class="edge">
+<title>proc~grad_1e_ecp&#45;&gt;proc~add_ecpder</title>
+<path fill="none" stroke="#000000" d="M452.1908,-33C460.4165,-33 469.1411,-33 477.6015,-33"/>
+<polygon fill="#000000" stroke="#000000" points="477.7389,-36.5001 487.7389,-33 477.7388,-29.5001 477.7389,-36.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~add_ecpder~~CalledByGraph_node3" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~add_ecpder~~CalledByGraph_node3"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="330.5,-66 257.5,-66 257.5,-42 330.5,-42 330.5,-66"/>
+<text text-anchor="middle" x="294" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_1e_ecp -->
+<g id="proc~~add_ecpder~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_1e_ecp</title>
+<path fill="none" stroke="#000000" d="M330.5336,-47.4706C340.1336,-45.7548 350.6616,-43.8732 360.8575,-42.051"/>
+<polygon fill="#000000" stroke="#000000" points="361.6678,-45.4617 370.8961,-40.2569 360.4362,-38.5709 361.6678,-45.4617"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~add_ecpder~~CalledByGraph_node4" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~add_ecpder~~CalledByGraph_node4"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="335,-24 253,-24 253,0 335,0 335,-24"/>
+<text text-anchor="middle" x="294" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_1e_ecp -->
+<g id="proc~~add_ecpder~~CalledByGraph_edge3" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_1e_ecp</title>
+<path fill="none" stroke="#000000" d="M335.0958,-19.3448C343.3723,-20.824 352.1641,-22.3953 360.7257,-23.9254"/>
+<polygon fill="#000000" stroke="#000000" points="360.166,-27.3808 370.6258,-25.6948 361.3976,-20.49 360.166,-27.3808"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~add_ecpder~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~add_ecpder~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~add_ecpder~~CalledByGraph_edge4" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M217.29,-12C225.459,-12 234.1015,-12 242.5254,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6458,-15.5001 252.6458,-12 242.6457,-8.5001 242.6458,-15.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~add_ecpder~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~add_ecpder~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~add_ecpder~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">    </span><span class="k">subroutine </span><span class="n">add_ecpder</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="n">denab</span><span class="p">,</span><span class="w"> </span><span class="n">de</span><span class="p">)</span>
+
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">coord</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">        </span><span class="kt">REAL</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">INTENT</span><span class="p">(</span><span class="n">INOUT</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">denab</span><span class="p">(:)</span>
+<span class="w">        </span><span class="kt">REAL</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">INOUT</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">de</span><span class="p">(:,:)</span>
+
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="n">ecp_result</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">result_ptr</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">integrator</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="kt">c_double</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">(:)</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">res_x</span><span class="p">(:),</span><span class="w"> </span><span class="n">res_y</span><span class="p">(:),</span><span class="w"> </span><span class="n">res_z</span><span class="p">(:)</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">deloc</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">natm</span><span class="p">,</span><span class="w"> </span><span class="n">prim</span>
+<span class="w">        </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tri_size</span><span class="p">,</span><span class="w"> </span><span class="n">full_size</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">driv_order</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.(</span><span class="n">basis</span><span class="p">%</span><span class="n">ecp_params</span><span class="p">%</span><span class="n">is_ecp</span><span class="p">))</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            return</span>
+<span class="k">        end if</span>
+
+<span class="k">        </span><span class="n">driv_order</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+
+<span class="w">        </span><span class="n">tri_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">        </span><span class="n">full_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+
+<span class="w">        </span><span class="k">allocate</span><span class="p">(</span><span class="n">res_x</span><span class="p">(</span><span class="n">full_size</span><span class="p">))</span>
+<span class="w">        </span><span class="k">allocate</span><span class="p">(</span><span class="n">res_y</span><span class="p">(</span><span class="n">full_size</span><span class="p">))</span>
+<span class="w">        </span><span class="k">allocate</span><span class="p">(</span><span class="n">res_z</span><span class="p">(</span><span class="n">full_size</span><span class="p">))</span>
+
+<span class="w">        </span><span class="n">natm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">size</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="nb">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="w">        </span><span class="k">allocate</span><span class="p">(</span><span class="n">deloc</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">natm</span><span class="p">))</span>
+<span class="w">        </span><span class="n">deloc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="w">        </span><span class="k">call </span><span class="n">set_integrator</span><span class="p">(</span><span class="n">integrator</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="n">driv_order</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">result_ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">compute_first_derivs</span><span class="p">(</span><span class="n">integrator</span><span class="p">)</span>
+
+<span class="w">        </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">result_ptr</span><span class="p">%</span><span class="k">data</span><span class="p">,</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">result_ptr</span><span class="p">%</span><span class="n">size</span><span class="p">])</span>
+
+
+<span class="w">        </span><span class="k">do </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">natm</span>
+<span class="w">            </span><span class="n">res_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">(</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span>
+<span class="w">            </span><span class="n">res_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">(</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span>
+<span class="w">            </span><span class="n">res_z</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">libecp_res</span><span class="p">(</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">full_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="p">))</span>
+<span class="w">            </span><span class="k">call </span><span class="n">transform_matrix</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">res_x</span><span class="p">)</span>
+<span class="w">            </span><span class="k">call </span><span class="n">transform_matrix</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">res_y</span><span class="p">)</span>
+<span class="w">            </span><span class="k">call </span><span class="n">transform_matrix</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">res_z</span><span class="p">)</span>
+
+<span class="w">            </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">                </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">j</span>
+<span class="w">                    </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">i</span>
+
+<span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">                        </span><span class="n">prim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">                    </span><span class="k">else</span>
+<span class="k">                        </span><span class="n">prim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">                    </span><span class="k">end if</span>
+
+<span class="k">                    </span><span class="n">deloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">prim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">res_x</span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">denab</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<span class="w">                    </span><span class="n">deloc</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deloc</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">prim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">res_y</span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">denab</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<span class="w">                    </span><span class="n">deloc</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deloc</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">prim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">res_z</span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">denab</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<span class="w">                </span><span class="k">end do</span>
+<span class="k">            end do</span>
+
+<span class="k">        end do</span>
+
+<span class="k">        </span><span class="n">de</span><span class="p">(:,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">natm</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">de</span><span class="p">(:,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">natm</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">deloc</span><span class="p">(:,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">natm</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">result_ptr</span><span class="p">%</span><span class="k">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_null_ptr</span>
+<span class="nb">        </span><span class="n">result_ptr</span><span class="p">%</span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">        </span><span class="k">nullify</span><span class="p">(</span><span class="n">libecp_res</span><span class="p">)</span>
+
+<span class="w">        </span><span class="k">call </span><span class="n">free_integrator</span><span class="p">(</span><span class="n">integrator</span><span class="p">)</span>
+<span class="w">        </span><span class="k">call </span><span class="n">free_result</span><span class="p">(</span><span class="n">result_ptr</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">end subroutine </span><span class="n">add_ecpder</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,898 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>int2_td_data_t_parallel_stop &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>int2_td_data_t_parallel_stop
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">20 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_lib.f90.html'>tdhf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_lib.html'>tdhf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">int2_td_data_t_parallel_stop</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine int2_td_data_t_parallel_stop(this)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~int2_td_data_t_parallel_stop~~UsesGraph Pages: 1 -->
+<svg id="procint2_td_data_t_parallel_stopUsesGraph" width="641pt" height="143pt"
+ viewBox="0.00 0.00 641.00 143.09" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph" class="graph" transform="scale(.6863 .6863) rotate(0) translate(4 204.4982)">
+<title>proc~~int2_td_data_t_parallel_stop~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-204.4982 930,-204.4982 930,4 -4,4"/>
+<!-- proc~int2_td_data_t_parallel_stop -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node1" class="node">
+<title>proc~int2_td_data_t_parallel_stop</title>
+<polygon fill="none" stroke="#000000" points="926,-37.4982 682,-37.4982 682,-13.4982 926,-13.4982 926,-37.4982"/>
+<text text-anchor="middle" x="804" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int2_td_data_t%int2_td_data_t_parallel_stop</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-37.4982 592,-37.4982 592,-13.4982 646,-13.4982 646,-37.4982"/>
+<text text-anchor="middle" x="619" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge1" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.8907,-25.4982C672.8054,-25.4982 664.1462,-25.4982 656.318,-25.4982"/>
+<polygon fill="#000000" stroke="#000000" points="656.1965,-21.9983 646.1964,-25.4982 656.1964,-28.9983 656.1965,-21.9983"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node3" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node3"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-57.4982 489,-57.4982 489,-33.4982 556,-33.4982 556,-57.4982"/>
+<text text-anchor="middle" x="522.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge2" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-31.1225C583.9291,-32.7668 575.0471,-34.6076 566.3567,-36.4087"/>
+<polygon fill="#000000" stroke="#000000" points="565.393,-33.034 556.3114,-38.4907 566.8136,-39.8883 565.393,-33.034"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-74.4982 142,-74.4982 142,-50.4982 203,-50.4982 203,-74.4982"/>
+<text text-anchor="middle" x="172.5" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge3" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9443,-20.2584C536.0998,-10.2278 404.1189,9.4224 294.5,-5.4982"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-5.4982C258.8005,-10.6557 221.8177,-30.3009 198.0658,-45.0973"/>
+<polygon fill="#000000" stroke="#000000" points="196.176,-42.1512 189.6407,-50.4904 199.9499,-48.0468 196.176,-42.1512"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node6" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node6"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-57.4982 380.5,-57.4982 380.5,-33.4982 446.5,-33.4982 446.5,-57.4982"/>
+<text text-anchor="middle" x="413.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge4" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-45.4982C478.7628,-45.4982 467.4795,-45.4982 456.7965,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="456.7947,-41.9983 446.7947,-45.4982 456.7947,-48.9983 456.7947,-41.9983"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node7" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node7"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-99.4982 374,-99.4982 374,-75.4982 453,-75.4982 453,-99.4982"/>
+<text text-anchor="middle" x="413.5" y="-85.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge5" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-57.5337C479.7487,-61.9712 466.5263,-67.066 454.29,-71.7809"/>
+<polygon fill="#000000" stroke="#000000" points="452.8124,-68.5994 444.7396,-75.4609 455.3293,-75.1313 452.8124,-68.5994"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-74.4982 0,-74.4982 0,-50.4982 94,-50.4982 94,-74.4982"/>
+<text text-anchor="middle" x="47" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge6" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-62.4982C130.4618,-62.4982 117.2165,-62.4982 104.2832,-62.4982"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-58.9983 94.0202,-62.4982 104.0202,-65.9983 104.0203,-58.9983"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge9" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-33.2968C371.6437,-19.7798 331.214,-.5009 294.5,-5.4982"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node8" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node8"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-57.4982 251,-57.4982 251,-33.4982 338,-33.4982 338,-57.4982"/>
+<text text-anchor="middle" x="294.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge7" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-45.4982C370.4498,-45.4982 359.3275,-45.4982 348.4544,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-41.9983 338.1539,-45.4982 348.1539,-48.9983 348.154,-41.9983"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node9" class="node">
+<title>module~messages</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node9"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-137.4982 261.5,-137.4982 261.5,-113.4982 327.5,-113.4982 327.5,-137.4982"/>
+<text text-anchor="middle" x="294.5" y="-123.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge8" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-57.5933C384.2087,-60.3782 378.8585,-63.4281 374,-66.4982 354.1394,-79.0481 332.823,-95.0165 317.2673,-107.175"/>
+<polygon fill="#000000" stroke="#000000" points="314.945,-104.5491 309.2638,-113.4919 319.2818,-110.0438 314.945,-104.5491"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge12" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-83.3979C329.6221,-78.7972 258.0316,-71.3708 213.2045,-66.7206"/>
+<polygon fill="#000000" stroke="#000000" points="213.5495,-63.2377 203.2418,-65.6872 212.8272,-70.2004 213.5495,-63.2377"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge10" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-75.4627C366.5776,-70.9374 351.8187,-65.7283 338.2399,-60.9358"/>
+<polygon fill="#000000" stroke="#000000" points="339.2004,-57.5633 328.6056,-57.5355 336.8706,-64.1642 339.2004,-57.5633"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge11" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-99.5216C363.7049,-103.3992 350.1523,-107.7269 337.6451,-111.7208"/>
+<polygon fill="#000000" stroke="#000000" points="336.347,-108.4611 327.8856,-114.8373 338.4764,-115.1294 336.347,-108.4611"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge16" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-113.3863C256.0979,-104.9064 234.3205,-93.3727 215,-83.4982 212.2312,-82.0831 209.354,-80.6283 206.4607,-79.1763"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-75.9276 197.2773,-74.6004 204.6667,-82.1929 207.7887,-75.9276"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node10" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-200.4982 130,-200.4982 130,-176.4982 215,-176.4982 215,-200.4982"/>
+<text text-anchor="middle" x="172.5" y="-186.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-137.6101C256.0979,-146.09 234.3205,-157.6237 215,-167.4982 212.2312,-168.9133 209.354,-170.3681 206.4607,-171.82"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-168.8035 197.2773,-176.396 207.7887,-175.0687 204.6667,-168.8035"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node11" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-158.4982 136.5,-158.4982 136.5,-134.4982 208.5,-134.4982 208.5,-158.4982"/>
+<text text-anchor="middle" x="172.5" y="-144.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-131.1811C248.3109,-133.4488 232.9133,-136.0992 218.6653,-138.5517"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-135.1485 208.5419,-140.2943 218.9907,-142.0471 217.8032,-135.1485"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-116.4982 133,-116.4982 133,-92.4982 212,-92.4982 212,-116.4982"/>
+<text text-anchor="middle" x="172.5" y="-102.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~int2_td_data_t_parallel_stop~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-119.8153C249.3385,-117.7245 235.302,-115.3084 222.0189,-113.0219"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-109.5535 212.052,-111.3063 221.3133,-116.452 222.5008,-109.5535"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocint2_td_data_t_parallel_stopUsesGraph = svgPanZoom('#procint2_td_data_t_parallel_stopUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+    <h3>Type Bound</h3>
+    <p><a href='../type/int2_td_data_t.html'>int2_td_data_t</a></p>
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~88"></span>
+              class(<a href='../type/int2_td_data_t.html'>int2_td_data_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~int2_td_data_t_parallel_stop~~CallsGraph Pages: 1 -->
+<svg id="procint2_td_data_t_parallel_stopCallsGraph" width="641pt" height="352pt"
+ viewBox="0.00 0.00 641.00 352.04" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph" class="graph" transform="scale(.7789 .7789) rotate(0) translate(4 448)">
+<title>proc~~int2_td_data_t_parallel_stop~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-448 819,-448 819,4 -4,4"/>
+<!-- proc~int2_td_data_t_parallel_stop -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node1" class="node">
+<title>proc~int2_td_data_t_parallel_stop</title>
+<polygon fill="none" stroke="#000000" points="244,-213 0,-213 0,-189 244,-189 244,-213"/>
+<text text-anchor="middle" x="122" y="-198.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int2_td_data_t%int2_td_data_t_parallel_stop</text>
+</g>
+<!-- none~allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node2" class="node">
+<title>none~allreduce</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node2"><a xlink:href="../type/par_env_t.html#boundprocedure-allreduce" xlink:title="par_env_t%allreduce">
+<polygon fill="#a7506f" stroke="#a7506f" points="404,-234 280,-234 280,-210 404,-210 404,-234"/>
+<text text-anchor="middle" x="342" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%allreduce</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;none~allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge1" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;none~allreduce</title>
+<path fill="none" stroke="#000000" d="M244.2236,-212.6668C252.8466,-213.4899 261.3681,-214.3033 269.5726,-215.0865"/>
+<polygon fill="#000000" stroke="#000000" points="269.492,-218.5946 279.7794,-216.0608 270.1572,-211.6263 269.492,-218.5946"/>
+</g>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node3" class="node">
+<title>proc~symmetrize_matrix</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node3"><a xlink:href="../proc/symmetrize_matrix.html" xlink:title="symmetrize_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="399.5,-192 284.5,-192 284.5,-168 399.5,-168 399.5,-192"/>
+<text text-anchor="middle" x="342" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge2" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M244.2236,-189.3332C254.4645,-188.3557 264.5624,-187.3918 274.1561,-186.476"/>
+<polygon fill="#000000" stroke="#000000" points="274.7293,-189.9373 284.3514,-185.5028 274.0641,-182.969 274.7293,-189.9373"/>
+</g>
+<!-- none~par_env_t_allreduce_byte -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node4" class="node">
+<title>none~par_env_t_allreduce_byte</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node4"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_byte" xlink:title="par_env_t%par_env_t_allreduce_byte">
+<polygon fill="#a7506f" stroke="#a7506f" points="670.5,-444 460.5,-444 460.5,-420 670.5,-420 670.5,-444"/>
+<text text-anchor="middle" x="565.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_byte</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_byte -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge3" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_byte</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M344.381,-234.176C351.7468,-268.3371 377.5406,-365.5442 440,-411 443.5165,-413.5592 447.2344,-415.849 451.1019,-417.8956"/>
+<polygon fill="#000000" stroke="#000000" points="449.8331,-421.1663 460.3732,-422.2423 452.8046,-414.8283 449.8331,-421.1663"/>
+</g>
+<!-- none~par_env_t_allreduce_c_bool -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node5" class="node">
+<title>none~par_env_t_allreduce_c_bool</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node5"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_c_bool" xlink:title="par_env_t%par_env_t_allreduce_c_bool">
+<polygon fill="#a7506f" stroke="#a7506f" points="676,-402 455,-402 455,-378 676,-378 676,-402"/>
+<text text-anchor="middle" x="565.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_c_bool</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_c_bool -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge4" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_c_bool</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M346.2982,-234.3699C357.038,-263.2754 387.9816,-335.3418 440,-369 442.6053,-370.6857 445.3025,-372.2497 448.0738,-373.7002"/>
+<polygon fill="#000000" stroke="#000000" points="446.6138,-376.8812 457.1539,-377.9566 449.5849,-370.543 446.6138,-376.8812"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node6" class="node">
+<title>none~par_env_t_allreduce_dp_1d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node6"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_dp_1d" xlink:title="par_env_t%par_env_t_allreduce_dp_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="675,-360 456,-360 456,-336 675,-336 675,-360"/>
+<text text-anchor="middle" x="565.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_dp_1d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge5" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M349.404,-234.1592C363.7857,-256.6119 397.8214,-304.3488 440,-327 443.5655,-328.9148 447.2635,-330.6631 451.0566,-332.2589"/>
+<polygon fill="#000000" stroke="#000000" points="450.0693,-335.6282 460.6602,-335.9195 452.5626,-329.0872 450.0693,-335.6282"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_2d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node7" class="node">
+<title>none~par_env_t_allreduce_dp_2d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node7"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_dp_2d" xlink:title="par_env_t%par_env_t_allreduce_dp_2d">
+<polygon fill="#a7506f" stroke="#a7506f" points="675,-318 456,-318 456,-294 675,-294 675,-318"/>
+<text text-anchor="middle" x="565.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_dp_2d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_2d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge6" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_2d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M356.5666,-234.1028C374.8487,-248.6157 407.7358,-272.5391 440,-285 446.1613,-287.3796 452.5953,-289.4898 459.1543,-291.3611"/>
+<polygon fill="#000000" stroke="#000000" points="458.2724,-294.7482 468.836,-293.9354 460.0712,-287.9832 458.2724,-294.7482"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_3d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node8" class="node">
+<title>none~par_env_t_allreduce_dp_3d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node8"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_dp_3d" xlink:title="par_env_t%par_env_t_allreduce_dp_3d">
+<polygon fill="#a7506f" stroke="#a7506f" points="675,-276 456,-276 456,-252 675,-252 675,-276"/>
+<text text-anchor="middle" x="565.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_dp_3d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_3d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge7" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_3d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.083,-234.0476C410.3404,-237.0979 425.7281,-240.2783 440,-243 452.8827,-245.4568 466.5396,-247.9035 479.9188,-250.2126"/>
+<polygon fill="#000000" stroke="#000000" points="479.6316,-253.7142 490.0784,-251.9495 480.8112,-246.8143 479.6316,-253.7142"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_4d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node9" class="node">
+<title>none~par_env_t_allreduce_dp_4d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node9"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_dp_4d" xlink:title="par_env_t%par_env_t_allreduce_dp_4d">
+<polygon fill="#a7506f" stroke="#a7506f" points="675,-234 456,-234 456,-210 675,-210 675,-234"/>
+<text text-anchor="middle" x="565.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_dp_4d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_4d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge8" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_4d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.2572,-222C417.1453,-222 431.1341,-222 445.305,-222"/>
+<polygon fill="#000000" stroke="#000000" points="445.6427,-225.5001 455.6427,-222 445.6426,-218.5001 445.6427,-225.5001"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node10" class="node">
+<title>none~par_env_t_allreduce_dp_scalar</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node10"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_dp_scalar" xlink:title="par_env_t%par_env_t_allreduce_dp_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="684.5,-192 446.5,-192 446.5,-168 684.5,-168 684.5,-192"/>
+<text text-anchor="middle" x="565.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_dp_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge9" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_dp_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.083,-209.9524C410.3404,-206.9021 425.7281,-203.7217 440,-201 452.8827,-198.5432 466.5396,-196.0965 479.9188,-193.7874"/>
+<polygon fill="#000000" stroke="#000000" points="480.8112,-197.1857 490.0784,-192.0505 479.6316,-190.2858 480.8112,-197.1857"/>
+</g>
+<!-- none~par_env_t_allreduce_int32_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node11" class="node">
+<title>none~par_env_t_allreduce_int32_1d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node11"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_int32_1d" xlink:title="par_env_t%par_env_t_allreduce_int32_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="681.5,-150 449.5,-150 449.5,-126 681.5,-126 681.5,-150"/>
+<text text-anchor="middle" x="565.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_int32_1d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_int32_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge10" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_int32_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M387.0671,-209.9648C393.0063,-207.4658 398.8215,-204.5002 404,-201 424.369,-187.2324 418.5911,-171.0874 440,-159 443.2703,-157.1536 446.6596,-155.4599 450.1378,-153.9066"/>
+<polygon fill="#000000" stroke="#000000" points="451.5687,-157.1035 459.5316,-150.1148 448.9485,-150.6123 451.5687,-157.1035"/>
+</g>
+<!-- none~par_env_t_allreduce_int32_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node12" class="node">
+<title>none~par_env_t_allreduce_int32_scalar</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node12"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_int32_scalar" xlink:title="par_env_t%par_env_t_allreduce_int32_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="691,-108 440,-108 440,-84 691,-84 691,-108"/>
+<text text-anchor="middle" x="565.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_int32_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_int32_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge11" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_int32_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M390.9652,-209.955C395.7008,-207.5006 400.1616,-204.549 404,-201 433.8231,-173.4254 408.0587,-142.0905 440,-117 441.6287,-115.7207 443.3063,-114.5069 445.0272,-113.3555"/>
+<polygon fill="#000000" stroke="#000000" points="447.1159,-116.1878 453.9655,-108.1049 443.5703,-110.1522 447.1159,-116.1878"/>
+</g>
+<!-- none~par_env_t_allreduce_int64_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node13" class="node">
+<title>none~par_env_t_allreduce_int64_1d</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node13"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_int64_1d" xlink:title="par_env_t%par_env_t_allreduce_int64_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="681.5,-66 449.5,-66 449.5,-42 681.5,-42 681.5,-66"/>
+<text text-anchor="middle" x="565.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_int64_1d</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_int64_1d -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge12" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_int64_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M392.3388,-209.926C396.6411,-207.4797 400.629,-204.5379 404,-201 444.1764,-158.8354 396.5672,-113.802 440,-75 441.1841,-73.9422 442.4006,-72.9272 443.6468,-71.9534"/>
+<polygon fill="#000000" stroke="#000000" points="445.9574,-74.6157 452.2735,-66.1094 442.0314,-68.8203 445.9574,-74.6157"/>
+</g>
+<!-- none~par_env_t_allreduce_int64_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node14" class="node">
+<title>none~par_env_t_allreduce_int64_scalar</title>
+<g id="a_proc~~int2_td_data_t_parallel_stop~~CallsGraph_node14"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_allreduce_int64_scalar" xlink:title="par_env_t%par_env_t_allreduce_int64_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="691,-24 440,-24 440,0 691,0 691,-24"/>
+<text text-anchor="middle" x="565.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_allreduce_int64_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~allreduce&#45;&gt;none~par_env_t_allreduce_int64_scalar -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge13" class="edge">
+<title>none~allreduce&#45;&gt;none~par_env_t_allreduce_int64_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M392.8858,-209.9823C397.0235,-207.5242 400.8253,-204.5643 404,-201 454.7897,-143.9779 384.7951,-85.7592 440,-33 440.9882,-32.0556 442.0019,-31.1446 443.0394,-30.2659"/>
+<polygon fill="#000000" stroke="#000000" points="445.413,-32.8666 451.428,-24.1448 441.2868,-27.212 445.413,-32.8666"/>
+</g>
+<!-- mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_node15" class="node">
+<title>mpi_allreduce</title>
+<polygon fill="#777777" stroke="#777777" points="815,-234 727,-234 727,-210 815,-210 815,-234"/>
+<text text-anchor="middle" x="771" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_allreduce</text>
+</g>
+<!-- none~par_env_t_allreduce_byte&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge14" class="edge">
+<title>none~par_env_t_allreduce_byte&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M670.7275,-422.9122C677.9815,-419.7729 684.8437,-415.8582 691,-411 744.4346,-368.8322 762.6691,-284.3485 768.4826,-244.1877"/>
+<polygon fill="#000000" stroke="#000000" points="771.9744,-244.4794 769.8118,-234.1076 765.0344,-243.5642 771.9744,-244.4794"/>
+</g>
+<!-- none~par_env_t_allreduce_c_bool&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge15" class="edge">
+<title>none~par_env_t_allreduce_c_bool&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.4455,-377.9605C680.9135,-375.426 686.1424,-372.4613 691,-369 733.9442,-338.4001 756.2059,-277.3081 765.5271,-244.3357"/>
+<polygon fill="#000000" stroke="#000000" points="769.0041,-244.881 768.2033,-234.3164 762.2412,-243.0745 769.0041,-244.881"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_1d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge16" class="edge">
+<title>none~par_env_t_allreduce_dp_1d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M672.6504,-335.9239C679.0544,-333.429 685.2305,-330.4801 691,-327 724.1152,-307.0254 748.3341,-267.7602 760.9961,-243.3156"/>
+<polygon fill="#000000" stroke="#000000" points="764.2383,-244.6565 765.5646,-234.145 757.9727,-241.5351 764.2383,-244.6565"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_2d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge17" class="edge">
+<title>none~par_env_t_allreduce_dp_2d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M665.8358,-293.919C674.5143,-291.4701 683.0198,-288.5297 691,-285 714.5429,-274.5869 737.1868,-255.6363 752.3371,-241.2299"/>
+<polygon fill="#000000" stroke="#000000" points="754.8423,-243.6754 759.5417,-234.1798 749.9465,-238.6723 754.8423,-243.6754"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_3d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge18" class="edge">
+<title>none~par_env_t_allreduce_dp_3d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.0361,-251.9868C659.6453,-249.2819 675.88,-246.2425 691,-243 699.8673,-241.0984 709.2284,-238.8569 718.3,-236.5591"/>
+<polygon fill="#000000" stroke="#000000" points="719.1852,-239.9454 727.993,-234.0569 717.4355,-233.1676 719.1852,-239.9454"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_4d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge19" class="edge">
+<title>none~par_env_t_allreduce_dp_4d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.1689,-222C689.5076,-222 703.6657,-222 716.5197,-222"/>
+<polygon fill="#000000" stroke="#000000" points="716.5273,-225.5001 726.5272,-222 716.5272,-218.5001 716.5273,-225.5001"/>
+</g>
+<!-- none~par_env_t_allreduce_dp_scalar&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge20" class="edge">
+<title>none~par_env_t_allreduce_dp_scalar&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.0361,-192.0132C659.6453,-194.7181 675.88,-197.7575 691,-201 699.8673,-202.9016 709.2284,-205.1431 718.3,-207.4409"/>
+<polygon fill="#000000" stroke="#000000" points="717.4355,-210.8324 727.993,-209.9431 719.1852,-204.0546 717.4355,-210.8324"/>
+</g>
+<!-- none~par_env_t_allreduce_int32_1d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge21" class="edge">
+<title>none~par_env_t_allreduce_int32_1d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M665.8358,-150.081C674.5143,-152.5299 683.0198,-155.4703 691,-159 714.5429,-169.4131 737.1868,-188.3637 752.3371,-202.7701"/>
+<polygon fill="#000000" stroke="#000000" points="749.9465,-205.3277 759.5417,-209.8202 754.8423,-200.3246 749.9465,-205.3277"/>
+</g>
+<!-- none~par_env_t_allreduce_int32_scalar&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge22" class="edge">
+<title>none~par_env_t_allreduce_int32_scalar&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M672.6504,-108.0761C679.0544,-110.571 685.2305,-113.5199 691,-117 724.1152,-136.9746 748.3341,-176.2398 760.9961,-200.6844"/>
+<polygon fill="#000000" stroke="#000000" points="757.9727,-202.4649 765.5646,-209.855 764.2383,-199.3435 757.9727,-202.4649"/>
+</g>
+<!-- none~par_env_t_allreduce_int64_1d&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge23" class="edge">
+<title>none~par_env_t_allreduce_int64_1d&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M675.4455,-66.0395C680.9135,-68.574 686.1424,-71.5387 691,-75 733.9442,-105.5999 756.2059,-166.6919 765.5271,-199.6643"/>
+<polygon fill="#000000" stroke="#000000" points="762.2412,-200.9255 768.2033,-209.6836 769.0041,-199.119 762.2412,-200.9255"/>
+</g>
+<!-- none~par_env_t_allreduce_int64_scalar&#45;&gt;mpi_allreduce -->
+<g id="proc~~int2_td_data_t_parallel_stop~~CallsGraph_edge24" class="edge">
+<title>none~par_env_t_allreduce_int64_scalar&#45;&gt;mpi_allreduce</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M677.0532,-24.0812C681.9791,-26.6254 686.6646,-29.5787 691,-33 744.4346,-75.1678 762.6691,-159.6515 768.4826,-199.8123"/>
+<polygon fill="#000000" stroke="#000000" points="765.0344,-200.4358 769.8118,-209.8924 771.9744,-199.5206 765.0344,-200.4358"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocint2_td_data_t_parallel_stopCallsGraph = svgPanZoom('#procint2_td_data_t_parallel_stopCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

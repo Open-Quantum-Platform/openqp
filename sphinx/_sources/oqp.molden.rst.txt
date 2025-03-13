@@ -1,0 +1,29 @@
+oqp.molden package
+==================
+
+Submodules
+----------
+
+oqp.molden.moldenreader module
+------------------------------
+
+.. automodule:: oqp.molden.moldenreader
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.molden.moldenwriter module
+------------------------------
+
+.. automodule:: oqp.molden.moldenwriter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: oqp.molden
+   :members:
+   :undoc-members:
+   :show-inheritance:

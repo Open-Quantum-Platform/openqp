@@ -1,0 +1,1259 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>lebedev &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>lebedev
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title="12.3% of total for modules and submodules.">5671 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/lebedev.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/lebedev.f90.html'>lebedev.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">lebedev</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/lebedev.html#variable-spherical_grid_type_lebedev">spherical_grid_type_lebedev</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-spherical_grid_type_o">spherical_grid_type_o</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-spherical_grid_type_oh">spherical_grid_type_oh</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-spherical_grid_type_i">spherical_grid_type_i</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-lebedev_npts">lebedev_npts</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-oct_npts">oct_npts</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-oh_npts">oh_npts</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-i_npts">i_npts</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-lebedev_orders">lebedev_orders</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-oct_orders">oct_orders</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-oh_orders">oh_orders</a>
+            <a class="list-group-item" href="../module/lebedev.html#variable-i_orders">i_orders</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/lebedev.html#proc-lebedev_get_grid">lebedev_get_grid</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~lebedev~~UsesGraph Pages: 1 -->
+<svg id="modulelebedevUsesGraph" width="290pt" height="32pt"
+ viewBox="0.00 0.00 290.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~lebedev~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>module~~lebedev~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 286,-28 286,4 -4,4"/>
+<!-- module~lebedev -->
+<g id="module~~lebedev~~UsesGraph_node1" class="node">
+<title>module~lebedev</title>
+<polygon fill="none" stroke="#000000" points="282,-24 227,-24 227,0 282,0 282,-24"/>
+<text text-anchor="middle" x="254.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">lebedev</text>
+</g>
+<!-- module~precision -->
+<g id="module~~lebedev~~UsesGraph_node2" class="node">
+<title>module~precision</title>
+<g id="a_module~~lebedev~~UsesGraph_node2"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="191,-24 130,-24 130,0 191,0 191,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~lebedev&#45;&gt;module~precision -->
+<g id="module~~lebedev~~UsesGraph_edge1" class="edge">
+<title>module~lebedev&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.8053,-12C218.8741,-12 210.0551,-12 201.5051,-12"/>
+<polygon fill="#000000" stroke="#000000" points="201.2873,-8.5001 191.2872,-12 201.2872,-15.5001 201.2873,-8.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~lebedev~~UsesGraph_node3" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~lebedev~~UsesGraph_node3"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~lebedev~~UsesGraph_edge2" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.7853,-12C121.9522,-12 113.2743,-12 104.5707,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3906,-8.5001 94.3906,-12 104.3906,-15.5001 104.3906,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~lebedev~~UsedByGraph Pages: 1 -->
+<svg id="modulelebedevUsedByGraph" width="641pt" height="545pt"
+ viewBox="0.00 0.00 641.00 545.11" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~lebedev~~UsedByGraph" class="graph" transform="scale(.7568 .7568) rotate(0) translate(4 716.2947)">
+<title>module~~lebedev~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-716.2947 843,-716.2947 843,4 -4,4"/>
+<!-- module~lebedev -->
+<g id="module~~lebedev~~UsedByGraph_node1" class="node">
+<title>module~lebedev</title>
+<polygon fill="none" stroke="#000000" points="55,-568.2947 0,-568.2947 0,-544.2947 55,-544.2947 55,-568.2947"/>
+<text text-anchor="middle" x="27.5" y="-553.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">lebedev</text>
+</g>
+<!-- module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_node2" class="node">
+<title>module~mod_dft_molgrid</title>
+<g id="a_module~~lebedev~~UsedByGraph_node2"><a xlink:href="../module/mod_dft_molgrid.html" xlink:title="mod_dft_molgrid">
+<polygon fill="#337ab7" stroke="#337ab7" points="197,-589.2947 94,-589.2947 94,-565.2947 197,-565.2947 197,-589.2947"/>
+<text text-anchor="middle" x="145.5" y="-574.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_molgrid</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~lebedev -->
+<g id="module~~lebedev~~UsedByGraph_edge1" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~lebedev</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M93.7435,-568.0838C84.1153,-566.3703 74.2257,-564.6103 65.1216,-562.99"/>
+<polygon fill="#000000" stroke="#000000" points="65.6907,-559.5364 55.2322,-561.2301 64.4642,-566.4281 65.6907,-559.5364"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~lebedev~~UsedByGraph_node3" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~lebedev~~UsedByGraph_node3"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="200,-547.2947 91,-547.2947 91,-523.2947 200,-523.2947 200,-547.2947"/>
+<text text-anchor="middle" x="145.5" y="-532.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~lebedev -->
+<g id="module~~lebedev~~UsedByGraph_edge2" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~lebedev</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M90.9903,-544.9956C82.2436,-546.5522 73.3646,-548.1323 65.128,-549.5982"/>
+<polygon fill="#000000" stroke="#000000" points="64.3291,-546.1853 55.0971,-551.3833 65.5557,-553.077 64.3291,-546.1853"/>
+</g>
+<!-- module~dft -->
+<g id="module~~lebedev~~UsedByGraph_node4" class="node">
+<title>module~dft</title>
+<g id="a_module~~lebedev~~UsedByGraph_node4"><a xlink:href="../module/dft.html" xlink:title="dft">
+<polygon fill="#337ab7" stroke="#337ab7" points="319,-631.2947 265,-631.2947 265,-607.2947 319,-607.2947 319,-631.2947"/>
+<text text-anchor="middle" x="292" y="-616.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft</text>
+</a>
+</g>
+</g>
+<!-- module~dft&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge3" class="edge">
+<title>module~dft&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M264.7878,-611.4932C245.9026,-606.079 220.1516,-598.6965 197.4081,-592.1762"/>
+<polygon fill="#000000" stroke="#000000" points="198.1182,-588.7388 187.5408,-589.3473 196.189,-595.4677 198.1182,-588.7388"/>
+</g>
+<!-- module~mod_dft_fuzzycell -->
+<g id="module~~lebedev~~UsedByGraph_node5" class="node">
+<title>module~mod_dft_fuzzycell</title>
+<g id="a_module~~lebedev~~UsedByGraph_node5"><a xlink:href="../module/mod_dft_fuzzycell.html" xlink:title="mod_dft_fuzzycell">
+<polygon fill="#337ab7" stroke="#337ab7" points="345.5,-673.2947 238.5,-673.2947 238.5,-649.2947 345.5,-649.2947 345.5,-673.2947"/>
+<text text-anchor="middle" x="292" y="-658.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_fuzzycell</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_fuzzycell&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge4" class="edge">
+<title>module~mod_dft_fuzzycell&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M255.8689,-649.2627C249.1331,-646.5969 242.2515,-643.5767 236,-640.2947 211.6741,-627.5236 186.1804,-609.2719 168.4733,-595.6983"/>
+<polygon fill="#000000" stroke="#000000" points="170.4881,-592.8313 160.4455,-589.4552 166.1908,-598.357 170.4881,-592.8313"/>
+</g>
+<!-- module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_node6" class="node">
+<title>module~mod_dft_gridint</title>
+<g id="a_module~~lebedev~~UsedByGraph_node6"><a xlink:href="../module/mod_dft_gridint.html" xlink:title="mod_dft_gridint">
+<polygon fill="#337ab7" stroke="#337ab7" points="340,-301.2947 244,-301.2947 244,-277.2947 340,-277.2947 340,-301.2947"/>
+<text text-anchor="middle" x="292" y="-286.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge5" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M291.3286,-301.5183C288.4034,-343.0325 273.3555,-480.2527 200,-556.2947 198.944,-557.3893 197.8247,-558.4278 196.653,-559.4129"/>
+<polygon fill="#000000" stroke="#000000" points="194.5361,-556.6209 188.2781,-565.1701 198.5016,-562.3894 194.5361,-556.6209"/>
+</g>
+<!-- module~tdhf_z_vector_mod -->
+<g id="module~~lebedev~~UsedByGraph_node7" class="node">
+<title>module~tdhf_z_vector_mod</title>
+<g id="a_module~~lebedev~~UsedByGraph_node7"><a xlink:href="../module/tdhf_z_vector_mod.html" xlink:title="tdhf_z_vector_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="348,-589.2947 236,-589.2947 236,-565.2947 348,-565.2947 348,-589.2947"/>
+<text text-anchor="middle" x="292" y="-574.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_mod</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_z_vector_mod&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge6" class="edge">
+<title>module~tdhf_z_vector_mod&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M235.7783,-577.2947C226.4156,-577.2947 216.66,-577.2947 207.1704,-577.2947"/>
+<polygon fill="#000000" stroke="#000000" points="207.0088,-573.7948 197.0088,-577.2947 207.0087,-580.7948 207.0088,-573.7948"/>
+</g>
+<!-- proc~derexc_blk -->
+<g id="module~~lebedev~~UsedByGraph_node8" class="node">
+<title>proc~derexc_blk</title>
+<g id="a_module~~lebedev~~UsedByGraph_node8"><a xlink:href="../proc/derexc_blk.html" xlink:title="derexc_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="496,-509.2947 426,-509.2947 426,-485.2947 496,-485.2947 496,-509.2947"/>
+<text text-anchor="middle" x="461" y="-494.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">derexc_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~derexc_blk&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge7" class="edge">
+<title>proc~derexc_blk&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M425.8895,-506.4347C391.8257,-515.1051 338.5958,-528.1345 292,-537.2947"/>
+</g>
+<!-- proc~derexc_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge31" class="edge">
+<title>proc~derexc_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M425.9036,-494.0605C411.6259,-491.2373 395.7561,-485.9958 384,-476.2947 330.9423,-432.5114 305.9497,-350.6186 296.6006,-311.3717"/>
+<polygon fill="#000000" stroke="#000000" points="299.9878,-310.4817 294.3682,-301.5001 293.1602,-312.0258 299.9878,-310.4817"/>
+</g>
+<!-- proc~dmatd_blk -->
+<g id="module~~lebedev~~UsedByGraph_node9" class="node">
+<title>proc~dmatd_blk</title>
+<g id="a_module~~lebedev~~UsedByGraph_node9"><a xlink:href="../proc/dmatd_blk.html" xlink:title="dmatd_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="495,-467.2947 427,-467.2947 427,-443.2947 495,-443.2947 495,-467.2947"/>
+<text text-anchor="middle" x="461" y="-452.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dmatd_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge8" class="edge">
+<title>proc~dmatd_blk&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.8322,-462.1308C413.1688,-465.4962 397.5019,-470.1697 384,-476.2947 339.3218,-496.5622 340.1389,-527.8312 292,-537.2947"/>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge32" class="edge">
+<title>proc~dmatd_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.7853,-451.5058C412.4946,-448.5894 396.3748,-443.4283 384,-434.2947 340.6828,-402.3231 312.6987,-343.3046 299.9704,-311.3071"/>
+<polygon fill="#000000" stroke="#000000" points="303.0855,-309.655 296.2385,-301.5698 296.5491,-312.1601 303.0855,-309.655"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="module~~lebedev~~UsedByGraph_node10" class="node">
+<title>proc~hf_energy</title>
+<g id="a_module~~lebedev~~UsedByGraph_node10"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="494,-712.2947 428,-712.2947 428,-688.2947 494,-688.2947 494,-712.2947"/>
+<text text-anchor="middle" x="461" y="-697.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge9" class="edge">
+<title>proc~hf_energy&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.6146,-705.178C381.7339,-710.273 297.8521,-713.6847 236,-682.2947 199.4353,-663.738 171.4539,-623.3709 156.8274,-598.4455"/>
+<polygon fill="#000000" stroke="#000000" points="159.692,-596.4011 151.7198,-589.4229 153.6003,-599.8495 159.692,-596.4011"/>
+</g>
+<!-- proc~hf_energy&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge20" class="edge">
+<title>proc~hf_energy&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.8587,-691.8967C413.7581,-687.5228 397.4901,-681.3737 384,-673.2947 365.3789,-662.1427 366.5001,-651.6463 348,-640.2947 342.0538,-636.6461 335.3715,-633.4662 328.749,-630.7603"/>
+<polygon fill="#000000" stroke="#000000" points="329.7732,-627.4056 319.1818,-627.1355 327.2931,-633.9515 329.7732,-627.4056"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="module~~lebedev~~UsedByGraph_node11" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_module~~lebedev~~UsedByGraph_node11"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="497.5,-631.2947 424.5,-631.2947 424.5,-607.2947 497.5,-607.2947 497.5,-631.2947"/>
+<text text-anchor="middle" x="461" y="-616.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge10" class="edge">
+<title>proc~hf_gradient&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.2874,-613.9358C410.8802,-610.8167 396.06,-605.9266 384,-598.2947 363.225,-585.1476 368.3654,-570.0676 348,-556.2947 326.2289,-541.5711 317.7888,-532.2249 292,-537.2947"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge21" class="edge">
+<title>proc~hf_gradient&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.3295,-619.2947C396.267,-619.2947 357.7104,-619.2947 329.4548,-619.2947"/>
+<polygon fill="#000000" stroke="#000000" points="329.1733,-615.7948 319.1733,-619.2947 329.1733,-622.7948 329.1733,-615.7948"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~lebedev~~UsedByGraph_node12" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~lebedev~~UsedByGraph_node12"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="839,-323.2947 730,-323.2947 730,-299.2947 839,-299.2947 839,-323.2947"/>
+<text text-anchor="middle" x="784.5" y="-308.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge11" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M779.2,-299.0098C757.7494,-251.1237 672.0546,-76.7518 538,-18.2947 475.2612,9.0638 449.383,1.9464 384,-18.2947 336.6596,-32.9502 331.7313,-51.6749 292,-81.2947"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292,-81.2947C226.6242,-129.3737 210.0758,-543.4103 200,-556.2947 199.3129,-557.1733 198.5842,-558.0152 197.8188,-558.8219"/>
+<polygon fill="#000000" stroke="#000000" points="195.5849,-556.1274 190.069,-565.1732 200.022,-561.5415 195.5849,-556.1274"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge22" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M783.1554,-323.3909C778.2691,-362.1386 758.2218,-484.9275 694,-558.2947 619.6604,-643.2205 572.8297,-644.0343 461,-659.2947"/>
+</g>
+<!-- module~mod_dft_gridint_fxc -->
+<g id="module~~lebedev~~UsedByGraph_node22" class="node">
+<title>module~mod_dft_gridint_fxc</title>
+<g id="a_module~~lebedev~~UsedByGraph_node22"><a xlink:href="../module/mod_dft_gridint_fxc.html" xlink:title="mod_dft_gridint_fxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="519.5,-341.2947 402.5,-341.2947 402.5,-317.2947 519.5,-317.2947 519.5,-341.2947"/>
+<text text-anchor="middle" x="461" y="-326.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lebedev~~UsedByGraph_edge40" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M729.9884,-314.3278C674.8369,-317.3965 589.4118,-322.1497 529.6687,-325.4738"/>
+<polygon fill="#000000" stroke="#000000" points="529.3588,-321.9856 519.5688,-326.0358 529.7478,-328.9748 529.3588,-321.9856"/>
+</g>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~lebedev~~UsedByGraph_node24" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<g id="a_module~~lebedev~~UsedByGraph_node24"><a xlink:href="../module/mod_dft_gridint_gxc.html" xlink:title="mod_dft_gridint_gxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="694,-303.2947 574,-303.2947 574,-279.2947 694,-279.2947 694,-303.2947"/>
+<text text-anchor="middle" x="634" y="-288.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc -->
+<g id="module~~lebedev~~UsedByGraph_edge43" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M729.7403,-304.0176C721.404,-302.9098 712.7045,-301.7537 704.0954,-300.6097"/>
+<polygon fill="#000000" stroke="#000000" points="704.4317,-297.1237 694.0577,-299.2758 703.5095,-304.0627 704.4317,-297.1237"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="module~~lebedev~~UsedByGraph_node13" class="node">
+<title>proc~scf_driver</title>
+<g id="a_module~~lebedev~~UsedByGraph_node13"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="493,-589.2947 429,-589.2947 429,-565.2947 493,-565.2947 493,-589.2947"/>
+<text text-anchor="middle" x="461" y="-574.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge12" class="edge">
+<title>proc~scf_driver&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.7241,-566.2868C387.3551,-552.7663 317.8866,-532.2057 292,-537.2947"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge23" class="edge">
+<title>proc~scf_driver&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.8146,-585.2934C400.3727,-592.3618 358.8941,-602.6701 329.0721,-610.0815"/>
+<polygon fill="#000000" stroke="#000000" points="327.9109,-606.7635 319.0503,-612.5721 329.5992,-613.5569 327.9109,-606.7635"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="module~~lebedev~~UsedByGraph_node14" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_module~~lebedev~~UsedByGraph_node14"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="490,-425.2947 432,-425.2947 432,-401.2947 490,-401.2947 490,-425.2947"/>
+<text text-anchor="middle" x="461" y="-410.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge13" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.9817,-417.1492C416.8357,-420.1302 398.494,-425.3283 384,-434.2947 331.8008,-466.5863 352.2273,-525.4547 292,-537.2947"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292,-537.2947C258.6764,-543.8457 221.7964,-553.9315 193.3761,-562.3362"/>
+<polygon fill="#000000" stroke="#000000" points="192.2743,-559.0124 183.696,-565.2304 194.2796,-565.7191 192.2743,-559.0124"/>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge33" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.9817,-409.4401C416.8357,-406.4591 398.494,-401.261 384,-392.2947 349.7984,-371.1368 320.9195,-333.4865 305.0712,-310.039"/>
+<polygon fill="#000000" stroke="#000000" points="307.8883,-307.9529 299.4668,-301.5241 302.0411,-311.8014 307.8883,-307.9529"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="module~~lebedev~~UsedByGraph_node15" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_module~~lebedev~~UsedByGraph_node15"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="491.5,-177.2947 430.5,-177.2947 430.5,-153.2947 491.5,-153.2947 491.5,-177.2947"/>
+<text text-anchor="middle" x="461" y="-162.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge14" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.19,-159.3781C415.765,-155.9885 398.5876,-151.044 384,-144.2947 339.0237,-123.4852 331.7313,-51.6749 292,-81.2947"/>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge34" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.4941,-169.4471C415.6468,-172.4723 398.0227,-177.6199 384,-186.2947 349.7984,-207.4525 320.9195,-245.1029 305.0712,-268.5504"/>
+<polygon fill="#000000" stroke="#000000" points="302.0411,-266.7879 299.4668,-277.0653 307.8883,-270.6365 302.0411,-266.7879"/>
+</g>
+<!-- proc~tddft_xc_gradient -->
+<g id="module~~lebedev~~UsedByGraph_node16" class="node">
+<title>proc~tddft_xc_gradient</title>
+<g id="a_module~~lebedev~~UsedByGraph_node16"><a xlink:href="../proc/tddft_xc_gradient.html" xlink:title="tddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="513.5,-135.2947 408.5,-135.2947 408.5,-111.2947 513.5,-111.2947 513.5,-135.2947"/>
+<text text-anchor="middle" x="461" y="-120.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge15" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.1608,-111.2619C366.961,-98.1895 294.5526,-79.3917 292,-81.2947"/>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge35" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M408.4728,-131.9888C399.7772,-134.9598 391.2465,-138.9462 384,-144.2947 340.6828,-176.2663 312.6987,-235.2847 299.9704,-267.2822"/>
+<polygon fill="#000000" stroke="#000000" points="296.5491,-266.4293 296.2385,-277.0196 303.0855,-268.9344 296.5491,-266.4293"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~lebedev~~UsedByGraph_node17" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~lebedev~~UsedByGraph_node17"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="672,-549.2947 596,-549.2947 596,-525.2947 672,-525.2947 672,-549.2947"/>
+<text text-anchor="middle" x="634" y="-534.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge16" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.8226,-535.9737C560.7415,-535.0736 507.319,-534.4937 461,-537.2947"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge24" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M626.1324,-549.6113C611.5285,-571.4257 578.0438,-616.7656 538,-640.2947 507.6093,-658.1518 495.925,-654.5288 461,-659.2947"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lebedev~~UsedByGraph_edge41" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.8957,-530.4285C587.6983,-527.3279 579.7741,-522.8273 574,-516.2947 524.0036,-459.7304 589.9567,-405.0638 538,-350.2947 535.1838,-347.326 531.9927,-344.7628 528.5506,-342.551"/>
+<polygon fill="#000000" stroke="#000000" points="530.0184,-339.3672 519.5483,-337.7462 526.7224,-345.5426 530.0184,-339.3672"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~lebedev~~UsedByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~lebedev~~UsedByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="676,-507.2947 592,-507.2947 592,-483.2947 676,-483.2947 676,-507.2947"/>
+<text text-anchor="middle" x="634" y="-492.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge17" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M600.086,-507.3245C565.5991,-518.6497 510.3613,-534.3097 461,-537.2947"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M461,-537.2947C386.0258,-541.8285 365.7005,-522.8061 292,-537.2947"/>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~dft -->
+<g id="module~~lebedev~~UsedByGraph_edge25" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~dft</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8786,-504.2237C585.2296,-507.1697 578.9334,-511.0868 574,-516.2947 534.5342,-557.9563 579.3945,-600.5489 538,-640.2947 512.5742,-664.7077 495.925,-654.5288 461,-659.2947"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M461,-659.2947C435.8164,-662.7313 370.5022,-644.2917 328.8396,-631.3002"/>
+<polygon fill="#000000" stroke="#000000" points="329.6419,-627.8833 319.0522,-628.2131 327.5362,-634.5591 329.6419,-627.8833"/>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~lebedev~~UsedByGraph_node25" class="node">
+<title>module~mod_dft_gridint_tdxc_grad</title>
+<g id="a_module~~lebedev~~UsedByGraph_node25"><a xlink:href="../module/mod_dft_gridint_tdxc_grad.html" xlink:title="mod_dft_gridint_tdxc_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="538,-383.2947 384,-383.2947 384,-359.2947 538,-359.2947 538,-383.2947"/>
+<text text-anchor="middle" x="461" y="-368.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_tdxc_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~lebedev~~UsedByGraph_edge44" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M626.0747,-483.0749C611.3793,-461.4139 577.7546,-416.3092 538,-392.2947 535.0034,-390.4845 531.8483,-388.8271 528.5951,-387.31"/>
+<polygon fill="#000000" stroke="#000000" points="529.7942,-384.0179 519.2177,-383.3952 527.0975,-390.4776 529.7942,-384.0179"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="module~~lebedev~~UsedByGraph_node19" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_module~~lebedev~~UsedByGraph_node19"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="493.5,-93.2947 428.5,-93.2947 428.5,-69.2947 493.5,-69.2947 493.5,-93.2947"/>
+<text text-anchor="middle" x="461" y="-78.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge18" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.4991,-70.7634C391.5917,-60.9857 331.4009,-51.9212 292,-81.2947"/>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge36" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.2249,-84.0882C413.3694,-86.7936 396.3973,-92.0644 384,-102.2947 330.9423,-146.0779 305.9497,-227.9707 296.6006,-267.2176"/>
+<polygon fill="#000000" stroke="#000000" points="293.1602,-266.5635 294.3682,-277.0893 299.9878,-268.1076 293.1602,-266.5635"/>
+</g>
+<!-- proc~utddft_xc_gradient -->
+<g id="module~~lebedev~~UsedByGraph_node20" class="node">
+<title>proc~utddft_xc_gradient</title>
+<g id="a_module~~lebedev~~UsedByGraph_node20"><a xlink:href="../proc/utddft_xc_gradient.html" xlink:title="utddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="517,-51.2947 405,-51.2947 405,-27.2947 517,-27.2947 517,-51.2947"/>
+<text text-anchor="middle" x="461" y="-36.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~lebedev~~UsedByGraph_edge19" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.9613,-42.2728C369.5952,-46.6315 324.6007,-56.9908 292,-81.2947"/>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge37" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.8377,-47.9579C397.2368,-50.9494 390.002,-54.9502 384,-60.2947 321.0356,-116.3618 300.5106,-221.5363 294.3838,-267.1989"/>
+<polygon fill="#000000" stroke="#000000" points="290.8984,-266.8657 293.1462,-277.2193 297.8457,-267.7237 290.8984,-266.8657"/>
+</g>
+<!-- module~mod_dft_gridint_energy -->
+<g id="module~~lebedev~~UsedByGraph_node21" class="node">
+<title>module~mod_dft_gridint_energy</title>
+<g id="a_module~~lebedev~~UsedByGraph_node21"><a xlink:href="../module/mod_dft_gridint_energy.html" xlink:title="mod_dft_gridint_energy">
+<polygon fill="#337ab7" stroke="#337ab7" points="530.5,-261.2947 391.5,-261.2947 391.5,-237.2947 530.5,-237.2947 530.5,-261.2947"/>
+<text text-anchor="middle" x="461" y="-246.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_energy</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge26" class="edge">
+<title>module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M410.2944,-261.296C391.2475,-265.8041 369.4579,-270.9614 349.8129,-275.6112"/>
+<polygon fill="#000000" stroke="#000000" points="348.988,-272.2096 340.063,-277.9188 350.6003,-279.0214 348.988,-272.2096"/>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge27" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M410.2944,-317.2934C391.2475,-312.7852 369.4579,-307.6279 349.8129,-302.9782"/>
+<polygon fill="#000000" stroke="#000000" points="350.6003,-299.5679 340.063,-300.6705 348.988,-306.3797 350.6003,-299.5679"/>
+</g>
+<!-- module~mod_dft_gridint_grad -->
+<g id="module~~lebedev~~UsedByGraph_node23" class="node">
+<title>module~mod_dft_gridint_grad</title>
+<g id="a_module~~lebedev~~UsedByGraph_node23"><a xlink:href="../module/mod_dft_gridint_grad.html" xlink:title="mod_dft_gridint_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-219.2947 398,-219.2947 398,-195.2947 524,-195.2947 524,-219.2947"/>
+<text text-anchor="middle" x="461" y="-204.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge28" class="edge">
+<title>module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M408.0208,-219.3349C399.8231,-221.882 391.5712,-224.8601 384,-228.2947 358.953,-239.6568 333.0753,-257.4507 315.17,-270.894"/>
+<polygon fill="#000000" stroke="#000000" points="312.8764,-268.2418 307.0591,-277.0968 317.1287,-273.8022 312.8764,-268.2418"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge29" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M573.6445,-290.9417C510.6126,-290.5731 412.4312,-289.999 350.211,-289.6351"/>
+<polygon fill="#000000" stroke="#000000" points="350.1865,-286.135 340.1662,-289.5763 350.1455,-293.1349 350.1865,-286.135"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lebedev~~UsedByGraph_edge39" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M579.2617,-303.3181C562.2978,-307.0443 543.4414,-311.1862 525.8596,-315.0481"/>
+<polygon fill="#000000" stroke="#000000" points="524.6951,-311.7203 515.6789,-317.2843 526.197,-318.5573 524.6951,-311.7203"/>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lebedev~~UsedByGraph_edge30" class="edge">
+<title>module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M408.0208,-359.2544C399.8231,-356.7074 391.5712,-353.7292 384,-350.2947 358.953,-338.9325 333.0753,-321.1387 315.17,-307.6953"/>
+<polygon fill="#000000" stroke="#000000" points="317.1287,-304.7871 307.0591,-301.4926 312.8764,-310.3475 317.1287,-304.7871"/>
+</g>
+<!-- proc~dftder -->
+<g id="module~~lebedev~~UsedByGraph_node26" class="node">
+<title>proc~dftder</title>
+<g id="a_module~~lebedev~~UsedByGraph_node26"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="661,-219.2947 607,-219.2947 607,-195.2947 661,-195.2947 661,-219.2947"/>
+<text text-anchor="middle" x="634" y="-204.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;module~mod_dft_gridint_grad -->
+<g id="module~~lebedev~~UsedByGraph_edge42" class="edge">
+<title>proc~dftder&#45;&gt;module~mod_dft_gridint_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M606.9688,-207.2947C587.4212,-207.2947 560.0204,-207.2947 534.2314,-207.2947"/>
+<polygon fill="#000000" stroke="#000000" points="534.0689,-203.7948 524.0688,-207.2947 534.0688,-210.7948 534.0689,-203.7948"/>
+</g>
+<!-- proc~dftexcor -->
+<g id="module~~lebedev~~UsedByGraph_node27" class="node">
+<title>proc~dftexcor</title>
+<g id="a_module~~lebedev~~UsedByGraph_node27"><a xlink:href="../proc/dftexcor.html" xlink:title="dftexcor">
+<polygon fill="#d9534f" stroke="#d9534f" points="662.5,-261.2947 605.5,-261.2947 605.5,-237.2947 662.5,-237.2947 662.5,-261.2947"/>
+<text text-anchor="middle" x="634" y="-246.8947" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftexcor</text>
+</a>
+</g>
+</g>
+<!-- proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy -->
+<g id="module~~lebedev~~UsedByGraph_edge38" class="edge">
+<title>proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M605.4326,-249.2947C587.7095,-249.2947 563.9814,-249.2947 540.8859,-249.2947"/>
+<polygon fill="#000000" stroke="#000000" points="540.6958,-245.7948 530.6958,-249.2947 540.6957,-252.7948 540.6958,-245.7948"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulelebedevUsedByGraph = svgPanZoom('#modulelebedevUsedByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-spherical_grid_type_lebedev"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>spherical_grid_type_lebedev</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-spherical_grid_type_o"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>spherical_grid_type_o</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-spherical_grid_type_oh"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>spherical_grid_type_oh</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-spherical_grid_type_i"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>spherical_grid_type_i</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lebedev_npts"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>lebedev_npts</strong>(*)</td>
+<td> =</td>
+                <td>[6, 14, 26, 38, 50, 74, 86, 110, 146, 170, 194, 230, 266, 302, 350, 434, 590, 770, 974, 1202, 1454, 1730, 2030, 2354, 2702, 3074, 3470, 3890, 4334, 4802, 5294, 5810]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oct_npts"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>oct_npts</strong>(*)</td>
+<td> =</td>
+                <td>[246, 264, 342, 432]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oh_npts"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>oh_npts</strong>(*)</td>
+<td> =</td>
+                <td>[350, 398]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-i_npts"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>i_npts</strong>(*)</td>
+<td> =</td>
+                <td>[132, 152, 180, 192, 212, 242]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lebedev_orders"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>lebedev_orders</strong>(*)</td>
+<td> =</td>
+                <td>[3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 35, 41, 47, 53, 59, 65, 71, 77, 83, 89, 95, 101, 107, 113, 119, 125, 131]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oct_orders"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>oct_orders</strong>(*)</td>
+<td> =</td>
+                <td>[26, 27, 31, 35]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oh_orders"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>oh_orders</strong>(*)</td>
+<td> =</td>
+                <td>[31, 33]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-i_orders"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>i_orders</strong>(*)</td>
+<td> =</td>
+                <td>[19, 20, 21, 23, 24, 25]</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-lebedev_get_grid"></span> <h3>public  subroutine <a href='../proc/lebedev_get_grid.html'>lebedev_get_grid</a>(npts, xyz, w, grid_type)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>npts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xyz~7"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xyz</strong>(npts,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-w~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>w</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-grid_type"></span>
+              integer,
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>grid_type</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

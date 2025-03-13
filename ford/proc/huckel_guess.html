@@ -1,0 +1,2111 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>huckel_guess &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>huckel_guess
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">42 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/huckel.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/huckel.f90.html'>huckel.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/huckel.html'>huckel</a></li>
+            <li class="breadcrumb-item active" aria-current="page">huckel_guess</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/huckel_guess.html#src">huckel_guess</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/int1.html'>int1</a></li>
+                  <li class="list-inline-item"><a href='../module/guess.html'>guess</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/constants.html'>constants</a></li>
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~huckel_guess~~UsesGraph Pages: 1 -->
+<svg id="prochuckel_guessUsesGraph" width="641pt" height="422pt"
+ viewBox="0.00 0.00 641.00 422.18" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~huckel_guess~~UsesGraph" class="graph" transform="scale(.626 .626) rotate(0) translate(4 670.4305)">
+<title>proc~~huckel_guess~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-670.4305 1020,-670.4305 1020,4 -4,4"/>
+<!-- proc~huckel_guess -->
+<g id="proc~~huckel_guess~~UsesGraph_node1" class="node">
+<title>proc~huckel_guess</title>
+<polygon fill="none" stroke="#000000" points="1016,-189.8041 932,-189.8041 932,-165.8041 1016,-165.8041 1016,-189.8041"/>
+<text text-anchor="middle" x="974" y="-175.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">huckel_guess</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-467.8041 429,-467.8041 429,-443.8041 499,-443.8041 499,-467.8041"/>
+<text text-anchor="middle" x="464" y="-453.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~basis_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge1" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M869,-451.8041C823.079,-483.384 803.8345,-477.4031 749.5,-489.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-489.8041C665.7172,-508.9264 565.5005,-486.9515 508.8465,-470.5076"/>
+<polygon fill="#000000" stroke="#000000" points="509.7088,-467.1126 499.1259,-467.6156 507.7126,-473.8219 509.7088,-467.1126"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~huckel_guess~~UsesGraph_node3" class="node">
+<title>module~constants</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node3"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-387.8041 277,-387.8041 277,-363.8041 341,-363.8041 341,-387.8041"/>
+<text text-anchor="middle" x="309" y="-373.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge2" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M971.2496,-189.9799C959.9344,-238.8825 915.3823,-419.907 869,-451.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M869,-451.8041C793.5823,-503.6689 555.5297,-377.0994 464,-376.8041"/>
+</g>
+<!-- module~guess -->
+<g id="proc~~huckel_guess~~UsesGraph_node4" class="node">
+<title>module~guess</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node4"><a xlink:href="../module/guess.html" xlink:title="guess">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-149.8041 842,-149.8041 842,-125.8041 896,-125.8041 896,-149.8041"/>
+<text text-anchor="middle" x="869" y="-135.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~guess -->
+<g id="proc~~huckel_guess~~UsesGraph_edge3" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M942.4965,-165.8028C930.9814,-161.4161 917.8529,-156.4147 905.9085,-151.8645"/>
+<polygon fill="#000000" stroke="#000000" points="906.806,-148.4611 896.2151,-148.1718 904.314,-155.0025 906.806,-148.4611"/>
+</g>
+<!-- module~int1 -->
+<g id="proc~~huckel_guess~~UsesGraph_node5" class="node">
+<title>module~int1</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node5"><a xlink:href="../module/int1.html" xlink:title="int1">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-315.8041 842,-315.8041 842,-291.8041 896,-291.8041 896,-315.8041"/>
+<text text-anchor="middle" x="869" y="-301.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~int1 -->
+<g id="proc~~huckel_guess~~UsesGraph_edge4" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M963.9322,-189.8855C945.8686,-211.5618 907.788,-257.2585 885.7408,-283.7152"/>
+<polygon fill="#000000" stroke="#000000" points="882.9047,-281.6513 879.1916,-291.5742 888.2823,-286.1326 882.9047,-281.6513"/>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~huckel_guess~~UsesGraph_node6" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node6"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-107.8041 842,-107.8041 842,-83.8041 896,-83.8041 896,-107.8041"/>
+<text text-anchor="middle" x="869" y="-93.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~mathlib -->
+<g id="proc~~huckel_guess~~UsesGraph_edge5" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M958.4704,-165.6396C942.7356,-153.319 917.6892,-133.7198 896,-116.8041 894.9727,-116.003 893.9233,-115.1849 892.8629,-114.3587"/>
+<polygon fill="#000000" stroke="#000000" points="894.7512,-111.3932 884.7104,-108.012 890.4511,-116.9167 894.7512,-111.3932"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~huckel_guess~~UsesGraph_node7" class="node">
+<title>module~messages</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node7"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="497,-147.8041 431,-147.8041 431,-123.8041 497,-123.8041 497,-147.8041"/>
+<text text-anchor="middle" x="464" y="-133.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~messages -->
+<g id="proc~~huckel_guess~~UsesGraph_edge6" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M931.8307,-174.3314C836.1571,-166.4524 603.4901,-147.2915 507.015,-139.3465"/>
+<polygon fill="#000000" stroke="#000000" points="507.2784,-135.8565 497.0248,-138.5238 506.7038,-142.8328 507.2784,-135.8565"/>
+</g>
+<!-- module~types -->
+<g id="proc~~huckel_guess~~UsesGraph_node8" class="node">
+<title>module~types</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node8"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="635.5,-541.8041 581.5,-541.8041 581.5,-517.8041 635.5,-517.8041 635.5,-541.8041"/>
+<text text-anchor="middle" x="608.5" y="-527.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~types -->
+<g id="proc~~huckel_guess~~UsesGraph_edge7" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-489.8041C713.8183,-497.948 673.7211,-509.5678 645.4344,-518.1868"/>
+<polygon fill="#000000" stroke="#000000" points="644.1089,-514.9325 635.5774,-521.2144 646.1643,-521.6239 644.1089,-514.9325"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.4588,-443.6538C414.018,-430.007 370.942,-407.7742 341.3505,-392.5012"/>
+<polygon fill="#000000" stroke="#000000" points="342.7463,-389.2829 332.2548,-387.8066 339.5358,-395.5033 342.7463,-389.2829"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_node12" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node12"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-387.8041 0,-387.8041 0,-363.8041 94,-363.8041 94,-387.8041"/>
+<text text-anchor="middle" x="47" y="-373.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-453.8041C248.7511,-444.999 229.6536,-473.3877 172,-453.8041"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~huckel_guess~~UsesGraph_node13" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node13"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-627.8041 250,-627.8041 250,-603.8041 368,-603.8041 368,-627.8041"/>
+<text text-anchor="middle" x="309" y="-613.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~huckel_guess~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.8954,-467.8926C428.5103,-475.3703 413.822,-485.9873 404,-498.8041 376.2826,-534.9731 400.4913,-562.8548 368,-594.8041 366.8856,-595.9 365.7103,-596.9389 364.4845,-597.924"/>
+<polygon fill="#000000" stroke="#000000" points="362.1898,-595.2448 355.7706,-603.6736 366.045,-601.0875 362.1898,-595.2448"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~huckel_guess~~UsesGraph_node15" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node15"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-307.8041 269.5,-307.8041 269.5,-283.8041 348.5,-283.8041 348.5,-307.8041"/>
+<text text-anchor="middle" x="309" y="-293.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M458.223,-443.7869C445.3584,-418.1503 411.9849,-357.5264 368,-321.8041 363.7098,-318.3199 358.8798,-315.2124 353.8778,-312.4661"/>
+<polygon fill="#000000" stroke="#000000" points="355.2771,-309.2527 344.7677,-307.9093 352.1456,-315.5132 355.2771,-309.2527"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~huckel_guess~~UsesGraph_node19" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node19"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-543.8041 282,-543.8041 282,-519.8041 336,-519.8041 336,-543.8041"/>
+<text text-anchor="middle" x="309" y="-529.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~huckel_guess~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.4398,-467.8466C413.3277,-480.6499 371.8569,-500.984 342.7002,-515.2802"/>
+<polygon fill="#000000" stroke="#000000" points="341.1393,-512.1473 333.7014,-519.6925 344.2211,-518.4325 341.1393,-512.1473"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_node20" class="node">
+<title>module~precision</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node20"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-387.8041 141.5,-387.8041 141.5,-363.8041 202.5,-363.8041 202.5,-387.8041"/>
+<text text-anchor="middle" x="172" y="-373.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.7026,-457.9851C397.1499,-459.3099 349.7425,-459.7585 309,-453.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-453.8041C263.2571,-447.119 218.2364,-415.3002 192.8978,-394.4239"/>
+<polygon fill="#000000" stroke="#000000" points="194.9817,-391.6024 185.0867,-387.8157 190.4606,-396.9465 194.9817,-391.6024"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge14" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-375.8041C257.6649,-375.8041 233.0702,-375.8041 212.5278,-375.8041"/>
+<polygon fill="#000000" stroke="#000000" points="212.5085,-372.3042 202.5084,-375.8041 212.5084,-379.3042 212.5085,-372.3042"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~huckel_guess~~UsesGraph_node18" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node18"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="783,-107.8041 716,-107.8041 716,-83.8041 783,-83.8041 783,-107.8041"/>
+<text text-anchor="middle" x="749.5" y="-93.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~guess&#45;&gt;module~oqp_linalg -->
+<g id="proc~~huckel_guess~~UsesGraph_edge15" class="edge">
+<title>module~guess&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-128.2737C827.5129,-123.2229 809.5091,-116.8952 793.2213,-111.1706"/>
+<polygon fill="#000000" stroke="#000000" points="793.9443,-107.7149 783.3495,-107.701 791.6232,-114.3189 793.9443,-107.7149"/>
+</g>
+<!-- module~guess&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge16" class="edge">
+<title>module~guess&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.9495,-137.0931C759.0926,-135.8185 502.6774,-138.6289 309,-213.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-213.8041C284.0479,-225.4791 271.2203,-215.2367 250,-232.8041 211.0281,-265.0673 188.4326,-322.0765 178.3578,-353.487"/>
+<polygon fill="#000000" stroke="#000000" points="174.8894,-352.8606 175.3101,-363.4471 181.583,-354.9089 174.8894,-352.8606"/>
+</g>
+<!-- module~int1&#45;&gt;module~basis_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge18" class="edge">
+<title>module~int1&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-451.8041C575.2469,-449.9687 537.6402,-451.111 509.129,-452.6371"/>
+<polygon fill="#000000" stroke="#000000" points="508.8455,-449.1475 499.0613,-453.2118 509.2445,-456.1361 508.8455,-449.1475"/>
+</g>
+<!-- module~int1&#45;&gt;module~messages -->
+<g id="proc~~huckel_guess~~UsesGraph_edge19" class="edge">
+<title>module~int1&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.7979,-292.5203C771.4966,-263.3583 583.6064,-185.4186 502.337,-151.7069"/>
+<polygon fill="#000000" stroke="#000000" points="503.5477,-148.42 492.9698,-147.8212 500.8655,-154.8857 503.5477,-148.42"/>
+</g>
+<!-- module~int1&#45;&gt;iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_edge17" class="edge">
+<title>module~int1&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M858.3168,-315.956C824.9969,-352.3961 718.6044,-457.8813 608.5,-451.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-451.8041C570.4601,-456.3289 562.1195,-438.6006 524,-434.8041 402.8015,-422.7335 371.1269,-427.0357 250,-439.8041 214.9734,-443.4964 205.3492,-465.1321 172,-453.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-453.8041C133.2509,-439.7019 93.7372,-412.4313 69.7867,-394.1684"/>
+<polygon fill="#000000" stroke="#000000" points="71.7427,-391.256 61.6972,-387.8886 67.4502,-396.7855 71.7427,-391.256"/>
+</g>
+<!-- module~mod_1e_primitives -->
+<g id="proc~~huckel_guess~~UsesGraph_node16" class="node">
+<title>module~mod_1e_primitives</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node16"><a xlink:href="../module/mod_1e_primitives.html" xlink:title="mod_1e_primitives">
+<polygon fill="#337ab7" stroke="#337ab7" points="806,-315.8041 693,-315.8041 693,-291.8041 806,-291.8041 806,-315.8041"/>
+<text text-anchor="middle" x="749.5" y="-301.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="proc~~huckel_guess~~UsesGraph_edge20" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-303.8041C834.1786,-303.8041 825.4291,-303.8041 816.4597,-303.8041"/>
+<polygon fill="#000000" stroke="#000000" points="816.2835,-300.3042 806.2835,-303.8041 816.2834,-307.3042 816.2835,-300.3042"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_node17" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node17"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="657,-385.8041 560,-385.8041 560,-361.8041 657,-361.8041 657,-385.8041"/>
+<text text-anchor="middle" x="608.5" y="-371.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge21" class="edge">
+<title>module~int1&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8578,-313.3705C830.797,-317.1329 817.8473,-321.3657 806,-324.8041 759.6519,-338.2558 706.5294,-351.3042 667.0605,-360.5493"/>
+<polygon fill="#000000" stroke="#000000" points="666.0223,-357.1974 657.0771,-362.8749 667.6105,-364.0148 666.0223,-357.1974"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~huckel_guess~~UsesGraph_edge22" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-95.8041C827.6485,-95.8041 809.8485,-95.8041 793.6828,-95.8041"/>
+<polygon fill="#000000" stroke="#000000" points="793.3495,-92.3042 783.3495,-95.8041 793.3494,-99.3042 793.3495,-92.3042"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge23" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8126,-86.39C830.7452,-82.6497 817.8028,-78.3924 806,-74.8041 740.2861,-54.8261 724.5645,-46.1518 657,-33.8041 572.2536,-18.3164 549.966,-21.4317 464,-15.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-15.8041C395.3737,-9.7953 369.8986,16.3989 309,-15.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-15.8041C284.6469,-28.682 268.6174,-14.4988 250,-34.8041 206.4569,-82.2949 181.5095,-285.3281 174.2457,-353.4323"/>
+<polygon fill="#000000" stroke="#000000" points="170.7518,-353.193 173.1969,-363.5018 177.7141,-353.9183 170.7518,-353.193"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~huckel_guess~~UsesGraph_node9" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-67.8041 266.5,-67.8041 266.5,-43.8041 351.5,-43.8041 351.5,-67.8041"/>
+<text text-anchor="middle" x="309" y="-53.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~huckel_guess~~UsesGraph_edge24" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.9125,-123.7989C421.87,-119.9035 412.2862,-115.179 404,-109.8041 385.7903,-97.9924 386.5949,-87.9998 368,-76.8041 365.1591,-75.0936 362.1576,-73.4927 359.0742,-71.9994"/>
+<polygon fill="#000000" stroke="#000000" points="360.2182,-68.6785 349.6566,-67.8407 357.3905,-75.082 360.2182,-68.6785"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~huckel_guess~~UsesGraph_node10" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-109.8041 273,-109.8041 273,-85.8041 345,-85.8041 345,-109.8041"/>
+<text text-anchor="middle" x="309" y="-95.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~huckel_guess~~UsesGraph_edge25" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.7486,-127.6522C408.6232,-122.2279 379.2619,-115.0296 354.9167,-109.0611"/>
+<polygon fill="#000000" stroke="#000000" points="355.7175,-105.6539 345.1717,-106.672 354.0507,-112.4525 355.7175,-105.6539"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge26" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.9282,-147.9781C439.0649,-178.3821 391.8553,-256.5121 368,-274.8041 364.8386,-277.2282 361.3736,-279.3886 357.7566,-281.3111"/>
+<polygon fill="#000000" stroke="#000000" points="356.1193,-278.2128 348.5389,-285.6147 359.0807,-284.5556 356.1193,-278.2128"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge27" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.9324,-137.3013C385.0247,-141.0604 301.7979,-154.1799 250,-199.8041 202.9768,-241.2228 182.9934,-316.378 175.6655,-353.6362"/>
+<polygon fill="#000000" stroke="#000000" points="172.2193,-353.0247 173.8515,-363.493 179.1037,-354.2917 172.2193,-353.0247"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge30" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M584.962,-517.7501C560.9253,-505.4406 523.4246,-486.2361 496.5508,-472.4738"/>
+<polygon fill="#000000" stroke="#000000" points="498.0241,-469.296 487.5279,-467.853 494.8333,-475.5265 498.0241,-469.296"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~huckel_guess~~UsesGraph_node11" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node11"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-627.8041 130,-627.8041 130,-603.8041 214,-603.8041 214,-627.8041"/>
+<text text-anchor="middle" x="172" y="-613.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~huckel_guess~~UsesGraph_edge28" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-655.8041C376.0023,-682.4855 267.6564,-651.9949 210.8956,-631.4525"/>
+<polygon fill="#000000" stroke="#000000" points="211.8381,-628.0692 201.245,-627.8745 209.4046,-634.6326 211.8381,-628.0692"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~huckel_guess~~UsesGraph_edge29" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M600.2221,-542.0647C580.5902,-569.7876 528.0237,-636.3918 464,-655.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-655.8041C442.8819,-662.2073 388.3163,-645.2729 349.9281,-631.4916"/>
+<polygon fill="#000000" stroke="#000000" points="350.6537,-628.0307 340.0598,-627.8915 348.2547,-634.6068 350.6537,-628.0307"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~huckel_guess~~UsesGraph_node14" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node14"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-585.8041 273.5,-585.8041 273.5,-561.8041 344.5,-561.8041 344.5,-585.8041"/>
+<text text-anchor="middle" x="309" y="-571.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~huckel_guess~~UsesGraph_edge31" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-512.8041C436.0285,-512.9314 429.5706,-520.4654 404,-531.8041 387.0669,-539.3128 384.7981,-544.998 368,-552.8041 363.6092,-554.8445 358.9608,-556.8105 354.2771,-558.6662"/>
+<polygon fill="#000000" stroke="#000000" points="352.7911,-555.4866 344.6851,-562.3089 355.2763,-562.0306 352.7911,-555.4866"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~huckel_guess~~UsesGraph_edge32" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-512.8041C423.4449,-512.9886 377.361,-519.445 346.057,-524.7805"/>
+<polygon fill="#000000" stroke="#000000" points="345.2827,-521.3628 336.0368,-526.5363 346.4909,-528.2577 345.2827,-521.3628"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M581.4465,-524.6294C552.4967,-519.56 505.1731,-512.6168 464,-512.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-512.8041C415.4049,-513.0252 291.7453,-492.681 250,-467.8041 220.698,-450.3425 197.105,-417.8533 183.8196,-396.5307"/>
+<polygon fill="#000000" stroke="#000000" points="186.7699,-394.6453 178.6137,-387.8831 180.7728,-398.2556 186.7699,-394.6453"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~huckel_guess~~UsesGraph_node21" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="493,-564.8041 435,-564.8041 435,-540.8041 493,-540.8041 493,-564.8041"/>
+<text text-anchor="middle" x="464" y="-550.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~huckel_guess~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M581.3207,-534.1303C559.2879,-537.6372 527.9447,-542.6261 503.1968,-546.5652"/>
+<polygon fill="#000000" stroke="#000000" points="502.3663,-543.1532 493.0408,-548.1817 503.4667,-550.0662 502.3663,-543.1532"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~huckel_guess~~UsesGraph_edge35" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-615.8041C241.1722,-615.8041 232.4436,-615.8041 224.0637,-615.8041"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-612.3042 214.0516,-615.8041 224.0516,-619.3042 224.0516,-612.3042"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~huckel_guess~~UsesGraph_edge36" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-584.7295C257.4565,-589.6058 238.4524,-595.4319 221.2204,-600.7147"/>
+<polygon fill="#000000" stroke="#000000" points="219.851,-597.4736 211.316,-603.751 221.9027,-604.1662 219.851,-597.4736"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge37" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.486,-566.9944C264.8835,-563.8873 256.3488,-559.3695 250,-552.8041 213.359,-514.9134 236.6695,-487.3895 214,-439.8041 206.6408,-424.3566 196.0606,-408.259 187.3606,-396.0726"/>
+<polygon fill="#000000" stroke="#000000" points="190.1559,-393.9657 181.4309,-387.9554 184.5035,-398.0949 190.1559,-393.9657"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~huckel_guess~~UsesGraph_node28" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-585.8041 131.5,-585.8041 131.5,-561.8041 212.5,-561.8041 212.5,-585.8041"/>
+<text text-anchor="middle" x="172" y="-571.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~huckel_guess~~UsesGraph_edge38" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-573.8041C257.9991,-573.8041 239.7453,-573.8041 222.9899,-573.8041"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-570.3042 212.79,-573.8041 222.79,-577.3042 222.7901,-570.3042"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge40" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M702.9612,-315.8543C622.8317,-336.5814 467.0376,-376.7824 464,-376.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-376.8041C425.8002,-376.6809 382.3057,-376.3869 351.1338,-376.1493"/>
+<polygon fill="#000000" stroke="#000000" points="351.0872,-372.649 341.0603,-376.0713 351.0329,-379.6487 351.0872,-372.649"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_edge39" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M722.2883,-291.7799C694.3296,-279.9963 649.2545,-262.568 608.5,-253.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-253.8041C450.9704,-219.9288 400.9635,-143.4736 250,-199.8041 165.0863,-231.4888 92.1268,-316.467 61.8924,-355.5857"/>
+<polygon fill="#000000" stroke="#000000" points="59.0422,-353.5518 55.779,-363.6316 64.6158,-357.7867 59.0422,-353.5518"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge42" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M725.2612,-315.8376C702.2598,-327.2567 667.4958,-344.5154 641.8794,-357.2328"/>
+<polygon fill="#000000" stroke="#000000" points="640.2949,-354.1118 632.8943,-361.6935 643.4076,-360.3816 640.2949,-354.1118"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="proc~~huckel_guess~~UsesGraph_node24" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node24"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-265.8041 404,-265.8041 404,-241.8041 524,-241.8041 524,-265.8041"/>
+<text text-anchor="middle" x="464" y="-251.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="proc~~huckel_guess~~UsesGraph_edge41" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-253.8041C584.5717,-248.6586 557.8945,-247.435 534.0391,-247.8914"/>
+<polygon fill="#000000" stroke="#000000" points="533.8983,-244.3939 524.0043,-248.1833 534.1019,-251.3909 533.8983,-244.3939"/>
+</g>
+<!-- module~rys -->
+<g id="proc~~huckel_guess~~UsesGraph_node25" class="node">
+<title>module~rys</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node25"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-307.8041 437,-307.8041 437,-283.8041 491,-283.8041 491,-307.8041"/>
+<text text-anchor="middle" x="464" y="-293.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="proc~~huckel_guess~~UsesGraph_edge43" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-253.8041C597.875,-251.5193 540.0123,-269.9494 500.8092,-283.1306"/>
+<polygon fill="#000000" stroke="#000000" points="499.6355,-279.8327 491.2845,-286.3528 501.8788,-286.4636 499.6355,-279.8327"/>
+</g>
+<!-- module~xyz_order -->
+<g id="proc~~huckel_guess~~UsesGraph_node26" class="node">
+<title>module~xyz_order</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node26"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="640.5,-305.8041 576.5,-305.8041 576.5,-281.8041 640.5,-281.8041 640.5,-305.8041"/>
+<text text-anchor="middle" x="608.5" y="-291.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="proc~~huckel_guess~~UsesGraph_edge44" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.9623,-299.7944C678.9369,-298.7996 664.1434,-297.7505 650.924,-296.8129"/>
+<polygon fill="#000000" stroke="#000000" points="650.9272,-293.3044 640.7046,-296.0881 650.4319,-300.2869 650.9272,-293.3044"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="proc~~huckel_guess~~UsesGraph_edge45" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.1785,-385.9035C562.6331,-399.8324 522.1319,-422.8158 494.3149,-438.6012"/>
+<polygon fill="#000000" stroke="#000000" points="492.3787,-435.6756 485.4089,-443.6551 495.8336,-441.7636 492.3787,-435.6756"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge46" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M573.1544,-361.7917C516.8208,-344.3282 403.3976,-316.0588 309,-335.8041"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~huckel_guess~~UsesGraph_node22" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node22"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="641.5,-66.8041 575.5,-66.8041 575.5,-42.8041 641.5,-42.8041 641.5,-66.8041"/>
+<text text-anchor="middle" x="608.5" y="-52.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~huckel_guess~~UsesGraph_edge47" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715.727,-85.9836C696.4029,-80.3645 671.9712,-73.2603 651.3112,-67.2528"/>
+<polygon fill="#000000" stroke="#000000" points="652.0905,-63.8345 641.5109,-64.4031 650.1359,-70.5561 652.0905,-63.8345"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~huckel_guess~~UsesGraph_node23" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node23"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="648,-108.8041 569,-108.8041 569,-84.8041 648,-84.8041 648,-108.8041"/>
+<text text-anchor="middle" x="608.5" y="-94.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~huckel_guess~~UsesGraph_edge48" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715.727,-96.0437C698.531,-96.1656 677.2905,-96.3163 658.2623,-96.4512"/>
+<polygon fill="#000000" stroke="#000000" points="658.2285,-92.9513 648.2536,-96.5222 658.2782,-99.9511 658.2285,-92.9513"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~huckel_guess~~UsesGraph_edge49" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7526,-538.2619C271.2465,-541.5549 259.4985,-546.2771 250,-552.8041 229.7374,-566.7279 233.3784,-579.6739 214,-594.8041 212.4096,-596.0458 210.7342,-597.2438 209.005,-598.3947"/>
+<polygon fill="#000000" stroke="#000000" points="206.844,-595.6088 200.0562,-603.7438 210.4355,-601.6173 206.844,-595.6088"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_edge50" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8004,-520.9838C271.6349,-516.6387 260.1094,-511.3472 250,-505.8041 213.467,-485.773 211.4504,-467.2045 172,-453.8041"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge51" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8658,-524.0978C271.0127,-519.9995 258.9831,-514.0604 250,-505.8041 225.399,-483.1936 231.1804,-468.4621 214,-439.8041 205.0919,-424.9449 194.3655,-408.6236 185.9824,-396.1821"/>
+<polygon fill="#000000" stroke="#000000" points="188.8633,-394.1943 180.3519,-387.885 183.071,-398.1249 188.8633,-394.1943"/>
+</g>
+<!-- mpi -->
+<g id="proc~~huckel_guess~~UsesGraph_node27" class="node">
+<title>mpi</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node27"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-543.8041 145,-543.8041 145,-519.8041 199,-519.8041 199,-543.8041"/>
+<text text-anchor="middle" x="172" y="-529.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~huckel_guess~~UsesGraph_edge52" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-531.8041C261.1051,-531.8041 232.0908,-531.8041 209.0994,-531.8041"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-528.3042 199.0106,-531.8041 209.0105,-535.3042 209.0106,-528.3042"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~huckel_guess~~UsesGraph_edge53" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-375.8041C130.2434,-375.8041 117.203,-375.8041 104.4454,-375.8041"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-372.3042 94.3156,-375.8041 104.3156,-379.3042 104.3156,-372.3042"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~huckel_guess~~UsesGraph_edge55" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M578.6728,-66.8807C572.4218,-69.6438 565.93,-72.6896 560,-75.8041 535.5153,-88.6637 508.9426,-105.5143 489.975,-118.0832"/>
+<polygon fill="#000000" stroke="#000000" points="487.9419,-115.2322 481.5739,-123.6998 491.8325,-121.0515 487.9419,-115.2322"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge56" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M577.8173,-42.712C548.972,-32.266 504.3195,-18.4435 464,-15.8041"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~huckel_guess~~UsesGraph_node29" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node29"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="507.5,-67.8041 420.5,-67.8041 420.5,-43.8041 507.5,-43.8041 507.5,-67.8041"/>
+<text text-anchor="middle" x="464" y="-53.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~huckel_guess~~UsesGraph_edge54" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M575.3488,-55.0335C558.3271,-55.1513 537.1622,-55.2978 517.8701,-55.4313"/>
+<polygon fill="#000000" stroke="#000000" points="517.6603,-51.9326 507.6848,-55.5018 517.7088,-58.9324 517.6603,-51.9326"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~huckel_guess~~UsesGraph_edge58" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M568.6322,-107.5643C549.5674,-112.7098 526.7098,-118.879 507.2284,-124.137"/>
+<polygon fill="#000000" stroke="#000000" points="506.1291,-120.8083 497.3866,-126.7932 507.9532,-127.5665 506.1291,-120.8083"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge59" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M568.7506,-101.3475C525.6507,-104.4268 456.0551,-103.8933 404,-76.8041 382.1909,-65.4548 388.4719,-48.4183 368,-34.8041 345.0609,-19.5493 333.4695,-3.1488 309,-15.8041"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~huckel_guess~~UsesGraph_edge57" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M568.6322,-85.4922C552.501,-80.9151 533.6544,-75.5677 516.4352,-70.6819"/>
+<polygon fill="#000000" stroke="#000000" points="517.0933,-67.2306 506.5176,-67.868 515.1825,-73.9647 517.0933,-67.2306"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge60" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.0757,-241.682C395.7772,-226.9279 331.6696,-205.005 309,-213.8041"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="proc~~huckel_guess~~UsesGraph_edge61" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M443.7122,-307.9781C424.4926,-319.3276 394.6806,-336.461 368,-349.8041 361.3237,-353.143 354.122,-356.5067 347.1217,-359.6557"/>
+<polygon fill="#000000" stroke="#000000" points="345.4974,-356.547 337.7689,-363.7942 348.33,-362.9483 345.4974,-356.547"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="proc~~huckel_guess~~UsesGraph_edge62" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.7413,-303.6573C405.9236,-312.344 354.1563,-326.3587 309,-335.8041"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-335.8041C275.9516,-342.7169 239.2695,-353.6037 212.1857,-362.2753"/>
+<polygon fill="#000000" stroke="#000000" points="211.1012,-358.9475 202.6662,-365.3584 213.2581,-365.6069 211.1012,-358.9475"/>
+</g>
+<!-- module~rys_lut -->
+<g id="proc~~huckel_guess~~UsesGraph_node30" class="node">
+<title>module~rys_lut</title>
+<g id="a_proc~~huckel_guess~~UsesGraph_node30"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-265.8041 282,-265.8041 282,-241.8041 336,-241.8041 336,-265.8041"/>
+<text text-anchor="middle" x="309" y="-251.4041" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="proc~~huckel_guess~~UsesGraph_edge63" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-288.3921C411.4124,-281.5546 373.7496,-271.3492 345.8688,-263.7944"/>
+<polygon fill="#000000" stroke="#000000" points="346.648,-260.3794 336.0806,-261.1421 344.8172,-267.1357 346.648,-260.3794"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprochuckel_guessUsesGraph = svgPanZoom('#prochuckel_guessUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ovl~2"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ovl</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-orbitals~2"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>orbitals</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~65"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~118"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-huckel_basis~2"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>huckel_basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~huckel_guess~~CallsGraph Pages: 1 -->
+<svg id="prochuckel_guessCallsGraph" width="641pt" height="904pt"
+ viewBox="0.00 0.00 641.00 903.77" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~huckel_guess~~CallsGraph" class="graph" transform="scale(.7963 .7963) rotate(0) translate(4 1131)">
+<title>proc~~huckel_guess~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-1131 801,-1131 801,4 -4,4"/>
+<!-- proc~huckel_guess -->
+<g id="proc~~huckel_guess~~CallsGraph_node1" class="node">
+<title>proc~huckel_guess</title>
+<polygon fill="none" stroke="#000000" points="84,-525 0,-525 0,-501 84,-501 84,-525"/>
+<text text-anchor="middle" x="42" y="-510.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">huckel_guess</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="797,-651 704,-651 704,-627 797,-627 797,-651"/>
+<text text-anchor="middle" x="750.5" y="-636.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge1" class="edge">
+<title>proc~huckel_guess&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M50.691,-525.18C63.6154,-542.1977 89.6626,-572.515 120,-586 221.865,-631.279 558.5196,-638.0757 693.6422,-638.9484"/>
+<polygon fill="#000000" stroke="#000000" points="693.7654,-642.4491 703.7848,-639.0051 693.8046,-635.4492 693.7654,-642.4491"/>
+</g>
+<!-- interface~unpack_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_node3" class="node">
+<title>interface~unpack_matrix</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node3"><a xlink:href="../interface/unpack_matrix.html" xlink:title="unpack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="260,-577 169,-577 169,-553 260,-553 260,-577"/>
+<text text-anchor="middle" x="214.5" y="-562.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">unpack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_edge2" class="edge">
+<title>proc~huckel_guess&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M82.0085,-525.0605C106.6312,-532.483 138.3923,-542.0574 164.6446,-549.9711"/>
+<polygon fill="#000000" stroke="#000000" points="163.8254,-553.3797 174.41,-552.9149 165.8458,-546.6776 163.8254,-553.3797"/>
+</g>
+<!-- proc~basis_overlap -->
+<g id="proc~~huckel_guess~~CallsGraph_node4" class="node">
+<title>proc~basis_overlap</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node4"><a xlink:href="../proc/basis_overlap.html" xlink:title="basis_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="257,-129 172,-129 172,-105 257,-105 257,-129"/>
+<text text-anchor="middle" x="214.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~basis_overlap -->
+<g id="proc~~huckel_guess~~CallsGraph_edge3" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~basis_overlap</title>
+<path fill="none" stroke="#000000" d="M43.2011,-500.8927C47.7123,-459.5522 66.2236,-321.0601 120,-222 138.6755,-187.5984 170.7977,-155.2782 192.3396,-135.8166"/>
+<polygon fill="#000000" stroke="#000000" points="194.8607,-138.2593 200.0277,-129.0098 190.2204,-133.0183 194.8607,-138.2593"/>
+</g>
+<!-- proc~corresponding_orbital_projection -->
+<g id="proc~~huckel_guess~~CallsGraph_node5" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node5"><a xlink:href="../proc/corresponding_orbital_projection.html" xlink:title="corresponding_orbital_projection">
+<polygon fill="#d9534f" stroke="#d9534f" points="309,-771 120,-771 120,-747 309,-747 309,-771"/>
+<text text-anchor="middle" x="214.5" y="-756.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">corresponding_orbital_projection</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection -->
+<g id="proc~~huckel_guess~~CallsGraph_edge4" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection</title>
+<path fill="none" stroke="#000000" d="M49.1153,-525.3408C62.3584,-548.0888 91.9927,-597.967 120,-638 145.7197,-674.7632 178.4733,-715.4945 197.8908,-739.0812"/>
+<polygon fill="#000000" stroke="#000000" points="195.3333,-741.4807 204.4036,-746.9562 200.7276,-737.0195 195.3333,-741.4807"/>
+</g>
+<!-- proc~diag_symm_full -->
+<g id="proc~~huckel_guess~~CallsGraph_node6" class="node">
+<title>proc~diag_symm_full</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node6"><a xlink:href="../proc/diag_symm_full.html" xlink:title="diag_symm_full">
+<polygon fill="#d9534f" stroke="#d9534f" points="471,-966 376,-966 376,-942 471,-942 471,-966"/>
+<text text-anchor="middle" x="423.5" y="-951.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">diag_symm_full</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~diag_symm_full -->
+<g id="proc~~huckel_guess~~CallsGraph_edge5" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~diag_symm_full</title>
+<path fill="none" stroke="#000000" d="M43.0131,-525.0828C47.9588,-581.2555 71.3268,-816.3234 120,-868 183.9312,-935.8761 297.0705,-951.5067 365.685,-954.3629"/>
+<polygon fill="#000000" stroke="#000000" points="365.7748,-957.8678 375.8872,-954.7071 366.0109,-950.8718 365.7748,-957.8678"/>
+</g>
+<!-- proc~matrix_invsqrt -->
+<g id="proc~~huckel_guess~~CallsGraph_node7" class="node">
+<title>proc~matrix_invsqrt</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node7"><a xlink:href="../proc/matrix_invsqrt.html" xlink:title="matrix_invsqrt">
+<polygon fill="#d9534f" stroke="#d9534f" points="467.5,-1066 379.5,-1066 379.5,-1042 467.5,-1042 467.5,-1066"/>
+<text text-anchor="middle" x="423.5" y="-1051.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">matrix_invsqrt</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~matrix_invsqrt -->
+<g id="proc~~huckel_guess~~CallsGraph_edge6" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~matrix_invsqrt</title>
+<path fill="none" stroke="#000000" d="M42.8035,-525.0896C47.0624,-585.8976 68.7623,-857.9208 120,-922 182.3747,-1000.0073 299.9735,-1032.9384 369.0427,-1046.042"/>
+<polygon fill="#000000" stroke="#000000" points="368.8167,-1049.5583 379.282,-1047.9066 370.0709,-1042.6716 368.8167,-1049.5583"/>
+</g>
+<!-- proc~mksphar -->
+<g id="proc~~huckel_guess~~CallsGraph_node8" class="node">
+<title>proc~mksphar</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node8"><a xlink:href="../proc/mksphar.html" xlink:title="mksphar">
+<polygon fill="#d9534f" stroke="#d9534f" points="244,-859 185,-859 185,-835 244,-835 244,-859"/>
+<text text-anchor="middle" x="214.5" y="-844.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mksphar</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~mksphar -->
+<g id="proc~~huckel_guess~~CallsGraph_edge7" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~mksphar</title>
+<path fill="none" stroke="#000000" d="M42.7455,-525.1243C45.749,-565.1994 59.8854,-695.6423 120,-780 135.2831,-801.4465 159.6562,-818.4827 179.8215,-830.0092"/>
+<polygon fill="#000000" stroke="#000000" points="178.2935,-833.1632 188.7427,-834.9135 181.6657,-827.029 178.2935,-833.1632"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node9" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node9"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="653.5,-474 552.5,-474 552.5,-450 653.5,-450 653.5,-474"/>
+<text text-anchor="middle" x="603" y="-459.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge8" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M57.0201,-500.8675C71.9676,-489.6242 96.0711,-473.6637 120,-467 267.1662,-426.0173 449.4664,-440.8297 542.3752,-452.7819"/>
+<polygon fill="#000000" stroke="#000000" points="542.0684,-456.2717 552.4405,-454.1109 542.9847,-449.3319 542.0684,-456.2717"/>
+</g>
+<!-- proc~oqp_dgeqrf_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node10" class="node">
+<title>proc~oqp_dgeqrf_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node10"><a xlink:href="../proc/oqp_dgeqrf_i64.html" xlink:title="oqp_dgeqrf_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="650.5,-516 555.5,-516 555.5,-492 650.5,-492 650.5,-516"/>
+<text text-anchor="middle" x="603" y="-501.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgeqrf_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~oqp_dgeqrf_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge9" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~oqp_dgeqrf_i64</title>
+<path fill="none" stroke="#000000" d="M80.1206,-500.915C92.6931,-497.4208 106.8299,-494.0105 120,-492 287.88,-466.3721 333.0664,-465.6234 502,-483 516.1211,-484.4525 531.18,-487.0187 545.2423,-489.8696"/>
+<polygon fill="#000000" stroke="#000000" points="544.7713,-493.3472 555.2781,-491.9841 546.2145,-486.4976 544.7713,-493.3472"/>
+</g>
+<!-- proc~oqp_dormqr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node11" class="node">
+<title>proc~oqp_dormqr_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node11"><a xlink:href="../proc/oqp_dormqr_i64.html" xlink:title="oqp_dormqr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="264.5,-525 164.5,-525 164.5,-501 264.5,-501 264.5,-525"/>
+<text text-anchor="middle" x="214.5" y="-510.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dormqr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~oqp_dormqr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge10" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~oqp_dormqr_i64</title>
+<path fill="none" stroke="#000000" d="M84.1982,-513C105.3114,-513 131.2386,-513 154.3906,-513"/>
+<polygon fill="#000000" stroke="#000000" points="154.462,-516.5001 164.462,-513 154.4619,-509.5001 154.462,-516.5001"/>
+</g>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node12" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node12"><a xlink:href="../proc/oqp_dsymm_i64.html" xlink:title="oqp_dsymm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="652.5,-310 553.5,-310 553.5,-286 652.5,-286 652.5,-310"/>
+<text text-anchor="middle" x="603" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsymm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge11" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M44.619,-500.8497C51.4343,-472.478 72.5893,-401.8659 120,-370 261.7976,-274.6944 334.4162,-360.2475 502,-327 520.1,-323.4091 539.6643,-318.1285 556.7102,-313.0541"/>
+<polygon fill="#000000" stroke="#000000" points="557.8736,-316.3587 566.4255,-310.1045 555.84,-309.6606 557.8736,-316.3587"/>
+</g>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~huckel_guess~~CallsGraph_node13" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node13"><a xlink:href="../proc/orthogonal_transform_sym.html" xlink:title="orthogonal_transform_sym">
+<polygon fill="#d9534f" stroke="#d9534f" points="501.5,-398 345.5,-398 345.5,-374 501.5,-374 501.5,-398"/>
+<text text-anchor="middle" x="423.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform_sym</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~huckel_guess~~CallsGraph_edge12" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M47.3471,-500.6914C57.7159,-478.5117 82.8505,-432.2623 120,-412 185.7738,-376.1253 271.6969,-371.9943 335.3245,-375.4596"/>
+<polygon fill="#000000" stroke="#000000" points="335.1419,-378.9549 345.3384,-376.0773 335.5729,-371.9682 335.1419,-378.9549"/>
+</g>
+<!-- proc~overlap -->
+<g id="proc~~huckel_guess~~CallsGraph_node14" class="node">
+<title>proc~overlap</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node14"><a xlink:href="../proc/overlap.html" xlink:title="overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="241.5,-255 187.5,-255 187.5,-231 241.5,-231 241.5,-255"/>
+<text text-anchor="middle" x="214.5" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~overlap -->
+<g id="proc~~huckel_guess~~CallsGraph_edge13" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~overlap</title>
+<path fill="none" stroke="#000000" d="M45.3897,-500.7062C54.198,-470.1617 79.9476,-389.169 120,-332 139.5487,-304.0971 168.9627,-278.1133 189.774,-261.5121"/>
+<polygon fill="#000000" stroke="#000000" points="192.1179,-264.1223 197.8378,-255.2041 187.8049,-258.6088 192.1179,-264.1223"/>
+</g>
+<!-- proc~unpack_f90 -->
+<g id="proc~~huckel_guess~~CallsGraph_node32" class="node">
+<title>proc~unpack_f90</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node32"><a xlink:href="../proc/unpack_f90.html" xlink:title="UNPACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="463,-596 384,-596 384,-572 463,-572 463,-596"/>
+<text text-anchor="middle" x="423.5" y="-581.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">UNPACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~unpack_matrix&#45;&gt;proc~unpack_f90 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge14" class="edge">
+<title>interface~unpack_matrix&#45;&gt;proc~unpack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M260.1077,-569.1462C293.6332,-572.1939 339.166,-576.3333 373.6501,-579.4682"/>
+<polygon fill="#000000" stroke="#000000" points="373.696,-582.9867 383.9718,-580.4065 374.3298,-576.0155 373.696,-582.9867"/>
+</g>
+<!-- none~alloc2 -->
+<g id="proc~~huckel_guess~~CallsGraph_node20" class="node">
+<title>none~alloc2</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node20"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc2" xlink:title="shpair_t%alloc2">
+<polygon fill="#a7506f" stroke="#a7506f" points="472,-108 375,-108 375,-84 472,-84 472,-108"/>
+<text text-anchor="middle" x="423.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~alloc2 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge15" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~alloc2</title>
+<path fill="none" stroke="#000000" d="M257.0462,-112.725C287.9809,-109.6168 330.2519,-105.3694 364.4543,-101.9328"/>
+<polygon fill="#000000" stroke="#000000" points="365.1883,-105.3768 374.7883,-100.8945 364.4884,-98.4119 365.1883,-105.3768"/>
+</g>
+<!-- none~fetch_by_id -->
+<g id="proc~~huckel_guess~~CallsGraph_node22" class="node">
+<title>none~fetch_by_id</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node22"><a xlink:href="../type/shell_t.html#boundprocedure-fetch_by_id" xlink:title="shell_t%fetch_by_id">
+<polygon fill="#a7506f" stroke="#a7506f" points="481.5,-192 365.5,-192 365.5,-168 481.5,-168 481.5,-192"/>
+<text text-anchor="middle" x="423.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shell_t%fetch_by_id</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~fetch_by_id -->
+<g id="proc~~huckel_guess~~CallsGraph_edge16" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M250.3548,-129.0727C276.4888,-137.7418 312.8078,-149.5201 345,-159 352.1514,-161.1059 359.6953,-163.2372 367.1648,-165.2937"/>
+<polygon fill="#000000" stroke="#000000" points="366.334,-168.6949 376.9023,-167.9457 368.1735,-161.9409 366.334,-168.6949"/>
+</g>
+<!-- none~shell_pair2 -->
+<g id="proc~~huckel_guess~~CallsGraph_node24" class="node">
+<title>none~shell_pair2</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node24"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair2" xlink:title="shpair_t%shell_pair2">
+<polygon fill="#a7506f" stroke="#a7506f" points="484.5,-66 362.5,-66 362.5,-42 484.5,-42 484.5,-66"/>
+<text text-anchor="middle" x="423.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~shell_pair2 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge17" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~shell_pair2</title>
+<path fill="none" stroke="#000000" d="M250.3548,-104.9273C276.4888,-96.2582 312.8078,-84.4799 345,-75 352.1514,-72.8941 359.6953,-70.7628 367.1648,-68.7063"/>
+<polygon fill="#000000" stroke="#000000" points="368.1735,-72.0591 376.9023,-66.0543 366.334,-65.3051 368.1735,-72.0591"/>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~huckel_guess~~CallsGraph_node25" class="node">
+<title>proc~comp_kin_ovl_int1_prim</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node25"><a xlink:href="../proc/comp_kin_ovl_int1_prim.html" xlink:title="comp_kin_ovl_int1_prim">
+<polygon fill="#d9534f" stroke="#d9534f" points="493.5,-150 353.5,-150 353.5,-126 493.5,-126 493.5,-150"/>
+<text text-anchor="middle" x="423.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_kin_ovl_int1_prim</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~huckel_guess~~CallsGraph_edge18" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim</title>
+<path fill="none" stroke="#000000" d="M257.0462,-121.275C281.8156,-123.7638 313.8529,-126.9828 343.1967,-129.9313"/>
+<polygon fill="#000000" stroke="#000000" points="343.1475,-133.4438 353.4473,-130.9612 343.8474,-126.4789 343.1475,-133.4438"/>
+</g>
+<!-- proc~update_rectangular_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_node33" class="node">
+<title>proc~update_rectangular_matrix</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node33"><a xlink:href="../proc/update_rectangular_matrix.html" xlink:title="update_rectangular_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="502,-24 345,-24 345,0 502,0 502,-24"/>
+<text text-anchor="middle" x="423.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_rectangular_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_edge19" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix</title>
+<path fill="none" stroke="#000000" d="M229.6678,-104.9762C253.1164,-86.9298 300.1573,-52.846 345,-33 349.7168,-30.9125 354.6876,-28.9929 359.7435,-27.2358"/>
+<polygon fill="#000000" stroke="#000000" points="361.0987,-30.4757 369.527,-24.0558 358.9348,-23.8185 361.0987,-30.4757"/>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge20" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M230.2794,-771.0306C253.7683,-788.1019 300.0071,-818.5528 345,-830 484.1294,-865.3976 548.5229,-906.594 668,-827 725.0618,-788.9862 742.951,-701.9504 748.3188,-661.0285"/>
+<polygon fill="#000000" stroke="#000000" points="751.805,-661.3501 749.5,-651.0091 744.8532,-660.5305 751.805,-661.3501"/>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~diag_symm_full -->
+<g id="proc~~huckel_guess~~CallsGraph_edge21" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~diag_symm_full</title>
+<path fill="none" stroke="#000000" d="M234.8516,-771.1708C254.8301,-783.6204 285.6224,-804.1821 309,-826 327.472,-843.2396 328.3651,-850.9816 345,-870 364.763,-892.5946 388.3973,-917.6317 404.534,-934.4439"/>
+<polygon fill="#000000" stroke="#000000" points="402.3448,-937.2163 411.8035,-941.9897 407.386,-932.3597 402.3448,-937.2163"/>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge22" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M233.6494,-746.8308C258.8188,-731.0046 304.581,-702.8077 345,-681 413.2263,-644.1891 451.8536,-664.1203 502,-605 538.5691,-561.8867 498.5387,-523.4828 538,-483 539.6478,-481.3095 541.4324,-479.755 543.3224,-478.3255"/>
+<polygon fill="#000000" stroke="#000000" points="545.5364,-481.0708 552.1884,-472.8245 541.8458,-475.1227 545.5364,-481.0708"/>
+</g>
+<!-- proc~oqp_dswap_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node27" class="node">
+<title>proc~oqp_dswap_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node27"><a xlink:href="../proc/oqp_dswap_i64.html" xlink:title="oqp_dswap_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="470.5,-771 376.5,-771 376.5,-747 470.5,-747 470.5,-771"/>
+<text text-anchor="middle" x="423.5" y="-756.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dswap_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dswap_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge23" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dswap_i64</title>
+<path fill="none" stroke="#000000" d="M309.2159,-759C328.7176,-759 348.6778,-759 366.3477,-759"/>
+<polygon fill="#000000" stroke="#000000" points="366.4661,-762.5001 376.4661,-759 366.466,-755.5001 366.4661,-762.5001"/>
+</g>
+<!-- proc~oqp_dsyrk_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node28" class="node">
+<title>proc~oqp_dsyrk_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node28"><a xlink:href="../proc/oqp_dsyrk_i64.html" xlink:title="oqp_dsyrk_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="467.5,-714 379.5,-714 379.5,-690 467.5,-690 467.5,-714"/>
+<text text-anchor="middle" x="423.5" y="-699.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsyrk_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dsyrk_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge24" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dsyrk_i64</title>
+<path fill="none" stroke="#000000" d="M258.5681,-746.9814C290.9418,-738.1522 335.1051,-726.1077 369.585,-716.7041"/>
+<polygon fill="#000000" stroke="#000000" points="370.7654,-720.0101 379.4921,-714.0021 368.9236,-713.2567 370.7654,-720.0101"/>
+</g>
+<!-- proc~schmd -->
+<g id="proc~~huckel_guess~~CallsGraph_node31" class="node">
+<title>proc~schmd</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node31"><a xlink:href="../proc/schmd.html" xlink:title="schmd">
+<polygon fill="#d9534f" stroke="#d9534f" points="450.5,-821 396.5,-821 396.5,-797 450.5,-797 450.5,-821"/>
+<text text-anchor="middle" x="423.5" y="-806.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">schmd</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~schmd -->
+<g id="proc~~huckel_guess~~CallsGraph_edge25" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~schmd</title>
+<path fill="none" stroke="#000000" d="M264.8267,-771.0399C302.2631,-779.9959 352.5204,-792.0192 386.3582,-800.1144"/>
+<polygon fill="#000000" stroke="#000000" points="385.7601,-803.57 396.3,-802.4928 387.3888,-796.7621 385.7601,-803.57"/>
+</g>
+<!-- proc~diag_symm_full&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge27" class="edge">
+<title>proc~diag_symm_full&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M457.6522,-966.0408C509.0754,-981.7977 606.8602,-1002.227 668,-955 715.4022,-918.3845 740.7548,-726.9716 748.1662,-661.2103"/>
+<polygon fill="#000000" stroke="#000000" points="751.6625,-661.4349 749.2732,-651.113 744.7042,-660.672 751.6625,-661.4349"/>
+</g>
+<!-- dsyev -->
+<g id="proc~~huckel_guess~~CallsGraph_node18" class="node">
+<title>dsyev</title>
+<polygon fill="#777777" stroke="#777777" points="630,-1026 576,-1026 576,-1002 630,-1002 630,-1026"/>
+<text text-anchor="middle" x="603" y="-1011.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyev</text>
+</g>
+<!-- proc~diag_symm_full&#45;&gt;dsyev -->
+<g id="proc~~huckel_guess~~CallsGraph_edge26" class="edge">
+<title>proc~diag_symm_full&#45;&gt;dsyev</title>
+<path fill="none" stroke="#000000" d="M459.8245,-966.1419C490.7913,-976.4929 535.0995,-991.3035 566.2015,-1001.6997"/>
+<polygon fill="#000000" stroke="#000000" points="565.208,-1005.0579 575.8018,-1004.9087 567.4272,-998.4189 565.208,-1005.0579"/>
+</g>
+<!-- proc~matrix_invsqrt&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge28" class="edge">
+<title>proc~matrix_invsqrt&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M467.9108,-1064.9198C522.0772,-1075.365 613.1761,-1083.2278 668,-1035 682.3986,-1022.3338 732.3005,-742.9131 746.6268,-661.2333"/>
+<polygon fill="#000000" stroke="#000000" points="750.0943,-661.722 748.3699,-651.2685 743.199,-660.5158 750.0943,-661.722"/>
+</g>
+<!-- proc~diag_symm_packed -->
+<g id="proc~~huckel_guess~~CallsGraph_node26" class="node">
+<title>proc~diag_symm_packed</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node26"><a xlink:href="../proc/diag_symm_packed.html" xlink:title="diag_symm_packed">
+<polygon fill="#d9534f" stroke="#d9534f" points="662,-1106 544,-1106 544,-1082 662,-1082 662,-1106"/>
+<text text-anchor="middle" x="603" y="-1091.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">diag_symm_packed</text>
+</a>
+</g>
+</g>
+<!-- proc~matrix_invsqrt&#45;&gt;proc~diag_symm_packed -->
+<g id="proc~~huckel_guess~~CallsGraph_edge29" class="edge">
+<title>proc~matrix_invsqrt&#45;&gt;proc~diag_symm_packed</title>
+<path fill="none" stroke="#000000" d="M467.8708,-1063.8876C489.3093,-1068.665 515.4358,-1074.4871 538.9813,-1079.734"/>
+<polygon fill="#000000" stroke="#000000" points="538.3712,-1083.1838 548.893,-1081.9427 539.8938,-1076.3514 538.3712,-1083.1838"/>
+</g>
+<!-- proc~mksphar&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge30" class="edge">
+<title>proc~mksphar&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M244.0277,-852.5071C333.4973,-868.5184 599.6466,-910.9738 668,-863 702.3609,-838.8838 734.0042,-712.6546 745.7122,-661.0331"/>
+<polygon fill="#000000" stroke="#000000" points="749.1415,-661.7357 747.9018,-651.2137 742.3093,-660.2122 749.1415,-661.7357"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge32" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M653.6961,-473.9701C658.839,-476.4402 663.7313,-479.416 668,-483 710.9805,-519.0857 734.6919,-583.4 744.7042,-617.0708"/>
+<polygon fill="#000000" stroke="#000000" points="741.3828,-618.1874 747.4806,-626.8515 748.1167,-616.2758 741.3828,-618.1874"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~huckel_guess~~CallsGraph_node15" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-474 723.5,-474 723.5,-450 777.5,-450 777.5,-474"/>
+<text text-anchor="middle" x="750.5" y="-459.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~huckel_guess~~CallsGraph_edge31" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M653.7611,-462C673.2663,-462 695.1551,-462 713.1718,-462"/>
+<polygon fill="#000000" stroke="#000000" points="713.2851,-465.5001 723.2851,-462 713.2851,-458.5001 713.2851,-465.5001"/>
+</g>
+<!-- proc~oqp_dgeqrf_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge34" class="edge">
+<title>proc~oqp_dgeqrf_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M642.9828,-516.0327C651.7143,-519.7097 660.5594,-524.3236 668,-530 699.8161,-554.2725 725.5115,-593.8582 739.3462,-618.0545"/>
+<polygon fill="#000000" stroke="#000000" points="736.2944,-619.7683 744.2152,-626.8048 742.4112,-616.3647 736.2944,-619.7683"/>
+</g>
+<!-- dgeqrf -->
+<g id="proc~~huckel_guess~~CallsGraph_node16" class="node">
+<title>dgeqrf</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-516 723.5,-516 723.5,-492 777.5,-492 777.5,-516"/>
+<text text-anchor="middle" x="750.5" y="-501.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgeqrf</text>
+</g>
+<!-- proc~oqp_dgeqrf_i64&#45;&gt;dgeqrf -->
+<g id="proc~~huckel_guess~~CallsGraph_edge33" class="edge">
+<title>proc~oqp_dgeqrf_i64&#45;&gt;dgeqrf</title>
+<path fill="none" stroke="#000000" d="M650.889,-504C671.188,-504 694.4799,-504 713.4343,-504"/>
+<polygon fill="#000000" stroke="#000000" points="713.4717,-507.5001 723.4717,-504 713.4717,-500.5001 713.4717,-507.5001"/>
+</g>
+<!-- proc~oqp_dormqr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge36" class="edge">
+<title>proc~oqp_dormqr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M264.8021,-517.9434C366.9499,-528.4399 595.1611,-554.35 668,-583 690.4275,-591.8215 712.8607,-607.61 728.6605,-620.1789"/>
+<polygon fill="#000000" stroke="#000000" points="726.7571,-623.1437 736.7137,-626.7657 731.189,-617.7253 726.7571,-623.1437"/>
+</g>
+<!-- dormqr -->
+<g id="proc~~huckel_guess~~CallsGraph_node17" class="node">
+<title>dormqr</title>
+<polygon fill="#777777" stroke="#777777" points="450.5,-516 396.5,-516 396.5,-492 450.5,-492 450.5,-516"/>
+<text text-anchor="middle" x="423.5" y="-501.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dormqr</text>
+</g>
+<!-- proc~oqp_dormqr_i64&#45;&gt;dormqr -->
+<g id="proc~~huckel_guess~~CallsGraph_edge35" class="edge">
+<title>proc~oqp_dormqr_i64&#45;&gt;dormqr</title>
+<path fill="none" stroke="#000000" d="M264.5607,-510.8443C301.8284,-509.2394 351.9123,-507.0827 385.8237,-505.6224"/>
+<polygon fill="#000000" stroke="#000000" points="386.3887,-509.1014 396.2289,-505.1744 386.0875,-502.1079 386.3887,-509.1014"/>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge38" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M652.6955,-307.5641C658.4771,-310.4389 663.7983,-314.1672 668,-319 728.9812,-389.1406 678.3011,-435.6804 704,-525 713.5842,-558.3109 729.6848,-595.164 740.2004,-617.7052"/>
+<polygon fill="#000000" stroke="#000000" points="737.1537,-619.4495 744.5954,-626.9908 743.4808,-616.4547 737.1537,-619.4495"/>
+</g>
+<!-- dsymm -->
+<g id="proc~~huckel_guess~~CallsGraph_node19" class="node">
+<title>dsymm</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-310 723.5,-310 723.5,-286 777.5,-286 777.5,-310"/>
+<text text-anchor="middle" x="750.5" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsymm</text>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;dsymm -->
+<g id="proc~~huckel_guess~~CallsGraph_edge37" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M652.5257,-298C672.347,-298 694.7945,-298 713.1974,-298"/>
+<polygon fill="#000000" stroke="#000000" points="713.2381,-301.5001 723.238,-298 713.238,-294.5001 713.2381,-301.5001"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge39" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M469.5552,-373.9723C523.2585,-362.9059 611.8171,-354.2315 668,-399 713.5487,-435.2948 684.9734,-469.9547 704,-525 715.3237,-557.7604 730.9601,-594.7604 740.9016,-617.4833"/>
+<polygon fill="#000000" stroke="#000000" points="737.7956,-619.1144 745.0326,-626.8524 744.2006,-616.2903 737.7956,-619.1144"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge40" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M469.0819,-398.0372C480.1809,-401.789 491.7891,-406.4353 502,-412 520.0405,-421.8317 519.9235,-431.2346 538,-441 541.4807,-442.8803 545.158,-444.6272 548.9215,-446.2435"/>
+<polygon fill="#000000" stroke="#000000" points="547.8053,-449.5659 558.3915,-449.9937 550.3827,-443.0576 547.8053,-449.5659"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge41" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M473.5088,-373.8598C483.4027,-370.2623 493.3824,-365.7083 502,-360 522.2168,-346.6085 517.7342,-332.3171 538,-319 540.5923,-317.2965 543.3334,-315.722 546.1659,-314.2677"/>
+<polygon fill="#000000" stroke="#000000" points="547.8133,-317.363 555.4528,-310.0221 544.9028,-310.9968 547.8133,-317.363"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node29" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node29"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="647.5,-432 558.5,-432 558.5,-408 647.5,-408 647.5,-432"/>
+<text text-anchor="middle" x="603" y="-417.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge42" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M487.0376,-398.035C507.1341,-401.8415 529.1526,-406.0122 548.553,-409.6869"/>
+<polygon fill="#000000" stroke="#000000" points="547.9588,-413.1365 558.4355,-411.5588 549.2616,-406.2588 547.9588,-413.1365"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node30" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node30"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="647.5,-352 558.5,-352 558.5,-328 647.5,-328 647.5,-352"/>
+<text text-anchor="middle" x="603" y="-337.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge43" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M470.6615,-373.914C494.4893,-367.8078 523.5308,-360.3654 548.3311,-354.0099"/>
+<polygon fill="#000000" stroke="#000000" points="549.4975,-357.3241 558.3156,-351.4512 547.7598,-350.5432 549.4975,-357.3241"/>
+</g>
+<!-- none~alloc~2 -->
+<g id="proc~~huckel_guess~~CallsGraph_node21" class="node">
+<title>none~alloc~2</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node21"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc~2" xlink:title="shpair_t%alloc">
+<polygon fill="#a7506f" stroke="#a7506f" points="468.5,-318 378.5,-318 378.5,-294 468.5,-294 468.5,-318"/>
+<text text-anchor="middle" x="423.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc</text>
+</a>
+</g>
+</g>
+<!-- proc~overlap&#45;&gt;none~alloc~2 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge44" class="edge">
+<title>proc~overlap&#45;&gt;none~alloc~2</title>
+<path fill="none" stroke="#000000" d="M241.6215,-252.1657C267.9321,-260.9537 309.0406,-274.4108 345,-285 352.5172,-287.2137 360.4681,-289.4554 368.3105,-291.6087"/>
+<polygon fill="#000000" stroke="#000000" points="367.5775,-295.0364 378.1454,-294.2803 369.4126,-288.2812 367.5775,-295.0364"/>
+</g>
+<!-- proc~overlap&#45;&gt;none~fetch_by_id -->
+<g id="proc~~huckel_guess~~CallsGraph_edge45" class="edge">
+<title>proc~overlap&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M241.6215,-233.8343C267.9321,-225.0463 309.0406,-211.5892 345,-201 352.1514,-198.8941 359.6953,-196.7628 367.1648,-194.7063"/>
+<polygon fill="#000000" stroke="#000000" points="368.1735,-198.0591 376.9023,-192.0543 366.334,-191.3051 368.1735,-198.0591"/>
+</g>
+<!-- none~shell_pair -->
+<g id="proc~~huckel_guess~~CallsGraph_node23" class="node">
+<title>none~shell_pair</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node23"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair" xlink:title="shpair_t%shell_pair">
+<polygon fill="#a7506f" stroke="#a7506f" points="481,-276 366,-276 366,-252 481,-252 481,-276"/>
+<text text-anchor="middle" x="423.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair</text>
+</a>
+</g>
+</g>
+<!-- proc~overlap&#45;&gt;none~shell_pair -->
+<g id="proc~~huckel_guess~~CallsGraph_edge46" class="edge">
+<title>proc~overlap&#45;&gt;none~shell_pair</title>
+<path fill="none" stroke="#000000" d="M241.8231,-245.7454C270.5679,-248.6336 316.9151,-253.2905 355.6019,-257.1777"/>
+<polygon fill="#000000" stroke="#000000" points="355.4718,-260.6822 365.7716,-258.1995 356.1717,-253.7172 355.4718,-260.6822"/>
+</g>
+<!-- proc~overlap&#45;&gt;proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~huckel_guess~~CallsGraph_edge47" class="edge">
+<title>proc~overlap&#45;&gt;proc~comp_kin_ovl_int1_prim</title>
+<path fill="none" stroke="#000000" d="M229.6678,-230.9762C253.1164,-212.9298 300.1573,-178.846 345,-159 349.7168,-156.9125 354.6876,-154.9929 359.7435,-153.2358"/>
+<polygon fill="#000000" stroke="#000000" points="361.0987,-156.4757 369.527,-150.0558 358.9348,-149.8185 361.0987,-156.4757"/>
+</g>
+<!-- proc~update_triang_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_node34" class="node">
+<title>proc~update_triang_matrix</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node34"><a xlink:href="../proc/update_triang_matrix.html" xlink:title="update_triang_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="487,-234 360,-234 360,-210 487,-210 487,-234"/>
+<text text-anchor="middle" x="423.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_triang_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~overlap&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~huckel_guess~~CallsGraph_edge48" class="edge">
+<title>proc~overlap&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M241.8231,-240.2546C269.0296,-237.5209 312.005,-233.2028 349.329,-229.4526"/>
+<polygon fill="#000000" stroke="#000000" points="350.0886,-232.894 359.6886,-228.4117 349.3887,-225.929 350.0886,-232.894"/>
+</g>
+<!-- proc~doquadgausshermite -->
+<g id="proc~~huckel_guess~~CallsGraph_node41" class="node">
+<title>proc~doquadgausshermite</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node41"><a xlink:href="../proc/doquadgausshermite.html" xlink:title="doQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="668,-150 538,-150 538,-126 668,-126 668,-150"/>
+<text text-anchor="middle" x="603" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">doQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite -->
+<g id="proc~~huckel_guess~~CallsGraph_edge49" class="edge">
+<title>proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M493.6706,-138C504.8125,-138 516.3776,-138 527.6329,-138"/>
+<polygon fill="#000000" stroke="#000000" points="527.8613,-141.5001 537.8613,-138 527.8612,-134.5001 527.8613,-141.5001"/>
+</g>
+<!-- proc~diag_symm_packed&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge52" class="edge">
+<title>proc~diag_symm_packed&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M650.1438,-1081.8479C656.9163,-1078.3324 663.2026,-1073.8111 668,-1068 681.2703,-1051.926 732.5989,-747.0296 746.8256,-661.271"/>
+<polygon fill="#000000" stroke="#000000" points="750.296,-661.7371 748.4762,-651.2997 743.39,-660.5939 750.296,-661.7371"/>
+</g>
+<!-- dspev -->
+<g id="proc~~huckel_guess~~CallsGraph_node35" class="node">
+<title>dspev</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-1127 723.5,-1127 723.5,-1103 777.5,-1103 777.5,-1127"/>
+<text text-anchor="middle" x="750.5" y="-1112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dspev</text>
+</g>
+<!-- proc~diag_symm_packed&#45;&gt;dspev -->
+<g id="proc~~huckel_guess~~CallsGraph_edge50" class="edge">
+<title>proc~diag_symm_packed&#45;&gt;dspev</title>
+<path fill="none" stroke="#000000" d="M662.144,-1102.4205C679.3357,-1104.8681 697.6304,-1107.4728 713.0866,-1109.6733"/>
+<polygon fill="#000000" stroke="#000000" points="712.8916,-1113.1808 723.2851,-1111.1253 713.8783,-1106.2507 712.8916,-1113.1808"/>
+</g>
+<!-- dspevx -->
+<g id="proc~~huckel_guess~~CallsGraph_node36" class="node">
+<title>dspevx</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-1085 723.5,-1085 723.5,-1061 777.5,-1061 777.5,-1085"/>
+<text text-anchor="middle" x="750.5" y="-1070.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dspevx</text>
+</g>
+<!-- proc~diag_symm_packed&#45;&gt;dspevx -->
+<g id="proc~~huckel_guess~~CallsGraph_edge51" class="edge">
+<title>proc~diag_symm_packed&#45;&gt;dspevx</title>
+<path fill="none" stroke="#000000" d="M662.144,-1085.5795C679.3357,-1083.1319 697.6304,-1080.5272 713.0866,-1078.3267"/>
+<polygon fill="#000000" stroke="#000000" points="713.8783,-1081.7493 723.2851,-1076.8747 712.8916,-1074.8192 713.8783,-1081.7493"/>
+</g>
+<!-- proc~oqp_dswap_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge54" class="edge">
+<title>proc~oqp_dswap_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M470.6523,-759.5091C521.8606,-758.2462 604.7921,-750.797 668,-719 696.1297,-704.8492 720.9322,-677.7394 735.8181,-659.0281"/>
+<polygon fill="#000000" stroke="#000000" points="738.5985,-661.1541 741.9361,-651.0987 733.0563,-656.878 738.5985,-661.1541"/>
+</g>
+<!-- dswap -->
+<g id="proc~~huckel_guess~~CallsGraph_node37" class="node">
+<title>dswap</title>
+<polygon fill="#777777" stroke="#777777" points="630,-790 576,-790 576,-766 630,-766 630,-790"/>
+<text text-anchor="middle" x="603" y="-775.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dswap</text>
+</g>
+<!-- proc~oqp_dswap_i64&#45;&gt;dswap -->
+<g id="proc~~huckel_guess~~CallsGraph_edge53" class="edge">
+<title>proc~oqp_dswap_i64&#45;&gt;dswap</title>
+<path fill="none" stroke="#000000" d="M470.6615,-763.992C500.4117,-767.1411 538.2894,-771.1504 565.8921,-774.0721"/>
+<polygon fill="#000000" stroke="#000000" points="565.6168,-777.5625 575.9296,-775.1346 566.3536,-770.6014 565.6168,-777.5625"/>
+</g>
+<!-- proc~oqp_dsyrk_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge56" class="edge">
+<title>proc~oqp_dsyrk_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M467.7327,-691.9314C488.9483,-687.2074 514.7497,-681.6154 538,-677 590.7496,-666.5288 651.1302,-655.857 694.0132,-648.4996"/>
+<polygon fill="#000000" stroke="#000000" points="694.7096,-651.9314 703.9765,-646.7958 693.5296,-645.0315 694.7096,-651.9314"/>
+</g>
+<!-- dsyrk -->
+<g id="proc~~huckel_guess~~CallsGraph_node38" class="node">
+<title>dsyrk</title>
+<polygon fill="#777777" stroke="#777777" points="630,-710 576,-710 576,-686 630,-686 630,-710"/>
+<text text-anchor="middle" x="603" y="-695.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyrk</text>
+</g>
+<!-- proc~oqp_dsyrk_i64&#45;&gt;dsyrk -->
+<g id="proc~~huckel_guess~~CallsGraph_edge55" class="edge">
+<title>proc~oqp_dsyrk_i64&#45;&gt;dsyrk</title>
+<path fill="none" stroke="#000000" d="M467.8708,-701.0112C497.8817,-700.3425 537.0789,-699.469 565.5232,-698.8351"/>
+<polygon fill="#000000" stroke="#000000" points="565.9371,-702.3269 575.8566,-698.6049 565.7811,-695.3286 565.9371,-702.3269"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge58" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M647.7521,-428.7703C655.1333,-431.7338 662.2425,-435.6979 668,-441 669.7379,-442.6004 720.6023,-566.1816 741.5835,-617.2701"/>
+<polygon fill="#000000" stroke="#000000" points="738.4329,-618.8118 745.4686,-626.7333 744.9085,-616.1533 738.4329,-618.8118"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~huckel_guess~~CallsGraph_node39" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-432 723.5,-432 723.5,-408 777.5,-408 777.5,-432"/>
+<text text-anchor="middle" x="750.5" y="-417.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~huckel_guess~~CallsGraph_edge57" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M647.6551,-420C668.4985,-420 693.0344,-420 712.9125,-420"/>
+<polygon fill="#000000" stroke="#000000" points="713.1304,-423.5001 723.1304,-420 713.1303,-416.5001 713.1304,-423.5001"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge60" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M647.6648,-351.1404C655.3246,-354.7918 662.556,-359.6209 668,-366 715.0349,-421.1135 682.2437,-455.8882 704,-525 714.4081,-558.0627 730.2888,-594.9821 740.5325,-617.6052"/>
+<polygon fill="#000000" stroke="#000000" points="737.4563,-619.294 744.8025,-626.9284 743.8206,-616.3792 737.4563,-619.294"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~huckel_guess~~CallsGraph_node40" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-352 723.5,-352 723.5,-328 777.5,-328 777.5,-352"/>
+<text text-anchor="middle" x="750.5" y="-337.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~huckel_guess~~CallsGraph_edge59" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M647.6551,-340C668.4985,-340 693.0344,-340 712.9125,-340"/>
+<polygon fill="#000000" stroke="#000000" points="713.1304,-343.5001 723.1304,-340 713.1303,-336.5001 713.1304,-343.5001"/>
+</g>
+<!-- proc~schmd&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge61" class="edge">
+<title>proc~schmd&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M450.6839,-816.0905C498.7646,-826.9723 600.1266,-842.2946 668,-799 716.9514,-767.7753 738.3028,-697.6063 746.3329,-661.4619"/>
+<polygon fill="#000000" stroke="#000000" points="749.8122,-661.9199 748.4131,-651.4178 742.9577,-660.5002 749.8122,-661.9199"/>
+</g>
+<!-- proc~schmd&#45;&gt;proc~oqp_dgeqrf_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge62" class="edge">
+<title>proc~schmd&#45;&gt;proc~oqp_dgeqrf_i64</title>
+<path fill="none" stroke="#000000" d="M450.6958,-804.9806C467.4872,-801.1818 488.3556,-793.8871 502,-780 535.9863,-745.409 521.4709,-722.5894 538,-677 557.835,-622.2923 582.191,-558.2668 594.7058,-525.5868"/>
+<polygon fill="#000000" stroke="#000000" points="598.0199,-526.7195 598.3323,-516.1293 591.4839,-524.2133 598.0199,-526.7195"/>
+</g>
+<!-- proc~oqp_dorgqr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_node42" class="node">
+<title>proc~oqp_dorgqr_i64</title>
+<g id="a_proc~~huckel_guess~~CallsGraph_node42"><a xlink:href="../proc/oqp_dorgqr_i64.html" xlink:title="oqp_dorgqr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="651,-946 555,-946 555,-922 651,-922 651,-946"/>
+<text text-anchor="middle" x="603" y="-931.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dorgqr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~schmd&#45;&gt;proc~oqp_dorgqr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge63" class="edge">
+<title>proc~schmd&#45;&gt;proc~oqp_dorgqr_i64</title>
+<path fill="none" stroke="#000000" d="M441.038,-821.2131C472.889,-843.3935 540.3597,-890.3786 577.3741,-916.1547"/>
+<polygon fill="#000000" stroke="#000000" points="575.4486,-919.0788 585.655,-921.9213 579.4489,-913.3344 575.4486,-919.0788"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge64" class="edge">
+<title>proc~unpack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M463.0244,-584.0503C511.8437,-584.9095 597.126,-589.0219 668,-606 684.4903,-609.9503 702.0297,-616.5924 716.6771,-622.8864"/>
+<polygon fill="#000000" stroke="#000000" points="715.2835,-626.097 725.8448,-626.9403 718.1146,-619.695 715.2835,-626.097"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~huckel_guess~~CallsGraph_edge65" class="edge">
+<title>proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M445.3063,-571.9545C462.6164,-561.4648 486.4188,-544.8463 502,-525 527.082,-493.0521 507.9833,-468.3638 538,-441 541.344,-437.9515 545.1351,-435.3453 549.1659,-433.1172"/>
+<polygon fill="#000000" stroke="#000000" points="550.7368,-436.2461 558.292,-428.8185 547.7539,-429.9135 550.7368,-436.2461"/>
+</g>
+<!-- abrt -->
+<g id="proc~~huckel_guess~~CallsGraph_node43" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-150 723.5,-150 723.5,-126 777.5,-126 777.5,-150"/>
+<text text-anchor="middle" x="750.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~doquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~huckel_guess~~CallsGraph_edge66" class="edge">
+<title>proc~doquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M668.125,-138C683.6226,-138 699.6352,-138 713.3749,-138"/>
+<polygon fill="#000000" stroke="#000000" points="713.3926,-141.5001 723.3926,-138 713.3925,-134.5001 713.3926,-141.5001"/>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~huckel_guess~~CallsGraph_edge68" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M648.6225,-921.8848C655.8265,-918.3502 662.6501,-913.813 668,-908 702.1845,-870.8565 734.9454,-718.3533 746.2999,-660.9702"/>
+<polygon fill="#000000" stroke="#000000" points="749.7425,-661.6023 748.2232,-651.117 742.8722,-660.2612 749.7425,-661.6023"/>
+</g>
+<!-- dorgqr -->
+<g id="proc~~huckel_guess~~CallsGraph_node44" class="node">
+<title>dorgqr</title>
+<polygon fill="#777777" stroke="#777777" points="777.5,-946 723.5,-946 723.5,-922 777.5,-922 777.5,-946"/>
+<text text-anchor="middle" x="750.5" y="-931.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dorgqr</text>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;dorgqr -->
+<g id="proc~~huckel_guess~~CallsGraph_edge67" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;dorgqr</title>
+<path fill="none" stroke="#000000" d="M651.297,-934C671.3366,-934 694.234,-934 712.9777,-934"/>
+<polygon fill="#000000" stroke="#000000" points="713.199,-937.5001 723.199,-934 713.199,-930.5001 713.199,-937.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprochuckel_guessCallsGraph = svgPanZoom('#prochuckel_guessCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~huckel_guess~~CalledByGraph Pages: 1 -->
+<svg id="prochuckel_guessCalledByGraph" width="345pt" height="32pt"
+ viewBox="0.00 0.00 345.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~huckel_guess~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~huckel_guess~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 341,-28 341,4 -4,4"/>
+<!-- proc~huckel_guess -->
+<g id="proc~~huckel_guess~~CalledByGraph_node1" class="node">
+<title>proc~huckel_guess</title>
+<polygon fill="none" stroke="#000000" points="337,-24 253,-24 253,0 337,0 337,-24"/>
+<text text-anchor="middle" x="295" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">huckel_guess</text>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~huckel_guess~~CalledByGraph_node2" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~huckel_guess~~CalledByGraph_node2"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~huckel_guess~~CalledByGraph_edge1" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M217.3075,-12C225.4629,-12 234.0971,-12 242.5298,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6701,-15.5001 252.6701,-12 242.67,-8.5001 242.6701,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~huckel_guess~~CalledByGraph_node3" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~huckel_guess~~CalledByGraph_node3"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~huckel_guess~~CalledByGraph_edge2" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w"> </span><span class="k">subroutine </span><span class="n">huckel_guess</span><span class="p">(</span><span class="n">ovl</span><span class="p">,</span><span class="w"> </span><span class="n">orbitals</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">huckel_basis</span><span class="p">)</span>
+
+<span class="w">   </span><span class="k">use </span><span class="n">constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">tol_int</span>
+<span class="w">   </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w">     </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">   </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w">  </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<span class="w">   </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">matrix_invsqrt</span>
+<span class="w">   </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">   </span><span class="k">use </span><span class="n">int1</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_overlap</span>
+<span class="w">   </span><span class="k">use </span><span class="n">guess</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">corresponding_orbital_projection</span>
+
+<span class="w">   </span><span class="k">implicit none</span>
+
+<span class="k">   type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">   </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">huckel_basis</span>
+
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ovl</span><span class="p">(</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">orbitals</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="w">   </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nat</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">l0co</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">nbf_co</span><span class="p">,</span><span class="w"> </span><span class="n">nact</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span>
+
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">scr</span><span class="p">(:)</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">q</span><span class="p">(:)</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">vec</span><span class="p">(:,:)</span>
+<span class="w">   </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">sco</span><span class="p">(:,:)</span>
+
+<span class="w">   </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">   </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+<span class="w">   </span><span class="n">nat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">natom</span>
+
+<span class="c">!  Number of orbitals in MINI basis used in Huckel</span>
+<span class="w">   </span><span class="n">nbf_co</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">huckel_basis</span><span class="p">%</span><span class="n">nbf</span>
+
+<span class="w">   </span><span class="k">allocate</span><span class="p">(</span><span class="n">scr</span><span class="p">(</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="n">q</span><span class="p">(</span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="n">vec</span><span class="p">(</span><span class="n">nbf_co</span><span class="p">,</span><span class="n">nbf_co</span><span class="p">),</span><span class="w">     </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="n">sco</span><span class="p">(</span><span class="n">nbf_co</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w">     </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">   </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Cannot allocate memory&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+
+<span class="c">!  Get overlap between the minimal basis set and the input basis</span>
+<span class="w">   </span><span class="k">call </span><span class="n">basis_overlap</span><span class="p">(</span><span class="n">sco</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">huckel_basis</span><span class="p">,</span><span class="w"> </span><span class="n">tol</span><span class="o">=</span><span class="nb">log</span><span class="p">(</span><span class="mi">1</span><span class="mf">0.0d0</span><span class="p">)</span><span class="o">*</span><span class="n">tol_int</span><span class="p">)</span>
+
+<span class="w">   </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">     </span><span class="n">sco</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sco</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">huckel_basis</span><span class="p">%</span><span class="n">bfnrm</span>
+<span class="w">   </span><span class="k">end do</span>
+
+<span class="c">!  Determine which orbitals should be projected</span>
+<span class="w">   </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">     </span><span class="n">ndoc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec</span><span class="o">/</span><span class="mi">2</span>
+<span class="w">     </span><span class="n">nact</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">   </span><span class="k">else if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">     </span><span class="n">ndoc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_b</span>
+<span class="w">     </span><span class="n">nact</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_a</span><span class="o">-</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_b</span>
+<span class="w">   </span><span class="k">end if</span>
+
+<span class="c">!  Extended Huckel calculation in mini basis set</span>
+<span class="w">   </span><span class="k">call </span><span class="n">huckel_calc</span><span class="p">(</span><span class="n">huckel_basis</span><span class="p">,</span><span class="w"> </span><span class="n">vec</span><span class="p">,</span><span class="w"> </span><span class="n">l0co</span><span class="p">,</span><span class="w"> </span><span class="n">nat</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">,</span><span class="w"> </span><span class="n">tol_int</span><span class="p">)</span>
+
+<span class="c">!  Do at most 5 virtuals from the huckel</span>
+<span class="w">   </span><span class="n">nproj</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">min</span><span class="p">(</span><span class="n">l0co</span><span class="p">,</span><span class="n">ndoc</span><span class="o">+</span><span class="n">nact</span><span class="o">+</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="c">!  Get canonical orbitals in input basis space</span>
+<span class="w">   </span><span class="k">call </span><span class="n">matrix_invsqrt</span><span class="p">(</span><span class="n">ovl</span><span class="p">,</span><span class="w"> </span><span class="n">q</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">qrnk</span><span class="o">=</span><span class="n">l0</span><span class="p">)</span>
+<span class="w">   </span><span class="n">orbitals</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">q</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="c">!  Project minimal basis set guess onto the input canonical orbitals,</span>
+<span class="w">   </span><span class="k">call </span><span class="n">corresponding_orbital_projection</span><span class="p">(</span><span class="n">vec</span><span class="p">,</span><span class="w"> </span><span class="n">sco</span><span class="p">,</span><span class="w"> </span><span class="n">orbitals</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="p">,</span><span class="w"> </span><span class="n">nact</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf_co</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">)</span>
+
+<span class="w">   </span><span class="k">deallocate</span><span class="p">(</span><span class="n">vec</span><span class="p">,</span><span class="w"> </span><span class="n">sco</span><span class="p">)</span>
+
+<span class="w">   </span><span class="k">call </span><span class="n">orthogonalize_orbitals</span><span class="p">(</span><span class="n">q</span><span class="p">,</span><span class="w"> </span><span class="n">ovl</span><span class="p">,</span><span class="w"> </span><span class="n">orbitals</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w"> </span><span class="k">end subroutine </span><span class="n">huckel_guess</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

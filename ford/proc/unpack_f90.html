@@ -1,0 +1,1115 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>UNPACK_F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>UNPACK_F90
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">12 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mathlib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mathlib.f90.html'>mathlib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mathlib.html'>mathlib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">UNPACK_F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/unpack_f90.html#src">UNPACK_F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine UNPACK_F90(AP, A, UPLO)  
+</h2>
+    
+
+    <p>@brief Fortran-90 routine for unpacking 1D array to symmetric matrix</p>
+<p>@details   LAPACK returns only upper or lower filling of matrix</p>
+<p>@date      6 October 2021   - Initial release -
+@author    Igor S. Gerasimov</p>
+<p>@param[in]          AP   - packed matrix (N x N)
+@param[out]         A    - matrix for unpacking ( N*(N+1)/2 )
+@param[in,optional] UPLO - format of packed matrix, <code>U</code> for upper and <code>L</code> for lower</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~3"></span>
+              character(len=1),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~unpack_f90~~CallsGraph Pages: 1 -->
+<svg id="procunpack_f90CallsGraph" width="341pt" height="74pt"
+ viewBox="0.00 0.00 341.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~unpack_f90~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~unpack_f90~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 337,-70 337,4 -4,4"/>
+<!-- proc~unpack_f90 -->
+<g id="proc~~unpack_f90~~CallsGraph_node1" class="node">
+<title>proc~unpack_f90</title>
+<polygon fill="none" stroke="#000000" points="79,-46 0,-46 0,-22 79,-22 79,-46"/>
+<text text-anchor="middle" x="39.5" y="-31.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">UNPACK_F90</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~unpack_f90~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~unpack_f90~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="333,-66 240,-66 240,-42 333,-42 333,-66"/>
+<text text-anchor="middle" x="286.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~unpack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~unpack_f90~~CallsGraph_edge1" class="edge">
+<title>proc~unpack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M79.1848,-37.2133C119.8815,-40.5086 183.5693,-45.6655 229.6202,-49.3943"/>
+<polygon fill="#000000" stroke="#000000" points="229.4987,-52.8959 239.7485,-50.2145 230.0637,-45.9187 229.4987,-52.8959"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~unpack_f90~~CallsGraph_node3" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~unpack_f90~~CallsGraph_node3"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="204,-26 115,-26 115,-2 204,-2 204,-26"/>
+<text text-anchor="middle" x="159.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~unpack_f90~~CallsGraph_edge2" class="edge">
+<title>proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M79.1251,-27.3958C87.3684,-26.0219 96.1941,-24.551 104.8688,-23.1052"/>
+<polygon fill="#000000" stroke="#000000" points="105.6505,-26.5233 114.939,-21.4268 104.4996,-19.6185 105.6505,-26.5233"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~unpack_f90~~CallsGraph_edge4" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M197.6042,-26.0013C210.4212,-30.0382 224.8908,-34.5955 238.3761,-38.8429"/>
+<polygon fill="#000000" stroke="#000000" points="237.3942,-42.203 247.9838,-41.8689 239.4971,-35.5264 237.3942,-42.203"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~unpack_f90~~CallsGraph_node4" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="313.5,-24 259.5,-24 259.5,0 313.5,0 313.5,-24"/>
+<text text-anchor="middle" x="286.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~unpack_f90~~CallsGraph_edge3" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M204.2754,-13.2949C218.9578,-13.0637 235.1068,-12.8093 249.1772,-12.5878"/>
+<polygon fill="#000000" stroke="#000000" points="249.5295,-16.0827 259.4731,-12.4256 249.4192,-9.0836 249.5295,-16.0827"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~unpack_f90~~CalledByGraph Pages: 1 -->
+<svg id="procunpack_f90CalledByGraph" width="641pt" height="568pt"
+ viewBox="0.00 0.00 641.00 567.90" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~unpack_f90~~CalledByGraph" class="graph" transform="scale(.7695 .7695) rotate(0) translate(4 734)">
+<title>proc~~unpack_f90~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-734 829,-734 829,4 -4,4"/>
+<!-- proc~unpack_f90 -->
+<g id="proc~~unpack_f90~~CalledByGraph_node1" class="node">
+<title>proc~unpack_f90</title>
+<polygon fill="none" stroke="#000000" points="825,-377 746,-377 746,-353 825,-353 825,-377"/>
+<text text-anchor="middle" x="785.5" y="-362.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">UNPACK_F90</text>
+</g>
+<!-- interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_node2" class="node">
+<title>interface~unpack_matrix</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node2"><a xlink:href="../interface/unpack_matrix.html" xlink:title="unpack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="710,-377 619,-377 619,-353 710,-353 710,-377"/>
+<text text-anchor="middle" x="664.5" y="-362.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">unpack_matrix</text>
+</a>
+</g>
+</g>
+<!-- interface~unpack_matrix&#45;&gt;proc~unpack_f90 -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge1" class="edge">
+<title>interface~unpack_matrix&#45;&gt;proc~unpack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M710.2449,-365C718.5236,-365 727.1949,-365 735.5858,-365"/>
+<polygon fill="#000000" stroke="#000000" points="735.6365,-368.5001 745.6365,-365 735.6365,-361.5001 735.6365,-368.5001"/>
+</g>
+<!-- none~add_data -->
+<g id="proc~~unpack_f90~~CalledByGraph_node3" class="node">
+<title>none~add_data</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node3"><a xlink:href="../type/scf_conv.html#boundprocedure-add_data" xlink:title="scf_conv%add_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="563.5,-650 445.5,-650 445.5,-626 563.5,-626 563.5,-650"/>
+<text text-anchor="middle" x="504.5" y="-635.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_conv%add_data</text>
+</a>
+</g>
+</g>
+<!-- none~add_data&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge2" class="edge">
+<title>none~add_data&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M563.6779,-629.209C570.7904,-626.2143 577.4765,-622.2466 583,-617 617.2239,-584.4915 648.9739,-442.0386 660.2051,-386.9022"/>
+<polygon fill="#000000" stroke="#000000" points="663.6366,-387.5908 662.1724,-377.0976 656.7734,-386.2136 663.6366,-387.5908"/>
+</g>
+<!-- proc~dftder -->
+<g id="proc~~unpack_f90~~CalledByGraph_node4" class="node">
+<title>proc~dftder</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node4"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="531.5,-524 477.5,-524 477.5,-500 531.5,-500 531.5,-524"/>
+<text text-anchor="middle" x="504.5" y="-509.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge3" class="edge">
+<title>proc~dftder&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M531.6817,-509.6464C547.8507,-507.1176 568.0562,-501.8735 583,-491 619.9607,-464.1065 644.5408,-414.8915 656.3494,-386.5842"/>
+<polygon fill="#000000" stroke="#000000" points="659.6467,-387.7654 660.1214,-377.1812 653.1499,-385.1592 659.6467,-387.7654"/>
+</g>
+<!-- proc~eijden -->
+<g id="proc~~unpack_f90~~CalledByGraph_node5" class="node">
+<title>proc~eijden</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node5"><a xlink:href="../proc/eijden.html" xlink:title="eijden">
+<polygon fill="#d9534f" stroke="#d9534f" points="531.5,-440 477.5,-440 477.5,-416 531.5,-416 531.5,-440"/>
+<text text-anchor="middle" x="504.5" y="-425.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eijden</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge4" class="edge">
+<title>proc~eijden&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M531.8419,-422.209C547.1428,-418.5924 566.4184,-413.4051 583,-407 600.8297,-400.1128 619.8642,-390.4461 635.0505,-382.1225"/>
+<polygon fill="#000000" stroke="#000000" points="636.9357,-385.0787 643.9637,-377.1504 633.5255,-378.9655 636.9357,-385.0787"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~unpack_f90~~CalledByGraph_node6" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node6"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="551,-608 458,-608 458,-584 551,-584 551,-608"/>
+<text text-anchor="middle" x="504.5" y="-593.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge5" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M551.2429,-591.0133C562.6926,-587.8921 574.1772,-582.9115 583,-575 639.3954,-524.4296 657.1075,-430.1677 662.3886,-387.2781"/>
+<polygon fill="#000000" stroke="#000000" points="665.8961,-387.4047 663.5254,-377.0786 658.9392,-386.6293 665.8961,-387.4047"/>
+</g>
+<!-- proc~get_ab_initio_orbital -->
+<g id="proc~~unpack_f90~~CalledByGraph_node7" class="node">
+<title>proc~get_ab_initio_orbital</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node7"><a xlink:href="../proc/get_ab_initio_orbital.html" xlink:title="get_ab_initio_orbital">
+<polygon fill="#d9534f" stroke="#d9534f" points="564.5,-566 444.5,-566 444.5,-542 564.5,-542 564.5,-566"/>
+<text text-anchor="middle" x="504.5" y="-551.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_orbital</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_orbital&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge6" class="edge">
+<title>proc~get_ab_initio_orbital&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M564.6203,-543.8153C571.2519,-541.0295 577.5609,-537.4915 583,-533 629.4389,-494.652 651.3978,-423.4854 659.9502,-387.3296"/>
+<polygon fill="#000000" stroke="#000000" points="663.4245,-387.8302 662.1862,-377.308 656.5925,-386.3058 663.4245,-387.8302"/>
+</g>
+<!-- proc~get_spin_square -->
+<g id="proc~~unpack_f90~~CalledByGraph_node8" class="node">
+<title>proc~get_spin_square</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node8"><a xlink:href="../proc/get_spin_square.html" xlink:title="get_spin_square">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="554,-196 455,-196 455,-172 554,-172 554,-196"/>
+<text text-anchor="middle" x="504.5" y="-181.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_spin_square</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge7" class="edge">
+<title>proc~get_spin_square&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M554.0092,-194.0204C564.3785,-197.7855 574.6779,-202.9436 583,-210 625.4768,-246.0164 648.8934,-309.8486 658.7787,-343.2507"/>
+<polygon fill="#000000" stroke="#000000" points="655.4326,-344.2808 661.5197,-352.9525 662.1689,-342.3775 655.4326,-344.2808"/>
+</g>
+<!-- proc~grad_ee_kinetic -->
+<g id="proc~~unpack_f90~~CalledByGraph_node9" class="node">
+<title>proc~grad_ee_kinetic</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node9"><a xlink:href="../proc/grad_ee_kinetic.html" xlink:title="grad_ee_kinetic">
+<polygon fill="#d9534f" stroke="#d9534f" points="553,-398 456,-398 456,-374 553,-374 553,-398"/>
+<text text-anchor="middle" x="504.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_ee_kinetic</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_ee_kinetic&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge8" class="edge">
+<title>proc~grad_ee_kinetic&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M553.3747,-379.5852C570.895,-377.2857 590.775,-374.6764 608.8282,-372.3069"/>
+<polygon fill="#000000" stroke="#000000" points="609.4686,-375.753 618.9281,-370.9813 608.5576,-368.8125 609.4686,-375.753"/>
+</g>
+<!-- proc~grad_ee_overlap -->
+<g id="proc~~unpack_f90~~CalledByGraph_node10" class="node">
+<title>proc~grad_ee_overlap</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node10"><a xlink:href="../proc/grad_ee_overlap.html" xlink:title="grad_ee_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="555.5,-356 453.5,-356 453.5,-332 555.5,-332 555.5,-356"/>
+<text text-anchor="middle" x="504.5" y="-341.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_ee_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_ee_overlap&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge9" class="edge">
+<title>proc~grad_ee_overlap&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M555.5649,-350.7023C572.537,-352.9299 591.5172,-355.421 608.82,-357.692"/>
+<polygon fill="#000000" stroke="#000000" points="608.4155,-361.1688 618.786,-359 609.3265,-354.2284 608.4155,-361.1688"/>
+</g>
+<!-- proc~grad_en_hellman_feynman -->
+<g id="proc~~unpack_f90~~CalledByGraph_node11" class="node">
+<title>proc~grad_en_hellman_feynman</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node11"><a xlink:href="../proc/grad_en_hellman_feynman.html" xlink:title="grad_en_hellman_feynman">
+<polygon fill="#d9534f" stroke="#d9534f" points="583,-314 426,-314 426,-290 583,-290 583,-314"/>
+<text text-anchor="middle" x="504.5" y="-299.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_en_hellman_feynman</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_en_hellman_feynman&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge10" class="edge">
+<title>proc~grad_en_hellman_feynman&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M556.1027,-314.1081C565.175,-316.7157 574.446,-319.6958 583,-323 600.8297,-329.8872 619.8642,-339.5539 635.0505,-347.8775"/>
+<polygon fill="#000000" stroke="#000000" points="633.5255,-351.0345 643.9637,-352.8496 636.9357,-344.9213 633.5255,-351.0345"/>
+</g>
+<!-- proc~grad_en_pulay -->
+<g id="proc~~unpack_f90~~CalledByGraph_node12" class="node">
+<title>proc~grad_en_pulay</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node12"><a xlink:href="../proc/grad_en_pulay.html" xlink:title="grad_en_pulay">
+<polygon fill="#d9534f" stroke="#d9534f" points="550,-482 459,-482 459,-458 550,-458 550,-482"/>
+<text text-anchor="middle" x="504.5" y="-467.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_en_pulay</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_en_pulay&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge11" class="edge">
+<title>proc~grad_en_pulay&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M550.1718,-462.2018C561.3852,-459.1173 573.0243,-454.8576 583,-449 610.8065,-432.6722 635.4571,-404.3082 650.1791,-385.105"/>
+<polygon fill="#000000" stroke="#000000" points="653.0487,-387.1117 656.2203,-377.0027 647.4369,-382.9274 653.0487,-387.1117"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~unpack_f90~~CalledByGraph_node13" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node13"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="546.5,-69 462.5,-69 462.5,-45 546.5,-45 546.5,-69"/>
+<text text-anchor="middle" x="504.5" y="-54.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge12" class="edge">
+<title>proc~huckel_guess&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M546.8785,-60.8046C559.9251,-63.9228 573.3713,-69.4132 583,-79 621.0598,-116.8942 651.0864,-282.0922 660.9992,-342.6465"/>
+<polygon fill="#000000" stroke="#000000" points="657.5695,-343.3641 662.6134,-352.6812 664.4807,-342.2523 657.5695,-343.3641"/>
+</g>
+<!-- proc~mo_to_ao -->
+<g id="proc~~unpack_f90~~CalledByGraph_node14" class="node">
+<title>proc~mo_to_ao</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node14"><a xlink:href="../proc/mo_to_ao.html" xlink:title="mo_to_ao">
+<polygon fill="#d9534f" stroke="#d9534f" points="536.5,-730 472.5,-730 472.5,-706 536.5,-706 536.5,-730"/>
+<text text-anchor="middle" x="504.5" y="-715.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_to_ao</text>
+</a>
+</g>
+</g>
+<!-- proc~mo_to_ao&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge13" class="edge">
+<title>proc~mo_to_ao&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M536.7197,-714.6439C552.7053,-711.351 571.0918,-704.844 583,-692 625.0215,-646.6762 653.1937,-453.4366 661.7545,-387.3028"/>
+<polygon fill="#000000" stroke="#000000" points="665.2555,-387.5155 663.0422,-377.1545 658.3112,-386.6343 665.2555,-387.5155"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~unpack_f90~~CalledByGraph_node15" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node15"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="559,-154 450,-154 450,-130 559,-130 559,-154"/>
+<text text-anchor="middle" x="504.5" y="-139.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge14" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M559.3234,-149.6224C567.9507,-152.713 576.238,-157.017 583,-163 637.4806,-211.2041 656.1031,-301.0206 661.995,-342.6953"/>
+<polygon fill="#000000" stroke="#000000" points="658.5578,-343.4068 663.3123,-352.8749 665.4999,-342.5083 658.5578,-343.4068"/>
+</g>
+<!-- proc~run_population_analysis -->
+<g id="proc~~unpack_f90~~CalledByGraph_node16" class="node">
+<title>proc~run_population_analysis</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node16"><a xlink:href="../proc/run_population_analysis.html" xlink:title="run_population_analysis">
+<polygon fill="#d9534f" stroke="#d9534f" points="575,-112 434,-112 434,-88 575,-88 575,-112"/>
+<text text-anchor="middle" x="504.5" y="-97.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">run_population_analysis</text>
+</a>
+</g>
+</g>
+<!-- proc~run_population_analysis&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge15" class="edge">
+<title>proc~run_population_analysis&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M570.584,-112.1605C575.0899,-114.6033 579.301,-117.5199 583,-121 616.2469,-152.2792 648.3633,-289.1817 659.9562,-343.0824"/>
+<polygon fill="#000000" stroke="#000000" points="656.5563,-343.9221 662.0536,-352.9791 663.4042,-342.4707 656.5563,-343.9221"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~unpack_f90~~CalledByGraph_node17" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node17"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="363,-650 299,-650 299,-626 363,-626 363,-650"/>
+<text text-anchor="middle" x="331" y="-635.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge16" class="edge">
+<title>proc~scf_driver&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M355.8753,-650.0029C404.8786,-671.7128 515.0331,-710.6889 583,-659 627.1467,-625.4264 653.6061,-450.028 661.7725,-387.3186"/>
+<polygon fill="#000000" stroke="#000000" points="665.2574,-387.6583 663.0455,-377.2969 658.3132,-386.7761 665.2574,-387.6583"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~add_data -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge20" class="edge">
+<title>proc~scf_driver&#45;&gt;none~add_data</title>
+<path fill="none" stroke="#000000" d="M363.2274,-638C383.4682,-638 410.3685,-638 435.2615,-638"/>
+<polygon fill="#000000" stroke="#000000" points="435.4137,-641.5001 445.4137,-638 435.4136,-634.5001 435.4137,-641.5001"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~form_rohf_fock -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge24" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~form_rohf_fock</title>
+<path fill="none" stroke="#000000" d="M363.2274,-630.1986C386.8801,-624.4728 419.6268,-616.5457 447.6374,-609.765"/>
+<polygon fill="#000000" stroke="#000000" points="448.8214,-613.0796 457.7172,-607.325 447.1744,-606.2761 448.8214,-613.0796"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~get_ab_initio_orbital -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge26" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~get_ab_initio_orbital</title>
+<path fill="none" stroke="#000000" d="M345.8937,-625.8792C363.8741,-611.7974 395.5091,-588.7439 426,-575 430.6241,-572.9157 435.4977,-571.0026 440.4595,-569.2537"/>
+<polygon fill="#000000" stroke="#000000" points="441.6633,-572.5423 450.0677,-566.0913 439.4747,-565.8932 441.6633,-572.5423"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~mo_to_ao -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge37" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~mo_to_ao</title>
+<path fill="none" stroke="#000000" d="M349.7099,-650.105C368.4655,-661.8824 398.437,-679.7454 426,-692 437.5811,-697.149 450.51,-701.8387 462.4799,-705.7735"/>
+<polygon fill="#000000" stroke="#000000" points="461.6677,-709.1882 472.2584,-708.8947 463.7963,-702.5196 461.6677,-709.1882"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~unpack_f90~~CalledByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="226.5,-322 142.5,-322 142.5,-298 226.5,-298 226.5,-322"/>
+<text text-anchor="middle" x="184.5" y="-307.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge17" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M217.1183,-297.9676C287.2988,-274.098 456.5088,-227.4829 583,-281 613.1841,-293.7706 637.6864,-323.7951 651.6841,-344.2617"/>
+<polygon fill="#000000" stroke="#000000" points="648.9418,-346.4618 657.359,-352.8963 654.7916,-342.6172 648.9418,-346.4618"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~unpack_f90~~CalledByGraph_node27" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node27"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="372,-367 290,-367 290,-343 372,-343 372,-367"/>
+<text text-anchor="middle" x="331" y="-352.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge47" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M223.7593,-322.0592C241.7309,-327.5795 263.21,-334.1771 282.209,-340.013"/>
+<polygon fill="#000000" stroke="#000000" points="281.2996,-343.395 291.8866,-342.9856 283.3551,-336.7036 281.2996,-343.395"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~unpack_f90~~CalledByGraph_node19" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node19"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="557.5,-25 451.5,-25 451.5,-1 557.5,-1 557.5,-25"/>
+<text text-anchor="middle" x="504.5" y="-10.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge18" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M557.7069,-20.4169C567.1339,-23.8527 576.1205,-28.824 583,-36 626.0187,-80.8728 653.5421,-275.768 661.8458,-342.4941"/>
+<polygon fill="#000000" stroke="#000000" points="658.4095,-343.2306 663.0932,-352.7339 665.3582,-342.3841 658.4095,-343.2306"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~unpack_f90~~CalledByGraph_node20" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node20"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="376.5,-234 285.5,-234 285.5,-210 376.5,-210 376.5,-234"/>
+<text text-anchor="middle" x="331" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge19" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M376.8186,-215.8474C430.1813,-211.012 519.1545,-210.3694 583,-248 620.0642,-269.8457 644.3662,-315.9545 656.1515,-343.3137"/>
+<polygon fill="#000000" stroke="#000000" points="653.0108,-344.8787 660.0561,-352.7916 659.4831,-342.2123 653.0108,-344.8787"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge27" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square</title>
+<path fill="none" stroke="#000000" d="M376.5851,-212.0159C397.4809,-207.4393 422.525,-201.9542 444.8922,-197.0553"/>
+<polygon fill="#000000" stroke="#000000" points="445.9364,-200.4096 454.956,-194.8511 444.4387,-193.5717 445.9364,-200.4096"/>
+</g>
+<!-- proc~guess_hcore -->
+<g id="proc~~unpack_f90~~CalledByGraph_node21" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node21"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="370.5,-566 291.5,-566 291.5,-542 370.5,-542 370.5,-566"/>
+<text text-anchor="middle" x="331" y="-551.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;proc~get_ab_initio_orbital -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge25" class="edge">
+<title>proc~guess_hcore&#45;&gt;proc~get_ab_initio_orbital</title>
+<path fill="none" stroke="#000000" d="M370.8044,-554C389.6324,-554 412.6825,-554 434.307,-554"/>
+<polygon fill="#000000" stroke="#000000" points="434.4514,-557.5001 444.4513,-554 434.4513,-550.5001 434.4514,-557.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~unpack_f90~~CalledByGraph_node22" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node22"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="373,-66 289,-66 289,-42 373,-42 373,-66"/>
+<text text-anchor="middle" x="331" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge36" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M373.4429,-54.7339C397.2496,-55.1455 427.1417,-55.6624 452.3641,-56.0985"/>
+<polygon fill="#000000" stroke="#000000" points="452.4363,-59.6002 462.4953,-56.2737 452.5573,-52.6012 452.4363,-59.6002"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~unpack_f90~~CalledByGraph_node23" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node23"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="217.5,-650 151.5,-650 151.5,-626 217.5,-626 217.5,-650"/>
+<text text-anchor="middle" x="184.5" y="-635.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge41" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M217.7431,-638C238.8273,-638 266.2906,-638 288.8929,-638"/>
+<polygon fill="#000000" stroke="#000000" points="288.8953,-641.5001 298.8952,-638 288.8952,-634.5001 288.8953,-641.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~unpack_f90~~CalledByGraph_node24" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node24"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="367.5,-419 294.5,-419 294.5,-395 367.5,-395 367.5,-419"/>
+<text text-anchor="middle" x="331" y="-404.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~dftder -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge21" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~dftder</title>
+<path fill="none" stroke="#000000" d="M341.3753,-419.2477C357.5746,-437.5865 390.6973,-472.0469 426,-491 438.6783,-497.8066 453.7156,-502.523 467.2194,-505.7343"/>
+<polygon fill="#000000" stroke="#000000" points="466.6664,-509.1958 477.1825,-507.9062 468.1575,-502.3565 466.6664,-509.1958"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~eijden -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge22" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M367.7949,-411.4536C397.0302,-414.9921 437.7479,-419.9205 467.1319,-423.4771"/>
+<polygon fill="#000000" stroke="#000000" points="467.0544,-426.9931 477.4025,-424.7202 467.8956,-420.0439 467.0544,-426.9931"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge28" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M367.7949,-402.5464C390.4511,-399.8042 420.0032,-396.2273 445.8323,-393.101"/>
+<polygon fill="#000000" stroke="#000000" points="446.3896,-396.5592 455.8966,-391.8828 445.5484,-389.6099 446.3896,-396.5592"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_ee_overlap -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge30" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_ee_overlap</title>
+<path fill="none" stroke="#000000" d="M355.5769,-394.8732C374.5117,-385.8414 401.5089,-373.6312 426,-365 432.0249,-362.8767 438.3745,-360.8475 444.7453,-358.9455"/>
+<polygon fill="#000000" stroke="#000000" points="446.0917,-362.2 454.7305,-356.0663 444.1523,-355.474 446.0917,-362.2"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_en_hellman_feynman -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge32" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_en_hellman_feynman</title>
+<path fill="none" stroke="#000000" d="M360.7132,-394.932C370.6966,-389.995 381.4559,-383.6302 390,-376 411.2391,-357.0326 402.7873,-339.4935 426,-323 428.2408,-321.4079 430.5952,-319.9364 433.0329,-318.5765"/>
+<polygon fill="#000000" stroke="#000000" points="434.7139,-321.6509 442.1704,-314.1242 431.6476,-315.3582 434.7139,-321.6509"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_en_pulay -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge34" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_en_pulay</title>
+<path fill="none" stroke="#000000" d="M355.5769,-419.1268C374.5117,-428.1586 401.5089,-440.3688 426,-449 433.3908,-451.6047 441.2702,-454.0678 449.078,-456.328"/>
+<polygon fill="#000000" stroke="#000000" points="448.314,-459.7487 458.8876,-459.0779 450.2035,-453.0085 448.314,-459.7487"/>
+</g>
+<!-- proc~lowdin -->
+<g id="proc~~unpack_f90~~CalledByGraph_node25" class="node">
+<title>proc~lowdin</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node25"><a xlink:href="../proc/lowdin.html" xlink:title="lowdin">
+<polygon fill="#d9534f" stroke="#d9534f" points="358,-108 304,-108 304,-84 358,-84 358,-108"/>
+<text text-anchor="middle" x="331" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lowdin</text>
+</a>
+</g>
+</g>
+<!-- proc~lowdin&#45;&gt;proc~run_population_analysis -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge39" class="edge">
+<title>proc~lowdin&#45;&gt;proc~run_population_analysis</title>
+<path fill="none" stroke="#000000" d="M358.1094,-96.625C375.8721,-97.0345 400.1007,-97.5931 423.7342,-98.138"/>
+<polygon fill="#000000" stroke="#000000" points="423.7278,-101.6386 433.8058,-98.3702 423.8892,-94.6405 423.7278,-101.6386"/>
+</g>
+<!-- proc~mulliken -->
+<g id="proc~~unpack_f90~~CalledByGraph_node26" class="node">
+<title>proc~mulliken</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node26"><a xlink:href="../proc/mulliken.html" xlink:title="mulliken">
+<polygon fill="#d9534f" stroke="#d9534f" points="360,-150 302,-150 302,-126 360,-126 360,-150"/>
+<text text-anchor="middle" x="331" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mulliken</text>
+</a>
+</g>
+</g>
+<!-- proc~mulliken&#45;&gt;proc~run_population_analysis -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge40" class="edge">
+<title>proc~mulliken&#45;&gt;proc~run_population_analysis</title>
+<path fill="none" stroke="#000000" d="M360.04,-131.6397C381.6909,-126.8977 412.1189,-120.2333 439.4687,-114.2432"/>
+<polygon fill="#000000" stroke="#000000" points="440.3642,-117.6301 449.3838,-112.0716 438.8665,-110.7922 440.3642,-117.6301"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~eijden -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge23" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M354.6703,-367.1323C365.4998,-372.7609 378.4617,-379.6075 390,-386 406.2028,-394.9767 408.9012,-399.8766 426,-407 439.1795,-412.4906 454.2067,-416.922 467.5611,-420.2735"/>
+<polygon fill="#000000" stroke="#000000" points="466.8488,-423.7018 477.3888,-422.6256 468.4782,-416.8941 466.8488,-423.7018"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge29" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M372.1171,-362.3466C394.1252,-366.2788 421.6111,-371.1899 445.8258,-375.5164"/>
+<polygon fill="#000000" stroke="#000000" points="445.518,-379.0168 455.9777,-377.3303 446.7493,-372.1259 445.518,-379.0168"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_overlap -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge31" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_overlap</title>
+<path fill="none" stroke="#000000" d="M372.1171,-352.3932C393.3286,-351.0483 419.6286,-349.3809 443.184,-347.8875"/>
+<polygon fill="#000000" stroke="#000000" points="443.6772,-351.3633 453.4357,-347.2375 443.2342,-344.3773 443.6772,-351.3633"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_en_hellman_feynman -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge33" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_en_hellman_feynman</title>
+<path fill="none" stroke="#000000" d="M365.1298,-342.919C383.145,-336.6907 405.6734,-329.1355 426,-323 432.964,-320.898 440.3072,-318.7907 447.5945,-316.7657"/>
+<polygon fill="#000000" stroke="#000000" points="448.7366,-320.0819 457.4561,-314.0635 446.8866,-313.3307 448.7366,-320.0819"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_en_pulay -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge35" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_en_pulay</title>
+<path fill="none" stroke="#000000" d="M361.6617,-367C371.4981,-371.8667 381.9245,-378.2052 390,-386 413.2032,-408.3967 400.4549,-429.3163 426,-449 432.8272,-454.2607 440.8666,-458.2065 449.1508,-461.1654"/>
+<polygon fill="#000000" stroke="#000000" points="448.342,-464.5791 458.9302,-464.2052 450.4198,-457.8946 448.342,-464.5791"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node28" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node28"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-322 0,-322 0,-298 97,-298 97,-322"/>
+<text text-anchor="middle" x="48.5" y="-307.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge42" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.215,-310C108.5358,-310 120.634,-310 132.1058,-310"/>
+<polygon fill="#000000" stroke="#000000" points="132.4248,-313.5001 142.4248,-310 132.4248,-306.5001 132.4248,-313.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node29" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node29"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="390,-24 272,-24 272,0 390,0 390,-24"/>
+<text text-anchor="middle" x="331" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge43" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M390.2236,-12.3413C406.6451,-12.436 424.5348,-12.5391 441.1802,-12.635"/>
+<polygon fill="#000000" stroke="#000000" points="441.3393,-16.1359 451.3594,-12.6937 441.3798,-9.136 441.3393,-16.1359"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node30" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node30"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="236,-234 133,-234 133,-210 236,-210 236,-234"/>
+<text text-anchor="middle" x="184.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge44" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M236.1504,-222C248.7609,-222 262.3093,-222 275.1077,-222"/>
+<polygon fill="#000000" stroke="#000000" points="275.1786,-225.5001 285.1786,-222 275.1785,-218.5001 275.1786,-225.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node31" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node31"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="379,-192 283,-192 283,-168 379,-168 379,-192"/>
+<text text-anchor="middle" x="331" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge38" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M379.3294,-169.4149C398.0286,-165.3194 419.7125,-160.5702 439.7258,-156.1869"/>
+<polygon fill="#000000" stroke="#000000" points="440.6844,-159.5599 449.704,-154.0014 439.1867,-152.722 440.6844,-159.5599"/>
+</g>
+<!-- proc~guess_hcore_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node32" class="node">
+<title>proc~guess_hcore_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node32"><a xlink:href="../proc/guess_hcore_c.html" xlink:title="guess_hcore_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="230.5,-566 138.5,-566 138.5,-542 230.5,-542 230.5,-566"/>
+<text text-anchor="middle" x="184.5" y="-551.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore_c&#45;&gt;proc~guess_hcore -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge45" class="edge">
+<title>proc~guess_hcore_c&#45;&gt;proc~guess_hcore</title>
+<path fill="none" stroke="#000000" d="M230.8535,-554C246.807,-554 264.7372,-554 280.9704,-554"/>
+<polygon fill="#000000" stroke="#000000" points="281.355,-557.5001 291.355,-554 281.355,-550.5001 281.355,-557.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~unpack_f90~~CalledByGraph_node33" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~unpack_f90~~CalledByGraph_node33"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="233,-66 136,-66 136,-42 233,-42 233,-66"/>
+<text text-anchor="middle" x="184.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~unpack_f90~~CalledByGraph_edge46" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M233.2824,-54C247.8903,-54 263.965,-54 278.7846,-54"/>
+<polygon fill="#000000" stroke="#000000" points="278.8104,-57.5001 288.8104,-54 278.8104,-50.5001 278.8104,-57.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocunpack_f90CalledByGraph = svgPanZoom('#procunpack_f90CalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">UNPACK_F90</span><span class="p">(</span><span class="n">AP</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="n">UPLO</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">IN</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">AP</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">OUT</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">A</span><span class="p">(:,</span><span class="w"> </span><span class="p">:)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">optional</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">UPLO</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">DUPLO</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="w"> </span><span class="nb">present</span><span class="p">(</span><span class="n">UPLO</span><span class="p">))</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      </span><span class="n">DUPLO</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;U&#39;</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="k">      </span><span class="n">DUPLO</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UPLO</span>
+<span class="w">    </span><span class="k">end if</span>
+<span class="k">    call </span><span class="n">UNPACK_F77</span><span class="p">(</span><span class="n">AP</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">(</span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="n">DUPLO</span><span class="p">)</span>
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">UNPACK_F90</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

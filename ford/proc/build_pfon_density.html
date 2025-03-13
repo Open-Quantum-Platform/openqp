@@ -1,0 +1,1077 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>build_pfon_density &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>build_pfon_density
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.6% of total for procedures.">88 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/scf.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/scf.f90.html'>scf.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/scf.html'>scf</a></li>
+            <li class="breadcrumb-item active" aria-current="page">build_pfon_density</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/build_pfon_density.html#src">build_pfon_density</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~build_pfon_density~~UsesGraph Pages: 1 -->
+<svg id="procbuild_pfon_densityUsesGraph" width="641pt" height="170pt"
+ viewBox="0.00 0.00 641.00 169.61" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~build_pfon_density~~UsesGraph" class="graph" transform="scale(.7993 .7993) rotate(0) translate(4 208.2093)">
+<title>proc~~build_pfon_density~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-208.2093 798,-208.2093 798,4 -4,4"/>
+<!-- proc~build_pfon_density -->
+<g id="proc~~build_pfon_density~~UsesGraph_node1" class="node">
+<title>proc~build_pfon_density</title>
+<polygon fill="none" stroke="#000000" points="794,-187 682,-187 682,-163 794,-163 794,-187"/>
+<text text-anchor="middle" x="738" y="-172.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">build_pfon_density</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~build_pfon_density~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-167 592,-167 592,-143 646,-143 646,-167"/>
+<text text-anchor="middle" x="619" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~build_pfon_density&#45;&gt;module~mathlib -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge1" class="edge">
+<title>proc~build_pfon_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.9846,-165.5856C673.2529,-164.1181 664.4209,-162.6338 656.244,-161.2595"/>
+<polygon fill="#000000" stroke="#000000" points="656.7358,-157.7931 646.294,-159.5872 655.5756,-164.6963 656.7358,-157.7931"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-150 142,-150 142,-126 203,-126 203,-150"/>
+<text text-anchor="middle" x="172.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~build_pfon_density&#45;&gt;module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge2" class="edge">
+<title>proc~build_pfon_density&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.571,-178.8017C638.0005,-182.0837 576.2721,-187.4875 522.5,-195"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge4" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M599.5748,-167.0164C580.7023,-177.7091 550.8246,-192.0957 522.5,-195"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522.5,-195C421.6952,-205.3363 394.9075,-208.6668 294.5,-195"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~build_pfon_density~~UsesGraph_node5" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node5"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-167 489,-167 489,-143 556,-143 556,-167"/>
+<text text-anchor="middle" x="522.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge3" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-155C583.9291,-155 575.0471,-155 566.3567,-155"/>
+<polygon fill="#000000" stroke="#000000" points="566.3114,-151.5001 556.3114,-155 566.3113,-158.5001 566.3114,-151.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~build_pfon_density~~UsesGraph_node4" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-150 0,-150 0,-126 94,-126 94,-150"/>
+<text text-anchor="middle" x="47" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge5" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-138C130.4618,-138 117.2165,-138 104.2832,-138"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-134.5001 94.0202,-138 104.0202,-141.5001 104.0203,-134.5001"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~build_pfon_density~~UsesGraph_node6" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node6"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-125 380.5,-125 380.5,-101 446.5,-101 446.5,-125"/>
+<text text-anchor="middle" x="413.5" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge6" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-142.9645C479.7487,-138.527 466.5263,-133.4322 454.29,-128.7173"/>
+<polygon fill="#000000" stroke="#000000" points="455.3293,-125.3669 444.7396,-125.0373 452.8124,-131.8988 455.3293,-125.3669"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~build_pfon_density~~UsesGraph_node7" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node7"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-167 374,-167 374,-143 453,-143 453,-167"/>
+<text text-anchor="middle" x="413.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge7" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-155C480.8143,-155 471.9967,-155 463.3372,-155"/>
+<polygon fill="#000000" stroke="#000000" points="463.2973,-151.5001 453.2973,-155 463.2973,-158.5001 463.2973,-151.5001"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge10" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.4953,-116.4237C336.9899,-120.9367 260.4712,-128.8744 213.3607,-133.7613"/>
+<polygon fill="#000000" stroke="#000000" points="212.7889,-130.3018 203.2035,-134.815 213.5113,-137.2644 212.7889,-130.3018"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~build_pfon_density~~UsesGraph_node8" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node8"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-167 251,-167 251,-143 338,-143 338,-167"/>
+<text text-anchor="middle" x="294.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge8" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-124.6993C367.4024,-129.2698 352.366,-134.5767 338.5291,-139.4603"/>
+<polygon fill="#000000" stroke="#000000" points="336.9777,-136.2962 328.7127,-142.9249 339.3075,-142.8971 336.9777,-136.2962"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~build_pfon_density~~UsesGraph_node9" class="node">
+<title>module~messages</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node9"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-87 261.5,-87 261.5,-63 327.5,-63 327.5,-87"/>
+<text text-anchor="middle" x="294.5" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge9" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-102.4149C367.0531,-98.1682 351.5534,-93.2187 337.4123,-88.7031"/>
+<polygon fill="#000000" stroke="#000000" points="338.4739,-85.368 327.8831,-85.6601 336.3445,-92.0363 338.4739,-85.368"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge13" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-167.2014C371.6437,-180.7184 331.214,-199.9973 294.5,-195"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-195C258.7595,-190.1352 221.785,-170.4298 198.0463,-155.5395"/>
+<polygon fill="#000000" stroke="#000000" points="199.9273,-152.5879 189.6264,-150.1094 196.1334,-158.4707 199.9273,-152.5879"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge11" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.8747,-155C365.6134,-155 356.7746,-155 348.1044,-155"/>
+<polygon fill="#000000" stroke="#000000" points="348.0486,-151.5001 338.0485,-155 348.0485,-158.5001 348.0486,-151.5001"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge12" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-142.9049C384.2087,-140.12 378.8585,-137.0701 374,-134 354.1394,-121.4501 332.823,-105.4817 317.2673,-93.3232"/>
+<polygon fill="#000000" stroke="#000000" points="319.2818,-90.4544 309.2638,-87.0063 314.945,-95.9491 319.2818,-90.4544"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge17" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-87.1119C256.0979,-95.5918 234.3205,-107.1255 215,-117 212.2312,-118.4151 209.354,-119.8699 206.4607,-121.3219"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-118.3053 197.2773,-125.8978 207.7887,-124.5706 204.6667,-118.3053"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~build_pfon_density~~UsesGraph_node10" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-108 130,-108 130,-84 215,-84 215,-108"/>
+<text text-anchor="middle" x="172.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-80.6829C250.3485,-82.5998 237.6232,-84.7903 225.3466,-86.9035"/>
+<polygon fill="#000000" stroke="#000000" points="224.4457,-83.507 215.1844,-88.6527 225.6332,-90.4055 224.4457,-83.507"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~build_pfon_density~~UsesGraph_node11" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-66 136.5,-66 136.5,-42 208.5,-42 208.5,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-69.3171C248.3109,-67.0494 232.9133,-64.399 218.6653,-61.9465"/>
+<polygon fill="#000000" stroke="#000000" points="218.9907,-58.4511 208.5419,-60.2039 217.8032,-65.3497 218.9907,-58.4511"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~build_pfon_density~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~build_pfon_density~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-24 133,-24 133,0 212,0 212,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~build_pfon_density~~UsesGraph_edge16" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-62.8881C256.0979,-54.4082 234.3205,-42.8745 215,-33 212.2312,-31.5849 209.354,-30.1301 206.4607,-28.6781"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-25.4294 197.2773,-24.1022 204.6667,-31.6947 207.7887,-25.4294"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocbuild_pfon_densityUsesGraph = svgPanZoom('#procbuild_pfon_densityUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pdmat~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>pdmat</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mo_a</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_b~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mo_b</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-occ_a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>occ_a</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-occ_b~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>occ_b</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-scf_type~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>scf_type</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~8"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nelec_a~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nelec_a</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nelec_b~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nelec_b</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~build_pfon_density~~CallsGraph Pages: 1 -->
+<svg id="procbuild_pfon_densityCallsGraph" width="588pt" height="74pt"
+ viewBox="0.00 0.00 588.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~build_pfon_density~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~build_pfon_density~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 584,-70 584,4 -4,4"/>
+<!-- proc~build_pfon_density -->
+<g id="proc~~build_pfon_density~~CallsGraph_node1" class="node">
+<title>proc~build_pfon_density</title>
+<polygon fill="none" stroke="#000000" points="112,-46 0,-46 0,-22 112,-22 112,-46"/>
+<text text-anchor="middle" x="56" y="-31.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">build_pfon_density</text>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~build_pfon_density~~CallsGraph_node2" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~build_pfon_density~~CallsGraph_node2"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="226,-46 148,-46 148,-22 226,-22 226,-46"/>
+<text text-anchor="middle" x="187" y="-31.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~build_pfon_density&#45;&gt;interface~pack_matrix -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge1" class="edge">
+<title>proc~build_pfon_density&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M112.316,-34C120.7027,-34 129.2942,-34 137.5259,-34"/>
+<polygon fill="#000000" stroke="#000000" points="137.7179,-37.5001 147.7179,-34 137.7178,-30.5001 137.7179,-37.5001"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~build_pfon_density~~CallsGraph_node3" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~build_pfon_density~~CallsGraph_node3"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="326,-46 262,-46 262,-22 326,-22 326,-46"/>
+<text text-anchor="middle" x="294" y="-31.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge2" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.2353,-34C234.5463,-34 243.3528,-34 251.7695,-34"/>
+<polygon fill="#000000" stroke="#000000" points="251.7832,-37.5001 261.7831,-34 251.7831,-30.5001 251.7832,-37.5001"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~build_pfon_density~~CallsGraph_node4" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~build_pfon_density~~CallsGraph_node4"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="580,-66 487,-66 487,-42 580,-42 580,-66"/>
+<text text-anchor="middle" x="533.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge3" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M326.3,-36.6973C364.8411,-39.9157 429.9554,-45.3533 476.9143,-49.2747"/>
+<polygon fill="#000000" stroke="#000000" points="476.6836,-52.7675 486.9403,-50.1119 477.2662,-45.7918 476.6836,-52.7675"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~build_pfon_density~~CallsGraph_node5" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~build_pfon_density~~CallsGraph_node5"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="451,-26 362,-26 362,-2 451,-2 451,-26"/>
+<text text-anchor="middle" x="406.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge4" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M326.238,-28.2688C334.1715,-26.8584 342.8895,-25.3085 351.5657,-23.7661"/>
+<polygon fill="#000000" stroke="#000000" points="352.4492,-27.164 361.6822,-21.9676 351.2239,-20.2721 352.4492,-27.164"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge6" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M444.6042,-26.0013C457.4212,-30.0382 471.8908,-34.5955 485.3761,-38.8429"/>
+<polygon fill="#000000" stroke="#000000" points="484.3942,-42.203 494.9838,-41.8689 486.4971,-35.5264 484.3942,-42.203"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~build_pfon_density~~CallsGraph_node6" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="560.5,-24 506.5,-24 506.5,0 560.5,0 560.5,-24"/>
+<text text-anchor="middle" x="533.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~build_pfon_density~~CallsGraph_edge5" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M451.2754,-13.2949C465.9578,-13.0637 482.1068,-12.8093 496.1772,-12.5878"/>
+<polygon fill="#000000" stroke="#000000" points="496.5295,-16.0827 506.4731,-12.4256 496.4192,-9.0836 496.5295,-16.0827"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~build_pfon_density~~CalledByGraph Pages: 1 -->
+<svg id="procbuild_pfon_densityCalledByGraph" width="322pt" height="32pt"
+ viewBox="0.00 0.00 322.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~build_pfon_density~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~build_pfon_density~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 318,-28 318,4 -4,4"/>
+<!-- proc~build_pfon_density -->
+<g id="proc~~build_pfon_density~~CalledByGraph_node1" class="node">
+<title>proc~build_pfon_density</title>
+<polygon fill="none" stroke="#000000" points="314,-24 202,-24 202,0 314,0 314,-24"/>
+<text text-anchor="middle" x="258" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">build_pfon_density</text>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~build_pfon_density~~CalledByGraph_node2" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~build_pfon_density~~CalledByGraph_node2"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="166,-24 102,-24 102,0 166,0 166,-24"/>
+<text text-anchor="middle" x="134" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~build_pfon_density -->
+<g id="proc~~build_pfon_density~~CalledByGraph_edge1" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~build_pfon_density</title>
+<path fill="none" stroke="#000000" d="M166.2558,-12C174.1807,-12 182.9553,-12 191.8443,-12"/>
+<polygon fill="#000000" stroke="#000000" points="191.8898,-15.5001 201.8897,-12 191.8897,-8.5001 191.8898,-15.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~build_pfon_density~~CalledByGraph_node3" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~build_pfon_density~~CalledByGraph_node3"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="66,-24 0,-24 0,0 66,0 66,-24"/>
+<text text-anchor="middle" x="33" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~build_pfon_density~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M66.0712,-12C74.2514,-12 83.127,-12 91.6809,-12"/>
+<polygon fill="#000000" stroke="#000000" points="91.8869,-15.5001 101.8868,-12 91.8868,-8.5001 91.8869,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">    </span><span class="k">subroutine </span><span class="n">build_pfon_density</span><span class="p">(</span><span class="n">pdmat</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">,</span><span class="w"> </span><span class="n">mo_b</span><span class="p">,</span><span class="w"> </span><span class="n">occ_a</span><span class="p">,</span><span class="w"> </span><span class="n">occ_b</span><span class="p">,</span><span class="w"> </span><span class="n">scf_type</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nelec_a</span><span class="p">,</span><span class="w"> </span><span class="n">nelec_b</span><span class="p">)</span>
+<span class="w">        </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span><span class="w"> </span>
+<span class="w">        </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">pack_matrix</span>
+<span class="w">        </span><span class="k">implicit none </span>
+
+<span class="k">        </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_b</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">occ_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">occ_b</span><span class="p">(:)</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">scf_type</span><span class="p">,</span><span class="w"> </span><span class="n">nelec_a</span><span class="p">,</span><span class="w"> </span><span class="n">nelec_b</span>
+
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(:,:)</span>
+<span class="w">        </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">mu</span><span class="p">,</span><span class="w"> </span><span class="n">nu</span>
+<span class="w">        </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n_double</span><span class="p">,</span><span class="w"> </span><span class="n">n_single</span>
+<span class="w">        </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">occ_factor</span>
+
+<span class="w">        </span><span class="k">allocate</span><span class="p">(</span><span class="n">dtmp</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">)</span>
+<span class="w">        </span>
+<span class="w">        </span><span class="n">pdmat</span><span class="p">(:,:)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+
+<span class="w">        </span><span class="k">select case</span><span class="p">(</span><span class="n">scf_type</span><span class="p">)</span>
+<span class="w">        </span><span class="k">case</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w">  </span><span class="c">! RHF</span>
+<span class="w">            </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1.0e-14_dp</span><span class="p">)</span><span class="w"> </span><span class="k">then </span>
+<span class="k">                    do </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">                        </span><span class="k">do </span><span class="n">nu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                            </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">nu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                        </span><span class="k">end do </span>
+<span class="k">                    end do </span>
+<span class="k">                end if </span>
+<span class="k">            end do </span>
+<span class="k">            call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">dtmp</span><span class="p">,</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="w">        </span><span class="k">case</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="w">  </span><span class="c">! UHF</span>
+<span class="w">            </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1.0e-14_dp</span><span class="p">)</span><span class="w"> </span><span class="k">then </span>
+<span class="k">                    do </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">                        </span><span class="k">do </span><span class="n">nu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                            </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">nu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                        </span><span class="k">end do </span>
+<span class="k">                    end do </span>
+<span class="k">                end if </span>
+<span class="k">            end do </span>
+<span class="k">            call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">dtmp</span><span class="p">,</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="w">            </span><span class="n">dtmp</span><span class="p">(:,:)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span><span class="w"> </span>
+<span class="w">            </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">occ_b</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1.0e-14_dp</span><span class="p">)</span><span class="w"> </span><span class="k">then </span>
+<span class="k">                    do </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                        </span><span class="k">do </span><span class="n">nu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                            </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">occ_b</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_b</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">mo_b</span><span class="p">(</span><span class="n">nu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                        </span><span class="k">end do </span>
+<span class="k">                    end do </span>
+<span class="k">                end if </span>
+<span class="k">            end do</span>
+<span class="k">            call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">dtmp</span><span class="p">,</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,</span><span class="mi">2</span><span class="p">))</span>
+
+<span class="w">        </span><span class="k">case</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w">  </span><span class="c">! ROHF</span>
+<span class="w">            </span><span class="n">n_double</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nelec_b</span><span class="w">           </span>
+<span class="w">            </span><span class="n">n_single</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nelec_a</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">nelec_b</span><span class="w"> </span>
+
+<span class="w">            </span><span class="n">dtmp</span><span class="p">(:,:)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">            </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1.0e-14_dp</span><span class="p">)</span><span class="w"> </span><span class="k">then </span>
+<span class="k">                    if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">n_double</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">                        </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w">  </span>
+<span class="w">                    </span><span class="k">else if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">n_double</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">n_single</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">                        </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0_dp</span><span class="w">  </span>
+<span class="w">                    </span><span class="k">else</span>
+<span class="k">                        </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">occ_a</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w">  </span><span class="c">! Virtual orbitals</span>
+<span class="w">                    </span><span class="k">endif</span>
+
+<span class="k">                    do </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">                        </span><span class="k">do </span><span class="n">nu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                            </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">nu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                        </span><span class="k">end do </span>
+<span class="k">                    end do </span>
+<span class="k">                end if </span>
+<span class="k">            end do </span>
+<span class="k">            call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">dtmp</span><span class="p">,</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="w">            </span><span class="n">dtmp</span><span class="p">(:,:)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span><span class="w"> </span>
+<span class="w">            </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">occ_b</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1.0e-14_dp</span><span class="p">)</span><span class="w"> </span><span class="k">then </span>
+<span class="k">                    if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">n_double</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">                        </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">occ_b</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                    </span><span class="k">else</span>
+<span class="k">                        </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">                    </span><span class="k">endif</span>
+
+<span class="k">                    do </span><span class="n">mu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                        </span><span class="k">do </span><span class="n">nu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span>
+<span class="w">                            </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dtmp</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">nu</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">occ_factor</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">nu</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">                        </span><span class="k">end do </span>
+<span class="k">                    end do </span>
+<span class="k">                end if </span>
+<span class="k">            end do</span>
+<span class="k">            call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">dtmp</span><span class="p">,</span><span class="w"> </span><span class="n">pdmat</span><span class="p">(:,</span><span class="mi">2</span><span class="p">))</span>
+<span class="w">        </span><span class="k">end select</span>
+
+<span class="k">        deallocate</span><span class="p">(</span><span class="n">dtmp</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">end subroutine </span><span class="n">build_pfon_density</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

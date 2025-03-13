@@ -1,0 +1,1589 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>electric_moments &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>electric_moments
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.9% of total for procedures.">139 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/electric_moments.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/electric_moments.f90.html'>electric_moments.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/electric_moments_mod.html'>electric_moments_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">electric_moments</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/electric_moments.html#src">electric_moments</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine electric_moments(infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/xyz_order.html'>xyz_order</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='../module/int1.html'>int1</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/physical_constants.html'>physical_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/strings.html'>strings</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~electric_moments~~UsesGraph Pages: 1 -->
+<svg id="procelectric_momentsUsesGraph" width="641pt" height="423pt"
+ viewBox="0.00 0.00 641.00 422.53" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~electric_moments~~UsesGraph" class="graph" transform="scale(.5979 .5979) rotate(0) translate(4 702.642)">
+<title>proc~~electric_moments~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-702.642 1068,-702.642 1068,4 -4,4"/>
+<!-- proc~electric_moments -->
+<g id="proc~~electric_moments~~UsesGraph_node1" class="node">
+<title>proc~electric_moments</title>
+<polygon fill="none" stroke="#000000" points="1064,-248 956,-248 956,-224 1064,-224 1064,-248"/>
+<text text-anchor="middle" x="1010" y="-233.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">electric_moments</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~electric_moments~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-464 429,-464 429,-440 499,-440 499,-464"/>
+<text text-anchor="middle" x="464" y="-449.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~basis_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge1" class="edge">
+<title>proc~electric_moments&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-452C679.791,-455.5168 570.0098,-454.2386 509.6212,-453.0687"/>
+<polygon fill="#000000" stroke="#000000" points="509.3607,-449.5629 499.2921,-452.8603 509.2194,-456.5614 509.3607,-449.5629"/>
+</g>
+<!-- module~int1 -->
+<g id="proc~~electric_moments~~UsesGraph_node3" class="node">
+<title>module~int1</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node3"><a xlink:href="../module/int1.html" xlink:title="int1">
+<polygon fill="#337ab7" stroke="#337ab7" points="920,-288 866,-288 866,-264 920,-264 920,-288"/>
+<text text-anchor="middle" x="893" y="-273.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~int1 -->
+<g id="proc~~electric_moments~~UsesGraph_edge2" class="edge">
+<title>proc~electric_moments&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M974.8961,-248.0013C960.6768,-252.8626 944.2494,-258.4788 929.8567,-263.3994"/>
+<polygon fill="#000000" stroke="#000000" points="928.5998,-260.1301 920.2698,-266.677 930.8644,-266.7538 928.5998,-260.1301"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~electric_moments~~UsesGraph_node4" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node4"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-386 269.5,-386 269.5,-362 348.5,-362 348.5,-386"/>
+<text text-anchor="middle" x="309" y="-371.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~io_constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge3" class="edge">
+<title>proc~electric_moments&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1004.0779,-248.2407C981.3562,-293.2537 894.9074,-447.2462 773.5,-452"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-452C747.146,-459.0579 740.5209,-441.8244 717,-428 699.5251,-417.7291 699.9315,-407.2431 681,-400 572.0753,-358.3261 432.247,-362.4278 358.9422,-368.518"/>
+<polygon fill="#000000" stroke="#000000" points="358.2758,-365.063 348.621,-369.4258 358.8892,-372.0361 358.2758,-365.063"/>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~electric_moments~~UsesGraph_node5" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node5"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="920,-126 866,-126 866,-102 920,-102 920,-126"/>
+<text text-anchor="middle" x="893" y="-111.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~mathlib -->
+<g id="proc~~electric_moments~~UsesGraph_edge4" class="edge">
+<title>proc~electric_moments&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M998.3538,-223.8561C978.0298,-202.6636 935.9314,-158.7661 911.5524,-133.3452"/>
+<polygon fill="#000000" stroke="#000000" points="914.0468,-130.8896 904.5991,-126.0947 908.9946,-135.7348 914.0468,-130.8896"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~electric_moments~~UsesGraph_node6" class="node">
+<title>module~messages</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node6"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="497,-184 431,-184 431,-160 497,-160 497,-184"/>
+<text text-anchor="middle" x="464" y="-169.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~messages -->
+<g id="proc~~electric_moments~~UsesGraph_edge5" class="edge">
+<title>proc~electric_moments&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M955.563,-230.7935C907.6569,-226.3558 836.0003,-220.0677 773.5,-216"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-216C731.5643,-211.6832 722.5887,-201.9003 681,-195 621.1422,-185.0685 551.2462,-178.5615 507.301,-175.0813"/>
+<polygon fill="#000000" stroke="#000000" points="507.4914,-171.5856 497.2508,-174.3024 506.9505,-178.5647 507.4914,-171.5856"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~electric_moments~~UsesGraph_node7" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node7"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="681,-504 560,-504 560,-480 681,-480 681,-504"/>
+<text text-anchor="middle" x="620.5" y="-489.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~electric_moments~~UsesGraph_edge6" class="edge">
+<title>proc~electric_moments&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-452C734.0131,-453.4819 690.5665,-465.9404 660.0932,-476.565"/>
+<polygon fill="#000000" stroke="#000000" points="658.9132,-473.2698 650.6766,-479.9338 661.2712,-479.8607 658.9132,-473.2698"/>
+</g>
+<!-- module~physical_constants -->
+<g id="proc~~electric_moments~~UsesGraph_node8" class="node">
+<title>module~physical_constants</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node8"><a xlink:href="../module/physical_constants.html" xlink:title="physical_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="829.5,-24 717.5,-24 717.5,0 829.5,0 829.5,-24"/>
+<text text-anchor="middle" x="773.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~physical_constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge7" class="edge">
+<title>proc~electric_moments&#45;&gt;module~physical_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1004.7808,-223.9874C992.8858,-197.6693 961.5485,-134.0042 920,-93 890.1935,-63.5839 847.5272,-41.6202 815.9211,-28.039"/>
+<polygon fill="#000000" stroke="#000000" points="817.0699,-24.7257 806.4939,-24.0943 814.3678,-31.1832 817.0699,-24.7257"/>
+</g>
+<!-- module~strings -->
+<g id="proc~~electric_moments~~UsesGraph_node9" class="node">
+<title>module~strings</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node9"><a xlink:href="../module/strings.html" xlink:title="strings">
+<polygon fill="#337ab7" stroke="#337ab7" points="920,-604 866,-604 866,-580 920,-580 920,-604"/>
+<text text-anchor="middle" x="893" y="-589.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~strings -->
+<g id="proc~~electric_moments~~UsesGraph_edge8" class="edge">
+<title>proc~electric_moments&#45;&gt;module~strings</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1005.9726,-248.2543C988.8851,-300.247 922.2491,-503.0026 900.1589,-570.2173"/>
+<polygon fill="#000000" stroke="#000000" points="896.8077,-569.2043 897.0105,-579.7972 903.4578,-571.3899 896.8077,-569.2043"/>
+</g>
+<!-- module~types -->
+<g id="proc~~electric_moments~~UsesGraph_node10" class="node">
+<title>module~types</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node10"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="647.5,-546 593.5,-546 593.5,-522 647.5,-522 647.5,-546"/>
+<text text-anchor="middle" x="620.5" y="-531.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~types -->
+<g id="proc~~electric_moments~~UsesGraph_edge9" class="edge">
+<title>proc~electric_moments&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-452C724.289,-453.8468 725.1584,-491.2017 681,-513 673.4869,-516.7088 665.1545,-520.0538 657.1361,-522.9278"/>
+<polygon fill="#000000" stroke="#000000" points="655.9173,-519.6455 647.5875,-526.1927 658.182,-526.2691 655.9173,-519.6455"/>
+</g>
+<!-- module~xyz_order -->
+<g id="proc~~electric_moments~~UsesGraph_node11" class="node">
+<title>module~xyz_order</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node11"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="652.5,-228 588.5,-228 588.5,-204 652.5,-204 652.5,-228"/>
+<text text-anchor="middle" x="620.5" y="-213.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~xyz_order -->
+<g id="proc~~electric_moments~~UsesGraph_edge10" class="edge">
+<title>proc~electric_moments&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-216C736.274,-213.5772 693.8453,-213.8127 663.1258,-214.519"/>
+<polygon fill="#000000" stroke="#000000" points="662.6828,-211.0291 652.776,-214.7849 662.8626,-218.0268 662.6828,-211.0291"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.9069,-439.9317C423.6269,-429.0556 394.2108,-412.8476 368,-400 361.2972,-396.7145 354.0829,-393.3764 347.0783,-390.2361"/>
+<polygon fill="#000000" stroke="#000000" points="348.2857,-386.9431 337.7244,-386.0999 345.4547,-393.3451 348.2857,-386.9431"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_node15" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node15"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-385 0,-385 0,-361 94,-361 94,-385"/>
+<text text-anchor="middle" x="47" y="-370.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.87,-450.718C397.4272,-449.8758 350.0872,-449.3602 309,-452"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~electric_moments~~UsesGraph_node16" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node16"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-622 250,-622 250,-598 368,-598 368,-622"/>
+<text text-anchor="middle" x="309" y="-607.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~electric_moments~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M452.2368,-464.2515C434.1965,-483.0132 398.573,-519.953 368,-551 354.952,-564.2503 340.1537,-579.048 328.6416,-590.5092"/>
+<polygon fill="#000000" stroke="#000000" points="325.8817,-588.3178 321.2587,-597.8508 330.8175,-593.2814 325.8817,-588.3178"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~electric_moments~~UsesGraph_node17" class="node">
+<title>module~constants</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node17"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-268 277,-268 277,-244 341,-244 341,-268"/>
+<text text-anchor="middle" x="309" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M454.3041,-439.7393C428.3166,-406.8778 356.9114,-316.5848 324.8957,-276.1004"/>
+<polygon fill="#000000" stroke="#000000" points="327.6405,-273.9287 318.6923,-268.256 322.1499,-278.2708 327.6405,-273.9287"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~electric_moments~~UsesGraph_node22" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node22"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-542 282,-542 282,-518 336,-518 336,-542"/>
+<text text-anchor="middle" x="309" y="-527.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~electric_moments~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.1209,-464.0166C413.838,-477.2428 371.4169,-498.5902 341.973,-513.4071"/>
+<polygon fill="#000000" stroke="#000000" points="340.2656,-510.3481 332.9062,-517.9698 343.4123,-516.601 340.2656,-510.3481"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_node23" class="node">
+<title>module~precision</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node23"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-385 141.5,-385 141.5,-361 202.5,-361 202.5,-385"/>
+<text text-anchor="middle" x="172" y="-370.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.7405,-442.7771C386.288,-431.6337 312.8498,-412.2326 250,-395 237.8089,-391.6574 224.5678,-387.9513 212.5151,-384.5485"/>
+<polygon fill="#000000" stroke="#000000" points="213.2948,-381.1317 202.7196,-381.7762 211.3885,-387.8672 213.2948,-381.1317"/>
+</g>
+<!-- module~int1&#45;&gt;module~basis_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge18" class="edge">
+<title>module~int1&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-414C581.5848,-416.2306 538.6418,-427.3012 507.5989,-436.9222"/>
+<polygon fill="#000000" stroke="#000000" points="506.431,-433.6207 497.9583,-439.9819 508.5486,-440.2927 506.431,-433.6207"/>
+</g>
+<!-- module~int1&#45;&gt;module~messages -->
+<g id="proc~~electric_moments~~UsesGraph_edge19" class="edge">
+<title>module~int1&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.8718,-275.4123C796.1681,-273.4982 612.5907,-265.7869 560,-237 537.8362,-224.868 544.6974,-207.4927 524,-193 518.7199,-189.3028 512.7259,-186.1995 506.6187,-183.6116"/>
+<polygon fill="#000000" stroke="#000000" points="507.6058,-180.2424 497.0148,-179.9578 505.1167,-186.785 507.6058,-180.2424"/>
+</g>
+<!-- module~int1&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge17" class="edge">
+<title>module~int1&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-414C708.6133,-434.3399 688.3886,-410.1087 620.5,-414"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-414C524.1398,-419.5233 499.4639,-416.7714 404,-431 361.2309,-437.3746 352.1525,-449.2275 309,-452"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-452C248.1729,-454.7415 231.3882,-465.435 172,-452"/>
+</g>
+<!-- module~mod_1e_primitives -->
+<g id="proc~~electric_moments~~UsesGraph_node19" class="node">
+<title>module~mod_1e_primitives</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node19"><a xlink:href="../module/mod_1e_primitives.html" xlink:title="mod_1e_primitives">
+<polygon fill="#337ab7" stroke="#337ab7" points="830,-308 717,-308 717,-284 830,-284 830,-308"/>
+<text text-anchor="middle" x="773.5" y="-293.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="proc~~electric_moments~~UsesGraph_edge20" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.8836,-280.5383C858.0957,-281.8417 849.2408,-283.3237 840.1703,-284.8418"/>
+<polygon fill="#000000" stroke="#000000" points="839.5685,-281.3937 830.2835,-286.4965 840.7241,-288.2977 839.5685,-281.3937"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="proc~~electric_moments~~UsesGraph_node20" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node20"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="669,-348 572,-348 572,-324 669,-324 669,-348"/>
+<text text-anchor="middle" x="620.5" y="-333.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge21" class="edge">
+<title>module~int1&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M887.8477,-288.3747C874.4464,-318.5123 835.1929,-394.6613 773.5,-414"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-414C728.4973,-428.1069 723.2802,-382.8956 681,-362 674.2357,-358.657 666.9379,-355.3095 659.8314,-352.1822"/>
+<polygon fill="#000000" stroke="#000000" points="660.8953,-348.8291 650.3273,-348.0751 658.1185,-355.2548 660.8953,-348.8291"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~electric_moments~~UsesGraph_node21" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node21"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="807,-126 740,-126 740,-102 807,-102 807,-126"/>
+<text text-anchor="middle" x="773.5" y="-111.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~electric_moments~~UsesGraph_edge22" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.8836,-114C851.6485,-114 833.8485,-114 817.6828,-114"/>
+<polygon fill="#000000" stroke="#000000" points="817.3495,-110.5001 807.3495,-114 817.3494,-117.5001 817.3495,-110.5001"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge23" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.7025,-103.7403C854.7317,-99.9235 841.8873,-95.8357 830,-93 670.7833,-55.0192 627.3537,-62.3957 464,-52"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-52C395.3271,-46.5495 370.5738,-21.1076 309,-52"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-52C284.3769,-64.3538 268.8987,-50.9562 250,-71 211.1006,-112.2563 183.6455,-288.1213 174.9432,-350.7462"/>
+<polygon fill="#000000" stroke="#000000" points="171.4626,-350.3671 173.5801,-360.7482 178.3984,-351.3124 171.4626,-350.3671"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge26" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.8132,-178.2801C421.2561,-181.4081 411.4202,-186.0695 404,-193 374.3164,-220.7247 386.6004,-240.8918 368,-277 354.0373,-304.1052 335.4067,-333.8701 322.8473,-353.1839"/>
+<polygon fill="#000000" stroke="#000000" points="319.7747,-351.4869 317.2165,-361.7683 325.6278,-355.3262 319.7747,-351.4869"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~electric_moments~~UsesGraph_node12" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-146 266.5,-146 266.5,-122 351.5,-122 351.5,-146"/>
+<text text-anchor="middle" x="309" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~electric_moments~~UsesGraph_edge24" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.7486,-163.848C410.6021,-158.9089 384.456,-152.4989 361.5605,-146.8858"/>
+<polygon fill="#000000" stroke="#000000" points="362.1854,-143.4354 351.6396,-144.4536 360.5186,-150.2341 362.1854,-143.4354"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~electric_moments~~UsesGraph_node13" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-104 273,-104 273,-80 345,-80 345,-104"/>
+<text text-anchor="middle" x="309" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~electric_moments~~UsesGraph_edge25" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.9125,-159.9947C421.87,-156.0994 412.2862,-151.3749 404,-146 385.7903,-134.1882 386.5949,-124.1956 368,-113 363.8521,-110.5026 359.362,-108.2387 354.7743,-106.2025"/>
+<polygon fill="#000000" stroke="#000000" points="355.88,-102.8736 345.2985,-102.341 353.2383,-109.3561 355.88,-102.8736"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge27" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.758,-166.1106C398.5376,-161.8412 348.8302,-159.1142 309,-174"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-174C283.1949,-183.6442 270.4045,-174.4913 250,-193 202.4738,-236.1105 182.6549,-313.2581 175.5022,-350.9944"/>
+<polygon fill="#000000" stroke="#000000" points="172.0372,-350.4897 173.7398,-360.9468 178.9299,-351.7103 172.0372,-350.4897"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_node14" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node14"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-622 130,-622 130,-598 214,-598 214,-622"/>
+<text text-anchor="middle" x="172" y="-607.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge28" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M573.9741,-504.0704C503.7442,-522.3154 366.4788,-558.073 250,-589 241.5307,-591.2487 232.549,-593.6508 223.8095,-595.9974"/>
+<polygon fill="#000000" stroke="#000000" points="222.8336,-592.6354 214.0854,-598.612 224.6513,-599.3953 222.8336,-592.6354"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~electric_moments~~UsesGraph_node24" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="493,-582 435,-582 435,-558 493,-558 493,-582"/>
+<text text-anchor="middle" x="464" y="-567.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~electric_moments~~UsesGraph_edge29" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M578.8983,-504.0998C572.3886,-506.6514 565.8772,-509.6154 560,-513 541.7026,-523.5373 541.8905,-532.7858 524,-544 517.3042,-548.1971 509.8136,-552.034 502.4554,-555.3964"/>
+<polygon fill="#000000" stroke="#000000" points="501.0474,-552.192 493.2757,-559.3929 503.8416,-558.6101 501.0474,-552.192"/>
+</g>
+<!-- module~physical_constants&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge30" class="edge">
+<title>module~physical_constants&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M717.3062,-12.2906C655.292,-12.5858 552.525,-13 464,-13 464,-13 464,-13 309,-13 141.0431,-13 69.4543,-272.3362 51.641,-350.7849"/>
+<polygon fill="#000000" stroke="#000000" points="48.2104,-350.0895 49.48,-360.608 55.0469,-351.5936 48.2104,-350.0895"/>
+</g>
+<!-- module~strings&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge31" class="edge">
+<title>module~strings&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.7234,-602.7737C782.5066,-634.3266 524.4185,-722.4398 309,-692"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M593.4577,-526.1003C582.8081,-522.6086 570.6117,-518.127 560,-513 534.5201,-500.6895 507.4843,-483.0466 488.6189,-469.8989"/>
+<polygon fill="#000000" stroke="#000000" points="490.4963,-466.9399 480.3091,-464.0295 486.4579,-472.6575 490.4963,-466.9399"/>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge32" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-610C387.2848,-623.7352 386.1685,-702.9043 309,-692"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-692C281.7226,-688.1456 272.9391,-688.2549 250,-673 229.5281,-659.3859 233.3784,-646.1302 214,-631 212.4096,-629.7583 210.7342,-628.5604 209.005,-627.4094"/>
+<polygon fill="#000000" stroke="#000000" points="210.4355,-624.1869 200.0562,-622.0603 206.844,-630.1953 210.4355,-624.1869"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~electric_moments~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-610C436.2843,-614.9622 405.3313,-615.8681 378.4174,-615.2046"/>
+<polygon fill="#000000" stroke="#000000" points="378.423,-611.703 368.3153,-614.8786 378.1972,-618.6994 378.423,-611.703"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~electric_moments~~UsesGraph_node18" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node18"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-664 273.5,-664 273.5,-640 344.5,-640 344.5,-664"/>
+<text text-anchor="middle" x="309" y="-649.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~electric_moments~~UsesGraph_edge35" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-610C426.6454,-616.688 385.1951,-628.1374 354.5645,-637.3942"/>
+<polygon fill="#000000" stroke="#000000" points="353.1512,-634.1664 344.613,-640.4394 355.1995,-640.8601 353.1512,-634.1664"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~electric_moments~~UsesGraph_edge36" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-610C410.2817,-619.6178 355.3839,-576.0512 327.5871,-549.4123"/>
+<polygon fill="#000000" stroke="#000000" points="329.7474,-546.6264 320.1748,-542.0859 324.8265,-551.6049 329.7474,-546.6264"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge37" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M602.6637,-546.2115C583.7794,-558.7329 552.7807,-578.1437 524,-591 498.4605,-602.4085 491.5339,-605.0703 464,-610"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-610C436.4661,-614.9297 424.8085,-609.6929 404,-591 374.3908,-564.4012 393.3029,-539.724 368,-509 355.2704,-493.5431 249.9227,-423.8286 199.1533,-390.6523"/>
+<polygon fill="#000000" stroke="#000000" points="200.9181,-387.6247 190.6306,-385.0913 197.0928,-393.4871 200.9181,-387.6247"/>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~electric_moments~~UsesGraph_edge38" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M593.2398,-540.2707C568.281,-546.012 531.0635,-554.5732 502.9682,-561.0361"/>
+<polygon fill="#000000" stroke="#000000" points="502.0305,-557.6603 493.0697,-563.313 503.5998,-564.4821 502.0305,-557.6603"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge39" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-610C241.1722,-610 232.4436,-610 224.0637,-610"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-606.5001 214.0516,-610 224.0516,-613.5001 224.0516,-606.5001"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge40" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.9525,-267.044C267.7823,-270.9986 258.0887,-275.9949 250,-282 223.3417,-301.7912 199.6128,-332.2638 185.5181,-352.4138"/>
+<polygon fill="#000000" stroke="#000000" points="182.4926,-350.638 179.7442,-360.8701 188.2736,-354.5852 182.4926,-350.638"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge41" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-641.0746C257.4565,-636.1983 238.4524,-630.3723 221.2204,-625.0895"/>
+<polygon fill="#000000" stroke="#000000" points="221.9027,-621.6379 211.316,-622.0531 219.851,-628.3305 221.9027,-621.6379"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge42" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.2257,-645.8164C264.5205,-642.7052 256.0004,-638.0288 250,-631 193.3462,-564.636 246.2875,-519.0638 214,-438 207.5992,-421.9296 197.0133,-405.5827 188.0709,-393.3024"/>
+<polygon fill="#000000" stroke="#000000" points="190.741,-391.0296 181.9333,-385.1411 185.1465,-395.237 190.741,-391.0296"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~electric_moments~~UsesGraph_node30" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-664 131.5,-664 131.5,-640 212.5,-640 212.5,-664"/>
+<text text-anchor="middle" x="172" y="-649.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~electric_moments~~UsesGraph_edge43" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-652C257.9991,-652 239.7453,-652 222.9899,-652"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-648.5001 212.79,-652 222.79,-655.5001 222.7901,-648.5001"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="proc~~electric_moments~~UsesGraph_edge49" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M750.2626,-283.8497C724.1629,-270.2028 681.6428,-247.9701 652.4331,-232.697"/>
+<polygon fill="#000000" stroke="#000000" points="653.9383,-229.5345 643.4548,-228.0025 650.6947,-235.7377 653.9383,-229.5345"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge44" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-296C365.7754,-289.6891 332.2279,-298.9032 250,-353 203.2033,-383.787 227.0285,-462.4709 172,-452"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-452C130.5206,-442.6164 90.382,-412.2972 67.2176,-392.0662"/>
+<polygon fill="#000000" stroke="#000000" points="69.2617,-389.198 59.4803,-385.1266 64.5878,-394.4091 69.2617,-389.198"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge45" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-296C551.5056,-287.1823 533.4124,-300.4597 464,-296"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-296C424.7096,-293.4756 381.4377,-281.4955 350.6233,-271.2982"/>
+<polygon fill="#000000" stroke="#000000" points="351.6715,-267.958 341.0772,-268.0643 349.4254,-274.5879 351.6715,-267.958"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge47" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M727.595,-308.0013C711.4808,-312.2142 693.1982,-316.9939 676.3581,-321.3966"/>
+<polygon fill="#000000" stroke="#000000" points="675.4264,-318.0224 666.6369,-323.9381 677.197,-324.7948 675.4264,-318.0224"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="proc~~electric_moments~~UsesGraph_node27" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node27"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-226 404,-226 404,-202 524,-202 524,-226"/>
+<text text-anchor="middle" x="464" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="proc~~electric_moments~~UsesGraph_edge46" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M716.9685,-299.4104C688.0088,-300.2955 652.2496,-300.0577 620.5,-296"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-296C591.4694,-292.2898 584.3417,-286.2489 560,-270 541.4399,-257.6105 542.9776,-246.7399 524,-235 521.2313,-233.2872 518.3039,-231.6903 515.2912,-230.2053"/>
+<polygon fill="#000000" stroke="#000000" points="516.6282,-226.9693 506.0706,-226.0822 513.7707,-233.3595 516.6282,-226.9693"/>
+</g>
+<!-- module~rys -->
+<g id="proc~~electric_moments~~UsesGraph_node28" class="node">
+<title>module~rys</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node28"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-268 437,-268 437,-244 491,-244 491,-268"/>
+<text text-anchor="middle" x="464" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="proc~~electric_moments~~UsesGraph_edge48" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-296C578.7072,-290.6587 532.0665,-277.8099 500.6626,-268.1051"/>
+<polygon fill="#000000" stroke="#000000" points="501.6167,-264.7362 491.0274,-265.0782 499.5187,-271.4145 501.6167,-264.7362"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="proc~~electric_moments~~UsesGraph_edge50" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M604.0476,-348.1948C576.5017,-368.6121 520.905,-409.8212 488.6637,-433.7189"/>
+<polygon fill="#000000" stroke="#000000" points="486.1816,-431.202 480.232,-439.9686 490.3499,-436.8257 486.1816,-431.202"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge51" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M571.9386,-335.0706C500.8509,-334.4226 364.4695,-335.8837 250,-353 237.6862,-354.8412 224.4996,-357.822 212.538,-360.9266"/>
+<polygon fill="#000000" stroke="#000000" points="211.5709,-357.5623 202.8244,-363.5413 213.3904,-364.3217 211.5709,-357.5623"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~electric_moments~~UsesGraph_node25" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node25"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="653.5,-146 587.5,-146 587.5,-122 653.5,-122 653.5,-146"/>
+<text text-anchor="middle" x="620.5" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~electric_moments~~UsesGraph_edge52" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M739.9235,-118.3891C717.5254,-121.3169 687.8691,-125.1936 663.7133,-128.3512"/>
+<polygon fill="#000000" stroke="#000000" points="663.1968,-124.8889 653.7348,-129.6556 664.1041,-131.8298 663.1968,-124.8889"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~electric_moments~~UsesGraph_node26" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node26"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="660,-104 581,-104 581,-80 660,-80 660,-104"/>
+<text text-anchor="middle" x="620.5" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~electric_moments~~UsesGraph_edge53" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M739.9235,-109.172C719.5562,-106.2434 693.1871,-102.4517 670.4098,-99.1766"/>
+<polygon fill="#000000" stroke="#000000" points="670.6282,-95.6721 660.2318,-97.7131 669.6318,-102.6008 670.6282,-95.6721"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~electric_moments~~UsesGraph_edge54" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7479,-540.7256C271.5763,-545.0597 260.0604,-550.3685 250,-556 231.018,-566.6255 210.8604,-580.6609 195.793,-591.7593"/>
+<polygon fill="#000000" stroke="#000000" points="193.4775,-589.1201 187.5571,-597.9065 197.6645,-594.7298 193.4775,-589.1201"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge55" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8004,-519.1796C271.6349,-514.8345 260.1094,-509.543 250,-504 213.467,-483.9689 212.9298,-459.7882 172,-452"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge56" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8658,-522.2937C271.0127,-518.1954 258.9831,-512.2563 250,-504 225.399,-481.3895 231.0787,-466.7187 214,-438 205.0477,-422.9463 194.3221,-406.3692 185.9505,-393.7236"/>
+<polygon fill="#000000" stroke="#000000" points="188.7875,-391.6694 180.3297,-385.2885 182.9623,-395.5511 188.7875,-391.6694"/>
+</g>
+<!-- mpi -->
+<g id="proc~~electric_moments~~UsesGraph_node29" class="node">
+<title>mpi</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node29"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-542 145,-542 145,-518 199,-518 199,-542"/>
+<text text-anchor="middle" x="172" y="-527.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~electric_moments~~UsesGraph_edge57" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-530C261.1051,-530 232.0908,-530 209.0994,-530"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-526.5001 199.0106,-530 209.0105,-533.5001 209.0106,-526.5001"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~electric_moments~~UsesGraph_edge58" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-373C130.2434,-373 117.203,-373 104.4454,-373"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-369.5001 94.3156,-373 104.3156,-376.5001 104.3156,-369.5001"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~electric_moments~~UsesGraph_edge60" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.3104,-142.0588C563.8641,-147.7518 532.2304,-155.4329 506.8738,-161.5897"/>
+<polygon fill="#000000" stroke="#000000" points="506.0336,-158.192 497.1418,-163.9528 507.6853,-164.9943 506.0336,-158.192"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge61" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.1837,-138.145C542.7307,-142.0956 462.8024,-143.5708 404,-113 382.1864,-101.6593 388.4719,-84.6141 368,-71 345.0609,-55.7451 333.7162,-39.8335 309,-52"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~electric_moments~~UsesGraph_node31" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node31"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="507.5,-104 420.5,-104 420.5,-80 507.5,-80 507.5,-104"/>
+<text text-anchor="middle" x="464" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~electric_moments~~UsesGraph_edge59" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.3104,-125.0929C566.9765,-119.6359 540.4844,-112.5262 517.2696,-106.296"/>
+<polygon fill="#000000" stroke="#000000" points="518.114,-102.8988 507.5485,-103.6871 516.2995,-109.6596 518.114,-102.8988"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~electric_moments~~UsesGraph_edge63" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M581.5918,-104.1034C574.3031,-106.7626 566.8319,-109.7621 560,-113 534.9722,-124.8617 508.2652,-141.6488 489.3912,-154.2854"/>
+<polygon fill="#000000" stroke="#000000" points="487.3634,-151.4316 481.0511,-159.9409 491.292,-157.2252 487.3634,-151.4316"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge64" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M588.1014,-79.9351C556.8463,-69.2073 507.9395,-54.7963 464,-52"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~electric_moments~~UsesGraph_edge62" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M580.6035,-92C561.5455,-92 538.4548,-92 517.8663,-92"/>
+<polygon fill="#000000" stroke="#000000" points="517.6769,-88.5001 507.6769,-92 517.6768,-95.5001 517.6769,-88.5001"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge65" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.6481,-201.9737C384.405,-188.7495 320.0314,-169.8772 309,-174"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="proc~~electric_moments~~UsesGraph_edge66" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-256C412.9873,-256 378.4025,-256 351.1981,-256"/>
+<polygon fill="#000000" stroke="#000000" points="351.1713,-252.5001 341.1712,-256 351.1712,-259.5001 351.1713,-252.5001"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="proc~~electric_moments~~UsesGraph_edge67" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.8936,-249.8015C426.0576,-246.5126 413.8412,-241.7244 404,-235 383.7007,-221.1297 388.4719,-206.6141 368,-193 345.0609,-177.7451 334.8051,-164.3558 309,-174"/>
+</g>
+<!-- module~rys_lut -->
+<g id="proc~~electric_moments~~UsesGraph_node32" class="node">
+<title>module~rys_lut</title>
+<g id="a_proc~~electric_moments~~UsesGraph_node32"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-226 282,-226 282,-202 336,-202 336,-226"/>
+<text text-anchor="middle" x="309" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="proc~~electric_moments~~UsesGraph_edge68" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-248.5879C411.4124,-241.7505 373.7496,-231.5451 345.8688,-223.9903"/>
+<polygon fill="#000000" stroke="#000000" points="346.648,-220.5752 336.0806,-221.338 344.8172,-227.3316 346.648,-220.5752"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocelectric_momentsUsesGraph = svgPanZoom('#procelectric_momentsUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~59"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~electric_moments~~CallsGraph Pages: 1 -->
+<svg id="procelectric_momentsCallsGraph" width="641pt" height="360pt"
+ viewBox="0.00 0.00 641.00 359.74" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~electric_moments~~CallsGraph" class="graph" transform="scale(.8817 .8817) rotate(0) translate(4 404)">
+<title>proc~~electric_moments~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-404 723,-404 723,4 -4,4"/>
+<!-- proc~electric_moments -->
+<g id="proc~~electric_moments~~CallsGraph_node1" class="node">
+<title>proc~electric_moments</title>
+<polygon fill="none" stroke="#000000" points="108,-296 0,-296 0,-272 108,-272 108,-296"/>
+<text text-anchor="middle" x="54" y="-281.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">electric_moments</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~electric_moments~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="432.5,-318 339.5,-318 339.5,-294 432.5,-294 432.5,-318"/>
+<text text-anchor="middle" x="386" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;interface~show_message -->
+<g id="proc~~electric_moments~~CallsGraph_edge1" class="edge">
+<title>proc~electric_moments&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M108.2542,-283.2998C120.0387,-283.1749 132.437,-283.0642 144,-283 204.4435,-282.6642 219.9002,-276.5547 280,-283 296.6684,-284.7876 314.5625,-288.1132 330.814,-291.6911"/>
+<polygon fill="#000000" stroke="#000000" points="330.1676,-295.1334 340.695,-293.9399 331.7211,-288.308 330.1676,-295.1334"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~electric_moments~~CallsGraph_node3" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node3"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="267,-358 157,-358 157,-334 267,-334 267,-358"/>
+<text text-anchor="middle" x="212" y="-343.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~electric_moments~~CallsGraph_edge2" class="edge">
+<title>proc~electric_moments&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M78.4694,-296.1767C96.368,-304.8288 121.3723,-316.3924 144,-325 149.1968,-326.9769 154.6677,-328.9076 160.1558,-330.7474"/>
+<polygon fill="#000000" stroke="#000000" points="159.4052,-334.1837 169.9974,-333.951 161.5719,-327.5275 159.4052,-334.1837"/>
+</g>
+<!-- proc~check_status -->
+<g id="proc~~electric_moments~~CallsGraph_node4" class="node">
+<title>proc~check_status</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node4"><a xlink:href="../proc/check_status.html" xlink:title="check_status">
+<polygon fill="#d9534f" stroke="#d9534f" points="252.5,-400 171.5,-400 171.5,-376 252.5,-376 252.5,-400"/>
+<text text-anchor="middle" x="212" y="-385.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">check_status</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~check_status -->
+<g id="proc~~electric_moments~~CallsGraph_edge3" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~check_status</title>
+<path fill="none" stroke="#000000" d="M64.0624,-296.2562C79.4724,-314.2643 110.6564,-347.8092 144,-367 149.4815,-370.1549 155.4896,-372.8877 161.5946,-375.2411"/>
+<polygon fill="#000000" stroke="#000000" points="160.6113,-378.6056 171.2061,-378.6332 162.9409,-372.0046 160.6113,-378.6056"/>
+</g>
+<!-- proc~multipole_integrals -->
+<g id="proc~~electric_moments~~CallsGraph_node5" class="node">
+<title>proc~multipole_integrals</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node5"><a xlink:href="../proc/multipole_integrals.html" xlink:title="multipole_integrals">
+<polygon fill="#d9534f" stroke="#d9534f" points="269.5,-192 154.5,-192 154.5,-168 269.5,-168 269.5,-192"/>
+<text text-anchor="middle" x="212" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">multipole_integrals</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~multipole_integrals -->
+<g id="proc~~electric_moments~~CallsGraph_edge4" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M64.452,-271.8752C80.1153,-254.3928 111.343,-222.1117 144,-203 148.457,-200.3916 153.2528,-198.0251 158.1609,-195.8904"/>
+<polygon fill="#000000" stroke="#000000" points="159.7029,-199.0428 167.6783,-192.0684 157.0943,-192.547 159.7029,-199.0428"/>
+</g>
+<!-- proc~traceprod_sym_packed -->
+<g id="proc~~electric_moments~~CallsGraph_node6" class="node">
+<title>proc~traceprod_sym_packed</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node6"><a xlink:href="../proc/traceprod_sym_packed.html" xlink:title="traceprod_sym_packed">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="280,-236 144,-236 144,-212 280,-212 280,-236"/>
+<text text-anchor="middle" x="212" y="-221.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">traceprod_sym_packed</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~traceprod_sym_packed -->
+<g id="proc~~electric_moments~~CallsGraph_edge5" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~traceprod_sym_packed</title>
+<path fill="none" stroke="#000000" d="M85.9737,-271.8581C110.468,-262.5564 144.4456,-249.6536 170.949,-239.589"/>
+<polygon fill="#000000" stroke="#000000" points="172.2378,-242.8435 180.3439,-236.0213 169.7527,-236.2995 172.2378,-242.8435"/>
+</g>
+<!-- proc~triangular_to_full -->
+<g id="proc~~electric_moments~~CallsGraph_node7" class="node">
+<title>proc~triangular_to_full</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node7"><a xlink:href="../proc/triangular_to_full.html" xlink:title="triangular_to_full">
+<polygon fill="#d9534f" stroke="#d9534f" points="263.5,-316 160.5,-316 160.5,-292 263.5,-292 263.5,-316"/>
+<text text-anchor="middle" x="212" y="-301.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">triangular_to_full</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~electric_moments~~CallsGraph_edge6" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M108.3746,-290.8829C121.9506,-292.6013 136.6046,-294.4563 150.4984,-296.215"/>
+<polygon fill="#000000" stroke="#000000" points="150.0941,-299.6917 160.4545,-297.4753 150.9732,-292.7471 150.0941,-299.6917"/>
+</g>
+<!-- proc~check_status&#45;&gt;interface~show_message -->
+<g id="proc~~electric_moments~~CallsGraph_edge8" class="edge">
+<title>proc~check_status&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M252.8107,-377.0161C261.9007,-374.1249 271.3912,-370.7505 280,-367 308.1473,-354.7375 338.3165,-336.8656 359.2429,-323.6336"/>
+<polygon fill="#000000" stroke="#000000" points="361.355,-326.4372 367.8893,-318.0973 357.5804,-320.5421 361.355,-326.4372"/>
+</g>
+<!-- get_status_message -->
+<g id="proc~~electric_moments~~CallsGraph_node8" class="node">
+<title>get_status_message</title>
+<polygon fill="#777777" stroke="#777777" points="446,-400 326,-400 326,-376 446,-376 446,-400"/>
+<text text-anchor="middle" x="386" y="-385.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_status_message</text>
+</g>
+<!-- proc~check_status&#45;&gt;get_status_message -->
+<g id="proc~~electric_moments~~CallsGraph_edge7" class="edge">
+<title>proc~check_status&#45;&gt;get_status_message</title>
+<path fill="none" stroke="#000000" d="M252.7953,-388C271.5256,-388 294.2811,-388 315.6454,-388"/>
+<polygon fill="#000000" stroke="#000000" points="315.6697,-391.5001 325.6697,-388 315.6697,-384.5001 315.6697,-391.5001"/>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;interface~show_message -->
+<g id="proc~~electric_moments~~CallsGraph_edge10" class="edge">
+<title>proc~multipole_integrals&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M263.2754,-192.0341C269.3612,-194.9381 275.1296,-198.5383 280,-203 309.3487,-229.8859 286.1893,-258.6273 316,-285 320.1575,-288.678 324.9385,-291.7123 330.0083,-294.2153"/>
+<polygon fill="#000000" stroke="#000000" points="328.7999,-297.5043 339.3738,-298.1715 331.5239,-291.056 328.7999,-297.5043"/>
+</g>
+<!-- interface~bas_norm_matrix -->
+<g id="proc~~electric_moments~~CallsGraph_node9" class="node">
+<title>interface~bas_norm_matrix</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node9"><a xlink:href="../interface/bas_norm_matrix.html" xlink:title="bas_norm_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="438.5,-192 333.5,-192 333.5,-168 438.5,-168 438.5,-192"/>
+<text text-anchor="middle" x="386" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bas_norm_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix -->
+<g id="proc~~electric_moments~~CallsGraph_edge9" class="edge">
+<title>proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M269.9395,-180C287.0463,-180 305.8466,-180 323.2418,-180"/>
+<polygon fill="#000000" stroke="#000000" points="323.2981,-183.5001 333.2981,-180 323.298,-176.5001 323.2981,-183.5001"/>
+</g>
+<!-- none~alloc~2 -->
+<g id="proc~~electric_moments~~CallsGraph_node10" class="node">
+<title>none~alloc~2</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node10"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc~2" xlink:title="shpair_t%alloc">
+<polygon fill="#a7506f" stroke="#a7506f" points="431,-150 341,-150 341,-126 431,-126 431,-150"/>
+<text text-anchor="middle" x="386" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~alloc~2 -->
+<g id="proc~~electric_moments~~CallsGraph_edge11" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~alloc~2</title>
+<path fill="none" stroke="#000000" d="M261.8614,-167.9645C283.4587,-162.7514 308.815,-156.6309 330.9618,-151.2851"/>
+<polygon fill="#000000" stroke="#000000" points="331.987,-154.6382 340.8865,-148.8895 330.3444,-147.8337 331.987,-154.6382"/>
+</g>
+<!-- none~fetch_by_id -->
+<g id="proc~~electric_moments~~CallsGraph_node11" class="node">
+<title>none~fetch_by_id</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node11"><a xlink:href="../type/shell_t.html#boundprocedure-fetch_by_id" xlink:title="shell_t%fetch_by_id">
+<polygon fill="#a7506f" stroke="#a7506f" points="444,-108 328,-108 328,-84 444,-84 444,-108"/>
+<text text-anchor="middle" x="386" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shell_t%fetch_by_id</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~fetch_by_id -->
+<g id="proc~~electric_moments~~CallsGraph_edge12" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M228.9292,-167.889C248.9287,-154.0305 283.5894,-131.3981 316,-117 320.5928,-114.9597 325.4401,-113.048 330.3533,-111.274"/>
+<polygon fill="#000000" stroke="#000000" points="331.5021,-114.5803 339.8331,-108.0346 329.2385,-107.9563 331.5021,-114.5803"/>
+</g>
+<!-- none~shell_pair -->
+<g id="proc~~electric_moments~~CallsGraph_node12" class="node">
+<title>none~shell_pair</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node12"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair" xlink:title="shpair_t%shell_pair">
+<polygon fill="#a7506f" stroke="#a7506f" points="443.5,-66 328.5,-66 328.5,-42 443.5,-42 443.5,-66"/>
+<text text-anchor="middle" x="386" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~shell_pair -->
+<g id="proc~~electric_moments~~CallsGraph_edge13" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~shell_pair</title>
+<path fill="none" stroke="#000000" d="M220.8401,-167.666C237.1634,-145.7796 274.208,-100.098 316,-75 319.0286,-73.1812 322.2265,-71.5096 325.521,-69.9747"/>
+<polygon fill="#000000" stroke="#000000" points="327.1307,-73.0951 335.0011,-66.0024 324.4254,-66.639 327.1307,-73.0951"/>
+</g>
+<!-- proc~comp_allmult_int1_prim -->
+<g id="proc~~electric_moments~~CallsGraph_node13" class="node">
+<title>proc~comp_allmult_int1_prim</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node13"><a xlink:href="../proc/comp_allmult_int1_prim.html" xlink:title="comp_allmult_int1_prim">
+<polygon fill="#d9534f" stroke="#d9534f" points="456,-24 316,-24 316,0 456,0 456,-24"/>
+<text text-anchor="middle" x="386" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_allmult_int1_prim</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~comp_allmult_int1_prim -->
+<g id="proc~~electric_moments~~CallsGraph_edge14" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~comp_allmult_int1_prim</title>
+<path fill="none" stroke="#000000" d="M217.2734,-167.6387C229.9635,-139.3808 264.9779,-69.6769 316,-33 318.2407,-31.3893 320.606,-29.9006 323.0585,-28.525"/>
+<polygon fill="#000000" stroke="#000000" points="324.8121,-31.5635 332.2536,-24.0219 321.7333,-25.2768 324.8121,-31.5635"/>
+</g>
+<!-- proc~print_sym_labeled -->
+<g id="proc~~electric_moments~~CallsGraph_node14" class="node">
+<title>proc~print_sym_labeled</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node14"><a xlink:href="../proc/print_sym_labeled.html" xlink:title="print_sym_labeled">
+<polygon fill="#d9534f" stroke="#d9534f" points="440.5,-276 331.5,-276 331.5,-252 440.5,-252 440.5,-276"/>
+<text text-anchor="middle" x="386" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_sym_labeled</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~print_sym_labeled -->
+<g id="proc~~electric_moments~~CallsGraph_edge15" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~print_sym_labeled</title>
+<path fill="none" stroke="#000000" d="M258.1319,-192.0068C265.7561,-194.9852 273.3374,-198.6151 280,-203 299.979,-216.1487 295.7959,-230.1998 316,-243 318.7867,-244.7655 321.7293,-246.3889 324.7676,-247.8811"/>
+<polygon fill="#000000" stroke="#000000" points="323.5446,-251.1664 334.1086,-251.9739 326.3539,-244.7548 323.5446,-251.1664"/>
+</g>
+<!-- proc~update_triang_matrix -->
+<g id="proc~~electric_moments~~CallsGraph_node15" class="node">
+<title>proc~update_triang_matrix</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node15"><a xlink:href="../proc/update_triang_matrix.html" xlink:title="update_triang_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="449.5,-234 322.5,-234 322.5,-210 449.5,-210 449.5,-234"/>
+<text text-anchor="middle" x="386" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_triang_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~electric_moments~~CallsGraph_edge16" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M261.8614,-192.0355C281.9743,-196.8903 305.3472,-202.5321 326.3521,-207.6022"/>
+<polygon fill="#000000" stroke="#000000" points="325.5892,-211.0185 336.1313,-209.9627 327.2317,-204.214 325.5892,-211.0185"/>
+</g>
+<!-- proc~triangular_to_full&#45;&gt;interface~show_message -->
+<g id="proc~~electric_moments~~CallsGraph_edge17" class="edge">
+<title>proc~triangular_to_full&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M263.7346,-304.5947C284.3961,-304.8321 308.2518,-305.1063 329.3754,-305.3491"/>
+<polygon fill="#000000" stroke="#000000" points="329.4602,-308.8503 339.4998,-305.4655 329.5407,-301.8507 329.4602,-308.8503"/>
+</g>
+<!-- proc~mulquadgausshermite -->
+<g id="proc~~electric_moments~~CallsGraph_node17" class="node">
+<title>proc~mulquadgausshermite</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node17"><a xlink:href="../proc/mulquadgausshermite.html" xlink:title="mulQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="629,-24 492,-24 492,0 629,0 629,-24"/>
+<text text-anchor="middle" x="560.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mulQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_allmult_int1_prim&#45;&gt;proc~mulquadgausshermite -->
+<g id="proc~~electric_moments~~CallsGraph_edge18" class="edge">
+<title>proc~comp_allmult_int1_prim&#45;&gt;proc~mulquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M456.2215,-12C464.5704,-12 473.1356,-12 481.5953,-12"/>
+<polygon fill="#000000" stroke="#000000" points="481.8402,-15.5001 491.8402,-12 481.8402,-8.5001 481.8402,-15.5001"/>
+</g>
+<!-- none~bf_label -->
+<g id="proc~~electric_moments~~CallsGraph_node16" class="node">
+<title>none~bf_label</title>
+<g id="a_proc~~electric_moments~~CallsGraph_node16"><a xlink:href="../type/basis_set.html#boundprocedure-bf_label" xlink:title="basis_set%bf_label">
+<polygon fill="#a7506f" stroke="#a7506f" points="616.5,-276 504.5,-276 504.5,-252 616.5,-252 616.5,-276"/>
+<text text-anchor="middle" x="560.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_set%bf_label</text>
+</a>
+</g>
+</g>
+<!-- proc~print_sym_labeled&#45;&gt;none~bf_label -->
+<g id="proc~~electric_moments~~CallsGraph_edge19" class="edge">
+<title>proc~print_sym_labeled&#45;&gt;none~bf_label</title>
+<path fill="none" stroke="#000000" d="M440.7341,-264C457.6954,-264 476.5698,-264 494.226,-264"/>
+<polygon fill="#000000" stroke="#000000" points="494.4572,-267.5001 504.4572,-264 494.4572,-260.5001 494.4572,-267.5001"/>
+</g>
+<!-- abrt -->
+<g id="proc~~electric_moments~~CallsGraph_node18" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="719,-24 665,-24 665,0 719,0 719,-24"/>
+<text text-anchor="middle" x="692" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~mulquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~electric_moments~~CallsGraph_edge20" class="edge">
+<title>proc~mulquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M629.331,-12C638.059,-12 646.7145,-12 654.6804,-12"/>
+<polygon fill="#000000" stroke="#000000" points="654.7033,-15.5001 664.7032,-12 654.7032,-8.5001 654.7033,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocelectric_momentsCallsGraph = svgPanZoom('#procelectric_momentsCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">electric_moments</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">Cstring</span><span class="p">,</span><span class="w"> </span><span class="n">fstring</span>
+<span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">,</span><span class="w"> </span><span class="n">triangular_to_full</span>
+<span class="w">    </span><span class="k">use </span><span class="n">int1</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">multipole_integrals</span>
+<span class="w">    </span><span class="k">use </span><span class="n">physical_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">AU_TO_DEBYE</span><span class="p">,</span><span class="w"> </span><span class="n">AU_TO_BUCK</span><span class="p">,</span><span class="w"> </span><span class="n">AU_TO_OCT</span>
+<span class="w">    </span><span class="k">use </span><span class="n">xyz_order</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;electric_moments&quot;</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">urohf</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mints</span><span class="p">(:,:)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">com</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="mi">6</span><span class="p">),</span><span class="w"> </span><span class="n">quad</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">z</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nat</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">status</span>
+
+<span class="w">    </span><span class="n">urohf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">.</span><span class="nb">or</span><span class="p">.</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">3</span>
+
+<span class="c">!   3. LOG: Write: Main output file</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+
+<span class="c">!   Load basis set</span>
+<span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+
+<span class="c">!   Allocate memory</span>
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">    </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(2/)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;========================&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Electric moment analysis&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;========================&#39;</span>
+<span class="w">    </span><span class="k">call </span><span class="nb">flush</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">nat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">mints</span><span class="p">(</span><span class="n">nbf2</span><span class="p">,</span><span class="mi">19</span><span class="p">),</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0d0</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Cannot allocate memory&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">status</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">check_status</span><span class="p">(</span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">status</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">check_status</span><span class="p">(</span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">)</span>
+<span class="w">    </span><span class="k">endif</span>
+
+<span class="k">    </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nat</span>
+<span class="w">        </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">com</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">mass</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="k">    </span><span class="n">com</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">com</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">mass</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">multipole_integrals</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">mints</span><span class="p">,</span><span class="w"> </span><span class="n">com</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="n">qxyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="n">oxyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nat</span>
+<span class="w">      </span><span class="n">dr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="o">-</span><span class="n">com</span>
+<span class="w">      </span><span class="n">z</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">ecp_zn_num</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+<span class="w">      </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span>
+
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span>
+<span class="w">      </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dr</span><span class="p">(</span><span class="n">X__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Y__</span><span class="p">)</span><span class="o">*</span><span class="n">dr</span><span class="p">(</span><span class="n">Z__</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span>
+<span class="w">        </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span>
+<span class="w">        </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">3</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span>
+<span class="w">        </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">9</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="n">urohf</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span>
+<span class="w">        </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span>
+<span class="w">        </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">3</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span>
+<span class="w">        </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oxyz</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">mints</span><span class="p">(:,</span><span class="mi">9</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="k">    end if</span>
+
+<span class="k">    </span><span class="n">dip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dip</span><span class="o">*</span><span class="n">AU_TO_DEBYE</span>
+
+<span class="w">    </span><span class="c">! Assemble quadrupole tensor:</span>
+<span class="w">    </span><span class="c">! Q_ab = 1/2 * ( 3 * r_a * r_b - r^2 * \delta(a,b) )</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">X__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">Y__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XY_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">X__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XZ_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Y__</span><span class="p">,</span><span class="n">Y__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Y__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YZ_</span><span class="p">)</span><span class="w">                        </span><span class="p">)</span>
+<span class="w">    </span><span class="n">quad</span><span class="p">(</span><span class="n">Z__</span><span class="p">,</span><span class="n">Z__</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">qxyz</span><span class="p">(</span><span class="n">ZZ_</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="n">qxyz</span><span class="p">(</span><span class="n">XX_</span><span class="p">)</span><span class="o">+</span><span class="n">qxyz</span><span class="p">(</span><span class="n">YY_</span><span class="p">)))</span>
+<span class="w">    </span><span class="k">call </span><span class="n">triangular_to_full</span><span class="p">(</span><span class="n">quad</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="s1">&#39;u&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="n">quad</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">quad</span><span class="o">*</span><span class="n">AU_TO_BUCK</span>
+
+<span class="w">    </span><span class="c">! Assemble octopole tensor:</span>
+<span class="w">    </span><span class="c">! O_abc = 1/2*(5*r_a*r_b*r_c - r^2*(r_a*\delta(b,c)+r_b*\delta(a,c)+r_c*\delta(a,b))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">3</span><span class="o">*</span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYX</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">4</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w">   </span><span class="p">(</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span><span class="o">+</span><span class="n">oxyz</span><span class="p">(</span><span class="n">YYY</span><span class="p">)))</span>
+<span class="w">    </span><span class="n">oct</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="mi">5</span><span class="o">*</span><span class="n">oxyz</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span><span class="w">                          </span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">oct</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oct</span><span class="o">*</span><span class="n">AU_TO_OCT</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/1x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;At point (Bohr):&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3f15.8,sp,f12.5)&#39;</span><span class="p">)</span><span class="w"> </span><span class="n">com</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric charge (a.u.):&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,sp,f12.5)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;C_o&#39;</span><span class="p">,</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">charge</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric dipole (Debye):&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x),a10)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Norm&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,4f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;D_o&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">dip</span><span class="p">,</span><span class="w"> </span><span class="nb">norm2</span><span class="p">(</span><span class="n">dip</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric quadrupole (Buckingham):&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,40x,3(a8,7x))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Z&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3F15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_X&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,3f15.8)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;Q_Z&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">quad</span><span class="p">(:,</span><span class="mi">3</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(/4x,a)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;electric octoupole (Buckingham*Angstrom):&#39;</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxx&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXX</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXY</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xxz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XXZ</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xyy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYX</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">XYZ</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_xzz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZX</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyy&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYY</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">YYZ</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_yyz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZY</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(4x,34x,a6,*(F15.8))&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;O_zzz&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">oct</span><span class="p">(</span><span class="n">ZZZ</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">electric_moments</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

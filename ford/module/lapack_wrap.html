@@ -1,0 +1,3060 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>lapack_wrap &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>lapack_wrap
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for modules and submodules.">207 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/lapack_wrap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/lapack_wrap.f90.html'>lapack_wrap.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">lapack_wrap</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dgeqrf_i64">oqp_dgeqrf_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dgesv_i64">oqp_dgesv_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dsysv_i64">oqp_dsysv_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dgglse_i64">oqp_dgglse_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dorgqr_i64">oqp_dorgqr_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dormqr_i64">oqp_dormqr_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dtpttr_i64">oqp_dtpttr_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dtrttp_i64">oqp_dtrttp_i64</a>
+            <a class="list-group-item" href="../module/lapack_wrap.html#proc-oqp_dgetri_i64">oqp_dgetri_i64</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='mathlib_types.html'>mathlib_types</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~lapack_wrap~~UsesGraph Pages: 1 -->
+<svg id="modulelapack_wrapUsesGraph" width="461pt" height="197pt"
+ viewBox="0.00 0.00 461.00 197.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~lapack_wrap~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 193)">
+<title>module~~lapack_wrap~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-193 457,-193 457,4 -4,4"/>
+<!-- module~lapack_wrap -->
+<g id="module~~lapack_wrap~~UsesGraph_node1" class="node">
+<title>module~lapack_wrap</title>
+<polygon fill="none" stroke="#000000" points="453,-149 374,-149 374,-125 453,-125 453,-149"/>
+<text text-anchor="middle" x="413.5" y="-134.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">lapack_wrap</text>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~lapack_wrap~~UsesGraph_node2" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~lapack_wrap~~UsesGraph_node2"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-189 251,-189 251,-165 338,-165 338,-189"/>
+<text text-anchor="middle" x="294.5" y="-174.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~lapack_wrap~~UsesGraph_edge1" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M377.7961,-149.0013C366.0197,-152.9598 352.7542,-157.4187 340.3296,-161.5951"/>
+<polygon fill="#000000" stroke="#000000" points="338.9537,-158.3651 330.59,-164.8689 341.184,-165.0003 338.9537,-158.3651"/>
+</g>
+<!-- module~messages -->
+<g id="module~~lapack_wrap~~UsesGraph_node3" class="node">
+<title>module~messages</title>
+<g id="a_module~~lapack_wrap~~UsesGraph_node3"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-108 261.5,-108 261.5,-84 327.5,-84 327.5,-108"/>
+<text text-anchor="middle" x="294.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~lapack_wrap~~UsesGraph_edge2" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.4397,-124.9204C365.5303,-120.4726 350.7631,-115.3848 337.2507,-110.7292"/>
+<polygon fill="#000000" stroke="#000000" points="338.2725,-107.3794 327.6778,-107.431 335.9922,-113.9976 338.2725,-107.3794"/>
+</g>
+<!-- module~precision -->
+<g id="module~~lapack_wrap~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_module~~lapack_wrap~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-150 142,-150 142,-126 203,-126 203,-150"/>
+<text text-anchor="middle" x="172.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~lapack_wrap~~UsesGraph_edge3" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-137.164C329.7154,-137.3477 258.3329,-137.6438 213.4879,-137.8299"/>
+<polygon fill="#000000" stroke="#000000" points="213.2271,-134.3309 203.2418,-137.8724 213.2562,-141.3308 213.2271,-134.3309"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~lapack_wrap~~UsesGraph_edge7" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-107.3658C246.4077,-112.5563 228.4183,-118.7494 212.5727,-124.2045"/>
+<polygon fill="#000000" stroke="#000000" points="211.3448,-120.9255 203.0288,-127.4901 213.6235,-127.5443 211.3448,-120.9255"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~lapack_wrap~~UsesGraph_node5" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-108 130,-108 130,-84 215,-84 215,-108"/>
+<text text-anchor="middle" x="172.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~lapack_wrap~~UsesGraph_edge4" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-96C250.3485,-96 237.6232,-96 225.3466,-96"/>
+<polygon fill="#000000" stroke="#000000" points="225.1844,-92.5001 215.1844,-96 225.1844,-99.5001 225.1844,-92.5001"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~lapack_wrap~~UsesGraph_node6" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-66 136.5,-66 136.5,-42 208.5,-42 208.5,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~lapack_wrap~~UsesGraph_edge5" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-84.6342C247.9536,-79.9758 232.0766,-74.51 217.5088,-69.4948"/>
+<polygon fill="#000000" stroke="#000000" points="218.2722,-66.0561 207.6775,-66.1103 215.9935,-72.6749 218.2722,-66.0561"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~lapack_wrap~~UsesGraph_node8" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~lapack_wrap~~UsesGraph_node8"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-24 133,-24 133,0 212,0 212,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~lapack_wrap~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.0887,-83.9145C265.7929,-70.4867 239.6975,-48.6403 215,-33 212.7315,-31.5635 210.351,-30.152 207.9239,-28.7825"/>
+<polygon fill="#000000" stroke="#000000" points="209.516,-25.665 199.0469,-24.0376 206.2161,-31.8384 209.516,-25.665"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~lapack_wrap~~UsesGraph_node7" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~lapack_wrap~~UsesGraph_node7"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-150 0,-150 0,-126 94,-126 94,-150"/>
+<text text-anchor="middle" x="47" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~lapack_wrap~~UsesGraph_edge8" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-138C130.4618,-138 117.2165,-138 104.2832,-138"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-134.5001 94.0202,-138 104.0202,-141.5001 104.0203,-134.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~lapack_wrap~~UsedByGraph Pages: 1 -->
+<svg id="modulelapack_wrapUsedByGraph" width="641pt" height="1435pt"
+ viewBox="0.00 0.00 641.00 1435.47" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~lapack_wrap~~UsedByGraph" class="graph" transform="scale(.7099 .7099) rotate(0) translate(4 2018.2034)">
+<title>module~~lapack_wrap~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-2018.2034 899,-2018.2034 899,4 -4,4"/>
+<!-- module~lapack_wrap -->
+<g id="module~~lapack_wrap~~UsedByGraph_node1" class="node">
+<title>module~lapack_wrap</title>
+<polygon fill="none" stroke="#000000" points="79,-395.2034 0,-395.2034 0,-371.2034 79,-371.2034 79,-395.2034"/>
+<text text-anchor="middle" x="39.5" y="-380.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">lapack_wrap</text>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_node2" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node2"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="182,-395.2034 115,-395.2034 115,-371.2034 182,-371.2034 182,-395.2034"/>
+<text text-anchor="middle" x="148.5" y="-380.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge1" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M114.907,-383.2034C106.8143,-383.2034 97.9967,-383.2034 89.3372,-383.2034"/>
+<polygon fill="#000000" stroke="#000000" points="89.2973,-379.7035 79.2973,-383.2034 89.2973,-386.7035 89.2973,-379.7035"/>
+</g>
+<!-- module~eigen -->
+<g id="module~~lapack_wrap~~UsedByGraph_node3" class="node">
+<title>module~eigen</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node3"><a xlink:href="../module/eigen.html" xlink:title="eigen">
+<polygon fill="#337ab7" stroke="#337ab7" points="293,-1930.2034 239,-1930.2034 239,-1906.2034 293,-1906.2034 293,-1930.2034"/>
+<text text-anchor="middle" x="266" y="-1915.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eigen</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge2" class="edge">
+<title>module~eigen&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M257.6839,-1906.1199C246.3188,-1888.8555 226.3901,-1855.7225 218,-1824.2034 179.9959,-1681.4328 153.0074,-577.728 149.0129,-405.7111"/>
+<polygon fill="#000000" stroke="#000000" points="152.5082,-405.4662 148.7786,-395.5495 145.5101,-405.6276 152.5082,-405.4662"/>
+</g>
+<!-- module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_node4" class="node">
+<title>module~guess</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node4"><a xlink:href="../module/guess.html" xlink:title="guess">
+<polygon fill="#337ab7" stroke="#337ab7" points="293,-1741.2034 239,-1741.2034 239,-1717.2034 293,-1717.2034 293,-1741.2034"/>
+<text text-anchor="middle" x="266" y="-1726.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess</text>
+</a>
+</g>
+</g>
+<!-- module~guess&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge3" class="edge">
+<title>module~guess&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M264.7475,-1716.8891C259.07,-1660.9334 235.2801,-1424.9987 218,-1231.2034 188.7539,-903.2112 157.7418,-503.4219 150.2162,-405.5881"/>
+<polygon fill="#000000" stroke="#000000" points="153.6901,-405.113 149.4343,-395.4105 146.7106,-405.6492 153.6901,-405.113"/>
+</g>
+<!-- module~huckel -->
+<g id="module~~lapack_wrap~~UsedByGraph_node5" class="node">
+<title>module~huckel</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node5"><a xlink:href="../module/huckel.html" xlink:title="huckel">
+<polygon fill="#337ab7" stroke="#337ab7" points="293,-1815.2034 239,-1815.2034 239,-1791.2034 293,-1791.2034 293,-1815.2034"/>
+<text text-anchor="middle" x="266" y="-1800.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel</text>
+</a>
+</g>
+</g>
+<!-- module~huckel&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge4" class="edge">
+<title>module~huckel&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.4111,-1791.1272C239.183,-1781.42 224.852,-1766.7144 218,-1750.2034 164.3542,-1620.9348 150.5865,-571.9016 148.7319,-405.4266"/>
+<polygon fill="#000000" stroke="#000000" points="152.2312,-405.3324 148.6226,-395.371 145.2316,-405.4085 152.2312,-405.3324"/>
+</g>
+<!-- module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_node6" class="node">
+<title>module~mathlib</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node6"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="293,-1222.2034 239,-1222.2034 239,-1198.2034 293,-1198.2034 293,-1222.2034"/>
+<text text-anchor="middle" x="266" y="-1207.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge5" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M264.2937,-1198.1939C251.3627,-1107.1814 168.8402,-526.3637 151.639,-405.2968"/>
+<polygon fill="#000000" stroke="#000000" points="155.0951,-404.7395 150.2231,-395.3313 148.1647,-405.7242 155.0951,-404.7395"/>
+</g>
+<!-- module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_node7" class="node">
+<title>module~mod_dft_gridint</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node7"><a xlink:href="../module/mod_dft_gridint.html" xlink:title="mod_dft_gridint">
+<polygon fill="#337ab7" stroke="#337ab7" points="314,-602.2034 218,-602.2034 218,-578.2034 314,-578.2034 314,-602.2034"/>
+<text text-anchor="middle" x="266" y="-587.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge6" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M259.1748,-578.1794C239.8678,-544.1662 184.688,-446.9559 160.3162,-404.0201"/>
+<polygon fill="#000000" stroke="#000000" points="163.3244,-402.2293 155.344,-395.2605 157.2367,-405.6849 163.3244,-402.2293"/>
+</g>
+<!-- module~mod_dft_gridint_energy -->
+<g id="module~~lapack_wrap~~UsedByGraph_node8" class="node">
+<title>module~mod_dft_gridint_energy</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node8"><a xlink:href="../module/mod_dft_gridint_energy.html" xlink:title="mod_dft_gridint_energy">
+<polygon fill="#337ab7" stroke="#337ab7" points="541.5,-434.2034 402.5,-434.2034 402.5,-410.2034 541.5,-410.2034 541.5,-434.2034"/>
+<text text-anchor="middle" x="472" y="-419.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_energy</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_energy&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge7" class="edge">
+<title>module~mod_dft_gridint_energy&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M402.2036,-413.789C338.4707,-406.1056 246.2171,-394.9838 192.2938,-388.483"/>
+<polygon fill="#000000" stroke="#000000" points="192.3871,-384.969 182.04,-387.2468 191.5492,-391.9187 192.3871,-384.969"/>
+</g>
+<!-- module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge59" class="edge">
+<title>module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M402.3989,-423.6033C384.092,-426.6816 365.2265,-432.5373 350,-443.2034 306.3083,-473.809 282.3486,-534.8987 272.1023,-567.8692"/>
+<polygon fill="#000000" stroke="#000000" points="268.6192,-567.306 269.1444,-577.8878 275.3328,-569.2881 268.6192,-567.306"/>
+</g>
+<!-- module~mod_dft_gridint_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_node9" class="node">
+<title>module~mod_dft_gridint_fxc</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node9"><a xlink:href="../module/mod_dft_gridint_fxc.html" xlink:title="mod_dft_gridint_fxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="530.5,-274.2034 413.5,-274.2034 413.5,-250.2034 530.5,-250.2034 530.5,-274.2034"/>
+<text text-anchor="middle" x="472" y="-259.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_fxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge8" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.4646,-255.4036C361.6219,-250.4966 290.4817,-246.8281 266,-260.2034"/>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge60" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.4274,-259.5558C391.1339,-261.5421 367.0272,-267.7466 350,-283.2034 328.2962,-302.9053 284.8627,-500.8575 270.6318,-568.0365"/>
+<polygon fill="#000000" stroke="#000000" points="267.1722,-567.4801 268.5354,-577.9869 274.0219,-568.9233 267.1722,-567.4801"/>
+</g>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_node10" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node10"><a xlink:href="../module/mod_dft_gridint_gxc.html" xlink:title="mod_dft_gridint_gxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="750,-294.2034 630,-294.2034 630,-270.2034 750,-270.2034 750,-294.2034"/>
+<text text-anchor="middle" x="690" y="-279.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_gxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge9" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M685.6956,-270.0175C668.4126,-221.2436 604.4892,-42.3802 594,-35.2034 504.5,26.0335 454.4449,-6.0237 350,-35.2034 283.9299,-53.6619 258.9586,-60.1728 218,-115.2034 188.4715,-154.8769 161.5077,-303.9362 152.0652,-360.8905"/>
+<polygon fill="#000000" stroke="#000000" points="148.5729,-360.5601 150.4147,-370.9936 155.4813,-361.6887 148.5729,-360.5601"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge62" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M678.5905,-294.464C661.8164,-311.6703 628.7118,-342.6171 594,-358.2034 493.5465,-403.309 436.7532,-333.3852 350,-401.2034 295.9567,-443.451 275.7944,-527.8954 269.0418,-568.0311"/>
+<polygon fill="#000000" stroke="#000000" points="265.5535,-567.6856 267.4758,-578.1046 272.4705,-568.761 265.5535,-567.6856"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge72" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M629.8535,-276.6853C602.3536,-274.1624 569.6229,-271.1596 541.1145,-268.5442"/>
+<polygon fill="#000000" stroke="#000000" points="541.098,-265.028 530.82,-267.5997 540.4584,-271.9987 541.098,-265.028"/>
+</g>
+<!-- module~resp_mod -->
+<g id="module~~lapack_wrap~~UsedByGraph_node11" class="node">
+<title>module~resp_mod</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node11"><a xlink:href="../module/resp_mod.html" xlink:title="resp_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="298.5,-314.2034 233.5,-314.2034 233.5,-290.2034 298.5,-290.2034 298.5,-314.2034"/>
+<text text-anchor="middle" x="266" y="-299.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">resp_mod</text>
+</a>
+</g>
+</g>
+<!-- module~resp_mod&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge10" class="edge">
+<title>module~resp_mod&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M234.8275,-314.2103C229.0726,-316.8785 223.233,-319.9059 218,-323.2034 199.5114,-334.8539 180.8934,-351.2332 167.5868,-363.9354"/>
+<polygon fill="#000000" stroke="#000000" points="165.1304,-361.4421 160.407,-370.9258 170.0136,-366.4576 165.1304,-361.4421"/>
+</g>
+<!-- module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_node12" class="node">
+<title>module~tdhf_lib</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node12"><a xlink:href="../module/tdhf_lib.html" xlink:title="tdhf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="293,-356.2034 239,-356.2034 239,-332.2034 293,-332.2034 293,-356.2034"/>
+<text text-anchor="middle" x="266" y="-341.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_lib</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge11" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M238.7478,-353.2488C224.8245,-357.8701 207.5503,-363.6037 191.8537,-368.8136"/>
+<polygon fill="#000000" stroke="#000000" points="190.7165,-365.5032 182.3282,-371.9753 192.9217,-372.1469 190.7165,-365.5032"/>
+</g>
+<!-- module~tdhf_mrsf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_node13" class="node">
+<title>module~tdhf_mrsf_lib</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node13"><a xlink:href="../module/tdhf_mrsf_lib.html" xlink:title="tdhf_mrsf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="306.5,-148.2034 225.5,-148.2034 225.5,-124.2034 306.5,-124.2034 306.5,-148.2034"/>
+<text text-anchor="middle" x="266" y="-133.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_lib</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge12" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M236.4704,-148.2334C229.6445,-152.1607 222.9433,-157.1179 218,-163.2034 169.1998,-223.2798 154.4725,-318.0069 150.1844,-360.8469"/>
+<polygon fill="#000000" stroke="#000000" points="146.6787,-360.7533 149.268,-371.0268 153.6505,-361.3809 146.6787,-360.7533"/>
+</g>
+<!-- module~tdhf_sf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_node14" class="node">
+<title>module~tdhf_sf_lib</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node14"><a xlink:href="../module/tdhf_sf_lib.html" xlink:title="tdhf_sf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="299,-230.2034 233,-230.2034 233,-206.2034 299,-206.2034 299,-230.2034"/>
+<text text-anchor="middle" x="266" y="-215.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_lib</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_sf_lib&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge13" class="edge">
+<title>module~tdhf_sf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M239.1409,-230.2864C231.6583,-234.5505 223.9571,-239.8865 218,-246.2034 185.8955,-280.2468 165.1517,-331.9781 155.2765,-361.161"/>
+<polygon fill="#000000" stroke="#000000" points="151.9002,-360.2255 152.129,-370.8179 158.5556,-362.3947 151.9002,-360.2255"/>
+</g>
+<!-- module~tdhf_z_vector_mod -->
+<g id="module~~lapack_wrap~~UsedByGraph_node15" class="node">
+<title>module~tdhf_z_vector_mod</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node15"><a xlink:href="../module/tdhf_z_vector_mod.html" xlink:title="tdhf_z_vector_mod">
+<polygon fill="#337ab7" stroke="#337ab7" points="528,-190.2034 416,-190.2034 416,-166.2034 528,-166.2034 528,-190.2034"/>
+<text text-anchor="middle" x="472" y="-175.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_mod</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_z_vector_mod&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge14" class="edge">
+<title>module~tdhf_z_vector_mod&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.9725,-180.0475C394.2913,-182.7049 369.9464,-188.197 350,-199.2034 329.059,-210.7586 333.3935,-225.2055 314,-239.2034 295.1189,-252.8314 286.4348,-249.0391 266,-260.2034"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M266,-260.2034C245.5652,-271.3676 235.9212,-266.3355 218,-281.2034 190.9922,-303.6097 170.0974,-339.0902 158.5468,-361.7483"/>
+<polygon fill="#000000" stroke="#000000" points="155.3269,-360.3641 154.0433,-370.8809 161.6051,-363.4601 155.3269,-360.3641"/>
+</g>
+<!-- module~tdhf_z_vector_mod&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge76" class="edge">
+<title>module~tdhf_z_vector_mod&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.7282,-175.5065C392.8584,-177.3013 367.7072,-183.3776 350,-199.2034 307.2121,-237.4451 351.8602,-280.0775 314,-323.2034 310.722,-326.9373 306.6574,-330.0339 302.2912,-332.5951"/>
+<polygon fill="#000000" stroke="#000000" points="300.4906,-329.5802 293.0607,-337.1332 303.579,-335.8621 300.4906,-329.5802"/>
+</g>
+<!-- proc~mo_to_ao -->
+<g id="module~~lapack_wrap~~UsedByGraph_node16" class="node">
+<title>proc~mo_to_ao</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node16"><a xlink:href="../proc/mo_to_ao.html" xlink:title="mo_to_ao">
+<polygon fill="#d9534f" stroke="#d9534f" points="504,-938.2034 440,-938.2034 440,-914.2034 504,-914.2034 504,-938.2034"/>
+<text text-anchor="middle" x="472" y="-923.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_to_ao</text>
+</a>
+</g>
+</g>
+<!-- proc~mo_to_ao&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge15" class="edge">
+<title>proc~mo_to_ao&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.9413,-928.5428C413.2322,-928.799 375.5601,-925.0254 350,-905.2034 182.4735,-775.2856 154.1385,-487.5223 149.4242,-405.4489"/>
+<polygon fill="#000000" stroke="#000000" points="152.91,-405.0791 148.9038,-395.2709 145.9191,-405.4367 152.91,-405.0791"/>
+</g>
+<!-- proc~mo_to_ao&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge43" class="edge">
+<title>proc~mo_to_ao&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.7987,-924.6895C412.6334,-925.1751 374.3827,-930.2506 350,-952.2034 313.9805,-984.6333 281.5919,-1131.6328 270.2709,-1188.0577"/>
+<polygon fill="#000000" stroke="#000000" points="266.7966,-1187.5856 268.2927,-1198.0743 273.664,-1188.9419 266.7966,-1187.5856"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="module~~lapack_wrap~~UsedByGraph_node17" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node17"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="525,-148.2034 419,-148.2034 419,-124.2034 525,-124.2034 525,-148.2034"/>
+<text text-anchor="middle" x="472" y="-133.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge16" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.8022,-142.7371C353.1574,-151.8313 246.6862,-170.2794 218,-197.2034 170.5427,-241.7453 155.2832,-321.7593 150.5423,-360.6938"/>
+<polygon fill="#000000" stroke="#000000" points="147.052,-360.4153 149.4453,-370.7362 154.0106,-361.1754 147.052,-360.4153"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge55" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.7692,-131.6009C394.3515,-132.5456 367.0953,-138.4708 350,-157.2034 315.8891,-194.5811 318.021,-560.7606 314,-611.2034 296.0638,-836.2096 274.1596,-1108.7428 267.8061,-1187.7492"/>
+<polygon fill="#000000" stroke="#000000" points="264.2969,-1187.7245 266.9839,-1197.9729 271.2744,-1188.2857 264.2969,-1187.7245"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge83" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.9093,-132.6864C394.9724,-133.9793 368.0821,-139.8843 350,-157.2034 295.4807,-209.4222 361.8191,-264.7868 314,-323.2034 310.8185,-327.0899 306.7763,-330.2769 302.3926,-332.8852"/>
+<polygon fill="#000000" stroke="#000000" points="300.5098,-329.9108 293.0815,-337.4653 303.5995,-336.192 300.5098,-329.9108"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge86" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.9499,-136.2034C387.4613,-136.2034 347.7546,-136.2034 316.69,-136.2034"/>
+<polygon fill="#000000" stroke="#000000" points="316.5108,-132.7035 306.5107,-136.2034 316.5107,-139.7035 316.5108,-132.7035"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_sf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge88" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_sf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.8506,-138.5871C396.644,-141.2666 371.1454,-146.6307 350,-157.2034 330.3156,-167.0456 331.723,-178.1557 314,-191.2034 309.3802,-194.6045 304.2892,-197.8945 299.2017,-200.9386"/>
+<polygon fill="#000000" stroke="#000000" points="297.0879,-198.1158 290.1504,-206.1234 300.5673,-204.1899 297.0879,-198.1158"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="module~~lapack_wrap~~UsedByGraph_node18" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node18"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="517.5,-232.2034 426.5,-232.2034 426.5,-208.2034 517.5,-208.2034 517.5,-232.2034"/>
+<text text-anchor="middle" x="472" y="-217.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~oqp_linalg -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge17" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.3414,-221.1932C382.7236,-223.8924 316.3552,-232.6925 266,-260.2034"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge56" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.4729,-215.5092C400.3145,-215.5021 368.9822,-220.5559 350,-241.2034 341.6895,-250.2429 279.0829,-1043.4756 267.7546,-1187.8048"/>
+<polygon fill="#000000" stroke="#000000" points="264.2418,-1187.8314 266.9491,-1198.0745 271.2204,-1188.3788 264.2418,-1187.8314"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge84" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.3674,-218.0291C401.4549,-219.1292 371.4146,-224.4531 350,-241.2034 318.6493,-265.7254 342.1622,-295.0771 314,-323.2034 310.5608,-326.6382 306.4659,-329.554 302.1389,-332.0179"/>
+<polygon fill="#000000" stroke="#000000" points="300.5075,-328.9197 293.067,-336.4621 303.5871,-335.2059 300.5075,-328.9197"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~tdhf_sf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge89" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~tdhf_sf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.2819,-219.7595C391.37,-219.4206 343.5842,-218.9566 309.2892,-218.6237"/>
+<polygon fill="#000000" stroke="#000000" points="309.1417,-215.1222 299.1082,-218.5248 309.0737,-222.1218 309.1417,-215.1222"/>
+</g>
+<!-- module~grd1 -->
+<g id="module~~lapack_wrap~~UsedByGraph_node19" class="node">
+<title>module~grd1</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node19"><a xlink:href="../module/grd1.html" xlink:title="grd1">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-1098.2034 445,-1098.2034 445,-1074.2034 499,-1074.2034 499,-1098.2034"/>
+<text text-anchor="middle" x="472" y="-1083.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd1</text>
+</a>
+</g>
+</g>
+<!-- module~grd1&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge28" class="edge">
+<title>module~grd1&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.9443,-1085.5511C418.923,-1086.0932 379.3234,-1090.079 350,-1107.2034 316.5504,-1126.7373 290.8495,-1164.943 277.1183,-1188.9329"/>
+<polygon fill="#000000" stroke="#000000" points="273.9072,-1187.5075 272.1354,-1197.9531 280.0345,-1190.8923 273.9072,-1187.5075"/>
+</g>
+<!-- module~mod_dft_gridint_grad -->
+<g id="module~~lapack_wrap~~UsedByGraph_node20" class="node">
+<title>module~mod_dft_gridint_grad</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node20"><a xlink:href="../module/mod_dft_gridint_grad.html" xlink:title="mod_dft_gridint_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="535,-476.2034 409,-476.2034 409,-452.2034 535,-452.2034 535,-476.2034"/>
+<text text-anchor="middle" x="472" y="-461.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge61" class="edge">
+<title>module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M408.7958,-466.3585C388.9163,-469.2566 367.5826,-474.8243 350,-485.2034 315.9247,-505.3181 290.1479,-544.8274 276.6188,-569.2305"/>
+<polygon fill="#000000" stroke="#000000" points="273.5211,-567.6011 271.8878,-578.0693 279.6927,-570.9045 273.5211,-567.6011"/>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~lapack_wrap~~UsedByGraph_node21" class="node">
+<title>module~mod_dft_gridint_tdxc_grad</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node21"><a xlink:href="../module/mod_dft_gridint_tdxc_grad.html" xlink:title="mod_dft_gridint_tdxc_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="549,-770.2034 395,-770.2034 395,-746.2034 549,-746.2034 549,-770.2034"/>
+<text text-anchor="middle" x="472" y="-755.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_tdxc_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge63" class="edge">
+<title>module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.7588,-755.3565C378.9277,-752.0078 363.1142,-746.3897 350,-737.2034 306.3083,-706.5977 282.3486,-645.508 272.1023,-612.5376"/>
+<polygon fill="#000000" stroke="#000000" points="275.3328,-611.1187 269.1444,-602.519 268.6192,-613.1008 275.3328,-611.1187"/>
+</g>
+<!-- proc~build_pfon_density -->
+<g id="module~~lapack_wrap~~UsedByGraph_node22" class="node">
+<title>proc~build_pfon_density</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node22"><a xlink:href="../proc/build_pfon_density.html" xlink:title="build_pfon_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="528,-1556.2034 416,-1556.2034 416,-1532.2034 528,-1532.2034 528,-1556.2034"/>
+<text text-anchor="middle" x="472" y="-1541.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">build_pfon_density</text>
+</a>
+</g>
+</g>
+<!-- proc~build_pfon_density&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge29" class="edge">
+<title>proc~build_pfon_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.8818,-1547.0978C392.9017,-1545.3644 367.6246,-1539.2811 350,-1523.2034 306.1882,-1483.2368 277.5719,-1296.8528 268.8333,-1232.2884"/>
+<polygon fill="#000000" stroke="#000000" points="272.3008,-1231.8115 267.5172,-1222.3581 265.3615,-1232.7313 272.3008,-1231.8115"/>
+</g>
+<!-- proc~corresponding_orbital_projection -->
+<g id="module~~lapack_wrap~~UsedByGraph_node23" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node23"><a xlink:href="../proc/corresponding_orbital_projection.html" xlink:title="corresponding_orbital_projection">
+<polygon fill="#d9534f" stroke="#d9534f" points="566.5,-1972.2034 377.5,-1972.2034 377.5,-1948.2034 566.5,-1948.2034 566.5,-1972.2034"/>
+<text text-anchor="middle" x="472" y="-1957.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">corresponding_orbital_projection</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;module~eigen -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge18" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.9894,-1948.1982C381.4165,-1945.4519 365.1416,-1942.3946 350,-1939.2034 334.4636,-1935.9289 317.4479,-1931.7816 302.8184,-1928.039"/>
+<polygon fill="#000000" stroke="#000000" points="303.6771,-1924.646 293.1191,-1925.5284 301.923,-1931.4227 303.6771,-1924.646"/>
+</g>
+<!-- proc~derexc_blk -->
+<g id="module~~lapack_wrap~~UsedByGraph_node24" class="node">
+<title>proc~derexc_blk</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node24"><a xlink:href="../proc/derexc_blk.html" xlink:title="derexc_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="507,-602.2034 437,-602.2034 437,-578.2034 507,-578.2034 507,-602.2034"/>
+<text text-anchor="middle" x="472" y="-587.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">derexc_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~derexc_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge64" class="edge">
+<title>proc~derexc_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.5873,-590.2034C405.8053,-590.2034 360.6041,-590.2034 324.4632,-590.2034"/>
+<polygon fill="#000000" stroke="#000000" points="324.048,-586.7035 314.048,-590.2034 324.048,-593.7035 324.048,-586.7035"/>
+</g>
+<!-- proc~dftder -->
+<g id="module~~lapack_wrap~~UsedByGraph_node25" class="node">
+<title>proc~dftder</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node25"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="717,-853.2034 663,-853.2034 663,-829.2034 717,-829.2034 717,-853.2034"/>
+<text text-anchor="middle" x="690" y="-838.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge30" class="edge">
+<title>proc~dftder&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M662.9617,-845.6349C651.6265,-848.6704 639.0152,-853.747 630,-862.2034 600.0774,-890.2711 626.3517,-921.9738 594,-947.2034 550.7272,-980.9498 504.1632,-921.7412 472,-966.2034"/>
+</g>
+<!-- proc~dftder&#45;&gt;module~mod_dft_gridint_grad -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge93" class="edge">
+<title>proc~dftder&#45;&gt;module~mod_dft_gridint_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M688.4596,-828.9405C681.05,-771.9514 647.2327,-533.7053 594,-485.2034 580.7861,-473.1638 563.28,-466.7309 545.6657,-463.5322"/>
+<polygon fill="#000000" stroke="#000000" points="545.7176,-460.0021 535.3138,-462.0047 544.6957,-466.9271 545.7176,-460.0021"/>
+</g>
+<!-- proc~dftexcor -->
+<g id="module~~lapack_wrap~~UsedByGraph_node26" class="node">
+<title>proc~dftexcor</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node26"><a xlink:href="../proc/dftexcor.html" xlink:title="dftexcor">
+<polygon fill="#d9534f" stroke="#d9534f" points="718.5,-436.2034 661.5,-436.2034 661.5,-412.2034 718.5,-412.2034 718.5,-436.2034"/>
+<text text-anchor="middle" x="690" y="-421.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftexcor</text>
+</a>
+</g>
+</g>
+<!-- proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge71" class="edge">
+<title>proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M661.0513,-423.9378C633.3018,-423.6832 590.1253,-423.2871 552.0363,-422.9376"/>
+<polygon fill="#000000" stroke="#000000" points="551.9935,-419.4372 541.9617,-422.8452 551.9292,-426.4369 551.9935,-419.4372"/>
+</g>
+<!-- proc~dmatd_blk -->
+<g id="module~~lapack_wrap~~UsedByGraph_node27" class="node">
+<title>proc~dmatd_blk</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node27"><a xlink:href="../proc/dmatd_blk.html" xlink:title="dmatd_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="506,-560.2034 438,-560.2034 438,-536.2034 506,-536.2034 506,-560.2034"/>
+<text text-anchor="middle" x="472" y="-545.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dmatd_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge65" class="edge">
+<title>proc~dmatd_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M437.9507,-553.3673C413.4096,-557.2587 379.5472,-562.976 350,-569.2034 340.7207,-571.1591 330.9136,-573.4262 321.4025,-575.7324"/>
+<polygon fill="#000000" stroke="#000000" points="320.5054,-572.3487 311.6325,-578.1385 322.1794,-579.1456 320.5054,-572.3487"/>
+</g>
+<!-- proc~eijden -->
+<g id="module~~lapack_wrap~~UsedByGraph_node28" class="node">
+<title>proc~eijden</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node28"><a xlink:href="../proc/eijden.html" xlink:title="eijden">
+<polygon fill="#d9534f" stroke="#d9534f" points="499,-1514.2034 445,-1514.2034 445,-1490.2034 499,-1490.2034 499,-1514.2034"/>
+<text text-anchor="middle" x="472" y="-1499.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eijden</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge31" class="edge">
+<title>proc~eijden&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.8112,-1505.1037C417.5554,-1506.4498 376.0063,-1504.0284 350,-1481.2034 311.6561,-1447.5499 280.3657,-1290.9176 269.8201,-1232.365"/>
+<polygon fill="#000000" stroke="#000000" points="273.2326,-1231.5624 268.0433,-1222.3254 266.3397,-1232.7823 273.2326,-1231.5624"/>
+</g>
+<!-- proc~electric_moments -->
+<g id="module~~lapack_wrap~~UsedByGraph_node29" class="node">
+<title>proc~electric_moments</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node29"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="526,-1472.2034 418,-1472.2034 418,-1448.2034 526,-1448.2034 526,-1472.2034"/>
+<text text-anchor="middle" x="472" y="-1457.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge32" class="edge">
+<title>proc~electric_moments&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M417.7894,-1462.4217C394.612,-1460.6667 368.6554,-1454.7528 350,-1439.2034 285.8402,-1385.7256 270.6824,-1278.7169 267.1042,-1232.4086"/>
+<polygon fill="#000000" stroke="#000000" points="270.5852,-1232.0038 266.4344,-1222.256 263.6004,-1232.4647 270.5852,-1232.0038"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="module~~lapack_wrap~~UsedByGraph_node30" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node30"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="518.5,-1430.2034 425.5,-1430.2034 425.5,-1406.2034 518.5,-1406.2034 518.5,-1430.2034"/>
+<text text-anchor="middle" x="472" y="-1415.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge33" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M425.2373,-1420.2513C400.579,-1419.0142 371.1459,-1413.5991 350,-1397.2034 296.5251,-1355.741 276.1476,-1272.7218 269.2012,-1232.7415"/>
+<polygon fill="#000000" stroke="#000000" points="272.626,-1231.9936 267.5818,-1222.6766 265.7148,-1233.1056 272.626,-1231.9936"/>
+</g>
+<!-- proc~get_ab_initio_density -->
+<g id="module~~lapack_wrap~~UsedByGraph_node31" class="node">
+<title>proc~get_ab_initio_density</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node31"><a xlink:href="../proc/get_ab_initio_density.html" xlink:title="get_ab_initio_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="534,-1388.2034 410,-1388.2034 410,-1364.2034 534,-1364.2034 534,-1388.2034"/>
+<text text-anchor="middle" x="472" y="-1373.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge34" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.7018,-1375.8303C389.2166,-1373.134 367.2866,-1367.2363 350,-1355.2034 306.6661,-1325.0392 282.557,-1264.7702 272.1932,-1232.2401"/>
+<polygon fill="#000000" stroke="#000000" points="275.4475,-1230.9102 269.1976,-1222.3551 268.7483,-1232.9404 275.4475,-1230.9102"/>
+</g>
+<!-- proc~get_ab_initio_orbital -->
+<g id="module~~lapack_wrap~~UsedByGraph_node32" class="node">
+<title>proc~get_ab_initio_orbital</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node32"><a xlink:href="../proc/get_ab_initio_orbital.html" xlink:title="get_ab_initio_orbital">
+<polygon fill="#d9534f" stroke="#d9534f" points="532,-1888.2034 412,-1888.2034 412,-1864.2034 532,-1864.2034 532,-1888.2034"/>
+<text text-anchor="middle" x="472" y="-1873.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_orbital</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_orbital&#45;&gt;module~eigen -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge19" class="edge">
+<title>proc~get_ab_initio_orbital&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.9497,-1885.6251C392.1611,-1888.9734 370.0837,-1892.9705 350,-1897.2034 334.4636,-1900.4778 317.4479,-1904.6252 302.8184,-1908.3677"/>
+<polygon fill="#000000" stroke="#000000" points="301.923,-1904.9841 293.1191,-1910.8783 303.6771,-1911.7607 301.923,-1904.9841"/>
+</g>
+<!-- proc~get_ab_initio_orbital&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge35" class="edge">
+<title>proc~get_ab_initio_orbital&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.9919,-1879.9774C389.6269,-1878.1245 365.8502,-1871.7164 350,-1855.2034 327.8156,-1832.0913 278.9453,-1343.0133 268.1417,-1232.3343"/>
+<polygon fill="#000000" stroke="#000000" points="271.6179,-1231.9182 267.1659,-1222.3041 264.6508,-1232.5961 271.6179,-1231.9182"/>
+</g>
+<!-- proc~get_spin_square -->
+<g id="module~~lapack_wrap~~UsedByGraph_node33" class="node">
+<title>proc~get_spin_square</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node33"><a xlink:href="../proc/get_spin_square.html" xlink:title="get_spin_square">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="521.5,-1346.2034 422.5,-1346.2034 422.5,-1322.2034 521.5,-1322.2034 521.5,-1346.2034"/>
+<text text-anchor="middle" x="472" y="-1331.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_spin_square</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge36" class="edge">
+<title>proc~get_spin_square&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.3611,-1333.5686C399.0633,-1331.3602 371.7142,-1325.8841 350,-1313.2034 316.5504,-1293.6695 290.8495,-1255.4638 277.1183,-1231.4739"/>
+<polygon fill="#000000" stroke="#000000" points="280.0345,-1229.5145 272.1354,-1222.4536 273.9072,-1232.8993 280.0345,-1229.5145"/>
+</g>
+<!-- proc~get_states_overlap -->
+<g id="module~~lapack_wrap~~UsedByGraph_node34" class="node">
+<title>proc~get_states_overlap</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node34"><a xlink:href="../proc/get_states_overlap.html" xlink:title="get_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="528,-68.2034 416,-68.2034 416,-44.2034 528,-44.2034 528,-68.2034"/>
+<text text-anchor="middle" x="472" y="-53.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge85" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.7643,-63.8038C394.6341,-67.7846 370.7255,-73.6682 350,-82.2034 328.0881,-91.2271 305.628,-106.0094 289.4519,-117.8283"/>
+<polygon fill="#000000" stroke="#000000" points="287.0665,-115.2417 281.155,-124.034 291.2592,-120.8472 287.0665,-115.2417"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="module~~lapack_wrap~~UsedByGraph_node35" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node35"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="541.5,-518.2034 402.5,-518.2034 402.5,-494.2034 541.5,-494.2034 541.5,-518.2034"/>
+<text text-anchor="middle" x="472" y="-503.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge37" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M402.4212,-503.4388C383.0214,-506.2255 363.5671,-512.9677 350,-527.2034 303.1846,-576.326 273.304,-1076.2133 267.1728,-1188.0768"/>
+<polygon fill="#000000" stroke="#000000" points="263.6709,-1188.0206 266.6255,-1198.1951 270.6606,-1188.3988 263.6709,-1188.0206"/>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge77" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M402.2078,-504.5676C384.0009,-501.4743 365.2341,-495.67 350,-485.2034 307.5893,-456.0648 283.2137,-397.8729 272.5327,-366.1165"/>
+<polygon fill="#000000" stroke="#000000" points="275.8162,-364.8938 269.4291,-356.4406 269.1506,-367.0318 275.8162,-364.8938"/>
+</g>
+<!-- proc~get_transition_density -->
+<g id="module~~lapack_wrap~~UsedByGraph_node36" class="node">
+<title>proc~get_transition_density</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node36"><a xlink:href="../proc/get_transition_density.html" xlink:title="get_transition_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="536.5,-316.2034 407.5,-316.2034 407.5,-292.2034 536.5,-292.2034 536.5,-316.2034"/>
+<text text-anchor="middle" x="472" y="-301.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_density&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge78" class="edge">
+<title>proc~get_transition_density&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M410.1932,-316.2047C375.3148,-322.9772 332.8913,-331.2148 303.1205,-336.9955"/>
+<polygon fill="#000000" stroke="#000000" points="302.3005,-333.5893 293.151,-338.9313 303.6349,-340.4609 302.3005,-333.5893"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="module~~lapack_wrap~~UsedByGraph_node37" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node37"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="534,-1304.2034 410,-1304.2034 410,-1280.2034 534,-1280.2034 534,-1304.2034"/>
+<text text-anchor="middle" x="472" y="-1289.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge38" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.9413,-1287.1023C390.2342,-1284.0268 368.7125,-1279.0989 350,-1271.2034 326.1026,-1261.1201 302.5273,-1243.096 286.4642,-1229.2458"/>
+<polygon fill="#000000" stroke="#000000" points="288.5941,-1226.4568 278.7871,-1222.4476 283.9535,-1231.6975 288.5941,-1226.4568"/>
+</g>
+<!-- proc~guess_hcore -->
+<g id="module~~lapack_wrap~~UsedByGraph_node38" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node38"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="511.5,-1678.2034 432.5,-1678.2034 432.5,-1654.2034 511.5,-1654.2034 511.5,-1678.2034"/>
+<text text-anchor="middle" x="472" y="-1663.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge22" class="edge">
+<title>proc~guess_hcore&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M432.2782,-1670.056C408.0708,-1673.1324 376.7513,-1678.4256 350,-1687.2034 330.8335,-1693.4924 310.5737,-1703.5121 294.7538,-1712.1877"/>
+<polygon fill="#000000" stroke="#000000" points="293.0029,-1709.1568 285.9942,-1717.1021 296.428,-1715.2616 293.0029,-1709.1568"/>
+</g>
+<!-- proc~guess_hcore&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge39" class="edge">
+<title>proc~guess_hcore&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M432.2146,-1670.1556C405.4711,-1670.5063 371.3373,-1666.112 350,-1645.2034 290.1853,-1586.5904 271.3513,-1312.9482 267.0591,-1232.5009"/>
+<polygon fill="#000000" stroke="#000000" points="270.5526,-1232.2826 266.5472,-1222.4741 263.5617,-1232.6396 270.5526,-1232.2826"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="module~~lapack_wrap~~UsedByGraph_node39" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node39"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="514,-1846.2034 430,-1846.2034 430,-1822.2034 514,-1822.2034 514,-1846.2034"/>
+<text text-anchor="middle" x="472" y="-1831.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge23" class="edge">
+<title>proc~guess_huckel&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.8911,-1833.2414C405.4043,-1831.1879 374.6182,-1825.9551 350,-1813.2034 334.5055,-1805.1775 302.7925,-1771.0594 283.0723,-1748.8504"/>
+<polygon fill="#000000" stroke="#000000" points="285.638,-1746.4681 276.4018,-1741.2773 280.3851,-1751.0949 285.638,-1746.4681"/>
+</g>
+<!-- proc~guess_huckel&#45;&gt;module~huckel -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge27" class="edge">
+<title>proc~guess_huckel&#45;&gt;module~huckel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.8157,-1827.8553C392.5326,-1822.2447 338.6867,-1814.1417 303.0381,-1808.7771"/>
+<polygon fill="#000000" stroke="#000000" points="303.4562,-1805.3007 293.0467,-1807.2735 302.4145,-1812.2227 303.4562,-1805.3007"/>
+</g>
+<!-- proc~guess_huckel&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge40" class="edge">
+<title>proc~guess_huckel&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.8214,-1838.53C403.2514,-1838.7804 370.2596,-1834.1228 350,-1813.2034 308.5843,-1770.4386 275.0078,-1335.9346 267.5483,-1232.3065"/>
+<polygon fill="#000000" stroke="#000000" points="271.0396,-1232.0575 266.8378,-1222.3315 264.0573,-1232.5549 271.0396,-1232.0575"/>
+</g>
+<!-- proc~guess_json -->
+<g id="module~~lapack_wrap~~UsedByGraph_node40" class="node">
+<title>proc~guess_json</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node40"><a xlink:href="../proc/guess_json.html" xlink:title="guess_json">
+<polygon fill="#d9534f" stroke="#d9534f" points="507,-1804.2034 437,-1804.2034 437,-1780.2034 507,-1780.2034 507,-1804.2034"/>
+<text text-anchor="middle" x="472" y="-1789.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge24" class="edge">
+<title>proc~guess_json&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.8973,-1788.922C412.1543,-1785.9466 378.4871,-1780.5506 350,-1771.2034 330.8335,-1764.9144 310.5737,-1754.8947 294.7538,-1746.219"/>
+<polygon fill="#000000" stroke="#000000" points="296.428,-1743.1451 285.9942,-1741.3046 293.0029,-1749.25 296.428,-1743.1451"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_node41" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node41"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="514,-1762.2034 430,-1762.2034 430,-1738.2034 514,-1738.2034 514,-1762.2034"/>
+<text text-anchor="middle" x="472" y="-1747.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge25" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.8157,-1745.903C392.5326,-1742.1023 338.6867,-1736.6132 303.0381,-1732.9791"/>
+<polygon fill="#000000" stroke="#000000" points="303.3501,-1729.4929 293.0467,-1731.9606 302.6401,-1736.4568 303.3501,-1729.4929"/>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge41" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.9739,-1754.3807C403.4673,-1754.5689 370.4889,-1749.8983 350,-1729.2034 279.0235,-1657.5134 267.9904,-1322.6786 266.3007,-1232.5788"/>
+<polygon fill="#000000" stroke="#000000" points="269.7974,-1232.3412 266.1313,-1222.4009 262.7983,-1232.4578 269.7974,-1232.3412"/>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop -->
+<g id="module~~lapack_wrap~~UsedByGraph_node42" class="node">
+<title>proc~int2_td_data_t_parallel_stop</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node42"><a xlink:href="../proc/int2_td_data_t_parallel_stop.html" xlink:title="int2_td_data_t%int2_td_data_t_parallel_stop">
+<polygon fill="#d9534f" stroke="#d9534f" points="594,-1262.2034 350,-1262.2034 350,-1238.2034 594,-1238.2034 594,-1262.2034"/>
+<text text-anchor="middle" x="472" y="-1247.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_td_data_t%int2_td_data_t_parallel_stop</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge42" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M410.1932,-1238.2021C375.3148,-1231.4295 332.8913,-1223.192 303.1205,-1217.4112"/>
+<polygon fill="#000000" stroke="#000000" points="303.6349,-1213.9458 293.151,-1215.4754 302.3005,-1220.8175 303.6349,-1213.9458"/>
+</g>
+<!-- proc~matrix_invsqrt -->
+<g id="module~~lapack_wrap~~UsedByGraph_node43" class="node">
+<title>proc~matrix_invsqrt</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node43"><a xlink:href="../proc/matrix_invsqrt.html" xlink:title="matrix_invsqrt">
+<polygon fill="#d9534f" stroke="#d9534f" points="516,-1930.2034 428,-1930.2034 428,-1906.2034 516,-1906.2034 516,-1930.2034"/>
+<text text-anchor="middle" x="472" y="-1915.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">matrix_invsqrt</text>
+</a>
+</g>
+</g>
+<!-- proc~matrix_invsqrt&#45;&gt;module~eigen -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge20" class="edge">
+<title>proc~matrix_invsqrt&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.8078,-1918.2034C390.7379,-1918.2034 338.3845,-1918.2034 303.3713,-1918.2034"/>
+<polygon fill="#000000" stroke="#000000" points="303.098,-1914.7035 293.098,-1918.2034 303.098,-1921.7035 303.098,-1914.7035"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~lapack_wrap~~UsedByGraph_node44" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node44"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="526.5,-1182.2034 417.5,-1182.2034 417.5,-1158.2034 526.5,-1158.2034 526.5,-1182.2034"/>
+<text text-anchor="middle" x="472" y="-1167.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge44" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M417.3366,-1180.8176C381.3542,-1187.8045 335.1934,-1196.7678 303.3651,-1202.948"/>
+<polygon fill="#000000" stroke="#000000" points="302.3055,-1199.5883 293.156,-1204.9304 303.6398,-1206.46 302.3055,-1199.5883"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~lapack_wrap~~UsedByGraph_node45" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node45"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="895,-335.2034 786,-335.2034 786,-311.2034 895,-311.2034 895,-335.2034"/>
+<text text-anchor="middle" x="840.5" y="-320.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge45" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M840.0882,-335.4699C836.6351,-434.9424 811.1047,-1107.4031 750,-1170.2034 688.6688,-1233.2364 405.8819,-1220.1 303.3015,-1213.0778"/>
+<polygon fill="#000000" stroke="#000000" points="303.327,-1209.571 293.1056,-1212.3589 302.8346,-1216.5537 303.327,-1209.571"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge73" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M690,-96.2034C616.4138,-72.5687 658.7242,-198.9624 594,-241.2034 578.3584,-251.4115 559.2769,-257.109 540.8936,-260.1818"/>
+<polygon fill="#000000" stroke="#000000" points="540.1813,-256.748 530.7788,-261.6309 541.1741,-263.6773 540.1813,-256.748"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge75" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M796.159,-311.1238C779.8507,-306.681 761.1982,-301.5996 744.1245,-296.9482"/>
+<polygon fill="#000000" stroke="#000000" points="744.8522,-293.519 734.2839,-294.2674 743.0123,-300.2729 744.8522,-293.519"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge79" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M785.7749,-331.7198C697.4782,-344.5613 527.836,-365.2587 472,-344.2034"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M472,-344.2034C416.0535,-323.0789 345.3053,-329.5504 302.9605,-336.5803"/>
+<polygon fill="#000000" stroke="#000000" points="302.3328,-333.1369 293.0898,-338.3155 303.5447,-340.0312 302.3328,-333.1369"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_sf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge87" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~tdhf_sf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M837.8874,-311.1882C827.903,-268.8679 787.6921,-127.5804 690,-96.2034"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M690,-96.2034C617.9516,-73.0626 417.4255,-80.8483 350,-115.2034 345.3219,-117.587 304.8257,-168.6582 281.8143,-197.9723"/>
+<polygon fill="#000000" stroke="#000000" points="278.9761,-195.9198 275.5622,-205.9495 284.4856,-200.2378 278.9761,-195.9198"/>
+</g>
+<!-- proc~rpaeig -->
+<g id="module~~lapack_wrap~~UsedByGraph_node46" class="node">
+<title>proc~rpaeig</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node46"><a xlink:href="../proc/rpaeig.html" xlink:title="rpaeig">
+<polygon fill="#d9534f" stroke="#d9534f" points="499,-2014.2034 445,-2014.2034 445,-1990.2034 499,-1990.2034 499,-2014.2034"/>
+<text text-anchor="middle" x="472" y="-1999.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rpaeig</text>
+</a>
+</g>
+</g>
+<!-- proc~rpaeig&#45;&gt;module~eigen -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge21" class="edge">
+<title>proc~rpaeig&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.7905,-2001.1689C419.3572,-1999.3698 380.7891,-1994.4749 350,-1981.2034 325.6234,-1970.6959 301.8,-1951.7583 285.7876,-1937.3806"/>
+<polygon fill="#000000" stroke="#000000" points="287.8874,-1934.5558 278.1646,-1930.3465 283.1403,-1939.7003 287.8874,-1934.5558"/>
+</g>
+<!-- proc~run_population_analysis -->
+<g id="module~~lapack_wrap~~UsedByGraph_node47" class="node">
+<title>proc~run_population_analysis</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node47"><a xlink:href="../proc/run_population_analysis.html" xlink:title="run_population_analysis">
+<polygon fill="#d9534f" stroke="#d9534f" points="542.5,-1140.2034 401.5,-1140.2034 401.5,-1116.2034 542.5,-1116.2034 542.5,-1140.2034"/>
+<text text-anchor="middle" x="472" y="-1125.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">run_population_analysis</text>
+</a>
+</g>
+</g>
+<!-- proc~run_population_analysis&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge46" class="edge">
+<title>proc~run_population_analysis&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M401.3978,-1134.7392C384.1424,-1137.8485 366.0393,-1142.4358 350,-1149.2034 326.1026,-1159.2866 302.5273,-1177.3107 286.4642,-1191.161"/>
+<polygon fill="#000000" stroke="#000000" points="283.9535,-1188.7093 278.7871,-1197.9591 288.5941,-1193.9499 283.9535,-1188.7093"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="module~~lapack_wrap~~UsedByGraph_node48" class="node">
+<title>proc~scf_driver</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node48"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="504,-1720.2034 440,-1720.2034 440,-1696.2034 504,-1696.2034 504,-1720.2034"/>
+<text text-anchor="middle" x="472" y="-1705.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~guess -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge26" class="edge">
+<title>proc~scf_driver&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.8125,-1711.4846C402.8864,-1715.2489 342.4256,-1721.4124 303.4291,-1725.3878"/>
+<polygon fill="#000000" stroke="#000000" points="302.6302,-1721.951 293.0367,-1726.4472 303.3402,-1728.9149 302.6302,-1721.951"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge47" class="edge">
+<title>proc~scf_driver&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.9576,-1712.0106C412.3239,-1713.3787 373.2964,-1710.4102 350,-1687.2034 284.5776,-1622.0325 269.5827,-1317.5697 266.643,-1232.3948"/>
+<polygon fill="#000000" stroke="#000000" points="270.1377,-1232.1717 266.3164,-1222.29 263.1413,-1232.3978 270.1377,-1232.1717"/>
+</g>
+<!-- proc~sfdmat -->
+<g id="module~~lapack_wrap~~UsedByGraph_node49" class="node">
+<title>proc~sfdmat</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node49"><a xlink:href="../proc/sfdmat.html" xlink:title="sfdmat">
+<polygon fill="#d9534f" stroke="#d9534f" points="499,-644.2034 445,-644.2034 445,-620.2034 499,-620.2034 499,-644.2034"/>
+<text text-anchor="middle" x="472" y="-629.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sfdmat</text>
+</a>
+</g>
+</g>
+<!-- proc~sfdmat&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge48" class="edge">
+<title>proc~sfdmat&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.8445,-628.5761C417.008,-626.5162 374.4375,-628.2527 350,-653.2034 311.7015,-692.3061 276.148,-1088.9843 267.8273,-1187.9344"/>
+<polygon fill="#000000" stroke="#000000" points="264.3303,-1187.7547 266.9881,-1198.0108 271.3061,-1188.3358 264.3303,-1187.7547"/>
+</g>
+<!-- proc~sfdmat&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge80" class="edge">
+<title>proc~sfdmat&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.8311,-635.081C417.5912,-636.409 376.0545,-633.9734 350,-611.2034 312.1879,-578.158 280.6791,-424.4394 269.9417,-366.4358"/>
+<polygon fill="#000000" stroke="#000000" points="273.3623,-365.6834 268.1284,-356.4716 266.4755,-366.9367 273.3623,-365.6834"/>
+</g>
+<!-- proc~symmetrize_matrices -->
+<g id="module~~lapack_wrap~~UsedByGraph_node50" class="node">
+<title>proc~symmetrize_matrices</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node50"><a xlink:href="../proc/symmetrize_matrices.html" xlink:title="symmetrize_matrices">
+<polygon fill="#d9534f" stroke="#d9534f" points="535.5,-1018.2034 408.5,-1018.2034 408.5,-994.2034 535.5,-994.2034 535.5,-1018.2034"/>
+<text text-anchor="middle" x="472" y="-1003.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrices</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrices&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge49" class="edge">
+<title>proc~symmetrize_matrices&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M408.3292,-1008.7388C387.9699,-1012.2681 366.4664,-1019.1599 350,-1032.2034 299.5353,-1072.1779 277.8534,-1149.7221 269.9216,-1187.8865"/>
+<polygon fill="#000000" stroke="#000000" points="266.4354,-1187.4787 267.9602,-1197.9632 273.3064,-1188.8162 266.4354,-1187.4787"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_node51" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node51"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="501,-896.2034 443,-896.2034 443,-872.2034 501,-872.2034 501,-896.2034"/>
+<text text-anchor="middle" x="472" y="-881.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge50" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.8545,-881.0422C415.4804,-879.7625 375.0824,-882.4725 350,-905.2034 307.2888,-943.9102 278.147,-1124.1826 269.036,-1187.8571"/>
+<polygon fill="#000000" stroke="#000000" points="265.535,-1187.6205 267.6129,-1198.0095 272.4672,-1188.5922 265.535,-1187.6205"/>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge66" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.7434,-887.2086C415.4826,-888.3372 375.3371,-885.4876 350,-863.2034 340.2101,-854.5931 289.8036,-675.8449 272.1311,-612.3449"/>
+<polygon fill="#000000" stroke="#000000" points="275.4554,-611.2352 269.4068,-602.5366 268.7108,-613.1086 275.4554,-611.2352"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_node52" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node52"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="502.5,-854.2034 441.5,-854.2034 441.5,-830.2034 502.5,-830.2034 502.5,-854.2034"/>
+<text text-anchor="middle" x="472" y="-839.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge51" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M441.3767,-838.8056C413.9236,-837.5515 374.3319,-840.4505 350,-863.2034 301.861,-908.2185 275.7345,-1117.9008 268.2682,-1187.606"/>
+<polygon fill="#000000" stroke="#000000" points="264.7515,-1187.5841 267.1942,-1197.8935 271.7137,-1188.311 264.7515,-1187.5841"/>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge67" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M441.4246,-844.9681C414.3853,-845.718 375.3945,-842.4303 350,-821.2034 316.7581,-793.417 283.4019,-664.3766 271.0268,-612.1914"/>
+<polygon fill="#000000" stroke="#000000" points="274.3959,-611.2275 268.7122,-602.2863 267.5796,-612.8204 274.3959,-611.2275"/>
+</g>
+<!-- proc~tddft_xc_gradient -->
+<g id="module~~lapack_wrap~~UsedByGraph_node53" class="node">
+<title>proc~tddft_xc_gradient</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node53"><a xlink:href="../proc/tddft_xc_gradient.html" xlink:title="tddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="524.5,-728.2034 419.5,-728.2034 419.5,-704.2034 524.5,-704.2034 524.5,-728.2034"/>
+<text text-anchor="middle" x="472" y="-713.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge68" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M419.2984,-715.3598C396.6716,-712.9888 370.729,-707.4397 350,-695.2034 315.9247,-675.0886 290.1479,-635.5794 276.6188,-611.1763"/>
+<polygon fill="#000000" stroke="#000000" points="279.6927,-609.5023 271.8878,-602.3375 273.5211,-612.8057 279.6927,-609.5023"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="module~~lapack_wrap~~UsedByGraph_node54" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node54"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="731,-1161.2034 649,-1161.2034 649,-1137.2034 731,-1137.2034 731,-1161.2034"/>
+<text text-anchor="middle" x="690" y="-1146.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge52" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M689.1487,-1161.5714C684.5058,-1224.9856 659.9807,-1512.7149 594,-1565.2034 551.5668,-1598.9595 392.5266,-1598.8417 350,-1565.2034 296.8379,-1523.1525 273.8512,-1303.2373 267.7451,-1232.2907"/>
+<polygon fill="#000000" stroke="#000000" points="271.2254,-1231.9085 266.908,-1222.2333 264.2496,-1232.4892 271.2254,-1231.9085"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;module~grd1 -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge91" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M666.5399,-1137.0238C647.4661,-1127.5951 619.6145,-1114.8871 594,-1107.2034 566.0805,-1098.8282 533.5017,-1093.433 509.0366,-1090.2109"/>
+<polygon fill="#000000" stroke="#000000" points="509.4439,-1086.7347 499.0856,-1088.9608 508.5713,-1093.6801 509.4439,-1086.7347"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~lapack_wrap~~UsedByGraph_node55" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node55"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="728,-394.2034 652,-394.2034 652,-370.2034 728,-370.2034 728,-394.2034"/>
+<text text-anchor="middle" x="690" y="-379.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge53" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M651.8044,-388.2508C643.4042,-391.3722 635.4107,-396.0874 630,-403.2034 556.6699,-499.6442 675.7986,-857.8327 594,-947.2034 556.9497,-987.6834 504.1632,-921.7412 472,-966.2034"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M472,-966.2034C439.8368,-1010.6656 392.5319,-950.5278 350,-985.2034 286.4087,-1037.0485 270.9472,-1142.1282 267.1967,-1187.9729"/>
+<polygon fill="#000000" stroke="#000000" points="263.6989,-1187.8206 266.4875,-1198.0418 270.6816,-1188.3125 263.6989,-1187.8206"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge74" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.1694,-370.0893C667.6241,-348.6846 634.2294,-304.4355 594,-283.2034 577.7221,-274.6123 558.6818,-269.419 540.5491,-266.3117"/>
+<polygon fill="#000000" stroke="#000000" points="541.0058,-262.8409 530.5921,-264.7917 539.9493,-269.7608 541.0058,-262.8409"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge81" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M651.8387,-379.8925C607.4036,-376.225 532.391,-366.9763 472,-344.2034"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~lapack_wrap~~UsedByGraph_node56" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node56"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="732,-895.2034 648,-895.2034 648,-871.2034 732,-871.2034 732,-895.2034"/>
+<text text-anchor="middle" x="690" y="-880.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge54" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M685.8142,-895.3594C675.3471,-923.7581 645.1422,-994.5205 594,-1027.2034 501.5198,-1086.3037 440.575,-1003.2227 350,-1065.2034 306.4267,-1095.0207 282.4176,-1155.4346 272.1324,-1188.0785"/>
+<polygon fill="#000000" stroke="#000000" points="268.6772,-1187.4163 269.162,-1198.0001 275.3831,-1189.424 268.6772,-1187.4163"/>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~tdhf_lib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge82" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M647.8575,-875.4828C640.9568,-872.4195 634.5776,-868.1502 630,-862.2034 567.3214,-780.777 652.5138,-485.6723 594,-401.2034 559.9198,-352.0061 527.9992,-365.3202 472,-344.2034"/>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge92" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M687.1654,-895.4131C678.9548,-927.8912 651.9598,-1016.8783 594,-1060.2034 569.6838,-1078.3798 535.4151,-1084.4459 509.3854,-1086.2144"/>
+<polygon fill="#000000" stroke="#000000" points="508.9581,-1082.7312 499.1433,-1086.7211 509.3041,-1089.7227 508.9581,-1082.7312"/>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge94" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M647.7944,-873.4663C641.3108,-870.6144 635.0915,-866.9382 630,-862.2034 600.555,-834.8213 625.6164,-804.0467 594,-779.2034 583.7655,-771.1614 571.5455,-765.7491 558.8522,-762.1724"/>
+<polygon fill="#000000" stroke="#000000" points="559.6235,-758.758 549.0783,-759.7819 557.9605,-765.5575 559.6235,-758.758"/>
+</g>
+<!-- proc~tdhf_unrelaxed_density -->
+<g id="module~~lapack_wrap~~UsedByGraph_node57" class="node">
+<title>proc~tdhf_unrelaxed_density</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node57"><a xlink:href="../proc/tdhf_unrelaxed_density.html" xlink:title="tdhf_unrelaxed_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="540,-1636.2034 404,-1636.2034 404,-1612.2034 540,-1612.2034 540,-1636.2034"/>
+<text text-anchor="middle" x="472" y="-1621.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_unrelaxed_density</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_unrelaxed_density&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge57" class="edge">
+<title>proc~tdhf_unrelaxed_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.9527,-1623.297C384.2654,-1619.7408 364.2643,-1612.4217 350,-1598.2034 297.4179,-1545.7908 273.8469,-1306.802 267.6978,-1232.3888"/>
+<polygon fill="#000000" stroke="#000000" points="271.1752,-1231.9657 266.887,-1222.2775 264.1976,-1232.5253 271.1752,-1231.9657"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="module~~lapack_wrap~~UsedByGraph_node58" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node58"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="504.5,-812.2034 439.5,-812.2034 439.5,-788.2034 504.5,-788.2034 504.5,-812.2034"/>
+<text text-anchor="middle" x="472" y="-797.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mathlib -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge58" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.3597,-796.5804C411.9165,-795.4529 373.5045,-798.6707 350,-821.2034 296.2744,-872.7076 273.4845,-1113.0252 267.6117,-1187.8821"/>
+<polygon fill="#000000" stroke="#000000" points="264.1066,-1187.818 266.8391,-1198.0544 271.0865,-1188.3482 264.1066,-1187.818"/>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge69" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.3881,-802.5723C412.7011,-802.788 375.353,-798.9417 350,-779.2034 295.8728,-737.0633 275.7518,-652.566 269.0256,-612.3964"/>
+<polygon fill="#000000" stroke="#000000" points="272.4537,-611.6617 267.4665,-602.314 265.5359,-612.7315 272.4537,-611.6617"/>
+</g>
+<!-- proc~utddft_xc_gradient -->
+<g id="module~~lapack_wrap~~UsedByGraph_node59" class="node">
+<title>proc~utddft_xc_gradient</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node59"><a xlink:href="../proc/utddft_xc_gradient.html" xlink:title="utddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="528,-686.2034 416,-686.2034 416,-662.2034 528,-662.2034 528,-686.2034"/>
+<text text-anchor="middle" x="472" y="-671.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge70" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.7535,-670.1423C394.5094,-667.1758 370.526,-662.051 350,-653.2034 325.6234,-642.6959 301.8,-623.7583 285.7876,-609.3806"/>
+<polygon fill="#000000" stroke="#000000" points="287.8874,-606.5558 278.1646,-602.3465 283.1403,-611.7003 287.8874,-606.5558"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="module~~lapack_wrap~~UsedByGraph_node60" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_module~~lapack_wrap~~UsedByGraph_node60"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="726.5,-1098.2034 653.5,-1098.2034 653.5,-1074.2034 726.5,-1074.2034 726.5,-1098.2034"/>
+<text text-anchor="middle" x="690" y="-1083.8034" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~lapack_wrap~~UsedByGraph_edge90" class="edge">
+<title>proc~hf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M653.0193,-1086.2034C612.9863,-1086.2034 549.4936,-1086.2034 509.3263,-1086.2034"/>
+<polygon fill="#000000" stroke="#000000" points="509.1502,-1082.7035 499.1502,-1086.2034 509.1502,-1089.7035 509.1502,-1082.7035"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulelapack_wrapUsedByGraph = svgPanZoom('#modulelapack_wrapUsedByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+
+
+
+
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dgeqrf_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dgeqrf_i64.html'>oqp_dgeqrf_i64</a>(m, n, a, lda, tau, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~48"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~231"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~151"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~81"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau~9"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~6"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~3"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~8"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dgesv_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dgesv_i64.html'>oqp_dgesv_i64</a>(n, nrhs, a, lda, ipiv, b, ldb, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~232"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nrhs~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nrhs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~152"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~82"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipiv~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipiv</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~97"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(ldb,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~26"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~9"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dsysv_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dsysv_i64.html'>oqp_dsysv_i64</a>(uplo, n, nrhs, a, lda, ipiv, b, ldb, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~80"></span>
+              character(len=*)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~233"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nrhs~3"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nrhs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~153"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~83"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipiv~3"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipiv</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~98"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~27"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~7"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~4"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~10"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dgglse_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dgglse_i64.html'>oqp_dgglse_i64</a>(m, n, p, a, lda, b, ldb, c, d, x, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~49"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~234"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-p~16"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>p</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~154"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~84"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~99"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(ldb,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~28"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~57"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d~26"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>d</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x~171"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>x</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~8"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~5"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~11"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dorgqr_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dorgqr_i64.html'>oqp_dorgqr_i64</a>(m, n, k, a, lda, tau, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~50"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~235"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-k~71"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>k</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~155"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~85"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau~10"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~9"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~6"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~12"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dormqr_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dormqr_i64.html'>oqp_dormqr_i64</a>(side, trans, m, n, k, a, lda, tau, c, ldc, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-side~15"></span>
+              character(len=*)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>side</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans~52"></span>
+              character(len=*)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~51"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~236"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-k~72"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>k</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~156"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~86"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau~11"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~58"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(ldc,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldc~23"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~10"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~7"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~13"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dtpttr_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dtpttr_i64.html'>oqp_dtpttr_i64</a>(uplo, n, ap, a, lda, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~81"></span>
+              character(len=*)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~237"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~21"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ap</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~157"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~87"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~14"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dtrttp_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dtrttp_i64.html'>oqp_dtrttp_i64</a>(uplo, n, a, lda, ap, info)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~82"></span>
+              character(len=*)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~238"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~158"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~88"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~22"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ap</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~15"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-oqp_dgetri_i64"></span> <h3>public  subroutine <a href='../proc/oqp_dgetri_i64.html'>oqp_dgetri_i64</a>(n, a, lda, ipiv, work, lwork, info)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>Compute the inverse of a real matrix using LAPACK routine dgetri.</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~239"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~159"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~89"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipiv~4"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipiv</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~11"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>work</strong>(lwork)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lwork~8"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lwork</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-info~16"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>info</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

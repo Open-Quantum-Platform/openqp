@@ -1,0 +1,875 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>bragg_slater.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>bragg_slater.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for source files.">31 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/bragg_slater.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">bragg_slater.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/bragg_slater_radii.html">bragg_slater_radii</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/bragg_slater.f90.html#src">bragg_slater.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~bragg_slater.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefilebragg_slaterf90EfferentGraph" width="229pt" height="32pt"
+ viewBox="0.00 0.00 229.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~bragg_slater.f90~~EfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>sourcefile~~bragg_slater.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 225,-28 225,4 -4,4"/>
+<!-- sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~bragg_slater.f90</title>
+<polygon fill="none" stroke="#000000" points="221,-24 120,-24 120,0 221,0 221,-24"/>
+<text text-anchor="middle" x="170.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">bragg_slater.F90</text>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="84,-24 0,-24 0,0 84,0 84,-24"/>
+<text text-anchor="middle" x="42" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~bragg_slater.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M119.7134,-12C111.3346,-12 102.6359,-12 94.2226,-12"/>
+<polygon fill="#000000" stroke="#000000" points="94.1425,-8.5001 84.1424,-12 94.1424,-15.5001 94.1425,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Files dependent on this one</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~bragg_slater.f90~~AfferentGraph Pages: 1 -->
+<svg id="sourcefilebragg_slaterf90AfferentGraph" width="641pt" height="268pt"
+ viewBox="0.00 0.00 641.00 267.61" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph" class="graph" transform="scale(.6595 .6595) rotate(0) translate(4 401.8055)">
+<title>sourcefile~~bragg_slater.f90~~AfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-401.8055 968,-401.8055 968,4 -4,4"/>
+<!-- sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node1" class="node">
+<title>sourcefile~bragg_slater.f90</title>
+<polygon fill="none" stroke="#000000" points="101,-316.6202 0,-316.6202 0,-292.6202 101,-292.6202 101,-316.6202"/>
+<text text-anchor="middle" x="50.5" y="-302.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">bragg_slater.F90</text>
+</g>
+<!-- sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node2" class="node">
+<title>sourcefile~dft.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/dft.f90.html" xlink:title="dft.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="671.5,-254.6202 617.5,-254.6202 617.5,-230.6202 671.5,-230.6202 671.5,-254.6202"/>
+<text text-anchor="middle" x="644.5" y="-240.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge1" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~bragg_slater.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M319,-324.6202C247.8362,-319.3388 166.065,-313.2441 111.6443,-309.1842"/>
+<polygon fill="#000000" stroke="#000000" points="111.7059,-305.6792 101.4731,-308.4254 111.185,-312.6598 111.7059,-305.6792"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node3" class="node">
+<title>sourcefile~dft_molgrid.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/dft_molgrid.f90.html" xlink:title="dft_molgrid.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="233,-296.6202 137,-296.6202 137,-272.6202 233,-272.6202 233,-296.6202"/>
+<text text-anchor="middle" x="185" y="-282.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_molgrid.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge9" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.5,-324.6202C408.5978,-336.4064 389.6945,-329.8669 319,-324.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M319,-324.6202C285.2938,-322.1187 248.6195,-310.5088 222.1732,-300.4367"/>
+<polygon fill="#000000" stroke="#000000" points="223.1534,-297.0618 212.5657,-296.674 220.6006,-303.5797 223.1534,-297.0618"/>
+</g>
+<!-- sourcefile~dft_fuzzycell.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node4" class="node">
+<title>sourcefile~dft_fuzzycell.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/dft_fuzzycell.f90.html" xlink:title="dft_fuzzycell.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="369,-296.6202 269,-296.6202 269,-272.6202 369,-272.6202 369,-296.6202"/>
+<text text-anchor="middle" x="319" y="-282.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_fuzzycell.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_fuzzycell.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge24" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_fuzzycell.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.2391,-252.7507C607.5795,-256.9517 596.9063,-262.3264 588,-268.6202 569.2626,-281.8614 571.842,-294.1 552,-305.6202 522.821,-322.5615 511.7709,-319.0105 478.5,-324.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.5,-324.6202C433.9816,-332.1264 383.5995,-315.095 351.5863,-300.9771"/>
+<polygon fill="#000000" stroke="#000000" points="352.8179,-297.6919 342.2678,-296.7197 349.9089,-304.0588 352.8179,-297.6919"/>
+</g>
+<!-- sourcefile~dft_gridint_energy.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node6" class="node">
+<title>sourcefile~dft_gridint_energy.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/dft_gridint_energy.f90.html" xlink:title="dft_gridint_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="543.5,-254.6202 413.5,-254.6202 413.5,-230.6202 543.5,-230.6202 543.5,-254.6202"/>
+<text text-anchor="middle" x="478.5" y="-240.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_energy.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge30" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_energy.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.4598,-242.6202C600.0136,-242.6202 576.393,-242.6202 553.5782,-242.6202"/>
+<polygon fill="#000000" stroke="#000000" points="553.5252,-239.1203 543.5251,-242.6202 553.5251,-246.1203 553.5252,-239.1203"/>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node8" class="node">
+<title>sourcefile~dft_gridint_grad.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/dft_gridint_grad.f90.html" xlink:title="dft_gridint_grad.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="538,-296.6202 419,-296.6202 419,-272.6202 538,-272.6202 538,-296.6202"/>
+<text text-anchor="middle" x="478.5" y="-282.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_grad.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge34" class="edge">
+<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.4598,-249.4617C595.4494,-255.0306 563.6116,-263.086 535.9627,-270.0815"/>
+<polygon fill="#000000" stroke="#000000" points="534.8277,-266.7583 525.9917,-272.6043 536.5447,-273.5444 534.8277,-266.7583"/>
+</g>
+<!-- sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge2" class="edge">
+<title>sourcefile~dft_molgrid.f90&#45;&gt;sourcefile~bragg_slater.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M136.8223,-291.7842C128.479,-293.0249 119.7086,-294.329 111.0859,-295.6112"/>
+<polygon fill="#000000" stroke="#000000" points="110.4422,-292.1683 101.0657,-297.1012 111.4718,-299.0922 110.4422,-292.1683"/>
+</g>
+<!-- sourcefile~dft_fuzzycell.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge10" class="edge">
+<title>sourcefile~dft_fuzzycell.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M268.7221,-284.6202C260.4858,-284.6202 251.8893,-284.6202 243.4751,-284.6202"/>
+<polygon fill="#000000" stroke="#000000" points="243.3386,-281.1203 233.3386,-284.6202 243.3386,-288.1203 243.3386,-281.1203"/>
+</g>
+<!-- sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node5" class="node">
+<title>sourcefile~dft_gridint.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/dft_gridint.f90.html" xlink:title="dft_gridint.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="363.5,-174.6202 274.5,-174.6202 274.5,-150.6202 363.5,-150.6202 363.5,-174.6202"/>
+<text text-anchor="middle" x="319" y="-160.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge11" class="edge">
+<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M291.4113,-174.645C283.7956,-178.5683 275.7714,-183.3024 269,-188.6202 240.8062,-210.7622 214.6816,-243.2864 199.2822,-264.2099"/>
+<polygon fill="#000000" stroke="#000000" points="196.3826,-262.2469 193.3644,-272.4027 202.0571,-266.3457 196.3826,-262.2469"/>
+</g>
+<!-- sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge12" class="edge">
+<title>sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.9738,-230.5121C405.6478,-216.9639 342.7995,-197.531 319,-202.6202"/>
+</g>
+<!-- sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge25" class="edge">
+<title>sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M454.2754,-230.47C426.9491,-216.764 382.3563,-194.3977 351.895,-179.1193"/>
+<polygon fill="#000000" stroke="#000000" points="353.4378,-175.9776 342.93,-174.6227 350.2995,-182.2347 353.4378,-175.9776"/>
+</g>
+<!-- sourcefile~dft_gridint_fxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node7" class="node">
+<title>sourcefile~dft_gridint_fxc.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/dft_gridint_fxc.f90.html" xlink:title="dft_gridint_fxc.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="533.5,-56.6202 423.5,-56.6202 423.5,-32.6202 533.5,-32.6202 533.5,-56.6202"/>
+<text text-anchor="middle" x="478.5" y="-42.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_fxc.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge13" class="edge">
+<title>sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.1805,-50.0176C390.8841,-55.1577 350.4374,-65.1655 319,-84.6202"/>
+</g>
+<!-- sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge26" class="edge">
+<title>sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.3531,-56.7509C423.5816,-60.4066 413.6071,-64.9867 405,-70.6202 375.3869,-90.0027 348.8382,-121.6579 333.3189,-142.3153"/>
+<polygon fill="#000000" stroke="#000000" points="330.4606,-140.2945 327.3663,-150.4274 336.1042,-144.4358 330.4606,-140.2945"/>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge14" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.8429,-272.6008C420.029,-270.0511 412.1781,-267.0666 405,-263.6202 362.7558,-243.3378 364.825,-192.8212 319,-202.6202"/>
+</g>
+<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge27" class="edge">
+<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.8521,-272.4878C413.8708,-270.0521 409.1588,-267.1288 405,-263.6202 376.7391,-239.7784 394.7233,-215.1801 369,-188.6202 365.9752,-185.4971 362.494,-182.6748 358.8059,-180.143"/>
+<polygon fill="#000000" stroke="#000000" points="360.3061,-176.9591 349.9424,-174.7578 356.6713,-182.9415 360.3061,-176.9591"/>
+</g>
+<!-- sourcefile~dft_gridint_gxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node9" class="node">
+<title>sourcefile~dft_gridint_gxc.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node9"><a xlink:href="../sourcefile/dft_gridint_gxc.f90.html" xlink:title="dft_gridint_gxc.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="701,-94.6202 588,-94.6202 588,-70.6202 701,-70.6202 701,-94.6202"/>
+<text text-anchor="middle" x="644.5" y="-80.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_gxc.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge15" class="edge">
+<title>sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.8085,-80.1225C555.6275,-79.4991 514.6705,-80.0411 478.5,-84.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.5,-84.6202C408.1724,-93.5236 379.2799,-47.3166 319,-84.6202"/>
+</g>
+<!-- sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge28" class="edge">
+<title>sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.5,-84.6202C426.3982,-91.2162 372.9999,-123.5809 343.1081,-144.4931"/>
+<polygon fill="#000000" stroke="#000000" points="340.7074,-141.9074 334.6135,-150.5743 344.7821,-147.5992 340.7074,-141.9074"/>
+</g>
+<!-- sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge31" class="edge">
+<title>sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9766,-70.5968C575.6991,-66.8706 557.6056,-62.7287 540.7352,-58.8668"/>
+<polygon fill="#000000" stroke="#000000" points="541.4953,-55.4504 530.9665,-56.6306 539.9333,-62.2739 541.4953,-55.4504"/>
+</g>
+<!-- sourcefile~dft_gridint_tdxc_grad.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node10" class="node">
+<title>sourcefile~dft_gridint_tdxc_grad.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node10"><a xlink:href="../sourcefile/dft_gridint_tdxc_grad.f90.html" xlink:title="dft_gridint_tdxc_grad.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="552,-174.6202 405,-174.6202 405,-150.6202 552,-150.6202 552,-174.6202"/>
+<text text-anchor="middle" x="478.5" y="-160.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_tdxc_grad.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge16" class="edge">
+<title>sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.0066,-174.668C402.1221,-183.0832 358.0843,-194.2626 319,-202.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M319,-202.6202C273.9508,-212.2534 230.0144,-244.8713 205.3333,-265.9502"/>
+<polygon fill="#000000" stroke="#000000" points="202.9477,-263.3869 197.7275,-272.6065 207.5577,-268.6545 202.9477,-263.3869"/>
+</g>
+<!-- sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge29" class="edge">
+<title>sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.8195,-162.6202C394.3996,-162.6202 383.8407,-162.6202 373.8599,-162.6202"/>
+<polygon fill="#000000" stroke="#000000" points="373.6982,-159.1203 363.6981,-162.6202 373.6981,-166.1203 373.6982,-159.1203"/>
+</g>
+<!-- sourcefile~grd2.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node11" class="node">
+<title>sourcefile~grd2.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node11"><a xlink:href="../sourcefile/grd2.f90.html" xlink:title="grd2.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="674.5,-334.6202 614.5,-334.6202 614.5,-310.6202 674.5,-310.6202 674.5,-334.6202"/>
+<text text-anchor="middle" x="644.5" y="-320.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge17" class="edge">
+<title>sourcefile~grd2.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M614.2975,-332.1834C581.3258,-342.0826 526.7773,-356.8858 478.5,-362.6202"/>
+</g>
+<!-- sourcefile~hf_energy.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node12" class="node">
+<title>sourcefile~hf_energy.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node12"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="964,-294.6202 879,-294.6202 879,-270.6202 964,-270.6202 964,-294.6202"/>
+<text text-anchor="middle" x="921.5" y="-280.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge3" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M881.451,-270.5337C869.2054,-267.2106 855.6342,-263.8985 843,-261.6202 787.3305,-251.5814 721.858,-246.6172 681.776,-244.3393"/>
+<polygon fill="#000000" stroke="#000000" points="681.8387,-240.8376 671.664,-243.7913 681.4599,-247.8274 681.8387,-240.8376"/>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge18" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M916.4157,-294.8877C906.3066,-317.4376 881.3006,-364.8799 843,-383.6202 763.313,-422.6108 733.0077,-368.6748 644.5,-362.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.5,-362.6202C570.8132,-358.9576 552.0459,-356.7756 478.5,-362.6202"/>
+</g>
+<!-- sourcefile~scf.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node14" class="node">
+<title>sourcefile~scf.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node14"><a xlink:href="../sourcefile/scf.f90.html" xlink:title="scf.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="817,-294.6202 763,-294.6202 763,-270.6202 817,-270.6202 817,-294.6202"/>
+<text text-anchor="middle" x="790" y="-280.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge39" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M878.8057,-282.6202C862.1956,-282.6202 843.3378,-282.6202 827.2852,-282.6202"/>
+<polygon fill="#000000" stroke="#000000" points="827.1933,-279.1203 817.1933,-282.6202 827.1933,-286.1203 827.1933,-279.1203"/>
+</g>
+<!-- sourcefile~hf_gradient.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node13" class="node">
+<title>sourcefile~hf_gradient.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node13"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="838,-374.6202 742,-374.6202 742,-350.6202 838,-350.6202 838,-374.6202"/>
+<text text-anchor="middle" x="790" y="-360.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge4" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.248,-350.4536C749.7573,-329.4304 697.3088,-286.1739 667.1618,-261.3103"/>
+<polygon fill="#000000" stroke="#000000" points="669.2327,-258.4816 659.2911,-254.8191 664.7789,-263.8819 669.2327,-258.4816"/>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge19" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M741.7749,-364.2687C713.4172,-364.8269 676.884,-364.8355 644.5,-362.6202"/>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge37" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M746.3452,-350.6189C726.6715,-345.2103 703.5989,-338.8674 684.3937,-333.5876"/>
+<polygon fill="#000000" stroke="#000000" points="685.3116,-330.2101 674.7416,-330.9341 683.456,-336.9597 685.3116,-330.2101"/>
+</g>
+<!-- sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge5" class="edge">
+<title>sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M762.9736,-275.1903C740.0472,-268.8875 706.9325,-259.7838 681.5382,-252.8026"/>
+<polygon fill="#000000" stroke="#000000" points="682.4455,-249.4222 671.8754,-250.1461 680.5899,-256.1718 682.4455,-249.4222"/>
+</g>
+<!-- sourcefile~scf.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge20" class="edge">
+<title>sourcefile~scf.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M762.9531,-279.4691C722.674,-275.9931 645.5072,-274.0932 588,-301.6202 567.3049,-311.5264 571.4714,-326.4842 552,-338.6202 522.8367,-356.7969 512.6242,-358.5669 478.5,-362.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.5,-362.6202C385.3526,-372.9654 357.2704,-370.1131 269,-338.6202 246.4052,-330.5589 223.6944,-315.4352 207.5944,-303.2391"/>
+<polygon fill="#000000" stroke="#000000" points="209.411,-300.2174 199.3729,-296.8282 205.1066,-305.7375 209.411,-300.2174"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node15" class="node">
+<title>sourcefile~tdhf_energy.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node15"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="838.5,-35.6202 741.5,-35.6202 741.5,-11.6202 838.5,-11.6202 838.5,-35.6202"/>
+<text text-anchor="middle" x="790" y="-21.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge6" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.8079,-35.8128C763.7948,-46.8744 746.9818,-64.2251 737,-82.6202 707.5884,-136.8219 740.7737,-169.4936 701,-216.6202 695.7115,-222.8864 688.5891,-227.7228 681.186,-231.4264"/>
+<polygon fill="#000000" stroke="#000000" points="679.5404,-228.3257 671.7756,-235.534 682.3407,-234.7412 679.5404,-228.3257"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge21" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M741.3745,-14.1867C713.1983,-9.4953 676.9801,-4.7818 644.5,-4.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.5,-4.6202C537.7224,-4.0893 505.3762,12.7987 405,-23.6202 360.9489,-39.6031 358.4647,-59.3518 319,-84.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M319,-84.6202C250.2663,-128.0377 208.6209,-220.943 192.5814,-263.0653"/>
+<polygon fill="#000000" stroke="#000000" points="189.2343,-262.0258 189.0544,-272.6191 195.8011,-264.4502 189.2343,-262.0258"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge32" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.5,-4.6202C600.7103,-4.4025 552.185,-17.7544 518.9694,-29.0884"/>
+<polygon fill="#000000" stroke="#000000" points="517.4527,-25.9112 509.1748,-32.5238 519.7696,-32.5167 517.4527,-25.9112"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node16" class="node">
+<title>sourcefile~tdhf_gradient.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node16"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="843,-214.6202 737,-214.6202 737,-190.6202 843,-190.6202 843,-214.6202"/>
+<text text-anchor="middle" x="790" y="-200.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge7" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M746.3452,-214.6216C725.6735,-220.3045 701.2495,-227.019 681.5019,-232.4479"/>
+<polygon fill="#000000" stroke="#000000" points="680.3606,-229.1317 671.6462,-235.1574 682.2162,-235.8813 680.3606,-229.1317"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge22" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.5,-202.6202C500.0932,-193.9524 460.4684,-172.3692 319,-202.6202"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_gridint_tdxc_grad.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge36" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_gridint_tdxc_grad.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M736.742,-204.1481C709.184,-204.5517 675.0102,-204.4516 644.5,-202.6202"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.5,-202.6202C602.3975,-200.0931 555.8178,-188.0191 522.7431,-177.7909"/>
+<polygon fill="#000000" stroke="#000000" points="523.522,-174.3665 512.932,-174.6885 521.4114,-181.0407 523.522,-174.3665"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge38" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.248,-214.7869C749.7573,-235.8101 697.3088,-279.0666 667.1618,-303.9301"/>
+<polygon fill="#000000" stroke="#000000" points="664.7789,-301.3586 659.2911,-310.4214 669.2327,-306.7589 664.7789,-301.3586"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_node17" class="node">
+<title>sourcefile~tdhf_z_vector.f90</title>
+<g id="a_sourcefile~~bragg_slater.f90~~AfferentGraph_node17"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="842.5,-115.6202 737.5,-115.6202 737.5,-91.6202 842.5,-91.6202 842.5,-115.6202"/>
+<text text-anchor="middle" x="790" y="-101.2202" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge8" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M783.1544,-115.7117C769.8909,-138.2182 738.6569,-186.9412 701,-216.6202 694.9948,-221.3532 687.9887,-225.4572 680.995,-228.918"/>
+<polygon fill="#000000" stroke="#000000" points="679.1964,-225.892 671.561,-233.2372 682.1104,-232.2567 679.1964,-225.892"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_molgrid.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge23" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_molgrid.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M737.2334,-105.6418C662.9235,-107.8736 523.2902,-109.8136 405,-98.6202 366.4468,-94.9721 351.9299,-64.2419 319,-84.6202"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge33" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M769.9525,-91.549C752.4242,-81.6445 725.9413,-68.2175 701,-61.6202 649.4016,-47.9718 588.9002,-44.09 544.0219,-43.4155"/>
+<polygon fill="#000000" stroke="#000000" points="543.8652,-39.9139 533.8305,-43.3132 543.7948,-46.9135 543.8652,-39.9139"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_gxc.f90 -->
+<g id="sourcefile~~bragg_slater.f90~~AfferentGraph_edge35" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_gxc.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M737.4712,-96.0388C729.0463,-94.8228 720.2284,-93.5501 711.5206,-92.2933"/>
+<polygon fill="#000000" stroke="#000000" points="711.7767,-88.7941 701.3792,-90.8296 710.7767,-95.7223 711.7767,-88.7941"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefilebragg_slaterf90AfferentGraph = svgPanZoom('#sourcefilebragg_slaterf90AfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="c">!&gt; @brief Bragg-Slater radii for determining the relative size of the</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a><span class="c">!&gt;        polyhedra in the polyatomic integration scheme</span>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="k">module </span><span class="n">bragg_slater_radii</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a><span class="w">  </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<a id="ln-5" name="ln-5" href="#ln-5"></a>
+<a id="ln-6" name="ln-6" href="#ln-6"></a><span class="w">  </span><span class="k">private</span>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="k">  public </span><span class="n">BRSL_NUM_ELEMENTS</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="w">  </span><span class="k">public </span><span class="n">BRSL_TYPE_GAMESS</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="w">  </span><span class="k">public </span><span class="n">BRSL_TYPE_GILL</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="w">  </span><span class="k">public </span><span class="n">BRSL_TYPE_TA</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a><span class="w">  </span><span class="k">public </span><span class="n">set_bragg_slater</span>
+<a id="ln-12" name="ln-12" href="#ln-12"></a>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">  </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">BRSL_NUM_ELEMENTS</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">137</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">  </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">BRSL_TYPE_GAMESS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">  </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">BRSL_TYPE_GILL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">  </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">BRSL_TYPE_TA</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="c">! J.C.Slater, Quantum Theory of Molecules and Solids, Volume 2, Chapter 3</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="c">! Except that hydrogen is changed from 0.25 -&gt; bohr radius,</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="c">! and missing values such as inert gasses are filled in with</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="c">! reasonable looking data (source unknown). Slater&#39;s table</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="c">! stops at the element americium, the extension is probably</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="c">! reasonable for actinides but not all the way to z=137!</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">  </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">brsl_values_gamess</span><span class="p">(</span><span class="n">BRSL_NUM_ELEMENTS</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[&amp;</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="mf">0.52917D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.31D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.05D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.85D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="mf">0.70D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.65D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.50D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.38D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">    </span><span class="mf">1.50D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.25D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.10D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.00D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.00D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.00D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="mf">0.71D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.20D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="w">    </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.25D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="mf">0.88D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.00D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="w">    </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="w">    </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a><span class="w">    </span><span class="mf">1.08D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.95D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="w">    </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">    </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="w">    </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a><span class="w">    </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.50D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.90D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">    </span><span class="mf">1.90D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.27D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.20D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.95D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="w">    </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="w">    </span><span class="mf">1.75d0</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75d0</span><span class="p">]</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="c">! Gill et al., CPL,209, 506 (1993).</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a><span class="w">  </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">brsl_values_gill</span><span class="p">(</span><span class="n">BRSL_NUM_ELEMENTS</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">     </span><span class="mf">0.52918D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.31126D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.62822D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.08550D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">     </span><span class="mf">0.81414D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.65131D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.54272D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.46520D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="w">     </span><span class="mf">0.40704D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.36185D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.16481D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.67109D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="w">     </span><span class="mf">1.36073D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.14763D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.99221D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.87388D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a><span class="w">     </span><span class="mf">0.78075D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.70555D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.20D+00</span><span class="p">,</span><span class="w">    </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="w">     </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="w">     </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">     </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.25D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.15D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="w">     </span><span class="mf">0.88D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.00D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="w">     </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">     </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">     </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.40D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.08D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.60D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a><span class="w">     </span><span class="mf">2.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.95D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">     </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.85D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.55D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.45D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">     </span><span class="mf">1.30D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.35D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.50D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">     </span><span class="mf">1.90D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.90D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.27D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="w">     </span><span class="mf">1.20D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.60D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">2.15D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.95D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.80D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">     </span><span class="mf">1.75D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.75D+00</span><span class="p">]</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="c">! O.Treutler, R.Ahlrichs, JCP,102(1), 346 (1995).</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a><span class="w">  </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">brsl_values_treutler</span><span class="p">(</span><span class="n">BRSL_NUM_ELEMENTS</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[&amp;</span>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">     </span><span class="mf">0.8D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">     </span><span class="mf">1.8D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.4D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.3D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">     </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">     </span><span class="mf">1.4D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.3D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.3D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a><span class="w">     </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="w">     </span><span class="mf">1.5D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.4D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a><span class="w">     </span><span class="mf">1.3D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">     </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.2D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">     </span><span class="mf">1.1D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w">     </span><span class="mf">0.9D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0D+00</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">     </span><span class="mf">1.0D+00</span><span class="p">]</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="k">contains</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="k">  subroutine </span><span class="n">set_bragg_slater</span><span class="p">(</span><span class="k">array</span><span class="p">,</span><span class="w"> </span><span class="n">bstype</span><span class="p">)</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="k">array</span><span class="p">(:)</span>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bstype</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="w">    </span><span class="k">select case</span><span class="w"> </span><span class="p">(</span><span class="n">bstype</span><span class="p">)</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="n">BRSL_TYPE_GAMESS</span><span class="p">)</span>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="w">      </span><span class="k">array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">brsl_values_gamess</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="n">BRSL_TYPE_TA</span><span class="p">)</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a><span class="w">      </span><span class="k">array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">brsl_values_treutler</span>
+<a id="ln-126" name="ln-126" href="#ln-126"></a>
+<a id="ln-127" name="ln-127" href="#ln-127"></a><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="n">BRSL_TYPE_GILL</span><span class="p">)</span>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="w">      </span><span class="k">array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">brsl_values_gill</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a>
+<a id="ln-130" name="ln-130" href="#ln-130"></a><span class="w">    </span><span class="k">case </span><span class="n">default</span>
+<a id="ln-131" name="ln-131" href="#ln-131"></a><span class="w">      </span><span class="k">array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">brsl_values_gill</span>
+<a id="ln-132" name="ln-132" href="#ln-132"></a>
+<a id="ln-133" name="ln-133" href="#ln-133"></a><span class="w">    </span><span class="k">end select</span>
+<a id="ln-134" name="ln-134" href="#ln-134"></a><span class="k">  end subroutine</span>
+<a id="ln-135" name="ln-135" href="#ln-135"></a>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="k">end module</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

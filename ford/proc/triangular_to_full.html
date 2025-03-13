@@ -1,0 +1,889 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>triangular_to_full &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>triangular_to_full
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">20 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mathlib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mathlib.f90.html'>mathlib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mathlib.html'>mathlib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">triangular_to_full</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/triangular_to_full.html#src">triangular_to_full</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine triangular_to_full(a, n, uplo)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~triangular_to_full~~UsesGraph Pages: 1 -->
+<svg id="proctriangular_to_fullUsesGraph" width="464pt" height="158pt"
+ viewBox="0.00 0.00 464.00 158.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~triangular_to_full~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 154)">
+<title>proc~~triangular_to_full~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-154 460,-154 460,4 -4,4"/>
+<!-- proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~UsesGraph_node1" class="node">
+<title>proc~triangular_to_full</title>
+<polygon fill="none" stroke="#000000" points="456,-128 353,-128 353,-104 456,-104 456,-128"/>
+<text text-anchor="middle" x="404.5" y="-113.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">triangular_to_full</text>
+</g>
+<!-- module~messages -->
+<g id="proc~~triangular_to_full~~UsesGraph_node2" class="node">
+<title>module~messages</title>
+<g id="a_proc~~triangular_to_full~~UsesGraph_node2"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="317,-108 251,-108 251,-84 317,-84 317,-108"/>
+<text text-anchor="middle" x="284" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~triangular_to_full&#45;&gt;module~messages -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge1" class="edge">
+<title>proc~triangular_to_full&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M352.6978,-107.4021C344.2658,-106.0026 335.6086,-104.5657 327.4045,-103.2041"/>
+<polygon fill="#000000" stroke="#000000" points="327.7442,-99.7126 317.306,-101.528 326.598,-106.6182 327.7442,-99.7126"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~triangular_to_full~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_proc~~triangular_to_full~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-150 142,-150 142,-126 203,-126 203,-150"/>
+<text text-anchor="middle" x="172.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~triangular_to_full&#45;&gt;module~precision -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge2" class="edge">
+<title>proc~triangular_to_full&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M352.7234,-120.9098C310.7315,-124.8918 252.3435,-130.4286 213.536,-134.1087"/>
+<polygon fill="#000000" stroke="#000000" points="212.7644,-130.666 203.1395,-135.0945 213.4253,-137.6348 212.7644,-130.666"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M252.0486,-108.0355C239.8439,-112.6328 225.7659,-117.9357 212.8771,-122.7907"/>
+<polygon fill="#000000" stroke="#000000" points="211.4278,-119.5965 203.3034,-126.3969 213.8953,-126.1472 211.4278,-119.5965"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~triangular_to_full~~UsesGraph_node4" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-108 130,-108 130,-84 215,-84 215,-108"/>
+<text text-anchor="middle" x="172.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge3" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8482,-96C242.82,-96 234.0392,-96 225.3524,-96"/>
+<polygon fill="#000000" stroke="#000000" points="225.2489,-92.5001 215.2489,-96 225.2488,-99.5001 225.2489,-92.5001"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~triangular_to_full~~UsesGraph_node5" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-66 136.5,-66 136.5,-42 208.5,-42 208.5,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge4" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M252.0486,-83.9645C240.1516,-79.4831 226.4745,-74.3312 213.8541,-69.5773"/>
+<polygon fill="#000000" stroke="#000000" points="215.048,-66.287 204.4561,-66.0373 212.5804,-72.8377 215.048,-66.287"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~triangular_to_full~~UsesGraph_node7" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~triangular_to_full~~UsesGraph_node7"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-24 133,-24 133,0 212,0 212,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge5" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M272.6554,-83.7483C259.6446,-70.1717 237.2324,-48.1921 215,-33 212.919,-31.578 210.7277,-30.1957 208.4822,-28.8639"/>
+<polygon fill="#000000" stroke="#000000" points="210.1182,-25.7692 199.672,-24.0008 206.7354,-31.8975 210.1182,-25.7692"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~triangular_to_full~~UsesGraph_node6" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~triangular_to_full~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-150 0,-150 0,-126 94,-126 94,-150"/>
+<text text-anchor="middle" x="47" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~triangular_to_full~~UsesGraph_edge7" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-138C130.4618,-138 117.2165,-138 104.2832,-138"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-134.5001 94.0202,-138 104.0202,-141.5001 104.0203,-134.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Fill the upper/lower triangle of the symmetric matrix
+@param[inout] a     square NxN matrix in triangular form
+@param[in]    n     matrix dimension
+@param[in]    uplo  U if <code>A</code> is upper triangular, L if lower triangular</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~140"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(n,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~219"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~79"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~triangular_to_full~~CallsGraph Pages: 1 -->
+<svg id="proctriangular_to_fullCallsGraph" width="240pt" height="32pt"
+ viewBox="0.00 0.00 240.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~triangular_to_full~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~triangular_to_full~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 236,-28 236,4 -4,4"/>
+<!-- proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CallsGraph_node1" class="node">
+<title>proc~triangular_to_full</title>
+<polygon fill="none" stroke="#000000" points="103,-24 0,-24 0,0 103,0 103,-24"/>
+<text text-anchor="middle" x="51.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">triangular_to_full</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~triangular_to_full~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~triangular_to_full~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="232,-24 139,-24 139,0 232,0 232,-24"/>
+<text text-anchor="middle" x="185.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~triangular_to_full&#45;&gt;interface~show_message -->
+<g id="proc~~triangular_to_full~~CallsGraph_edge1" class="edge">
+<title>proc~triangular_to_full&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M103.3079,-12C111.5806,-12 120.1795,-12 128.5633,-12"/>
+<polygon fill="#000000" stroke="#000000" points="128.6466,-15.5001 138.6465,-12 128.6465,-8.5001 128.6466,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~triangular_to_full~~CalledByGraph Pages: 1 -->
+<svg id="proctriangular_to_fullCalledByGraph" width="532pt" height="238pt"
+ viewBox="0.00 0.00 532.00 238.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~triangular_to_full~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 234)">
+<title>proc~~triangular_to_full~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-234 528,-234 528,4 -4,4"/>
+<!-- proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node1" class="node">
+<title>proc~triangular_to_full</title>
+<polygon fill="none" stroke="#000000" points="524,-126 421,-126 421,-102 524,-102 524,-126"/>
+<text text-anchor="middle" x="472.5" y="-111.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">triangular_to_full</text>
+</g>
+<!-- proc~electric_moments -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node2" class="node">
+<title>proc~electric_moments</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node2"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="385,-230 277,-230 277,-206 385,-206 385,-230"/>
+<text text-anchor="middle" x="331" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge1" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M367.672,-205.9745C373.6592,-203.3874 379.6476,-200.3927 385,-197 412.6047,-179.5023 439.077,-152.4846 455.535,-134.0618"/>
+<polygon fill="#000000" stroke="#000000" points="458.4056,-136.0963 462.3601,-126.2671 453.1392,-131.4849 458.4056,-136.0963"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node3" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node3"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="377.5,-188 284.5,-188 284.5,-164 377.5,-164 377.5,-188"/>
+<text text-anchor="middle" x="331" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge2" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M363.1248,-163.9163C370.358,-161.0822 377.9723,-158.009 385,-155 402.9195,-147.3277 422.5983,-138.1735 438.7478,-130.4633"/>
+<polygon fill="#000000" stroke="#000000" points="440.3089,-133.5964 447.8085,-126.1126 437.2788,-127.2861 440.3089,-133.5964"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node4" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node4"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="241,-104 132,-104 132,-80 241,-80 241,-104"/>
+<text text-anchor="middle" x="186.5" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge3" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M241.3053,-96.2158C289.7113,-99.9393 360.2374,-105.3644 410.6499,-109.2423"/>
+<polygon fill="#000000" stroke="#000000" points="410.53,-112.7433 420.769,-110.0207 411.067,-105.7639 410.53,-112.7433"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node5" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node5"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="360,-146 302,-146 302,-122 360,-122 360,-146"/>
+<text text-anchor="middle" x="331" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_fxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge9" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_fxc</title>
+<path fill="none" stroke="#000000" d="M227.9079,-104.0355C248.1696,-109.9247 272.4151,-116.9719 292.3015,-122.752"/>
+<polygon fill="#000000" stroke="#000000" points="291.3879,-126.1312 301.9674,-125.5614 293.3417,-119.4094 291.3879,-126.1312"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node6" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node6"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="361.5,-66 300.5,-66 300.5,-42 361.5,-42 361.5,-66"/>
+<text text-anchor="middle" x="331" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_gxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge11" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_gxc</title>
+<path fill="none" stroke="#000000" d="M232.2207,-79.9766C250.9175,-75.0598 272.3668,-69.4191 290.4904,-64.653"/>
+<polygon fill="#000000" stroke="#000000" points="291.3974,-68.0336 300.1784,-62.1053 289.617,-61.2638 291.3974,-68.0336"/>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge4" class="edge">
+<title>proc~tddft_fxc&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M360.3189,-129.856C374.9354,-127.7901 393.1945,-125.2093 410.7091,-122.7337"/>
+<polygon fill="#000000" stroke="#000000" points="411.4906,-126.1581 420.9023,-121.293 410.5108,-119.227 411.4906,-126.1581"/>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge5" class="edge">
+<title>proc~tddft_gxc&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M359.6346,-66.1419C381.2114,-75.2911 411.0049,-87.9243 434.5633,-97.9138"/>
+<polygon fill="#000000" stroke="#000000" points="433.3351,-101.1946 443.9079,-101.8762 436.0678,-94.75 433.3351,-101.1946"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node7" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node7"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="363.5,-24 298.5,-24 298.5,0 363.5,0 363.5,-24"/>
+<text text-anchor="middle" x="331" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge6" class="edge">
+<title>proc~utddft_fxc&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M363.6509,-22.4198C370.9311,-25.357 378.433,-28.8932 385,-33 412.2442,-50.0377 438.6198,-76.1945 455.1635,-94.1475"/>
+<polygon fill="#000000" stroke="#000000" points="452.7387,-96.6845 462.0406,-101.7566 457.932,-91.9908 452.7387,-96.6845"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node8" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node8"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="218.5,-188 154.5,-188 154.5,-164 218.5,-164 218.5,-188"/>
+<text text-anchor="middle" x="186.5" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~form_rohf_fock -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge7" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~form_rohf_fock</title>
+<path fill="none" stroke="#000000" d="M218.5692,-176C234.9909,-176 255.4733,-176 274.44,-176"/>
+<polygon fill="#000000" stroke="#000000" points="274.487,-179.5001 284.487,-176 274.487,-172.5001 274.487,-179.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node9" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node9"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="224.5,-146 148.5,-146 148.5,-122 224.5,-122 224.5,-146"/>
+<text text-anchor="middle" x="186.5" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~tddft_fxc -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~tddft_fxc</title>
+<path fill="none" stroke="#000000" d="M224.844,-134C245.4436,-134 270.7991,-134 291.5633,-134"/>
+<polygon fill="#000000" stroke="#000000" points="291.6495,-137.5001 301.6495,-134 291.6494,-130.5001 291.6495,-137.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node10" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node10"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="96,-104 0,-104 0,-80 96,-80 96,-104"/>
+<text text-anchor="middle" x="48" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge8" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M96.0519,-92C104.3629,-92 113.1247,-92 121.7912,-92"/>
+<polygon fill="#000000" stroke="#000000" points="121.8885,-95.5001 131.8885,-92 121.8885,-88.5001 121.8885,-95.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node11" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node11"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="81,-188 15,-188 15,-164 81,-164 81,-188"/>
+<text text-anchor="middle" x="48" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge12" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M81.1742,-176C99.9831,-176 123.7183,-176 143.8935,-176"/>
+<polygon fill="#000000" stroke="#000000" points="144.0744,-179.5001 154.0744,-176 144.0743,-172.5001 144.0744,-179.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~triangular_to_full~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~triangular_to_full~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="92.5,-146 3.5,-146 3.5,-122 92.5,-122 92.5,-146"/>
+<text text-anchor="middle" x="48" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~triangular_to_full~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M92.5846,-134C106.9657,-134 122.9793,-134 137.6513,-134"/>
+<polygon fill="#000000" stroke="#000000" points="138.0552,-137.5001 148.0551,-134 138.0551,-130.5001 138.0552,-137.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">triangular_to_full</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="n">n</span><span class="p">,</span><span class="n">uplo</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">uplo</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">uplo</span><span class="o">==</span><span class="s1">&#39;u&#39;</span><span class="w"> </span><span class="p">.</span><span class="nb">or</span><span class="p">.</span><span class="w"> </span><span class="n">uplo</span><span class="o">==</span><span class="s1">&#39;U&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">n</span>
+<span class="w">        </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    else if</span><span class="w"> </span><span class="p">(</span><span class="n">uplo</span><span class="o">==</span><span class="s1">&#39;l&#39;</span><span class="w"> </span><span class="p">.</span><span class="nb">or</span><span class="p">.</span><span class="w"> </span><span class="n">uplo</span><span class="o">==</span><span class="s1">&#39;L&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">n</span>
+<span class="w">        </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    else</span>
+<span class="k">      call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Invalid parameter UPLO=&#39;</span><span class="o">//</span><span class="n">uplo</span><span class="o">//</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">              </span><span class="s1">&#39; in `triangular_to_full`. Use either `L` or `U`.&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end if</span>
+<span class="k">  end subroutine </span><span class="n">triangular_to_full</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

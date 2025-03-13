@@ -1,0 +1,1442 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>guess_huckel.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>guess_huckel.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for source files.">108 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess_huckel.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">guess_huckel.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/guess_huckel_mod.html">guess_huckel_mod</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/guess_huckel.f90.html#src">guess_huckel.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~guess_huckel.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefileguess_huckelf90EfferentGraph" width="641pt" height="647pt"
+ viewBox="0.00 0.00 641.00 647.44" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph" class="graph" transform="scale(.4827 .4827) rotate(0) translate(4 1337.347)">
+<title>sourcefile~~guess_huckel.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-1337.347 1324,-1337.347 1324,4 -4,4"/>
+<!-- sourcefile~guess_huckel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~guess_huckel.f90</title>
+<polygon fill="none" stroke="#000000" points="1320,-249.5897 1214,-249.5897 1214,-225.5897 1320,-225.5897 1320,-249.5897"/>
+<text text-anchor="middle" x="1267" y="-235.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">guess_huckel.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="594.5,-873.5897 501.5,-873.5897 501.5,-849.5897 594.5,-849.5897 594.5,-873.5897"/>
+<text text-anchor="middle" x="548" y="-859.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-1054.5897C969.0088,-1089.926 994.7553,-1136.7091 947,-1185.5897 921.8442,-1211.3383 913.9461,-1220.954 879,-1229.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-1229.5897C750.5768,-1261.3251 728.2532,-1143.7424 655,-1033.5897 626.9823,-991.4588 646.7059,-967.9262 619,-925.5897 607.3016,-907.7137 589.4145,-891.6322 574.5211,-880.0607"/>
+<polygon fill="#000000" stroke="#000000" points="576.266,-876.9941 566.1674,-873.7893 572.0633,-882.5922 576.266,-876.9941"/>
+</g>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~c_interop.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/c_interop.f90.html" xlink:title="c_interop.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="921.5,-1086.5897 836.5,-1086.5897 836.5,-1062.5897 921.5,-1062.5897 921.5,-1086.5897"/>
+<text text-anchor="middle" x="879" y="-1072.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">c_interop.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-1054.5897C999.1027,-1071.937 962.0071,-1076.9417 931.9961,-1077.6072"/>
+<polygon fill="#000000" stroke="#000000" points="931.679,-1074.1091 921.7022,-1077.6748 931.725,-1081.109 931.679,-1074.1091"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="118,-1084.5897 17,-1084.5897 17,-1060.5897 118,-1060.5897 118,-1084.5897"/>
+<text text-anchor="middle" x="67.5" y="-1070.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-1269.5897C501.4582,-1259.8128 488.5571,-1270.3675 441,-1270.5897 385.4451,-1270.8493 370.2596,-1282.5195 316,-1270.5897 307.3331,-1268.6841 177.9694,-1209.0828 171,-1203.5897 130.7094,-1171.8335 96.6576,-1121.3702 79.4769,-1093.2465"/>
+<polygon fill="#000000" stroke="#000000" points="82.4537,-1091.4049 74.3125,-1084.6246 76.4485,-1095.0019 82.4537,-1091.4049"/>
+</g>
+<!-- sourcefile~guess.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~guess.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/guess.f90.html" xlink:title="guess.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1060.5,-248.5897 994.5,-248.5897 994.5,-224.5897 1060.5,-224.5897 1060.5,-248.5897"/>
+<text text-anchor="middle" x="1027.5" y="-234.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~guess.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~guess.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1143,-85.5897C1110.8503,-80.6066 1059.7207,-172.8477 1037.9099,-215.525"/>
+<polygon fill="#000000" stroke="#000000" points="1034.7482,-214.0217 1033.3696,-224.5264 1040.9981,-217.1742 1034.7482,-214.0217"/>
+</g>
+<!-- sourcefile~huckel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~huckel.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/huckel.f90.html" xlink:title="huckel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1178,-381.5897 1108,-381.5897 1108,-357.5897 1178,-357.5897 1178,-381.5897"/>
+<text text-anchor="middle" x="1143" y="-367.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1255.5566,-249.7713C1234.0565,-272.6586 1187.4587,-322.2627 1161.4666,-349.9317"/>
+<polygon fill="#000000" stroke="#000000" points="1158.7115,-347.7526 1154.4157,-357.4375 1163.8135,-352.5454 1158.7115,-347.7526"/>
+</g>
+<!-- sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~mathlib.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/mathlib.f90.html" xlink:title="mathlib.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="917,-95.5897 841,-95.5897 841,-71.5897 917,-71.5897 917,-95.5897"/>
+<text text-anchor="middle" x="879" y="-81.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~mathlib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1263.1083,-225.2031C1251.4754,-190.9037 1213.3374,-96.4917 1143,-85.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1143,-85.5897C1068.4775,-74.039 980.6975,-76.5095 927.4837,-79.7494"/>
+<polygon fill="#000000" stroke="#000000" points="927.0705,-76.2687 917.316,-80.4038 927.5201,-83.2542 927.0705,-76.2687"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="269.5,-719.5897 181.5,-719.5897 181.5,-695.5897 269.5,-695.5897 269.5,-719.5897"/>
+<text text-anchor="middle" x="225.5" y="-705.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-1229.5897C808.0914,-1254.1011 790.0178,-1268.5086 715,-1269.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-1269.5897C604.4774,-1271.1824 379.1239,-1063.3264 316,-972.5897 283.4712,-925.8316 298.2201,-903.557 280,-849.5897 265.3948,-806.3297 245.656,-756.7267 234.3813,-729.0846"/>
+<polygon fill="#000000" stroke="#000000" points="237.5348,-727.5497 230.5029,-719.6248 231.058,-730.2051 237.5348,-727.5497"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="416.5,-603.5897 340.5,-603.5897 340.5,-579.5897 416.5,-579.5897 416.5,-603.5897"/>
+<text text-anchor="middle" x="378.5" y="-589.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1265.9414,-249.7356C1258.1188,-337.7794 1207.7811,-875.34 1143,-897.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1143,-897.5897C951.9211,-963.2177 1225.6123,-579.8201 1072,-448.5897 971.2412,-362.5119 580.273,-405.545 477,-488.5897 447.5599,-512.2633 468.2825,-539.4588 441,-565.5897 436.5959,-569.8079 431.4094,-573.3842 425.9384,-576.4057"/>
+<polygon fill="#000000" stroke="#000000" points="424.0059,-573.454 416.5508,-580.9821 427.0733,-579.7462 424.0059,-573.454"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-643.5897 25.5,-643.5897 25.5,-619.5897 109.5,-619.5897 109.5,-643.5897"/>
+<text text-anchor="middle" x="67.5" y="-629.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-1269.5897C640.9966,-1275.2848 621.1509,-1282.1548 548,-1269.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-1269.5897C477.2477,-1257.4366 490.0355,-1201.0215 441,-1148.5897 393.1526,-1097.4283 366.4399,-1101.1971 316,-1052.5897 243.2681,-982.5002 223.3714,-963.9593 171,-877.5897 124.0596,-800.1768 88.4803,-697.6293 74.2641,-653.4105"/>
+<polygon fill="#000000" stroke="#000000" points="77.5471,-652.1841 71.189,-643.7091 70.8743,-654.2993 77.5471,-652.1841"/>
+</g>
+<!-- sourcefile~printing.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~printing.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/printing.f90.html" xlink:title="printing.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="917,-987.5897 841,-987.5897 841,-963.5897 917,-963.5897 917,-987.5897"/>
+<text text-anchor="middle" x="879" y="-973.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">printing.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~printing.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~printing.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1143,-897.5897C1060.9591,-925.3988 1101.4239,-1009.4311 1027.5,-1054.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-1054.5897C1016.1425,-1061.5277 945.6564,-1018.5237 906.013,-993.1877"/>
+<polygon fill="#000000" stroke="#000000" points="907.6574,-990.084 897.353,-987.6206 903.8722,-995.9723 907.6574,-990.084"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-1289.5897 32.5,-1289.5897 32.5,-1265.5897 102.5,-1265.5897 102.5,-1289.5897"/>
+<text text-anchor="middle" x="67.5" y="-1275.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-1269.5897C639.1049,-1275.4304 621.419,-1287.4944 548,-1307.5897"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="773.5,-991.5897 656.5,-991.5897 656.5,-967.5897 773.5,-967.5897 773.5,-991.5897"/>
+<text text-anchor="middle" x="715" y="-977.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-1054.5897C1004.8982,-1068.3966 843.9057,-1020.4614 762.2494,-994.7784"/>
+<polygon fill="#000000" stroke="#000000" points="762.8144,-991.2865 752.2246,-991.6117 760.7059,-997.9614 762.8144,-991.2865"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="747,-873.5897 683,-873.5897 683,-849.5897 747,-849.5897 747,-873.5897"/>
+<text text-anchor="middle" x="715" y="-859.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1143,-897.5897C1072.293,-921.557 850.3334,-886.0037 757.0023,-869.3797"/>
+<polygon fill="#000000" stroke="#000000" points="757.5245,-865.9176 747.0631,-867.5941 756.2866,-872.8073 757.5245,-865.9176"/>
+</g>
+<!-- sourcefile~util.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~util.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/util.f90.html" xlink:title="util.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1170,-37.5897 1116,-37.5897 1116,-13.5897 1170,-13.5897 1170,-37.5897"/>
+<text text-anchor="middle" x="1143" y="-23.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~util.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~util.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1261.3623,-225.5517C1248.1368,-197.6814 1213.5396,-126.8802 1178,-71.5897 1172.3417,-62.7868 1165.4855,-53.5227 1159.3463,-45.6338"/>
+<polygon fill="#000000" stroke="#000000" points="1162.0118,-43.362 1153.0566,-37.7002 1156.5264,-47.7107 1162.0118,-43.362"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-863.5897C290.3958,-882.4517 308.4009,-961.297 225.5,-996.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-996.5897C181.3371,-1015.3908 131.6324,-1039.8657 99.969,-1055.8913"/>
+<polygon fill="#000000" stroke="#000000" points="98.0768,-1052.9269 90.7478,-1060.5778 101.2483,-1059.1672 98.0768,-1052.9269"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-707.5897C349.484,-687.6025 309.4607,-688.3278 277.6267,-693.6674"/>
+<polygon fill="#000000" stroke="#000000" points="276.7889,-690.2634 267.6031,-695.5428 278.0763,-697.144 276.7889,-690.2634"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M529.5568,-849.3913C513.6092,-837.9781 490.9788,-819.5733 477,-798.5897 449.6487,-757.5326 462.0138,-738.2237 441,-693.5897 427.0379,-663.9338 406.5358,-632.0752 392.8646,-612.0018"/>
+<polygon fill="#000000" stroke="#000000" points="395.6698,-609.9045 387.1119,-603.6585 389.9069,-613.878 395.6698,-609.9045"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.4089,-857.2218C467.0454,-855.1829 419.3634,-854.8414 378.5,-863.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-863.5897C312.0067,-877.825 288.403,-889.4202 225.5,-863.5897"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="441,-1261.5897 316,-1261.5897 316,-1237.5897 441,-1237.5897 441,-1261.5897"/>
+<text text-anchor="middle" x="378.5" y="-1247.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.1673,-870.4161C491.8952,-874.2431 483.1423,-879.7283 477,-887.5897 384.532,-1005.9371 530.8908,-1103.2731 441,-1223.5897 438.6832,-1226.6907 435.928,-1229.4241 432.8854,-1231.8332"/>
+<polygon fill="#000000" stroke="#000000" points="430.7103,-1229.074 424.2646,-1237.4825 434.5471,-1234.9289 430.7103,-1229.074"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node17" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node17"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="428.5,-1181.5897 328.5,-1181.5897 328.5,-1157.5897 428.5,-1157.5897 428.5,-1181.5897"/>
+<text text-anchor="middle" x="378.5" y="-1167.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.3367,-871.9878C492.3879,-875.7157 483.725,-880.7632 477,-887.5897 403.4237,-962.2771 384.6266,-1094.869 379.9745,-1147.3315"/>
+<polygon fill="#000000" stroke="#000000" points="376.4673,-1147.2849 379.1629,-1157.5311 383.4452,-1147.8402 376.4673,-1147.2849"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node18" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node18"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268.5,-564.5897 182.5,-564.5897 182.5,-540.5897 268.5,-540.5897 268.5,-564.5897"/>
+<text text-anchor="middle" x="225.5" y="-550.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M534.0092,-849.4029C519.6064,-836.8043 496.5696,-816.5052 477,-798.5897 433.0391,-758.3444 427.5829,-741.3996 378.5,-707.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-707.5897C348.5375,-686.9505 277.1608,-609.7495 243.5675,-572.6896"/>
+<polygon fill="#000000" stroke="#000000" points="245.93,-570.0838 236.6281,-565.0117 240.7368,-574.7775 245.93,-570.0838"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node20" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node20"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="268,-1289.5897 183,-1289.5897 183,-1265.5897 268,-1265.5897 268,-1289.5897"/>
+<text text-anchor="middle" x="225.5" y="-1275.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M501.4237,-866.3647C492.1384,-869.413 483.3152,-874.1842 477,-881.5897 387.2855,-986.793 529.629,-1084.4702 441,-1190.5897 403.7785,-1235.1567 369.5794,-1206.2088 316,-1228.5897 294.5779,-1237.538 271.5871,-1250.0262 254.1388,-1260.1555"/>
+<polygon fill="#000000" stroke="#000000" points="251.9007,-1257.4117 245.0607,-1265.5028 255.4535,-1263.4432 251.9007,-1257.4117"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M838.753,-1062.5542C805.2552,-1052.1901 756.5085,-1036.2997 715,-1019.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-1019.5897C689.0519,-1009.1438 676.1217,-1018.928 655,-1000.5897 627.0803,-976.3492 641.151,-955.1945 619,-925.5897 606.0351,-908.2621 587.8552,-891.9806 573.1376,-880.1758"/>
+<polygon fill="#000000" stroke="#000000" points="574.9725,-877.1677 564.9377,-873.7685 570.6624,-882.6836 574.9725,-877.1677"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-1019.5897C546.0868,-951.5905 447.6877,-1052.3431 316,-926.5897 308.3817,-919.3147 255.0105,-783.4623 233.9845,-729.4583"/>
+<polygon fill="#000000" stroke="#000000" points="237.1196,-727.8631 230.2337,-719.8111 230.5954,-730.3998 237.1196,-727.8631"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M863.9718,-1086.7869C809.5954,-1130.9053 625.9191,-1279.796 619,-1283.5897 589.7925,-1299.6038 578.9335,-1295.2346 548,-1307.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-1307.5897C409.1611,-1344.2942 369.0506,-1331.6746 225.5,-1327.5897"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M837.3767,-1062.5192C828.2326,-1058.844 818.9236,-1054.2403 811,-1048.5897 790.707,-1034.118 794.9719,-1020.5013 775,-1005.5897 770.2796,-1002.0653 765.0077,-998.9014 759.6017,-996.0968"/>
+<polygon fill="#000000" stroke="#000000" points="760.982,-992.8772 750.4511,-991.7155 757.9591,-999.1908 760.982,-992.8772"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M866.6573,-1062.4099C852.1697,-1047.6938 827.9709,-1021.7649 811,-996.5897 791.2237,-967.2528 795.3031,-954.5644 775,-925.5897 763.5642,-909.2696 748.1443,-892.9133 735.8004,-880.8212"/>
+<polygon fill="#000000" stroke="#000000" points="738.2119,-878.2844 728.5752,-873.8816 733.3629,-883.333 738.2119,-878.2844"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1020.6202,-248.6378C1010.5715,-266.8381 992.0901,-302.7157 983,-335.5897 946.5045,-467.5748 1020.8188,-526.252 947,-641.5897 881.831,-743.4126 831.3119,-750.6283 715,-783.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-783.5897C666.3796,-801.1553 612.6178,-827.6138 579.5665,-844.7458"/>
+<polygon fill="#000000" stroke="#000000" points="577.6523,-841.7969 570.4091,-849.5291 580.8932,-848.0015 577.6523,-841.7969"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~mathlib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1017.1186,-224.5057C1002.0625,-207.1222 973.1078,-174.2199 947,-147.5897 931.7252,-132.0092 913.7167,-115.122 900.0707,-102.6083"/>
+<polygon fill="#000000" stroke="#000000" points="902.3409,-99.9417 892.5939,-95.7888 897.6236,-105.1136 902.3409,-99.9417"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1020.8292,-248.6983C1011.047,-266.976 992.9017,-302.9509 983,-335.5897 955.0005,-427.8835 1009.3915,-476.0409 947,-549.5897 894.7199,-611.2188 854.7162,-595.2976 775,-608.5897 722.393,-617.3615 708.058,-614.0017 655,-608.5897 530.1748,-595.8573 498.21,-514.0001 378.5,-551.5897"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-161.5897C605.886,-155.0792 578.585,-183.232 477,-223.5897 430.6025,-242.0225 428.3367,-274.6233 378.5,-277.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-277.5897C310.5407,-279.9424 281.0124,-238.3166 225.5,-277.5897"/>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1020.4532,-248.5933C1010.1915,-266.7371 991.4417,-302.5432 983,-335.5897 957.5129,-435.3637 1012.5252,-718.1485 947,-797.5897 934.8172,-812.3599 821.1441,-838.7891 757.5603,-852.6096"/>
+<polygon fill="#000000" stroke="#000000" points="756.469,-849.2645 747.433,-854.7964 757.9465,-856.1068 756.469,-849.2645"/>
+</g>
+<!-- sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node19" class="node">
+<title>sourcefile~eigen.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node19"><a xlink:href="../sourcefile/eigen.f90.html" xlink:title="eigen.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="747.5,-95.5897 682.5,-95.5897 682.5,-71.5897 747.5,-71.5897 747.5,-95.5897"/>
+<text text-anchor="middle" x="715" y="-81.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eigen.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1007.5199,-224.587C979.6224,-208.2791 927.013,-179.1471 879,-161.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-161.5897C830.4653,-143.8415 821.8374,-131.4272 775,-109.5897 768.0676,-106.3575 760.6283,-103.0258 753.429,-99.8707"/>
+<polygon fill="#000000" stroke="#000000" points="754.3975,-96.4756 743.8308,-95.7038 751.6099,-102.8966 754.3975,-96.4756"/>
+</g>
+<!-- sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node24" class="node">
+<title>sourcefile~oqp_linalg.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node24"><a xlink:href="../sourcefile/oqp_linalg.f90.html" xlink:title="oqp_linalg.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="593,-133.5897 503,-133.5897 503,-109.5897 593,-109.5897 593,-133.5897"/>
+<text text-anchor="middle" x="548" y="-119.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~guess.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-161.5897C810.5445,-136.5569 787.7595,-165.931 715,-161.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-161.5897C672.6568,-159.0632 625.7951,-146.9892 592.5173,-136.7608"/>
+<polygon fill="#000000" stroke="#000000" points="593.2352,-133.3177 582.6459,-133.6583 591.1364,-139.9956 593.2352,-133.3177"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1142.4767,-381.9295C1139.8067,-438.9904 1125.6557,-682.6066 1072,-873.5897 1058.5122,-921.5985 1057.2902,-936.5983 1027.5,-976.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-976.5897C1005.3431,-1006.334 982.9561,-963.6899 947,-954.5897 825.4123,-923.8169 682.0198,-891.3132 604.5477,-874.0632"/>
+<polygon fill="#000000" stroke="#000000" points="605.0406,-870.5874 594.5193,-871.8335 603.5213,-877.4205 605.0406,-870.5874"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~guess.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge39" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~guess.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1132.3411,-357.3158C1112.3147,-334.2551 1068.9111,-284.2752 1044.7007,-256.3966"/>
+<polygon fill="#000000" stroke="#000000" points="1047.3327,-254.0894 1038.1332,-248.834 1042.0474,-258.6792 1047.3327,-254.0894"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~mathlib.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge42" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~mathlib.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-123.5897C1012.3013,-110.8535 964.7471,-99.4308 927.5004,-92.085"/>
+<polygon fill="#000000" stroke="#000000" points="927.7849,-88.5756 917.3037,-90.1235 926.4625,-95.4496 927.7849,-88.5756"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge43" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1142.3764,-382.0251C1137.7919,-459.4545 1102.8486,-871.8373 879,-859.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-859.5897C819.3087,-872.4884 676.8156,-790.2566 619,-770.5897 587.465,-759.8625 579.8144,-756.4575 548,-746.5897"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge45" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1107.8668,-361.1668C1085.1081,-356.2928 1054.7394,-350.8733 1027.5,-349.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-349.5897C961.5492,-346.482 937.9481,-383.3265 879,-353.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-353.5897C768.8823,-298.0401 740.8553,-275.6405 619,-256.5897 556.6463,-246.8414 539.7634,-249.9735 477,-256.5897 432.485,-261.2822 423.2348,-276.041 378.5,-277.5897"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge46" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-859.5897C837.695,-857.3297 790.455,-858.2789 757.3182,-859.5227"/>
+<polygon fill="#000000" stroke="#000000" points="756.9322,-856.0352 747.0804,-859.9331 757.2127,-863.0296 756.9322,-856.0352"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-976.5897C1006.8774,-1004.4277 998.5683,-1009.6401 983,-1040.5897 960.4528,-1085.4133 984.989,-1114.8122 947,-1147.5897 873.7472,-1210.7934 587.9008,-1236.6691 451.5899,-1245.5792"/>
+<polygon fill="#000000" stroke="#000000" points="451.0031,-1242.1095 441.2472,-1246.2414 451.4505,-1249.0952 451.0031,-1242.1095"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-349.5897C990.8402,-349.2634 983.4397,-363.5654 947,-367.5897 886.9208,-374.2247 871.4404,-368.2883 811,-367.5897 618.7392,-365.3673 558.8666,-290.9787 378.5,-357.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-357.5897C352.0902,-368.2124 338.4223,-354.0523 316,-371.5897 263.8626,-412.3685 239.4495,-491.158 230.192,-529.924"/>
+<polygon fill="#000000" stroke="#000000" points="226.6695,-529.6337 227.8815,-540.159 233.4977,-531.1752 226.6695,-529.6337"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge38" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1140.9937,-357.4161C1133.7375,-317.3715 1105.0696,-188.5916 1027.5,-123.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-123.5897C993.0938,-94.7579 989.5506,-76.8903 947,-62.5897 889.7049,-43.3336 871.0944,-56.0937 811,-62.5897 793.3013,-64.5029 774.0816,-68.3452 757.5212,-72.2263"/>
+<polygon fill="#000000" stroke="#000000" points="756.4864,-68.8756 747.591,-74.6309 758.1339,-75.679 756.4864,-68.8756"/>
+</g>
+<!-- sourcefile~huckel_lut.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node22" class="node">
+<title>sourcefile~huckel_lut.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node22"><a xlink:href="../sourcefile/huckel_lut.f90.html" xlink:title="huckel_lut.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1072,-401.5897 983,-401.5897 983,-377.5897 1072,-377.5897 1072,-401.5897"/>
+<text text-anchor="middle" x="1027.5" y="-387.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_lut.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~huckel_lut.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge40" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~huckel_lut.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1107.7186,-375.699C1099.708,-377.0861 1091.014,-378.5916 1082.4045,-380.0824"/>
+<polygon fill="#000000" stroke="#000000" points="1081.6388,-376.6628 1072.3826,-381.8178 1082.8332,-383.5602 1081.6388,-376.6628"/>
+</g>
+<!-- sourcefile~int1.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node23" class="node">
+<title>sourcefile~int1.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node23"><a xlink:href="../sourcefile/int1.f90.html" xlink:title="int1.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="1055,-481.5897 1000,-481.5897 1000,-457.5897 1055,-457.5897 1055,-481.5897"/>
+<text text-anchor="middle" x="1027.5" y="-467.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge41" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1128.8374,-381.8517C1108.9001,-399.1134 1072.3921,-430.7221 1049.0688,-450.9154"/>
+<polygon fill="#000000" stroke="#000000" points="1046.6868,-448.3481 1041.4176,-457.5398 1051.2688,-453.6402 1046.6868,-448.3481"/>
+</g>
+<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge44" class="edge">
+<title>sourcefile~huckel.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1027.5,-123.5897C1000.5603,-101.6834 749.6703,-121.6917 715,-123.5897"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge48" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M859.8684,-95.7633C843.8637,-107.0878 821.9428,-125.5104 811,-147.5897 776.9663,-216.2594 825.0839,-432.5774 775,-490.5897 726.0511,-547.2874 380.7523,-550.9104 378.5,-551.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-551.5897C350.8005,-560.2875 338.0326,-551.6827 316,-570.5897 287.9407,-594.6684 300.3961,-614.7496 280,-645.5897 269.9797,-660.7409 256.5217,-676.0876 245.4864,-687.722"/>
+<polygon fill="#000000" stroke="#000000" points="242.7491,-685.5175 238.3058,-695.1355 247.7772,-690.3876 242.7491,-685.5175"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge50" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M848.4079,-71.5379C815.8675,-59.8128 762.6234,-43.7349 715,-43.5897"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge47" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~eigen.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M840.9629,-83.5897C816.0965,-83.5897 783.5722,-83.5897 757.802,-83.5897"/>
+<polygon fill="#000000" stroke="#000000" points="757.5727,-80.0898 747.5727,-83.5897 757.5726,-87.0898 757.5727,-80.0898"/>
+</g>
+<!-- sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge49" class="edge">
+<title>sourcefile~mathlib.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.3156,-95.6775C812.5434,-106.5076 761.0893,-121.0666 715,-123.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-123.5897C677.7726,-125.6276 635.8107,-125.1138 603.2622,-124.0974"/>
+<polygon fill="#000000" stroke="#000000" points="603.1557,-120.5919 593.0433,-123.7523 602.9194,-127.5879 603.1557,-120.5919"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge51" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M220.2431,-719.7339C197.3749,-772.5621 106.3817,-982.7681 76.8253,-1051.0472"/>
+<polygon fill="#000000" stroke="#000000" points="73.5373,-1049.8324 72.7767,-1060.3999 79.9613,-1052.6132 73.5373,-1049.8324"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge52" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M200.4644,-695.5473C173.847,-682.7439 131.5735,-662.4099 101.8524,-648.1136"/>
+<polygon fill="#000000" stroke="#000000" points="103.2084,-644.8821 92.6795,-643.7014 100.174,-651.1902 103.2084,-644.8821"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge53" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M346.8515,-603.6531C316.3139,-614.3799 268.5138,-628.7902 225.5,-631.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-631.5897C190.3326,-633.8785 150.6688,-633.87 119.8793,-633.2935"/>
+<polygon fill="#000000" stroke="#000000" points="119.8694,-629.7926 109.7971,-633.0788 119.7203,-636.791 119.8694,-629.7926"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge54" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M840.8592,-967.368C807.6004,-960.1627 758.0713,-949.3459 715,-939.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-939.5897C663.0188,-927.8153 607.9855,-898.3444 575.8756,-879.1885"/>
+<polygon fill="#000000" stroke="#000000" points="577.4273,-876.0363 567.0617,-873.8442 573.7979,-882.0219 577.4273,-876.0363"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge55" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-939.5897C529.817,-938.9468 242.2405,-989.4629 225.5,-996.5897"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge56" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-939.5897C642.6116,-923.1928 622.1706,-942.3572 548,-939.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-939.5897C485.902,-937.2726 494.4063,-881.3591 441,-849.5897 390.5075,-819.5536 365.118,-838.8244 316,-806.5897 283.8312,-785.4782 255.4864,-750.3758 239.4309,-728.1384"/>
+<polygon fill="#000000" stroke="#000000" points="242.1394,-725.906 233.5166,-719.7498 236.4183,-729.9396 242.1394,-725.906"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge57" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-939.5897C401.2568,-927.2682 361.321,-920.4935 225.5,-863.5897"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge58" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M840.9629,-976.5174C823.961,-976.9321 803.3791,-977.4341 783.8238,-977.9111"/>
+<polygon fill="#000000" stroke="#000000" points="783.6273,-974.4147 773.7156,-978.1576 783.798,-981.4126 783.6273,-974.4147"/>
+</g>
+<!-- sourcefile~printing.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge59" class="edge">
+<title>sourcefile~printing.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M861.4491,-963.3897C832.4731,-943.2478 774.4922,-902.944 740.8287,-879.5438"/>
+<polygon fill="#000000" stroke="#000000" points="742.6335,-876.5358 732.4247,-873.702 738.6381,-882.2836 742.6335,-876.5358"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge60" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M656.45,-981.4438C570.3509,-980.8905 409.6849,-966.8684 316,-877.5897 271.2514,-834.9457 243.9367,-765.2344 232.213,-729.7901"/>
+<polygon fill="#000000" stroke="#000000" points="235.4495,-728.4194 229.0731,-719.9582 228.7813,-730.549 235.4495,-728.4194"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge62" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.8007,-861.5897C660.7106,-861.5897 630.7997,-861.5897 604.7652,-861.5897"/>
+<polygon fill="#000000" stroke="#000000" points="604.6298,-858.0898 594.6298,-861.5897 604.6298,-865.0898 604.6298,-858.0898"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge64" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M709.1248,-849.5191C690.9977,-813.7923 632.0489,-708.406 548,-665.5897"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge65" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M686.5228,-849.4975C676.5217,-845.1852 665.2307,-840.2427 655,-835.5897 607.0455,-813.7796 598.7468,-798.7342 548,-784.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-784.5897C448.3066,-756.8024 410.704,-722.8516 316,-764.5897 261.449,-788.6315 280.6455,-886.2347 225.5,-863.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-863.5897C135.0532,-825.6959 89.1722,-704.0218 73.681,-653.6969"/>
+<polygon fill="#000000" stroke="#000000" points="76.9546,-652.4252 70.7562,-643.8328 70.2434,-654.4152 76.9546,-652.4252"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge61" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.5527,-869.2997C619.0374,-884.5307 483.8486,-917.6886 477,-925.5897 389.6202,-1026.3979 521.5661,-1117.257 441,-1223.5897 438.6623,-1226.675 435.8916,-1229.3967 432.8379,-1231.7974"/>
+<polygon fill="#000000" stroke="#000000" points="430.662,-1229.0379 424.1969,-1237.4316 434.4853,-1234.9016 430.662,-1229.0379"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node21" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node21"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="425.5,-797.5897 331.5,-797.5897 331.5,-773.5897 425.5,-773.5897 425.5,-797.5897"/>
+<text text-anchor="middle" x="378.5" y="-783.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge63" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-784.5897C511.6493,-774.4578 469.1856,-774.7272 435.854,-777.5199"/>
+<polygon fill="#000000" stroke="#000000" points="435.4501,-774.0423 425.8197,-778.4589 436.1024,-781.0119 435.4501,-774.0423"/>
+</g>
+<!-- sourcefile~util.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge66" class="edge">
+<title>sourcefile~util.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1115.9759,-27.5733C1048.4191,-32.3474 866.7166,-44.0522 715,-43.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715,-43.5897C497.6239,-31.3679 406.8889,57.8254 225.5,-62.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-62.5897C204.6799,-77.5747 187.734,-62.1475 171,-81.5897 100.7233,-163.2396 74.5371,-516.1172 68.7883,-609.0754"/>
+<polygon fill="#000000" stroke="#000000" points="65.2794,-609.1202 68.1739,-619.312 72.2668,-609.5397 65.2794,-609.1202"/>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge67" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M365.7132,-1261.7336C340.7719,-1284.0621 283.02,-1329.2265 225.5,-1327.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-1327.5897C180.5406,-1326.3103 131.5722,-1307.9484 100.2566,-1293.8441"/>
+<polygon fill="#000000" stroke="#000000" points="101.6746,-1290.6438 91.1286,-1289.6272 98.7389,-1296.9985 101.6746,-1290.6438"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge69" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M328.4062,-1178.9818C298.6308,-1183.8519 260.0507,-1188.9251 225.5,-1189.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-1189.5897C161.28,-1190.825 106.0983,-1127.022 81.3688,-1093.1315"/>
+<polygon fill="#000000" stroke="#000000" points="84.1227,-1090.9642 75.4841,-1084.8303 78.4121,-1095.0125 84.1227,-1090.9642"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge71" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-1189.5897C175.4638,-1190.5522 179.6313,-1233.9493 135,-1256.5897 127.9199,-1260.1813 120.108,-1263.2986 112.3862,-1265.9521"/>
+<polygon fill="#000000" stroke="#000000" points="111.1614,-1262.6694 102.7153,-1269.0658 113.3068,-1269.3325 111.1614,-1262.6694"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge68" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.5581,-1157.4128C365.9847,-1117.489 335.2313,-986.8535 316,-877.5897 295.7781,-762.6977 327.3204,-724.2193 280,-617.5897 272.3557,-600.3644 258.7355,-584.1181 247.0239,-572.1763"/>
+<polygon fill="#000000" stroke="#000000" points="249.277,-569.4837 239.6854,-564.9834 244.3771,-574.4828 249.277,-569.4837"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge70" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M343.7125,-1181.5974C334.389,-1185.4663 324.5351,-1190.1767 316,-1195.5897 288.2069,-1213.2162 260.8451,-1239.6155 243.61,-1257.668"/>
+<polygon fill="#000000" stroke="#000000" points="240.7271,-1255.6255 236.4386,-1265.3136 245.8327,-1260.4144 240.7271,-1255.6255"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge72" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M201.1588,-564.7603C174.2891,-578.1952 130.8727,-599.9033 100.849,-614.9152"/>
+<polygon fill="#000000" stroke="#000000" points="98.9886,-611.9322 91.6096,-619.5349 102.1192,-618.1932 98.9886,-611.9322"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge74" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M695.197,-95.6876C643.757,-127.4572 507.7658,-213.7503 477,-256.5897 445.759,-300.0908 465.4652,-323.9473 441,-371.5897 398.8112,-453.7462 358.9416,-455.8242 316,-537.5897 292.4747,-582.3844 305.2031,-601.7171 280,-645.5897 270.9517,-661.3407 257.5031,-676.6932 246.2297,-688.1807"/>
+<polygon fill="#000000" stroke="#000000" points="243.5039,-685.9538 238.8534,-695.4734 248.4254,-690.9317 243.5039,-685.9538"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge76" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.0434,-83.1925C621.7854,-82.5111 489.7917,-81.226 378.5,-81.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-81.5897C309.9777,-81.6115 282.5881,-24.6917 225.5,-62.5897"/>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge75" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~oqp_linalg.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.4043,-91.0067C659.847,-96.1395 629.2748,-103.096 602.9874,-109.0776"/>
+<polygon fill="#000000" stroke="#000000" points="602.1221,-105.6849 593.1479,-111.3165 603.6752,-112.5105 602.1221,-105.6849"/>
+</g>
+<!-- sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node28" class="node">
+<title>sourcefile~mathlib_types.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node28"><a xlink:href="../sourcefile/mathlib_types.f90.html" xlink:title="mathlib_types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="280,-114.5897 171,-114.5897 171,-90.5897 280,-90.5897 280,-114.5897"/>
+<text text-anchor="middle" x="225.5" y="-100.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge73" class="edge">
+<title>sourcefile~eigen.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.5,-81.5897C349.3766,-81.6849 317.4221,-85.4801 290.2822,-89.8183"/>
+<polygon fill="#000000" stroke="#000000" points="289.4252,-86.4125 280.1323,-91.5009 290.5701,-93.3182 289.4252,-86.4125"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge78" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-1277.5897C161.0464,-1277.5897 134.6935,-1277.5897 112.6669,-1277.5897"/>
+<polygon fill="#000000" stroke="#000000" points="112.5631,-1274.0898 102.563,-1277.5897 112.563,-1281.0898 112.5631,-1274.0898"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node31" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node31"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-1247.5897 0,-1247.5897 0,-1223.5897 135,-1223.5897 135,-1247.5897"/>
+<text text-anchor="middle" x="67.5" y="-1233.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge77" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.7429,-1266.2239C164.2137,-1261.2984 142.2883,-1255.4701 122.5619,-1250.2264"/>
+<polygon fill="#000000" stroke="#000000" points="123.3425,-1246.8124 112.7789,-1247.6259 121.5441,-1253.5775 123.3425,-1246.8124"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge79" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M354.9291,-773.5731C328.9853,-760.3469 287.1116,-738.9995 258.0476,-724.1826"/>
+<polygon fill="#000000" stroke="#000000" points="259.5965,-721.0437 249.0977,-719.6199 256.4171,-727.28 259.5965,-721.0437"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge80" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M368.3856,-797.5911C344.2644,-824.6769 281.2122,-886.4674 225.5,-863.5897"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge81" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-783.5897C813.3277,-815.2116 785.1274,-763.7165 715,-783.5897"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge82" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1026.4023,-481.6454C1018.5972,-566.7594 971.1167,-1074.3757 947,-1095.5897 825.9891,-1202.0357 306.8467,-1117.3596 128.1852,-1084.3245"/>
+<polygon fill="#000000" stroke="#000000" points="128.6423,-1080.8495 118.1707,-1082.4607 127.3615,-1087.7313 128.6423,-1080.8495"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge84" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-783.5897C836.9785,-803.8235 821.3181,-775.0523 775,-769.5897 674.2925,-757.7126 644.1866,-778.7021 548,-746.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-746.5897C498.1798,-728.3045 492.6728,-705.6859 441,-693.5897 386.9068,-680.9269 371.3921,-689.3306 316,-693.5897 304.1111,-694.5038 291.4206,-696.084 279.4188,-697.8614"/>
+<polygon fill="#000000" stroke="#000000" points="278.8793,-694.4032 269.5318,-699.3906 279.9493,-701.3209 278.8793,-694.4032"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge87" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1025.9867,-481.8677C1021.246,-514.4543 1003.459,-603.2479 947,-641.5897 910.2581,-666.5414 587.5743,-685.7497 548,-665.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548,-665.5897C518.1415,-650.1705 507.9227,-652.7452 477,-639.5897 454.5378,-630.0335 429.8456,-617.9973 410.8027,-608.3683"/>
+<polygon fill="#000000" stroke="#000000" points="412.1718,-605.1378 401.6725,-603.7176 408.9945,-611.3752 412.1718,-605.1378"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge88" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1015.5593,-457.5034C991.7275,-434.052 935.6647,-382.1746 879,-353.5897"/>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~printing.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge89" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~printing.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1026.8081,-481.6488C1023.5901,-531.6903 1007.5693,-727.2147 947,-873.5897 934.2406,-904.4248 911.6015,-935.752 895.9717,-955.4011"/>
+<polygon fill="#000000" stroke="#000000" points="893.1312,-953.3469 889.5482,-963.3175 898.5669,-957.7576 893.1312,-953.3469"/>
+</g>
+<!-- sourcefile~ecp.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node26" class="node">
+<title>sourcefile~ecp.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node26"><a xlink:href="../sourcefile/ecp.f90.html" xlink:title="ecp.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="742.5,-481.5897 687.5,-481.5897 687.5,-457.5897 742.5,-457.5897 742.5,-481.5897"/>
+<text text-anchor="middle" x="715" y="-467.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ecp.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~ecp.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge83" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~ecp.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M999.7677,-469.5897C943.5927,-469.5897 816.3091,-469.5897 752.6815,-469.5897"/>
+<polygon fill="#000000" stroke="#000000" points="752.6702,-466.0898 742.6701,-469.5897 752.6701,-473.0898 752.6702,-466.0898"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node29" class="node">
+<title>sourcefile~mod_1e_primitives.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node29"><a xlink:href="../sourcefile/mod_1e_primitives.f90.html" xlink:title="mod_1e_primitives.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="947,-540.5897 811,-540.5897 811,-516.5897 947,-516.5897 947,-540.5897"/>
+<text text-anchor="middle" x="879" y="-526.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge85" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M999.9163,-480.5489C977.0831,-489.6207 944.3483,-502.6264 918.6957,-512.8183"/>
+<polygon fill="#000000" stroke="#000000" points="917.2473,-509.6276 909.2463,-516.5726 919.832,-516.133 917.2473,-509.6276"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node30" class="node">
+<title>sourcefile~mod_shell_tools.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node30"><a xlink:href="../sourcefile/mod_shell_tools.f90.html" xlink:title="mod_shell_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="775,-717.5897 655,-717.5897 655,-693.5897 775,-693.5897 775,-717.5897"/>
+<text text-anchor="middle" x="715" y="-703.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge86" class="edge">
+<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_shell_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1025.6598,-481.6663C1017.9094,-531.0866 986.4931,-717.2932 947,-759.5897 925.1273,-783.015 907.8762,-769.6855 879,-783.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M879,-783.5897C832.4386,-806.0095 821.8374,-753.4272 775,-731.5897 768.0676,-728.3575 760.6283,-725.0258 753.429,-721.8707"/>
+<polygon fill="#000000" stroke="#000000" points="754.3975,-718.4756 743.8308,-717.7038 751.6099,-724.8966 754.3975,-718.4756"/>
+</g>
+<!-- sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node25" class="node">
+<title>sourcefile~blas_wrap.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node25"><a xlink:href="../sourcefile/blas_wrap.f90.html" xlink:title="blas_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="422.5,-133.5897 334.5,-133.5897 334.5,-109.5897 422.5,-109.5897 422.5,-133.5897"/>
+<text text-anchor="middle" x="378.5" y="-119.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge90" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~blas_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M502.5771,-121.5897C481.0624,-121.5897 455.2029,-121.5897 432.6728,-121.5897"/>
+<polygon fill="#000000" stroke="#000000" points="432.5831,-118.0898 422.583,-121.5897 432.583,-125.0898 432.5831,-118.0898"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node27" class="node">
+<title>sourcefile~lapack_wrap.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node27"><a xlink:href="../sourcefile/lapack_wrap.f90.html" xlink:title="lapack_wrap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="429.5,-212.5897 327.5,-212.5897 327.5,-188.5897 429.5,-188.5897 429.5,-212.5897"/>
+<text text-anchor="middle" x="378.5" y="-198.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge91" class="edge">
+<title>sourcefile~oqp_linalg.f90&#45;&gt;sourcefile~lapack_wrap.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M511.8455,-133.7029C500.5503,-137.7862 488.1353,-142.5857 477,-147.5897 453.1016,-158.3291 427.0336,-172.4701 407.7213,-183.4441"/>
+<polygon fill="#000000" stroke="#000000" points="405.7555,-180.5367 398.8224,-188.5482 409.2383,-186.6088 405.7555,-180.5367"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge93" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M359.0044,-133.7331C344.4058,-143.9999 325.399,-160.128 316,-179.5897 225.6617,-366.6459 360.7218,-454.187 280,-645.5897 273.0104,-662.163 259.7747,-677.388 248.0974,-688.6032"/>
+<polygon fill="#000000" stroke="#000000" points="245.7288,-686.0264 240.7301,-695.368 250.4632,-691.1825 245.7288,-686.0264"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge94" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M349.773,-109.479C330.2058,-101.3398 303.6598,-90.5114 280,-81.5897 255.9978,-72.5388 246.8715,-48.4022 225.5,-62.5897"/>
+</g>
+<!-- sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge92" class="edge">
+<title>sourcefile~blas_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M334.2461,-116.0941C320.5499,-114.3933 305.1659,-112.4828 290.3755,-110.6461"/>
+<polygon fill="#000000" stroke="#000000" points="290.614,-107.1489 280.2588,-109.3898 289.7512,-114.0956 290.614,-107.1489"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge95" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M705.3152,-481.6136C691.7248,-499.1652 667.2853,-533.3421 655,-566.5897 618.8335,-664.4666 668.9787,-706.9926 619,-798.5897 609.0367,-816.8497 591.6371,-832.4193 576.5568,-843.5122"/>
+<polygon fill="#000000" stroke="#000000" points="574.1881,-840.8989 568.0194,-849.5127 578.2134,-846.6258 574.1881,-840.8989"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge98" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M699.4023,-457.4483C643.3199,-414.3204 451.3838,-271.3998 378.5,-277.5897"/>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge96" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M687.279,-464.3881C642.2631,-455.4968 550.8648,-435.5851 477,-407.5897 431.0917,-390.19 425.4618,-343.2749 378.5,-357.5897"/>
+</g>
+<!-- sourcefile~ecpint.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node32" class="node">
+<title>sourcefile~ecpint.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node32"><a xlink:href="../sourcefile/ecpint.f90.html" xlink:title="ecpint.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="582,-521.5897 514,-521.5897 514,-497.5897 582,-497.5897 582,-521.5897"/>
+<text text-anchor="middle" x="548" y="-507.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ecpint.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~ecp.f90&#45;&gt;sourcefile~ecpint.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge97" class="edge">
+<title>sourcefile~ecp.f90&#45;&gt;sourcefile~ecpint.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M687.4233,-476.1949C661.5379,-482.395 622.3821,-491.7736 592.1492,-499.015"/>
+<polygon fill="#000000" stroke="#000000" points="591.1801,-495.6481 582.2705,-501.3812 592.8107,-502.4555 591.1801,-495.6481"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge100" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M367.9166,-212.6004C353.4091,-229.8403 327.8037,-263.2157 316,-296.5897 264.0057,-443.6 342.4354,-502.7006 280,-645.5897 272.751,-662.1796 259.385,-677.494 247.7042,-688.752"/>
+<polygon fill="#000000" stroke="#000000" points="245.3276,-686.1826 240.3528,-695.5369 250.0752,-691.3265 245.3276,-686.1826"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge101" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M348.2613,-212.6088C316.2776,-226.0336 265.0696,-249.5956 225.5,-277.5897"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M225.5,-277.5897C204.5588,-292.4049 188.8112,-278.1293 171,-296.5897 126.1585,-343.0658 84.5464,-542.6443 71.6166,-609.5958"/>
+<polygon fill="#000000" stroke="#000000" points="68.1642,-609.0163 69.7283,-619.495 75.0402,-610.328 68.1642,-609.0163"/>
+</g>
+<!-- sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge99" class="edge">
+<title>sourcefile~lapack_wrap.f90&#45;&gt;sourcefile~mathlib_types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M359.7392,-188.573C333.0126,-171.454 283.8068,-139.9365 252.9699,-120.1848"/>
+<polygon fill="#000000" stroke="#000000" points="254.7228,-117.1512 244.4143,-114.7047 250.9472,-123.0457 254.7228,-117.1512"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge102" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M810.9767,-529.1109C671.8884,-530.2591 363.9797,-533.2541 316,-537.5897 303.856,-538.6871 290.8812,-540.4697 278.6587,-542.4296"/>
+<polygon fill="#000000" stroke="#000000" points="277.8915,-539.0091 268.6035,-544.1064 279.043,-545.9137 277.8915,-539.0091"/>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_shell_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge104" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_shell_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M867.7276,-540.7556C839.874,-570.8172 767.5894,-648.8316 733.4154,-685.7146"/>
+<polygon fill="#000000" stroke="#000000" points="730.5805,-683.6245 726.3513,-693.3386 735.7152,-688.3821 730.5805,-683.6245"/>
+</g>
+<!-- sourcefile~mod_gauss_hermite.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node33" class="node">
+<title>sourcefile~mod_gauss_hermite.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node33"><a xlink:href="../sourcefile/mod_gauss_hermite.f90.html" xlink:title="mod_gauss_hermite.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619,-289.5897 477,-289.5897 477,-265.5897 619,-265.5897 619,-289.5897"/>
+<text text-anchor="middle" x="548" y="-275.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_gauss_hermite.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge103" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~mod_gauss_hermite.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M873.4074,-516.4184C860.0458,-488.4986 823.7166,-419.0661 775,-377.5897 725.1505,-335.1488 654.4534,-307.849 605.2496,-292.6745"/>
+<polygon fill="#000000" stroke="#000000" points="605.9844,-289.2406 595.4,-289.7099 603.9668,-295.9436 605.9844,-289.2406"/>
+</g>
+<!-- sourcefile~rys.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node34" class="node">
+<title>sourcefile~rys.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node34"><a xlink:href="../sourcefile/rys.f90.html" xlink:title="rys.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="405.5,-329.5897 351.5,-329.5897 351.5,-305.5897 405.5,-305.5897 405.5,-329.5897"/>
+<text text-anchor="middle" x="378.5" y="-315.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge105" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M866.2116,-516.4137C847.5189,-499.1898 811.0272,-467.6859 775,-448.5897 651.0642,-382.8975 487.9762,-341.6741 415.7143,-325.458"/>
+<polygon fill="#000000" stroke="#000000" points="416.2474,-321.9914 405.7272,-323.247 414.7343,-328.8259 416.2474,-321.9914"/>
+</g>
+<!-- sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node35" class="node">
+<title>sourcefile~xyzorder.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node35"><a xlink:href="../sourcefile/xyzorder.f90.html" xlink:title="xyzorder.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="755.5,-599.5897 674.5,-599.5897 674.5,-575.5897 755.5,-575.5897 755.5,-599.5897"/>
+<text text-anchor="middle" x="715" y="-585.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyzorder.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge106" class="edge">
+<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~xyzorder.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.4164,-540.6716C820.2109,-549.7394 785.4966,-562.2281 758.22,-572.041"/>
+<polygon fill="#000000" stroke="#000000" points="756.7635,-568.8454 748.5387,-575.5239 759.1331,-575.4321 756.7635,-568.8454"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge107" class="edge">
+<title>sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M702.7392,-717.8037C684.6467,-735.7499 649.6286,-770.1905 619,-798.5897 602.7364,-813.6694 583.9497,-830.306 569.7878,-842.6946"/>
+<polygon fill="#000000" stroke="#000000" points="567.2736,-840.2432 562.038,-849.4541 571.8748,-845.5186 567.2736,-840.2432"/>
+</g>
+<!-- sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge108" class="edge">
+<title>sourcefile~mod_shell_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M654.5361,-706.8254C605.3325,-705.9999 534.8205,-700.5915 477,-679.5897 458.9258,-673.0247 459.0673,-662.1737 441,-655.5897 350.4548,-622.5938 321.6665,-625.3309 225.5,-631.5897"/>
+</g>
+<!-- sourcefile~mod_gauss_hermite.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge109" class="edge">
+<title>sourcefile~mod_gauss_hermite.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M476.963,-274.9168C446.5844,-274.4652 410.7537,-274.8504 378.5,-277.5897"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge111" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M351.4467,-308.1464C310.3395,-294.1508 235.8101,-270.2956 225.5,-277.5897"/>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge110" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M351.2653,-323.9291C339.2151,-327.892 325.6252,-334.1023 316,-343.5897 261.7148,-397.0978 237.8682,-488.532 229.4003,-530.4327"/>
+<polygon fill="#000000" stroke="#000000" points="225.9318,-529.9366 227.4879,-540.4166 232.8068,-531.2536 225.9318,-529.9366"/>
+</g>
+<!-- sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_node36" class="node">
+<title>sourcefile~rys_lut.f90</title>
+<g id="a_sourcefile~~guess_huckel.f90~~EfferentGraph_node36"><a xlink:href="../sourcefile/rys_lut.f90.html" xlink:title="rys_lut.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="260.5,-329.5897 190.5,-329.5897 190.5,-305.5897 260.5,-305.5897 260.5,-329.5897"/>
+<text text-anchor="middle" x="225.5" y="-315.1897" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90 -->
+<g id="sourcefile~~guess_huckel.f90~~EfferentGraph_edge112" class="edge">
+<title>sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M351.4989,-317.5897C329.1572,-317.5897 296.9445,-317.5897 270.6831,-317.5897"/>
+<polygon fill="#000000" stroke="#000000" points="270.5766,-314.0898 260.5766,-317.5897 270.5765,-321.0898 270.5766,-314.0898"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefileguess_huckelf90EfferentGraph = svgPanZoom('#sourcefileguess_huckelf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">guess_huckel_mod</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w">  </span><span class="k">implicit none</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="k">  </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">module_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;guess_huckel_mod&quot;</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="k">contains</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="k">  subroutine </span><span class="n">guess_huckel_C</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;guess_huckel&quot;</span><span class="p">)</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="w">    </span><span class="k">use </span><span class="n">c_interop</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">oqp_handle_t</span><span class="p">,</span><span class="w"> </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">    </span><span class="n">inf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">oqp_handle_get_info</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">    </span><span class="k">call </span><span class="n">guess_huckel</span><span class="p">(</span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">guess_huckel_C</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">guess_huckel</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">IW</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">    </span><span class="k">use </span><span class="n">guess</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">get_ab_initio_density</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">matrix_invsqrt</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="k">use </span><span class="n">huckel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">huckel_guess</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">Cstring</span><span class="p">,</span><span class="w"> </span><span class="n">fstring</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="w">    </span><span class="k">use </span><span class="n">printing</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">print_module_info</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="w">    </span><span class="k">use </span><span class="nb">iso_c_binding</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="kt">c_char</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="kt">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;guess_huckel&quot;</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span>
+<a id="ln-41" name="ln-41" href="#ln-41"></a>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">huckel_basis</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="p">:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">err</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">  </span><span class="c">! tagarray</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">      </span><span class="n">Smat</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">      </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="w">      </span><span class="n">dmat_b</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_b</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">(:)</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a><span class="w">      </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="w">      </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="w">      </span><span class="n">OQP_SM</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_hbasis_filename</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">(:)</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">  </span><span class="c">! Section of Tagarray for the log filename</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a><span class="w">  </span><span class="c">! We are getting lot file name from Python via tagarray</span>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_hbasis_filename</span><span class="p">,</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">)</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="kt">character</span><span class="p">(</span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span><span class="p">)</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">basis_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">       </span><span class="n">basis_file</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis_filename</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="w">   </span><span class="c">!</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="w">  </span><span class="c">! Files open</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="w">  </span><span class="c">! 1. XYZ: Read : Geometric data, ATOMS</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">  </span><span class="c">! 3. LOG: Read Write: Main output file</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">    </span><span class="k">call </span><span class="n">print_module_info</span><span class="p">(</span><span class="s1">&#39;Guess_Huckel&#39;</span><span class="p">,</span><span class="s1">&#39;Initial guess using Huckel theory&#39;</span><span class="p">)</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="w">  </span><span class="c">! Readings</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a><span class="w">  </span><span class="c">! load basis set</span>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a><span class="k">      call </span><span class="n">huckel_basis</span><span class="p">%</span><span class="n">from_file</span><span class="p">(</span><span class="n">basis_file</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">,</span><span class="w"> </span><span class="n">err</span><span class="p">)</span>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">  </span><span class="c">! Checking error of basis set reading..</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">    </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">basis_set_issue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">err</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">basis_set_issue</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="w">  </span><span class="c">!  Allocate H, S ,T and D matrices</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a><span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">    </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="w">    </span><span class="c">! clean data</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">(</span><span class="n">tags_alpha</span><span class="p">)</span>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">(</span><span class="n">tags_beta</span><span class="p">)</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">    </span><span class="c">! load general data</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_SM</span><span class="p">,</span><span class="w"> </span><span class="n">smat</span><span class="p">)</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">    </span><span class="c">! allocate alpha</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_DM_A_comment</span><span class="p">)</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_E_MO_A_comment</span><span class="p">)</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_VEC_MO_A_comment</span><span class="p">)</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="w">    </span><span class="c">! load alpha data</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">)</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">)</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">)</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a>
+<a id="ln-117" name="ln-117" href="#ln-117"></a><span class="w">  </span><span class="c">! UHF/ROHF</span>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a><span class="w">      </span><span class="c">! allocate beta</span>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="w">      </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_DM_B_comment</span><span class="p">)</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a><span class="w">      </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_E_MO_B_comment</span><span class="p">)</span>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="w">      </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_VEC_MO_B_comment</span><span class="p">)</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">      </span><span class="c">! load beta</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a><span class="w">      </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">)</span>
+<a id="ln-127" name="ln-127" href="#ln-127"></a><span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">)</span>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_b</span><span class="p">)</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-130" name="ln-130" href="#ln-130"></a>
+<a id="ln-131" name="ln-131" href="#ln-131"></a><span class="w">  </span><span class="c">! Calculate Huckel MO</span>
+<a id="ln-132" name="ln-132" href="#ln-132"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-133" name="ln-133" href="#ln-133"></a><span class="k">      call </span><span class="n">huckel_guess</span><span class="p">(</span><span class="n">Smat</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">huckel_basis</span><span class="p">)</span>
+<a id="ln-134" name="ln-134" href="#ln-134"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-135" name="ln-135" href="#ln-135"></a><span class="w">  </span><span class="c">!  For ROHF/UHF</span>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">INFOS</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="n">MO_B</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MO_A</span>
+<a id="ln-137" name="ln-137" href="#ln-137"></a><span class="w">  </span><span class="c">!</span>
+<a id="ln-138" name="ln-138" href="#ln-138"></a><span class="w">  </span><span class="c">! Calculate Density Matrix</span>
+<a id="ln-139" name="ln-139" href="#ln-139"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-140" name="ln-140" href="#ln-140"></a><span class="w">  </span><span class="c">! RHF</span>
+<a id="ln-141" name="ln-141" href="#ln-141"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-142" name="ln-142" href="#ln-142"></a><span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="o">=</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">)</span>
+<a id="ln-143" name="ln-143" href="#ln-143"></a><span class="w">  </span><span class="c">! ROHF/UHF</span>
+<a id="ln-144" name="ln-144" href="#ln-144"></a><span class="w">      </span><span class="k">else</span>
+<a id="ln-145" name="ln-145" href="#ln-145"></a><span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">)</span>
+<a id="ln-146" name="ln-146" href="#ln-146"></a><span class="w">      </span><span class="k">endif</span>
+<a id="ln-147" name="ln-147" href="#ln-147"></a><span class="k">    endif</span>
+<a id="ln-148" name="ln-148" href="#ln-148"></a><span class="w">    </span><span class="c">! Broadcast MO and density matrices to all processes</span>
+<a id="ln-149" name="ln-149" href="#ln-149"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-150" name="ln-150" href="#ln-150"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-151" name="ln-151" href="#ln-151"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<a id="ln-152" name="ln-152" href="#ln-152"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-153" name="ln-153" href="#ln-153"></a><span class="w">    </span><span class="c">! Broadcast the density matrices to all processes</span>
+<a id="ln-154" name="ln-154" href="#ln-154"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-155" name="ln-155" href="#ln-155"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-156" name="ln-156" href="#ln-156"></a><span class="w">    </span><span class="k">else</span>
+<a id="ln-157" name="ln-157" href="#ln-157"></a><span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-158" name="ln-158" href="#ln-158"></a><span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<a id="ln-159" name="ln-159" href="#ln-159"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-160" name="ln-160" href="#ln-160"></a><span class="k">    call </span><span class="n">pe</span><span class="p">%</span><span class="n">barrier</span><span class="p">()</span>
+<a id="ln-161" name="ln-161" href="#ln-161"></a><span class="w">    </span><span class="k">write</span><span class="w"> </span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/x,a,/)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;...... End of initial orbital guess ......&#39;</span>
+<a id="ln-162" name="ln-162" href="#ln-162"></a><span class="w">    </span><span class="k">call </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="o">=</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-163" name="ln-163" href="#ln-163"></a><span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-164" name="ln-164" href="#ln-164"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">guess_huckel</span>
+<a id="ln-165" name="ln-165" href="#ln-165"></a>
+<a id="ln-166" name="ln-166" href="#ln-166"></a><span class="k">end module </span><span class="n">guess_huckel_mod</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

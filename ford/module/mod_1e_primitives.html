@@ -1,0 +1,2894 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mod_1e_primitives &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mod_1e_primitives
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 2.0% of total for modules and submodules.">944 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mod_1e_primitives.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mod_1e_primitives.f90.html'>mod_1e_primitives.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mod_1e_primitives</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-iii~2">iii</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-max_ang_pad">MAX_ANG_PAD</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-max_nroots">MAX_NROOTS</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-max_el_mom">MAX_EL_MOM</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-max_el_mom_s">MAX_EL_MOM_S</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#variable-twopi">TWOPI</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_kin_ovl_int1_prim">comp_kin_ovl_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_coulomb_int1_prim">comp_coulomb_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_ewaldlr_int1_prim">comp_ewaldlr_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_coulomb_dampch_int1_prim">comp_coulomb_dampch_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_coulpot_prim">comp_coulpot_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_lz_int1_prim">comp_lz_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_mult_int1_prim">comp_mult_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_allmult_int1_prim">comp_allmult_int1_prim</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_overlap_der1">comp_overlap_der1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_kinetic_der1">comp_kinetic_der1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_coulomb_der1">comp_coulomb_der1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_coulomb_helfeyder1">comp_coulomb_helfeyder1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_ewaldlr_der1">comp_ewaldlr_der1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-comp_ewaldlr_helfeyder1">comp_ewaldlr_helfeyder1</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-update_triang_matrix">update_triang_matrix</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-update_rectangular_matrix">update_rectangular_matrix</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-density_unordered">density_unordered</a>
+            <a class="list-group-item" href="../module/mod_1e_primitives.html#proc-density_ordered">density_ordered</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      <p>@brief Helper functions and data blocks needed
+to compute one-electron integrals and their derivatives
+@author   Vladimir Mironov</p>
+<div class="alert alert-success">
+<p class="alert-title h4">Todo</p>
+<ul>
+<li>Unify interfaces</li>
+<li>Cleanup redundant subroutines
+@date <em>Sep, 2018</em> Initial release</li>
+</ul>
+</div>
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='xyz_order.html'>xyz_order</a></li>
+                  <li class="list-inline-item"><a href='mod_shell_tools.html'>mod_shell_tools</a></li>
+                  <li class="list-inline-item"><a href='rys.html'>rys</a></li>
+                  <li class="list-inline-item"><a href='constants.html'>constants</a></li>
+                  <li class="list-inline-item"><a href='mod_gauss_hermite.html'>mod_gauss_hermite</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_fortran_env'>iso_fortran_env</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_1e_primitives~~UsesGraph Pages: 1 -->
+<svg id="modulemod_1e_primitivesUsesGraph" width="641pt" height="282pt"
+ viewBox="0.00 0.00 641.00 281.91" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_1e_primitives~~UsesGraph" class="graph" transform="scale(.7875 .7875) rotate(0) translate(4 354)">
+<title>module~~mod_1e_primitives~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-354 810,-354 810,4 -4,4"/>
+<!-- module~mod_1e_primitives -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node1" class="node">
+<title>module~mod_1e_primitives</title>
+<polygon fill="none" stroke="#000000" points="806,-84 693,-84 693,-60 806,-60 806,-84"/>
+<text text-anchor="middle" x="749.5" y="-69.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_1e_primitives</text>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node2" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-186 0,-186 0,-162 94,-162 94,-186"/>
+<text text-anchor="middle" x="47" y="-171.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge1" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.7903,-70.1069C608.8755,-67.1511 446.7055,-60.8476 309,-52"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-52C229.2432,-45.7355 200.2421,-32.7058 130,-71 95.9741,-89.5501 70.7416,-128.3998 57.4945,-152.7266"/>
+<polygon fill="#000000" stroke="#000000" points="54.2483,-151.381 52.7099,-161.8636 60.4495,-154.6284 54.2483,-151.381"/>
+</g>
+<!-- module~constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node3" class="node">
+<title>module~constants</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node3"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-268 277,-268 277,-244 341,-244 341,-268"/>
+<text text-anchor="middle" x="309" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge2" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M743.7962,-84.0272C727.5674,-116.9196 677.7944,-209.0356 608.5,-256"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-256C567.7831,-283.596 423.6665,-270.4027 351.2232,-261.6377"/>
+<polygon fill="#000000" stroke="#000000" points="351.4299,-258.1367 341.0757,-260.382 350.5702,-265.0837 351.4299,-258.1367"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node4" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node4"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-350 404,-350 404,-326 524,-326 524,-350"/>
+<text text-anchor="middle" x="464" y="-335.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge3" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-256C570.1577,-281.9866 565.0637,-295.571 524,-317 520.522,-318.815 516.8531,-320.5308 513.1133,-322.14"/>
+<polygon fill="#000000" stroke="#000000" points="511.7072,-318.933 503.7395,-325.9163 514.323,-325.426 511.7072,-318.933"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node5" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node5"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="657,-104 560,-104 560,-80 657,-80 657,-104"/>
+<text text-anchor="middle" x="608.5" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge4" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.9623,-80.0195C684.5741,-81.2093 675.9112,-82.4381 667.4746,-83.6348"/>
+<polygon fill="#000000" stroke="#000000" points="666.739,-80.204 657.3297,-85.0738 667.7221,-87.1347 666.739,-80.204"/>
+</g>
+<!-- module~rys -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node6" class="node">
+<title>module~rys</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node6"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-308 437,-308 437,-284 491,-284 491,-308"/>
+<text text-anchor="middle" x="464" y="-293.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge5" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-256C576.1702,-277.9116 532.1008,-287.8789 501.158,-292.3761"/>
+<polygon fill="#000000" stroke="#000000" points="500.6544,-288.9122 491.2035,-293.7009 501.5779,-295.851 500.6544,-288.9122"/>
+</g>
+<!-- module~xyz_order -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node7" class="node">
+<title>module~xyz_order</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node7"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="640.5,-24 576.5,-24 576.5,0 640.5,0 640.5,-24"/>
+<text text-anchor="middle" x="608.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge6" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M720.9665,-59.8581C699.466,-50.7089 669.7778,-38.0757 646.3026,-28.0862"/>
+<polygon fill="#000000" stroke="#000000" points="647.563,-24.8189 636.991,-24.1238 644.8221,-31.26 647.563,-24.8189"/>
+</g>
+<!-- module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node9" class="node">
+<title>module~precision</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node9"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-228 141.5,-228 141.5,-204 202.5,-204 202.5,-228"/>
+<text text-anchor="middle" x="172" y="-213.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge7" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-246.6218C257.5772,-240.986 232.8455,-233.7651 212.2467,-227.7509"/>
+<polygon fill="#000000" stroke="#000000" points="213.0886,-224.3506 202.5084,-224.9076 211.1267,-231.0701 213.0886,-224.3506"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge8" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.9106,-346.0863C374.6728,-348.0005 339.3684,-347.2758 309,-338"/>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node8" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node8"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-104 429,-104 429,-80 499,-80 499,-104"/>
+<text text-anchor="middle" x="464" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge9" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M559.9816,-92C543.7054,-92 525.6215,-92 509.5786,-92"/>
+<polygon fill="#000000" stroke="#000000" points="509.3704,-88.5001 499.3703,-92 509.3703,-95.5001 509.3704,-88.5001"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge10" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.6415,-104.1493C540.154,-131.0043 419.5228,-194.7152 309,-216"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge11" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-288.9409C412.9873,-282.8354 378.4025,-273.9103 351.1981,-266.8898"/>
+<polygon fill="#000000" stroke="#000000" points="351.7286,-263.4121 341.1712,-264.3023 349.9794,-270.1901 351.7286,-263.4121"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge12" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6897,-305.0967C395.567,-318.5367 321.2321,-341.7362 309,-338"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-338C282.6532,-329.9526 272.4674,-334.9415 250,-319 219.5868,-297.4206 195.7795,-260.4301 182.8246,-237.1457"/>
+<polygon fill="#000000" stroke="#000000" points="185.7717,-235.2364 177.9493,-228.0907 179.6083,-238.5548 185.7717,-235.2364"/>
+</g>
+<!-- module~rys_lut -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node10" class="node">
+<title>module~rys_lut</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node10"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-310 282,-310 282,-286 336,-286 336,-310"/>
+<text text-anchor="middle" x="309" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge13" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-296.353C411.5231,-296.6771 374.0798,-297.1603 346.2362,-297.5195"/>
+<polygon fill="#000000" stroke="#000000" points="346.0346,-294.0217 336.0806,-297.6506 346.125,-301.0212 346.0346,-294.0217"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.9228,-79.9357C400.9751,-69.2083 352.5426,-54.7976 309,-52"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M458.3182,-104.3834C445.6386,-130.7996 412.6033,-193.2596 368,-230 362.7175,-234.3512 356.5929,-238.1071 350.3298,-241.3038"/>
+<polygon fill="#000000" stroke="#000000" points="348.7198,-238.1926 341.1363,-245.5914 351.6785,-244.5366 348.7198,-238.1926"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge19" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.0217,-104.2822C441.2422,-126.0863 407.4887,-171.6419 368,-197 344.8196,-211.8856 336.0513,-210.7904 309,-216"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-216C277.0033,-222.162 240.018,-221.7288 212.5467,-219.9946"/>
+<polygon fill="#000000" stroke="#000000" points="212.7383,-216.4994 202.5141,-219.2772 212.239,-223.4816 212.7383,-216.4994"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node11" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node11"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-104 250,-104 250,-80 368,-80 368,-104"/>
+<text text-anchor="middle" x="309" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.8281,-92C413.8204,-92 395.7578,-92 378.2617,-92"/>
+<polygon fill="#000000" stroke="#000000" points="378.0532,-88.5001 368.0531,-92 378.0531,-95.5001 378.0532,-88.5001"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-188 269.5,-188 269.5,-164 348.5,-164 348.5,-188"/>
+<text text-anchor="middle" x="309" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge17" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M448.0679,-104.1753C429.581,-117.8856 397.811,-140.1799 368,-155 364.276,-156.8513 360.3478,-158.6182 356.3593,-160.2846"/>
+<polygon fill="#000000" stroke="#000000" points="355.0228,-157.0493 347.0118,-163.9828 357.5981,-163.5584 355.0228,-157.0493"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node13" class="node">
+<title>module~parallel</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node13"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-146 282,-146 282,-122 336,-122 336,-146"/>
+<text text-anchor="middle" x="309" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge18" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.8281,-101.5305C404.1781,-108.2098 371.2868,-117.1223 346.2005,-123.9199"/>
+<polygon fill="#000000" stroke="#000000" points="345.0545,-120.6041 336.3179,-126.5977 346.8853,-127.3605 345.0545,-120.6041"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge20" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-205.7256C126.817,-200.8185 109.0336,-194.8433 92.8552,-189.4073"/>
+<polygon fill="#000000" stroke="#000000" points="93.626,-185.9741 83.032,-186.1068 91.3965,-192.6096 93.626,-185.9741"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node14" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node14"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-104 130,-104 130,-80 214,-80 214,-104"/>
+<text text-anchor="middle" x="172" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge21" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-92C241.1722,-92 232.4436,-92 224.0637,-92"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-88.5001 214.0516,-92 224.0516,-95.5001 224.0516,-88.5001"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge23" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7097,-140.8255C262.8013,-145.3592 236.9917,-151.1616 214,-155 177.7704,-161.0484 136.7929,-165.7424 104.4962,-168.9517"/>
+<polygon fill="#000000" stroke="#000000" points="103.946,-165.4886 94.3323,-169.9413 104.6244,-172.4556 103.946,-165.4886"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge24" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8426,-141.1535C271.4632,-144.5206 259.7803,-149.1115 250,-155 231.4051,-166.1956 231.0804,-174.6071 214,-188 209.6036,-191.4472 204.7923,-194.9139 200.0454,-198.1766"/>
+<polygon fill="#000000" stroke="#000000" points="198.0367,-195.3094 191.6739,-203.7809 201.9308,-201.1263 198.0367,-195.3094"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge22" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-125.7022C264.5765,-120.3811 241.5349,-113.3173 221.0312,-107.0315"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-103.6041 211.2057,-104.0193 219.7406,-110.2967 221.7924,-103.6041"/>
+</g>
+<!-- mpi -->
+<g id="module~~mod_1e_primitives~~UsesGraph_node15" class="node">
+<title>mpi</title>
+<g id="a_module~~mod_1e_primitives~~UsesGraph_node15"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-146 145,-146 145,-122 199,-122 199,-146"/>
+<text text-anchor="middle" x="172" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~mod_1e_primitives~~UsesGraph_edge25" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-134C261.1051,-134 232.0908,-134 209.0994,-134"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-130.5001 199.0106,-134 209.0105,-137.5001 209.0106,-130.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulemod_1e_primitivesUsesGraph = svgPanZoom('#modulemod_1e_primitivesUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_1e_primitives~~UsedByGraph Pages: 1 -->
+<svg id="modulemod_1e_primitivesUsedByGraph" width="400pt" height="410pt"
+ viewBox="0.00 0.00 400.00 410.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_1e_primitives~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 406)">
+<title>module~~mod_1e_primitives~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-406 396,-406 396,4 -4,4"/>
+<!-- module~mod_1e_primitives -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node1" class="node">
+<title>module~mod_1e_primitives</title>
+<polygon fill="none" stroke="#000000" points="113,-234 0,-234 0,-210 113,-210 113,-234"/>
+<text text-anchor="middle" x="56.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_1e_primitives</text>
+</g>
+<!-- module~grd1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node2" class="node">
+<title>module~grd1</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node2"><a xlink:href="../module/grd1.html" xlink:title="grd1">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-339 149,-339 149,-315 203,-315 203,-339"/>
+<text text-anchor="middle" x="176" y="-324.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd1</text>
+</a>
+</g>
+</g>
+<!-- module~grd1&#45;&gt;module~mod_1e_primitives -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge1" class="edge">
+<title>module~grd1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M162.2918,-314.9552C141.692,-296.8549 102.5657,-262.4762 78.1025,-240.9813"/>
+<polygon fill="#000000" stroke="#000000" points="80.2388,-238.1992 70.4164,-234.2278 75.6183,-243.4577 80.2388,-238.1992"/>
+</g>
+<!-- module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node3" class="node">
+<title>module~int1</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node3"><a xlink:href="../module/int1.html" xlink:title="int1">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-171 149,-171 149,-147 203,-147 203,-171"/>
+<text text-anchor="middle" x="176" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge2" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M152.9592,-171.147C134.6089,-180.8213 108.7164,-194.4717 88.3772,-205.1944"/>
+<polygon fill="#000000" stroke="#000000" points="86.6838,-202.1305 79.4701,-209.8903 89.9483,-208.3227 86.6838,-202.1305"/>
+</g>
+<!-- proc~electric_moments -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node4" class="node">
+<title>proc~electric_moments</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node4"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="369.5,-276 261.5,-276 261.5,-252 369.5,-252 369.5,-276"/>
+<text text-anchor="middle" x="315.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge6" class="edge">
+<title>proc~electric_moments&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.251,-253.9546C253.402,-251.1522 245.7175,-247.5721 239,-243 215.4081,-226.9428 197.1106,-199.1114 186.4546,-179.9111"/>
+<polygon fill="#000000" stroke="#000000" points="189.5084,-178.199 181.7194,-171.0169 183.3295,-181.4887 189.5084,-178.199"/>
+</g>
+<!-- proc~get_structures_ao_overlap -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node5" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node5"><a xlink:href="../proc/get_structures_ao_overlap.html" xlink:title="get_structures_ao_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="392,-234 239,-234 239,-210 392,-210 392,-234"/>
+<text text-anchor="middle" x="315.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge7" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M262.8583,-209.9508C254.7147,-207.4049 246.5183,-204.4295 239,-201 225.0856,-194.6529 210.8064,-185.4002 199.3679,-177.1938"/>
+<polygon fill="#000000" stroke="#000000" points="201.3524,-174.3085 191.2276,-171.1878 197.1964,-179.9413 201.3524,-174.3085"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node6" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node6"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="385,-192 246,-192 246,-168 385,-168 385,-192"/>
+<text text-anchor="middle" x="315.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge8" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M245.75,-169.5C234.527,-167.8105 223.3039,-166.121 213.2431,-164.6065"/>
+<polygon fill="#000000" stroke="#000000" points="213.6378,-161.1265 203.2282,-163.0989 212.5957,-168.0486 213.6378,-161.1265"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node7" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node7"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="377.5,-150 253.5,-150 253.5,-126 377.5,-126 377.5,-150"/>
+<text text-anchor="middle" x="315.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge9" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M253.0943,-147.3944C239.3789,-149.4591 225.2805,-151.5814 212.9521,-153.4373"/>
+<polygon fill="#000000" stroke="#000000" points="212.4274,-149.9768 203.0598,-154.9265 213.4694,-156.8988 212.4274,-149.9768"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node8" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node8"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="352,-402 279,-402 279,-378 352,-378 352,-402"/>
+<text text-anchor="middle" x="315.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge3" class="edge">
+<title>proc~hf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.8586,-382.4771C265.9445,-379.1705 251.5305,-374.7158 239,-369 225.0856,-362.6529 210.8064,-353.4002 199.3679,-345.1938"/>
+<polygon fill="#000000" stroke="#000000" points="201.3524,-342.3085 191.2276,-339.1878 197.1964,-347.9413 201.3524,-342.3085"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node9" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node9"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="357.5,-108 273.5,-108 273.5,-84 357.5,-84 357.5,-108"/>
+<text text-anchor="middle" x="315.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge10" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3557,-104.9795C261.9455,-108.1016 249.7762,-112.0844 239,-117 225.0856,-123.3471 210.8064,-132.5998 199.3679,-140.8062"/>
+<polygon fill="#000000" stroke="#000000" points="197.1964,-138.0587 191.2276,-146.8122 201.3524,-143.6915 197.1964,-138.0587"/>
+</g>
+<!-- proc~int1e -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node10" class="node">
+<title>proc~int1e</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node10"><a xlink:href="../proc/int1e.html" xlink:title="int1e">
+<polygon fill="#d9534f" stroke="#d9534f" points="342.5,-66 288.5,-66 288.5,-42 342.5,-42 342.5,-66"/>
+<text text-anchor="middle" x="315.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e</text>
+</a>
+</g>
+</g>
+<!-- proc~int1e&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge11" class="edge">
+<title>proc~int1e&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M288.1802,-57.0607C272.6986,-59.8309 253.5736,-65.0809 239,-75 215.4081,-91.0572 197.1106,-118.8886 186.4546,-138.0889"/>
+<polygon fill="#000000" stroke="#000000" points="183.3295,-136.5113 181.7194,-146.9831 189.5084,-139.801 183.3295,-136.5113"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node11" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node11"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="370,-24 261,-24 261,0 370,0 370,-24"/>
+<text text-anchor="middle" x="315.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~int1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge12" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M260.8674,-20.8577C252.9811,-23.8161 245.3862,-27.7557 239,-33 205.9835,-60.1129 188.6915,-108.8915 181.0375,-137.1442"/>
+<polygon fill="#000000" stroke="#000000" points="177.6344,-136.3254 178.5632,-146.8794 184.4187,-138.0497 177.6344,-136.3254"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node12" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node12"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="356.5,-360 274.5,-360 274.5,-336 356.5,-336 356.5,-360"/>
+<text text-anchor="middle" x="315.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;module~grd1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge4" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.3999,-341.8129C255.0058,-338.8933 232.0349,-335.4354 213.1669,-332.595"/>
+<polygon fill="#000000" stroke="#000000" points="213.5652,-329.1156 203.1556,-331.0879 212.5231,-336.0376 213.5652,-329.1156"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_node13" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~mod_1e_primitives~~UsedByGraph_node13"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="357.5,-318 273.5,-318 273.5,-294 357.5,-294 357.5,-318"/>
+<text text-anchor="middle" x="315.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~mod_1e_primitives~~UsedByGraph_edge5" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.2668,-312.3577C254.1397,-315.237 231.7248,-318.6113 213.2363,-321.3945"/>
+<polygon fill="#000000" stroke="#000000" points="212.505,-317.9651 203.1375,-322.9148 213.5471,-324.8871 212.505,-317.9651"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-iii~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>iii</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_ang_pad"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>MAX_ANG_PAD</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_nroots"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>MAX_NROOTS</strong></td>
+<td> =</td>
+                <td>(2*MAX_ANG+1)/2+1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_el_mom"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>MAX_EL_MOM</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_el_mom_s"></span>
+              character(len=1),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>MAX_EL_MOM_S</strong></td>
+<td> =</td>
+                <td>&#39;3&#39;</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-twopi"></span>
+              real(kind=REAL64),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>TWOPI</strong></td>
+<td> =</td>
+                <td>pi*2.0_real64</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_kin_ovl_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_kin_ovl_int1_prim.html'>comp_kin_ovl_int1_prim</a>(cp, id, dokinetic, sblk, tblk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of overlap and kinetic energy 1e integrals
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       dokinetic   if <code>.FALSE.</code> compute only overlap integrals
+@param[inout]    sblk        block of 1e overlap integrals
+@param[inout]    tblk        block of 1e kinetic energy integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~8"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dokinetic"></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dokinetic</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>sblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>tblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_coulomb_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_coulomb_int1_prim.html'>comp_coulomb_int1_prim</a>(cp, id, c, znuc, vblk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of 1e Coulomb atraction integrals
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[inout]    vblk        block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~2"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~9"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~35"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>vblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_ewaldlr_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_ewaldlr_int1_prim.html'>comp_ewaldlr_int1_prim</a>(cp, id, c, znuc, omega, vblk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of 1e Coulomb atraction integrals for
+ Ewald summation, long-range part
+@details 1e integrals using modified Coulomb potential:
+ \f$ \frac{Erf(\omega^{1/2}|r-r_C|)}{|r-r_C|} \f$
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[in]       omega       Ewald splitting parameter
+@param[inout]    vblk        block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~3"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~10"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~36"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-omega"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>omega</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vblk~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>vblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_coulomb_dampch_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_coulomb_dampch_int1_prim.html'>comp_coulomb_dampch_int1_prim</a>(cp, id, alpha, beta, c, znuc, vblk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Subtract damping function term from ESP block
+@details Compute one-electron Coulomb integrals with the damping function:
+ \f$ |r-r_C|^{-1} (1 - \beta e^{-\alpha(r-r_C)^2}) \f$
+ Only the part \f$ - |r-r_C|^{-1} \beta e^{-\alpha(r-r_C)^2}) \f$ is computed here;
+ the other part is regular Coulomb potential computed elsewhere
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       alpha       dumping exponent
+@param[in]       beta        dumping function scaling factor
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[inout]    vblk        block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~4"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~11"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-alpha~79"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>alpha</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta~51"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~37"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~3"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vblk~3"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>vblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_coulpot_prim"></span> <h3>public  subroutine <a href='../proc/comp_coulpot_prim.html'>comp_coulpot_prim</a>(cp, id, c, den, vsum)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute sum of 1e Coulomb integrals over primitive shell pair
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       c           coordinates of the charged particle
+@param[in]       den         normalized density matrix block
+@param[inout]    vsum        sum of Coulomb integrals over pair of primitives
+@author   Vladimir Mironov
+@date <em>Oct, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~5"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~12"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~38"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-den~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>den</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vsum"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vsum</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_lz_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_lz_int1_prim.html'>comp_lz_int1_prim</a>(cp, id, zblk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of 1e Coulomb ESP integrals in FMO method
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[inout]    zblk        block of 1e Lz-integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~6"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~13"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>zblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_mult_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_mult_int1_prim.html'>comp_mult_int1_prim</a>(cp, id, r, mom, blk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of multipole integrals of order <code>MOM</code>
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       r           point in space to compute integrals
+@param[in]       mom         multiplole moment order (1-dipole, 2-quadrupole, 3-octopole)
+@param[inout]    blk         block of 1e multipole moment integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~7"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~14"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-r~8"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>r</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mom~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mom</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blk"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>blk</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_allmult_int1_prim"></span> <h3>public  subroutine <a href='../proc/comp_allmult_int1_prim.html'>comp_allmult_int1_prim</a>(cp, id, r, mxmom, blk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute primitive block of multipole
+       integrals up to an order <code>MXMOM</code>
+@param[in]       cp          shell pair data
+@param[in]       id          current pair of primitives
+@param[in]       r           point in space to compute integrals
+@param[in]       mxmom       multiplole moment order (1-dipole, 2-quadrupole, 3-octopole)
+@param[inout]    blk         block of 1e multipole moment integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~8"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-id~15"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>id</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-r~9"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>r</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mxmom"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mxmom</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blk~2"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>blk</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_overlap_der1"></span> <h3>public  subroutine <a href='../proc/comp_overlap_der1.html'>comp_overlap_der1</a>(cp, dij, de)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute 1e overlap contribution to the gradient
+@param[in]       cp          shell pair data
+@param[in]       dij         density matrix block
+@param[inout]    de          dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~9"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-de~4"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>de</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_kinetic_der1"></span> <h3>public  subroutine <a href='../proc/comp_kinetic_der1.html'>comp_kinetic_der1</a>(cp, dij, de)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute 1e kinetic contribution to the gradient
+@param[in]       cp          shell pair data
+@param[in]       dij         density matrix block
+@param[inout]    de          dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~10"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~6"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-de~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>de</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_coulomb_der1"></span> <h3>public  subroutine <a href='../proc/comp_coulomb_der1.html'>comp_coulomb_der1</a>(cp, c, znuc, dij, dernuc)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute 1e Coulomb contribution to the gradient (v.r.t. shifts of
+ shell's centers)
+@param[in]       nroots      roots for GaussRys
+@param[in]       cp          shell pair data
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[in]       dij         density matrix block
+@param[inout]    dernuc      dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~11"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~39"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~4"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~7"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dernuc"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dernuc</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_coulomb_helfeyder1"></span> <h3>public  subroutine <a href='../proc/comp_coulomb_helfeyder1.html'>comp_coulomb_helfeyder1</a>(cp, c, znuc, dij, derhf)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute 1e Hellmann-Feynman contribution to the gradient
+@param[in]       nroots      roots for GaussRys
+@param[in]       cp          shell pair data
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[in]       dij         density matrix block
+@param[inout]    derhf       dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~12"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~40"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~8"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-derhf"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>derhf</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_ewaldlr_der1"></span> <h3>public  subroutine <a href='../proc/comp_ewaldlr_der1.html'>comp_ewaldlr_der1</a>(cp, c, znuc, dij, omega, dernuc)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute 1e Ewald long-range contribution to the gradient (v.r.t. shifts of
+ shell's centers)
+@param[in]       nroots      roots for GaussRys
+@param[in]       cp          shell pair data
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[in]       dij         density matrix block
+@param[in]       omega       Ewald splitting parameter
+@param[inout]    dernuc      dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~13"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~41"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~6"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~9"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-omega~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>omega</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dernuc~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dernuc</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-comp_ewaldlr_helfeyder1"></span> <h3>public  subroutine <a href='../proc/comp_ewaldlr_helfeyder1.html'>comp_ewaldlr_helfeyder1</a>(cp, c, znuc, dij, omega, derhf)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute Ewald long-range 1e Hellmann-Feynman contribution
+ to the gradient
+@param[in]       nroots      roots for GaussRys
+@param[in]       cp          shell pair data
+@param[in]       c           coordinates of the charged particle
+@param[in]       znuc        particle charge
+@param[in]       dij         density matrix block
+@param[in]       omega       Ewald splitting parameter
+@param[inout]    derhf       dimension(3), contribution to gradient
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cp~14"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cp</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~42"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-znuc~7"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>znuc</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~10"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-omega~3"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>omega</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-derhf~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>derhf</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-update_triang_matrix"></span> <h3>public  subroutine <a href='../proc/update_triang_matrix.html'>update_triang_matrix</a>(shi, shj, mblk, m)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Add contribution of the 1e-integral block to the triangular matrix
+@param[in]       shi     first shell data
+@param[in]       shj     second shell data
+@param[in]       mblk    square block of 1e integrals passed as 1D array
+@param[inout]    m       packed triangular matrix of 1e integral contribution
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shi"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shi</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shj"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shj</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>mblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~43"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>m</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-update_rectangular_matrix"></span> <h3>public  subroutine <a href='../proc/update_rectangular_matrix.html'>update_rectangular_matrix</a>(shi, shj, mblk, m)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Add contribution of the 1e-integral block to the rectangular matrix
+@param[in]       shi     first shell data
+@param[in]       shj     second shell data
+@param[in]       mblk    square block of 1e integrals passed as 1D array
+@param[inout]    m       rectangular matrix of 1-e integral contribution
+@author   Igor S. Gerasimov
+@date <em>Oct, 2022</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shi~2"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shi</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shj~2"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shj</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mblk~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>mblk</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~44"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>m</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-density_unordered"></span> <h3>public  subroutine <a href='../proc/density_unordered.html'>density_unordered</a>(shi, shj, dij, denab)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Copy density block from the triangular density matrix
+@details This subroutine assumes arbitrary order of shell IDs
+@param[in]       shi     first shell data
+@param[in]       shj     second shell data
+@param[in]       dij     density matrix in packed triangular form
+@param[out]      denab   density matrix block for shells shi and shj</p><a href="../proc/density_unordered.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shi~3"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shi</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shj~3"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shj</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~16"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-denab~2"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>denab</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-density_ordered"></span> <h3>public  subroutine <a href='../proc/density_ordered.html'>density_ordered</a>(shi, shj, dij, denab)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Copy density block from the triangular density matrix
+@details This subroutine assumes <code>shi%shid&gt;=shj%shid</code>
+@param[in]       shi     first shell data
+@param[in]       shj     second shell data
+@param[in]       dij     density matrix in packed triangular form
+@param[out]      denab   density matrix block for shells shi and shj</p><a href="../proc/density_ordered.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shi~4"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shi</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shj~4"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shj</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dij~17"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>dij</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-denab~3"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>denab</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

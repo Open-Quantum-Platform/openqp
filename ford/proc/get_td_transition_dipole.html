@@ -1,0 +1,1840 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_td_transition_dipole &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_td_transition_dipole
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">43 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_energy.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_energy.f90.html'>tdhf_energy.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_energy_mod.html'>tdhf_energy_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_td_transition_dipole</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine get_td_transition_dipole(basis, dip, v, vr, vl, nstates, nocc)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/tdhf_lib.html'>tdhf_lib</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/int1.html'>int1</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_td_transition_dipole~~UsesGraph Pages: 1 -->
+<svg id="procget_td_transition_dipoleUsesGraph" width="641pt" height="587pt"
+ viewBox="0.00 0.00 641.00 586.61" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_td_transition_dipole~~UsesGraph" class="graph" transform="scale(.5941 .5941) rotate(0) translate(4 983.448)">
+<title>proc~~get_td_transition_dipole~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-983.448 1075,-983.448 1075,4 -4,4"/>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node1" class="node">
+<title>proc~get_td_transition_dipole</title>
+<polygon fill="none" stroke="#000000" points="1071,-358.411 932,-358.411 932,-334.411 1071,-334.411 1071,-358.411"/>
+<text text-anchor="middle" x="1001.5" y="-344.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_td_transition_dipole</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-731.411 429,-731.411 429,-707.411 499,-707.411 499,-731.411"/>
+<text text-anchor="middle" x="464" y="-717.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge1" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M999.8807,-358.6436C991.665,-418.9242 952.7477,-683.7456 896,-740.411 848.3214,-788.0204 816.7116,-784.1541 749.5,-779.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-779.411C681.4099,-780.8124 676.5855,-721.0197 608.5,-719.411"/>
+</g>
+<!-- module~int1 -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node3" class="node">
+<title>module~int1</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node3"><a xlink:href="../module/int1.html" xlink:title="int1">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-358.411 842,-358.411 842,-334.411 896,-334.411 896,-358.411"/>
+<text text-anchor="middle" x="869" y="-344.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~int1 -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge2" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M931.7578,-346.411C922.9145,-346.411 914.1543,-346.411 906.11,-346.411"/>
+<polygon fill="#000000" stroke="#000000" points="906.0006,-342.9111 896.0005,-346.411 906.0005,-349.9111 906.0006,-342.9111"/>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node4" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node4"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-254.411 842,-254.411 842,-230.411 896,-230.411 896,-254.411"/>
+<text text-anchor="middle" x="869" y="-240.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~mathlib -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge3" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M986.0412,-334.2774C963.0032,-316.1946 919.486,-282.0378 892.4957,-260.8529"/>
+<polygon fill="#000000" stroke="#000000" points="894.3876,-257.8885 884.3603,-254.4674 890.0656,-263.3949 894.3876,-257.8885"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node5" class="node">
+<title>module~messages</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node5"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="497,-292.411 431,-292.411 431,-268.411 497,-268.411 497,-292.411"/>
+<text text-anchor="middle" x="464" y="-278.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge4" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M944.6856,-334.3708C928.955,-331.2368 911.8486,-328.013 896,-325.411 831.211,-314.7739 814.9309,-311.8486 749.5,-306.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-306.411C663.7641,-296.8459 563.2473,-288.3143 507.2679,-283.8016"/>
+<polygon fill="#000000" stroke="#000000" points="507.263,-280.29 497.0153,-282.9799 506.7038,-287.2677 507.263,-280.29"/>
+</g>
+<!-- module~tdhf_lib -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node6" class="node">
+<title>module~tdhf_lib</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node6"><a xlink:href="../module/tdhf_lib.html" xlink:title="tdhf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="896,-731.411 842,-731.411 842,-707.411 896,-707.411 896,-731.411"/>
+<text text-anchor="middle" x="869" y="-717.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_lib</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge5" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~tdhf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M997.0915,-358.8214C977.8714,-412.9277 901.2663,-628.5784 876.6554,-697.8604"/>
+<polygon fill="#000000" stroke="#000000" points="873.3404,-696.7365 873.2911,-707.3313 879.9366,-699.0797 873.3404,-696.7365"/>
+</g>
+<!-- module~types -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node7" class="node">
+<title>module~types</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node7"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="635.5,-811.411 581.5,-811.411 581.5,-787.411 635.5,-787.411 635.5,-811.411"/>
+<text text-anchor="middle" x="608.5" y="-797.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~types -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge6" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-779.411C714.0259,-776.9077 673.903,-783.5311 645.554,-789.8156"/>
+<polygon fill="#000000" stroke="#000000" points="644.6284,-786.4372 635.6727,-792.0981 646.2039,-793.2576 644.6284,-786.4372"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node11" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node11"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-693.411 0,-693.411 0,-669.411 94,-669.411 94,-693.411"/>
+<text text-anchor="middle" x="47" y="-679.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-759.411C228.6078,-746.5028 138.2977,-715.8643 87.469,-697.0574"/>
+<polygon fill="#000000" stroke="#000000" points="88.4368,-693.6828 77.8443,-693.4625 85.9875,-700.2403 88.4368,-693.6828"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node12" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node12"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-891.411 250,-891.411 250,-867.411 368,-867.411 368,-891.411"/>
+<text text-anchor="middle" x="309" y="-877.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.9282,-731.585C439.0649,-761.9889 391.8553,-840.119 368,-858.411 366.1423,-859.8355 364.1797,-861.1689 362.143,-862.4165"/>
+<polygon fill="#000000" stroke="#000000" points="360.0291,-859.5758 352.8343,-867.3531 363.3087,-865.76 360.0291,-859.5758"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node13" class="node">
+<title>module~constants</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node13"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-533.411 277,-533.411 277,-509.411 341,-509.411 341,-533.411"/>
+<text text-anchor="middle" x="309" y="-519.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.7702,-707.2972C434.2556,-696.4128 415.4354,-679.2754 404,-660.411 375.5767,-613.5225 405.8726,-582.0605 368,-542.411 363.2066,-537.3927 357.1357,-533.5714 350.7224,-530.6621"/>
+<polygon fill="#000000" stroke="#000000" points="351.7806,-527.3196 341.19,-527.019 349.2816,-533.8584 351.7806,-527.3196"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node16" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node16"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-373.411 269.5,-373.411 269.5,-349.411 348.5,-349.411 348.5,-373.411"/>
+<text text-anchor="middle" x="309" y="-359.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M446.4969,-707.2699C432.5883,-696.6101 413.8844,-679.8051 404,-660.411 355.0223,-564.3123 416.5735,-516.7147 368,-420.411 360.0265,-404.6024 346.2174,-390.44 333.9628,-379.9554"/>
+<polygon fill="#000000" stroke="#000000" points="336.168,-377.2375 326.2111,-373.6164 331.7366,-382.6563 336.168,-377.2375"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node20" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node20"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-849.411 282,-849.411 282,-825.411 336,-825.411 336,-849.411"/>
+<text text-anchor="middle" x="309" y="-835.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.1907,-731.5384C421.3329,-735.3817 412.023,-740.0492 404,-745.411 373.1296,-766.0417 343.3508,-797.3208 325.6036,-817.5618"/>
+<polygon fill="#000000" stroke="#000000" points="322.8605,-815.3834 318.9819,-825.2428 328.1624,-819.9541 322.8605,-815.3834"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node21" class="node">
+<title>module~precision</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node21"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-595.411 141.5,-595.411 141.5,-571.411 202.5,-571.411 202.5,-595.411"/>
+<text text-anchor="middle" x="172" y="-581.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.4966,-731.4202C392.3097,-744.5092 332.1867,-763.134 309,-759.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-759.411C281.0493,-754.9231 270.8763,-754.5307 250,-735.411 210.3035,-699.0547 187.6899,-637.8551 177.8886,-605.3078"/>
+<polygon fill="#000000" stroke="#000000" points="181.1795,-604.0873 175.0497,-595.4458 174.4527,-606.0238 181.1795,-604.0873"/>
+</g>
+<!-- module~int1&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge14" class="edge">
+<title>module~int1&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M868.4508,-358.7602C865.7066,-415.1054 851.7414,-647.3294 806,-700.411 788.7057,-720.4805 772.7437,-706.6986 749.5,-719.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M749.5,-719.411C694.5191,-749.4812 671.1492,-720.8913 608.5,-719.411"/>
+</g>
+<!-- module~int1&#45;&gt;module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge15" class="edge">
+<title>module~int1&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M844.5658,-334.3679C820.9206,-323.6558 783.7303,-309.2557 749.5,-306.411"/>
+</g>
+<!-- module~int1&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge13" class="edge">
+<title>module~int1&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.6069,-334.2827C858.3145,-310.1124 839.0721,-255.3509 806,-221.411 753.5439,-167.5785 727.2276,-168.2004 657,-141.411 455.4459,-64.5251 315.8824,38.3166 172,-122.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-122.411C97.9545,-204.5828 58.2068,-566.053 49.062,-659.3672"/>
+<polygon fill="#000000" stroke="#000000" points="45.5725,-659.0915 48.0982,-669.3808 52.5403,-659.7622 45.5725,-659.0915"/>
+</g>
+<!-- module~mod_1e_primitives -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node17" class="node">
+<title>module~mod_1e_primitives</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node17"><a xlink:href="../module/mod_1e_primitives.html" xlink:title="mod_1e_primitives">
+<polygon fill="#337ab7" stroke="#337ab7" points="806,-377.411 693,-377.411 693,-353.411 806,-353.411 806,-377.411"/>
+<text text-anchor="middle" x="749.5" y="-363.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge16" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-350.7224C834.0957,-351.9607 825.2408,-353.3685 816.1703,-354.8107"/>
+<polygon fill="#000000" stroke="#000000" points="815.6098,-351.3558 806.2835,-356.3827 816.709,-358.2689 815.6098,-351.3558"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node18" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node18"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="657,-514.411 560,-514.411 560,-490.411 657,-490.411 657,-514.411"/>
+<text text-anchor="middle" x="608.5" y="-500.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge17" class="edge">
+<title>module~int1&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M850.3609,-358.4836C837.8768,-366.5106 821.0363,-377.2256 806,-386.411 747.0956,-422.3945 677.2686,-462.9131 638.4138,-485.2725"/>
+<polygon fill="#000000" stroke="#000000" points="636.6134,-482.2703 629.6878,-490.2882 640.1018,-488.3392 636.6134,-482.2703"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node19" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node19"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="783,-254.411 716,-254.411 716,-230.411 783,-230.411 783,-254.411"/>
+<text text-anchor="middle" x="749.5" y="-240.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge18" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-242.411C827.6485,-242.411 809.8485,-242.411 793.6828,-242.411"/>
+<polygon fill="#000000" stroke="#000000" points="793.3495,-238.9111 783.3495,-242.411 793.3494,-245.9111 793.3495,-238.9111"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge19" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M866.4499,-230.3723C858.5853,-194.5076 833.5675,-89.6722 806,-70.411 664.3472,28.5605 471.1211,49.5002 250,-185.411 198.0132,-240.6399 178.2849,-484.7871 173.3385,-560.7641"/>
+<polygon fill="#000000" stroke="#000000" points="169.824,-560.8876 172.6913,-571.0871 176.8103,-561.3257 169.824,-560.8876"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node8" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-293.411 266.5,-293.411 266.5,-269.411 351.5,-269.411 351.5,-293.411"/>
+<text text-anchor="middle" x="309" y="-279.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge20" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.7486,-280.6255C410.6924,-280.7549 384.6904,-280.9227 361.8687,-281.0699"/>
+<polygon fill="#000000" stroke="#000000" points="361.6168,-277.5714 351.6396,-281.1359 361.662,-284.5712 361.6168,-277.5714"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node9" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-251.411 273,-251.411 273,-227.411 345,-227.411 345,-251.411"/>
+<text text-anchor="middle" x="309" y="-237.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge21" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.7486,-271.6155C408.6232,-265.763 379.2619,-257.9964 354.9167,-251.5567"/>
+<polygon fill="#000000" stroke="#000000" points="355.7343,-248.1527 345.1717,-248.979 353.9442,-254.9199 355.7343,-248.1527"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge22" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.8021,-289.2567C421.7586,-292.3946 412.2018,-296.419 404,-301.411 385.2005,-312.8533 386.3366,-323.2408 368,-335.411 362.7365,-338.9045 356.9262,-342.1213 351.0661,-345.0136"/>
+<polygon fill="#000000" stroke="#000000" points="349.4774,-341.8924 341.8877,-349.2847 352.4308,-348.2389 349.4774,-341.8924"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge23" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M430.7603,-288.1505C388.4203,-298.1706 319.4534,-315.0962 309,-321.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-321.411C285.4201,-335.6554 269.4704,-320.9221 250,-340.411 218.0663,-372.375 187.5082,-507.6396 176.4019,-561.3231"/>
+<polygon fill="#000000" stroke="#000000" points="172.9573,-560.6988 174.3894,-571.1964 179.8163,-562.097 172.9573,-560.6988"/>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge24" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.541,-712.302C816.0586,-707.2783 777.8952,-703.8811 749.5,-719.411"/>
+</g>
+<!-- module~int2_compute -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node15" class="node">
+<title>module~int2_compute</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node15"><a xlink:href="../module/int2_compute.html" xlink:title="int2_compute">
+<polygon fill="#337ab7" stroke="#337ab7" points="792,-691.411 707,-691.411 707,-667.411 792,-667.411 792,-691.411"/>
+<text text-anchor="middle" x="749.5" y="-677.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~int2_compute -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge25" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M841.8836,-710.3344C828.0832,-705.715 810.9323,-699.9741 795.1681,-694.6974"/>
+<polygon fill="#000000" stroke="#000000" points="796.1681,-691.3413 785.5743,-691.4861 793.9462,-697.9793 796.1681,-691.3413"/>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge26" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M868.3173,-707.0929C864.7126,-645.0917 846.508,-367.1955 806,-292.411 799.2561,-279.9606 788.133,-269.1094 777.5316,-260.7269"/>
+<polygon fill="#000000" stroke="#000000" points="779.3463,-257.7145 769.2351,-254.5502 775.1661,-263.3293 779.3463,-257.7145"/>
+</g>
+<!-- module~tdhf_lib&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge27" class="edge">
+<title>module~tdhf_lib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M858.0738,-707.3794C846.0189,-694.4655 825.706,-673.7432 806,-658.411 744.5739,-610.6186 728.7948,-596.4575 657,-566.411 583.5649,-535.678 387.5578,-468.5307 309,-481.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-481.411C281.8146,-485.8683 273.2819,-485.6846 250,-500.411 223.8874,-516.928 200.5926,-544.2036 186.404,-562.9511"/>
+<polygon fill="#000000" stroke="#000000" points="183.485,-561.0124 180.373,-571.1399 189.1214,-565.1635 183.485,-561.0124"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge30" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M585.7485,-787.3369C577.6062,-782.9834 568.3739,-778.0101 560,-773.411 537.8179,-761.2282 512.9142,-747.2099 494.031,-736.5097"/>
+<polygon fill="#000000" stroke="#000000" points="495.7078,-733.437 485.2831,-731.546 492.2533,-739.5252 495.7078,-733.437"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node10" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node10"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-891.411 130,-891.411 130,-867.411 214,-867.411 214,-891.411"/>
+<text text-anchor="middle" x="172" y="-877.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge28" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-961.411C372.5821,-988.9827 334.8985,-986.1108 250,-942.411 228.1404,-931.1592 233.3784,-915.5412 214,-900.411 212.4096,-899.1693 210.7342,-897.9714 209.005,-896.8204"/>
+<polygon fill="#000000" stroke="#000000" points="210.4355,-893.5979 200.0562,-891.4714 206.844,-899.6063 210.4355,-893.5979"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge29" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M603.8069,-811.5187C593.2445,-837.3481 565.2605,-898.4272 524,-934.411 501.9614,-953.6311 491.9967,-952.9672 464,-961.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-961.411C415.6018,-976.008 411.1125,-926.8075 368,-900.411 365.2182,-898.7078 362.2782,-897.1154 359.2552,-895.6312"/>
+<polygon fill="#000000" stroke="#000000" points="360.5704,-892.3855 350.0126,-891.5008 357.7143,-898.7763 360.5704,-892.3855"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node14" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node14"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-933.411 273.5,-933.411 273.5,-909.411 344.5,-909.411 344.5,-933.411"/>
+<text text-anchor="middle" x="309" y="-919.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge31" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-961.411C442.8725,-967.7831 388.3092,-950.8562 349.9241,-937.085"/>
+<polygon fill="#000000" stroke="#000000" points="350.6506,-933.6246 340.0566,-933.4877 348.2529,-940.2012 350.6506,-933.6246"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge32" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M581.1197,-803.4458C564.5901,-805.8452 543.0982,-808.9004 524,-811.411 461.667,-819.6051 389.0356,-828.1874 346.1527,-833.1549"/>
+<polygon fill="#000000" stroke="#000000" points="345.7067,-829.6831 336.1745,-834.3077 346.5101,-836.6368 345.7067,-829.6831"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M581.495,-800.9991C507.3573,-804.8185 302.6879,-811.5707 250,-773.411 194.7122,-733.3683 178.4946,-646.9562 173.8312,-605.9231"/>
+<polygon fill="#000000" stroke="#000000" points="177.3015,-605.4516 172.8187,-595.8519 170.3367,-606.1519 177.3015,-605.4516"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node22" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="493,-925.411 435,-925.411 435,-901.411 493,-901.411 493,-925.411"/>
+<text text-anchor="middle" x="464" y="-911.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M599.3355,-811.7049C585.0102,-830.2154 555.6561,-865.4131 524,-887.411 517.445,-891.9661 509.9645,-895.9804 502.5614,-899.4073"/>
+<polygon fill="#000000" stroke="#000000" points="501.0783,-896.2356 493.3011,-903.4304 503.8676,-902.6558 501.0783,-896.2356"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge35" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-879.411C241.1722,-879.411 232.4436,-879.411 224.0637,-879.411"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-875.9111 214.0516,-879.411 224.0516,-882.9111 224.0516,-875.9111"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge36" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8317,-531.9293C268.033,-535.0574 258.5644,-538.6586 250,-542.411 233.7926,-549.5122 216.3081,-558.5661 202.009,-566.3586"/>
+<polygon fill="#000000" stroke="#000000" points="200.1829,-563.3687 193.1179,-571.264 203.5645,-569.4977 200.1829,-563.3687"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge37" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-910.4857C257.4565,-905.6094 238.4524,-899.7833 221.2204,-894.5005"/>
+<polygon fill="#000000" stroke="#000000" points="221.9027,-891.0489 211.316,-891.4641 219.851,-897.7415 221.9027,-891.0489"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge38" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.4899,-914.9953C264.7842,-911.8846 256.1977,-907.2664 250,-900.411 239.8529,-889.1871 192.3477,-676.0545 176.8807,-605.7197"/>
+<polygon fill="#000000" stroke="#000000" points="180.2463,-604.7275 174.684,-595.7102 173.409,-606.2281 180.2463,-604.7275"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node32" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-933.411 131.5,-933.411 131.5,-909.411 212.5,-909.411 212.5,-933.411"/>
+<text text-anchor="middle" x="172" y="-919.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge39" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-921.411C257.9991,-921.411 239.7453,-921.411 222.9899,-921.411"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-917.9111 212.79,-921.411 222.79,-924.9111 222.7901,-917.9111"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge41" class="edge">
+<title>module~int2_compute&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M724.3753,-691.4671C696.6329,-703.6015 650.3456,-720.3997 608.5,-719.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-719.411C575.2183,-718.6247 537.6127,-718.6535 509.1091,-718.8638"/>
+<polygon fill="#000000" stroke="#000000" points="509.0147,-715.3644 499.0444,-718.9483 509.0735,-722.3641 509.0147,-715.3644"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge45" class="edge">
+<title>module~int2_compute&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M746.002,-667.1833C736.187,-634.4038 705.8707,-542.892 657,-481.411 622.9206,-438.538 591.8095,-449.9942 560,-405.411 531.5909,-365.5937 558.5274,-336.0571 524,-301.411 519.1322,-296.5265 513.0662,-292.7753 506.6768,-289.8952"/>
+<polygon fill="#000000" stroke="#000000" points="507.7769,-286.5688 497.1863,-286.2683 505.278,-293.1076 507.7769,-286.5688"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge40" class="edge">
+<title>module~int2_compute&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-759.411C587.7029,-769.5812 579.1152,-765.3511 560,-778.411 540.5228,-791.7183 544.0724,-805.0197 524,-817.411 479.5326,-844.8621 422.4317,-860.5832 378.2528,-869.322"/>
+<polygon fill="#000000" stroke="#000000" points="377.3458,-865.9317 368.1762,-871.2392 378.6542,-872.8083 377.3458,-865.9317"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~parallel -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge46" class="edge">
+<title>module~int2_compute&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M731.5692,-691.6142C705.5052,-708.8712 655.1607,-740.415 608.5,-759.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-759.411C517.6127,-796.412 403.9737,-820.3176 346.3029,-830.9808"/>
+<polygon fill="#000000" stroke="#000000" points="345.416,-827.5846 336.2039,-832.8179 346.6689,-834.4716 345.416,-827.5846"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge47" class="edge">
+<title>module~int2_compute&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M738.6194,-667.2036C716.7923,-643.8722 664.9002,-594.0523 608.5,-580.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-580.411C545.5404,-565.1832 527.6262,-573.5564 464,-561.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-561.411C387.8515,-546.8753 385.5019,-468.8678 309,-481.411"/>
+</g>
+<!-- module~int2_pairs -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node24" class="node">
+<title>module~int2_pairs</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node24"><a xlink:href="../module/int2_pairs.html" xlink:title="int2_pairs">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-575.411 277,-575.411 277,-551.411 341,-551.411 341,-575.411"/>
+<text text-anchor="middle" x="309" y="-561.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2_pairs -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge42" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-561.411C426.3564,-554.2254 382.6313,-555.6527 351.2382,-558.3344"/>
+<polygon fill="#000000" stroke="#000000" points="350.7228,-554.8672 341.0912,-559.2813 351.3732,-561.8369 350.7228,-554.8672"/>
+</g>
+<!-- module~int2e_libint -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node25" class="node">
+<title>module~int2e_libint</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node25"><a xlink:href="../module/int2e_libint.html" xlink:title="int2e_libint">
+<polygon fill="#337ab7" stroke="#337ab7" points="499.5,-651.411 428.5,-651.411 428.5,-627.411 499.5,-627.411 499.5,-651.411"/>
+<text text-anchor="middle" x="464" y="-637.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_libint</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_libint -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge43" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-580.411C563.1493,-569.4422 513.4332,-599.9205 485.7407,-621.0528"/>
+<polygon fill="#000000" stroke="#000000" points="483.5639,-618.312 477.8827,-627.2549 487.9008,-623.8068 483.5639,-618.312"/>
+</g>
+<!-- module~int2e_rys -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node26" class="node">
+<title>module~int2e_rys</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node26"><a xlink:href="../module/int2e_rys.html" xlink:title="int2e_rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="639,-691.411 578,-691.411 578,-667.411 639,-667.411 639,-691.411"/>
+<text text-anchor="middle" x="608.5" y="-677.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_rys</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_rys -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge44" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M706.8127,-679.411C688.654,-679.411 667.5634,-679.411 649.5834,-679.411"/>
+<polygon fill="#000000" stroke="#000000" points="649.4022,-675.9111 639.4022,-679.411 649.4021,-682.9111 649.4022,-675.9111"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge48" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M742.3119,-353.3752C731.1634,-334.5079 709.2925,-296.6817 693,-263.411 675.1366,-226.9326 689.3297,-203.999 657,-179.411 612.0882,-145.2538 228.9443,-62.5113 172,-122.411"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge49" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M705.2599,-377.4254C701.0576,-378.9524 696.9099,-380.616 693,-382.411 675.7449,-390.3328 674.1365,-397.2357 657,-405.411 551.2093,-455.8808 417.657,-493.7394 350.944,-511.033"/>
+<polygon fill="#000000" stroke="#000000" points="350.0262,-507.655 341.2112,-513.5326 351.7675,-514.435 350.0262,-507.655"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge51" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M736.9872,-377.5689C712.4868,-401.3742 658.0077,-454.3078 628.4695,-483.008"/>
+<polygon fill="#000000" stroke="#000000" points="625.9205,-480.6046 621.1875,-490.0835 630.7986,-485.6251 625.9205,-480.6046"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node28" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node28"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-334.411 404,-334.411 404,-310.411 524,-310.411 524,-334.411"/>
+<text text-anchor="middle" x="464" y="-320.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge50" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.8412,-353.3869C667.214,-348.8763 636.4646,-344.7455 608.5,-344.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-344.411C582.2958,-344.0976 553.7182,-340.4569 528.9464,-336.2244"/>
+<polygon fill="#000000" stroke="#000000" points="529.398,-332.7499 518.9402,-334.4484 528.1747,-339.6422 529.398,-332.7499"/>
+</g>
+<!-- module~rys -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node29" class="node">
+<title>module~rys</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node29"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-414.411 437,-414.411 437,-390.411 491,-390.411 491,-414.411"/>
+<text text-anchor="middle" x="464" y="-400.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge52" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.5,-344.411C564.5441,-343.8853 518.1248,-367.431 490.1083,-384.6788"/>
+<polygon fill="#000000" stroke="#000000" points="487.9099,-381.9286 481.3427,-390.2427 491.6612,-387.8386 487.9099,-381.9286"/>
+</g>
+<!-- module~xyz_order -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node30" class="node">
+<title>module~xyz_order</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node30"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="640.5,-396.411 576.5,-396.411 576.5,-372.411 640.5,-372.411 640.5,-396.411"/>
+<text text-anchor="middle" x="608.5" y="-382.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge53" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.9623,-373.0296C678.9369,-374.9195 664.1434,-376.913 650.924,-378.6943"/>
+<polygon fill="#000000" stroke="#000000" points="650.1476,-375.2672 640.7046,-380.0714 651.0825,-382.2045 650.1476,-375.2672"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge54" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M597.7245,-514.435C587.0701,-526.787 570.833,-546.9124 560,-566.411 538.2732,-605.5177 548.5084,-622.9848 524,-660.411 514.0208,-675.6501 499.5288,-690.0409 487.2875,-700.7946"/>
+<polygon fill="#000000" stroke="#000000" points="484.9825,-698.1603 479.6382,-707.3085 489.5209,-703.4898 484.9825,-698.1603"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge55" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M592.6086,-490.3223C582.3467,-481.9223 569.2359,-470.0095 560,-457.411 537.9021,-427.2677 552.5796,-405.4972 524,-381.411 519.2588,-377.4152 314.3072,-318.205 309,-321.411"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node23" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node23"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="641.5,-254.411 575.5,-254.411 575.5,-230.411 641.5,-230.411 641.5,-254.411"/>
+<text text-anchor="middle" x="608.5" y="-240.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge56" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715.727,-242.411C696.4907,-242.411 672.1932,-242.411 651.5932,-242.411"/>
+<polygon fill="#000000" stroke="#000000" points="651.511,-238.9111 641.5109,-242.411 651.5109,-245.9111 651.511,-238.9111"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node27" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node27"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="648,-212.411 569,-212.411 569,-188.411 648,-188.411 648,-212.411"/>
+<text text-anchor="middle" x="608.5" y="-198.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge57" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715.727,-232.351C698.4518,-227.2052 677.0946,-220.8435 657.9994,-215.1555"/>
+<polygon fill="#000000" stroke="#000000" points="658.8367,-211.753 648.2536,-212.2525 656.8383,-218.4617 658.8367,-211.753"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge58" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-845.7089C264.5765,-851.0299 241.5349,-858.0938 221.0312,-864.3796"/>
+<polygon fill="#000000" stroke="#000000" points="219.7406,-861.1144 211.2057,-867.3918 221.7924,-867.8069 219.7406,-861.1144"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge59" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.726,-841.9863C244.3969,-846.7555 176.7074,-849.9284 130,-820.411 87.0931,-793.2954 63.4189,-735.2676 53.1943,-703.4324"/>
+<polygon fill="#000000" stroke="#000000" points="56.4982,-702.2674 50.234,-693.7227 49.8024,-704.3088 56.4982,-702.2674"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge60" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7445,-830.6456C270.6106,-826.6677 258.4024,-820.5639 250,-811.411 194.7074,-751.1796 178.3785,-650.0295 173.7471,-605.5418"/>
+<polygon fill="#000000" stroke="#000000" points="177.2249,-605.1404 172.8051,-595.5115 170.2556,-605.795 177.2249,-605.1404"/>
+</g>
+<!-- mpi -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node31" class="node">
+<title>mpi</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node31"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-811.411 145,-811.411 145,-787.411 199,-787.411 199,-811.411"/>
+<text text-anchor="middle" x="172" y="-797.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge61" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-829.9034C261.0113,-824.1003 231.8293,-816.006 208.789,-809.6153"/>
+<polygon fill="#000000" stroke="#000000" points="209.5823,-806.2032 199.0106,-806.903 207.7112,-812.9485 209.5823,-806.2032"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge62" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M156.6725,-595.4277C135.1182,-612.3263 95.6684,-643.255 70.4233,-663.0472"/>
+<polygon fill="#000000" stroke="#000000" points="68.1631,-660.3717 62.4528,-669.296 72.482,-665.8805 68.1631,-660.3717"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge64" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M575.3488,-251.129C555.1169,-256.4495 529.0316,-263.3093 507.1951,-269.0518"/>
+<polygon fill="#000000" stroke="#000000" points="506.2784,-265.6737 497.4974,-271.602 508.0587,-272.4436 506.2784,-265.6737"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge65" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M575.3907,-240.292C534.8068,-237.4005 464.0258,-231.403 404,-221.411 361.2487,-214.2946 344.5027,-174.5539 309,-199.411"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node34" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node34"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="507.5,-212.411 420.5,-212.411 420.5,-188.411 507.5,-188.411 507.5,-212.411"/>
+<text text-anchor="middle" x="464" y="-198.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge63" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M575.3488,-232.7754C557.6,-227.6166 535.3465,-221.1484 515.4085,-215.3533"/>
+<polygon fill="#000000" stroke="#000000" points="516.1137,-211.9135 505.5342,-212.4832 514.1599,-218.6353 516.1137,-211.9135"/>
+</g>
+<!-- module~int2_pairs&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge66" class="edge">
+<title>module~int2_pairs&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-568.1001C257.6649,-570.9052 233.0702,-574.4957 212.5278,-577.4945"/>
+<polygon fill="#000000" stroke="#000000" points="211.8979,-574.0493 202.5084,-578.9572 212.9092,-580.9759 211.8979,-574.0493"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge67" class="edge">
+<title>module~int2e_libint&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.2002,-649.1495C381.8029,-663.3852 300.8407,-693.9368 250,-745.411 224.0175,-771.7173 232.7901,-788.5669 214,-820.411 206.1347,-833.7405 196.1228,-847.8923 187.847,-858.9939"/>
+<polygon fill="#000000" stroke="#000000" points="184.903,-857.0841 181.6564,-867.1692 190.4835,-861.3099 184.903,-857.0841"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge68" class="edge">
+<title>module~int2e_libint&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.2311,-628.6867C419.5799,-624.8735 410.8609,-619.8698 404,-613.411 378.239,-589.1598 394.5583,-565.7864 368,-542.411 362.9003,-537.9225 356.7752,-534.374 350.429,-531.5741"/>
+<polygon fill="#000000" stroke="#000000" points="351.6568,-528.2965 341.0666,-527.9852 349.1512,-534.8327 351.6568,-528.2965"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge71" class="edge">
+<title>module~int2e_libint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.487,-632.6003C374.1152,-622.1728 270.5103,-602.3034 213.014,-591.2767"/>
+<polygon fill="#000000" stroke="#000000" points="213.3172,-587.7712 202.837,-589.325 211.9988,-594.6459 213.3172,-587.7712"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~int2_pairs -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge69" class="edge">
+<title>module~int2e_libint&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.2804,-627.3507C423.7273,-623.2699 413.2733,-618.4584 404,-613.411 387.1102,-604.2179 384.8614,-598.6561 368,-589.411 361.8672,-586.0484 355.2132,-582.7783 348.6579,-579.7559"/>
+<polygon fill="#000000" stroke="#000000" points="349.7538,-576.412 339.1964,-575.5231 346.8952,-582.8017 349.7538,-576.412"/>
+</g>
+<!-- module~libint_f -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node33" class="node">
+<title>module~libint_f</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node33"><a xlink:href="../module/libint_f.html" xlink:title="libint_f">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-655.411 282,-655.411 282,-631.411 336,-631.411 336,-655.411"/>
+<text text-anchor="middle" x="309" y="-641.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">libint_f</text>
+</a>
+</g>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~libint_f -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge70" class="edge">
+<title>module~int2e_libint&#45;&gt;module~libint_f</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.4399,-640.3287C403.8834,-640.9624 371.2878,-641.8036 346.3523,-642.4471"/>
+<polygon fill="#000000" stroke="#000000" points="346.0868,-638.9527 336.1805,-642.7096 346.2675,-645.9503 346.0868,-638.9527"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~basis_tools -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge72" class="edge">
+<title>module~int2e_rys&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M577.8553,-687.894C557.7932,-693.4475 531.2387,-700.7982 508.8213,-707.0037"/>
+<polygon fill="#000000" stroke="#000000" points="507.8792,-703.6328 499.1754,-709.6739 509.7468,-710.3791 507.8792,-703.6328"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge73" class="edge">
+<title>module~int2e_rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M594.3657,-667.2828C578.2158,-653.8992 550.5756,-632.4049 524,-618.411 473.871,-592.0148 452.5047,-604.6852 404,-575.411 385.4171,-564.1956 386.5949,-553.6066 368,-542.411 362.6208,-539.1723 356.6661,-536.3262 350.6693,-533.8603"/>
+<polygon fill="#000000" stroke="#000000" points="351.8789,-530.5758 341.2878,-530.2965 349.3931,-537.1196 351.8789,-530.5758"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge74" class="edge">
+<title>module~int2e_rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M577.9822,-685.4161C513.8753,-696.516 361.9009,-714.7915 250,-664.411 221.7233,-651.6802 198.5071,-623.5629 184.958,-604.0546"/>
+<polygon fill="#000000" stroke="#000000" points="187.7297,-601.9027 179.2663,-595.5291 181.9078,-605.7894 187.7297,-601.9027"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge76" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M578.6907,-212.5218C572.4385,-215.2826 565.9417,-218.3189 560,-221.411 535.731,-234.041 509.328,-250.4794 490.3654,-262.796"/>
+<polygon fill="#000000" stroke="#000000" points="488.401,-259.8986 481.9539,-268.3061 492.2368,-265.7542 488.401,-259.8986"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge77" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M574.0286,-188.3675C513.8539,-169.71 388.4912,-141.6276 309,-199.411"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-199.411C286.4586,-215.2476 268.4714,-197.9728 250,-218.411 203.5,-269.8625 180.2293,-490.4492 173.8512,-561.3634"/>
+<polygon fill="#000000" stroke="#000000" points="170.3571,-561.1436 172.9716,-571.4108 177.3305,-561.7541 170.3571,-561.1436"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge75" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M568.6322,-200.411C552.9285,-200.411 534.6514,-200.411 517.8075,-200.411"/>
+<polygon fill="#000000" stroke="#000000" points="517.5408,-196.9111 507.5408,-200.411 517.5407,-203.9111 517.5408,-196.9111"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge78" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M419.3137,-310.3679C386.4424,-304.1571 341.9382,-301.5133 309,-321.411"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge79" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.9876,-409.778C425.7898,-413.8624 413.2774,-419.8831 404,-428.411 379.1127,-451.2876 392.8166,-472.4578 368,-495.411 362.8653,-500.1601 356.7223,-504.1399 350.369,-507.4429"/>
+<polygon fill="#000000" stroke="#000000" points="348.5881,-504.4114 341.0032,-511.8088 351.5456,-510.756 348.5881,-504.4114"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge80" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.847,-396.7544C393.2439,-389.2755 306.764,-381.2262 250,-420.411 201.8015,-453.683 182.4197,-525.1118 175.4577,-561.3517"/>
+<polygon fill="#000000" stroke="#000000" points="171.9779,-560.93 173.6776,-571.3876 178.8703,-562.1526 171.9779,-560.93"/>
+</g>
+<!-- module~rys_lut -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_node35" class="node">
+<title>module~rys_lut</title>
+<g id="a_proc~~get_td_transition_dipole~~UsesGraph_node35"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-453.411 282,-453.411 282,-429.411 336,-429.411 336,-453.411"/>
+<text text-anchor="middle" x="309" y="-439.011" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge81" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-409.2937C411.4124,-415.6427 373.7496,-425.1192 345.8688,-432.1343"/>
+<polygon fill="#000000" stroke="#000000" points="344.9243,-428.7628 336.0806,-434.5972 346.6324,-435.5512 344.9243,-428.7628"/>
+</g>
+<!-- module~libint_f&#45;&gt;iso_c_binding -->
+<g id="proc~~get_td_transition_dipole~~UsesGraph_edge82" class="edge">
+<title>module~libint_f&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9194,-649.5909C270.5435,-653.4908 258.0989,-659.6952 250,-669.411 205.8248,-722.4058 242.5312,-757.5949 214,-820.411 207.6816,-834.3219 197.8985,-848.32 189.3633,-859.1883"/>
+<polygon fill="#000000" stroke="#000000" points="186.466,-857.2039 182.876,-867.1719 191.8986,-861.6183 186.466,-857.2039"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_td_transition_dipoleUsesGraph = svgPanZoom('#procget_td_transition_dipoleUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~110"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dip~6"></span>
+              real(kind=8)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dip</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-v~58"></span>
+              real(kind=8)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>v</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vr~4"></span>
+              real(kind=8)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vr</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vl~4"></span>
+              real(kind=8)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vl</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nstates~11"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nstates</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocc~5"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_td_transition_dipole~~CallsGraph Pages: 1 -->
+<svg id="procget_td_transition_dipoleCallsGraph" width="641pt" height="399pt"
+ viewBox="0.00 0.00 641.00 398.94" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_td_transition_dipole~~CallsGraph" class="graph" transform="scale(.7099 .7099) rotate(0) translate(4 558)">
+<title>proc~~get_td_transition_dipole~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-558 899,-558 899,4 -4,4"/>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node1" class="node">
+<title>proc~get_td_transition_dipole</title>
+<polygon fill="none" stroke="#000000" points="139,-234 0,-234 0,-210 139,-210 139,-234"/>
+<text text-anchor="middle" x="69.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_td_transition_dipole</text>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node2" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node2"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="335,-348 257,-348 257,-324 335,-324 335,-348"/>
+<text text-anchor="middle" x="296" y="-333.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;interface~pack_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge1" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M93.7395,-234.2C134.5245,-254.7276 216.9169,-296.1966 262.9614,-319.3713"/>
+<polygon fill="#000000" stroke="#000000" points="261.4289,-322.5182 271.9348,-323.8877 264.5759,-316.2655 261.4289,-322.5182"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="895,-458 802,-458 802,-434 895,-434 895,-458"/>
+<text text-anchor="middle" x="848.5" y="-443.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge2" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M75.1233,-234.1431C88.3203,-261.1607 124.057,-326.2759 175,-357 375.199,-477.7416 669.165,-464.8611 791.6594,-452.8968"/>
+<polygon fill="#000000" stroke="#000000" points="792.3303,-456.3468 801.9264,-451.8563 791.6245,-449.3825 792.3303,-456.3468"/>
+</g>
+<!-- proc~atomic_structure_center -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node4" class="node">
+<title>proc~atomic_structure_center</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node4"><a xlink:href="../proc/atomic_structure_center.html" xlink:title="atomic_structure%atomic_structure_center">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="417,-213 175,-213 175,-189 417,-189 417,-213"/>
+<text text-anchor="middle" x="296" y="-198.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure%atomic_structure_center</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~atomic_structure_center -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge3" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~atomic_structure_center</title>
+<path fill="none" stroke="#000000" d="M139.3056,-215.528C147.4336,-214.7744 155.9135,-213.9882 164.5381,-213.1885"/>
+<polygon fill="#000000" stroke="#000000" points="165.0825,-216.6531 174.7166,-212.2448 164.4362,-209.683 165.0825,-216.6531"/>
+</g>
+<!-- proc~iatogen -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node5" class="node">
+<title>proc~iatogen</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node5"><a xlink:href="../proc/iatogen.html" xlink:title="iatogen">
+<polygon fill="#d9534f" stroke="#d9534f" points="323,-171 269,-171 269,-147 323,-147 323,-171"/>
+<text text-anchor="middle" x="296" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iatogen</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~iatogen -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge4" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M95.4238,-209.9267C116.4655,-200.5582 147.1121,-187.8793 175,-180 202.5243,-172.2235 234.428,-166.8305 258.5635,-163.4585"/>
+<polygon fill="#000000" stroke="#000000" points="259.2835,-166.8933 268.7286,-162.0931 258.3516,-159.9556 259.2835,-166.8933"/>
+</g>
+<!-- proc~multipole_integrals -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node6" class="node">
+<title>proc~multipole_integrals</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node6"><a xlink:href="../proc/multipole_integrals.html" xlink:title="multipole_integrals">
+<polygon fill="#d9534f" stroke="#d9534f" points="353.5,-255 238.5,-255 238.5,-231 353.5,-231 353.5,-255"/>
+<text text-anchor="middle" x="296" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">multipole_integrals</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge5" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M139.3056,-228.472C167.5525,-231.091 200.0494,-234.1039 228.1,-236.7046"/>
+<polygon fill="#000000" stroke="#000000" points="227.9367,-240.2044 238.2172,-237.6427 228.583,-233.2343 227.9367,-240.2044"/>
+</g>
+<!-- proc~orthogonal_transform -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node7" class="node">
+<title>proc~orthogonal_transform</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node7"><a xlink:href="../proc/orthogonal_transform.html" xlink:title="orthogonal_transform">
+<polygon fill="#d9534f" stroke="#d9534f" points="587.5,-516 458.5,-516 458.5,-492 587.5,-492 587.5,-516"/>
+<text text-anchor="middle" x="523" y="-501.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~orthogonal_transform -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge6" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~orthogonal_transform</title>
+<path fill="none" stroke="#000000" d="M70.2417,-234.0408C73.5419,-276.056 90.737,-416.9188 175,-478 258.0405,-538.195 383.4322,-530.1481 458.8503,-517.7905"/>
+<polygon fill="#000000" stroke="#000000" points="459.8859,-521.1642 469.1508,-516.0249 458.7032,-514.2648 459.8859,-521.1642"/>
+</g>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node8" class="node">
+<title>proc~symmetrize_matrix</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node8"><a xlink:href="../proc/symmetrize_matrix.html" xlink:title="symmetrize_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="353.5,-129 238.5,-129 238.5,-105 353.5,-105 353.5,-129"/>
+<text text-anchor="middle" x="296" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge7" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M80.516,-209.9923C98.3937,-191.3226 135.7025,-155.6498 175,-138 191.421,-130.6248 210.1718,-125.8301 227.9296,-122.7161"/>
+<polygon fill="#000000" stroke="#000000" points="228.9217,-126.1021 238.2452,-121.07 227.8186,-119.1896 228.9217,-126.1021"/>
+</g>
+<!-- proc~traceprod_sym_packed -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node9" class="node">
+<title>proc~traceprod_sym_packed</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node9"><a xlink:href="../proc/traceprod_sym_packed.html" xlink:title="traceprod_sym_packed">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="364,-87 228,-87 228,-63 364,-63 364,-87"/>
+<text text-anchor="middle" x="296" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">traceprod_sym_packed</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~traceprod_sym_packed -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge8" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~traceprod_sym_packed</title>
+<path fill="none" stroke="#000000" d="M75.7551,-209.8711C89.711,-184.1544 126.0548,-124.2052 175,-96 187.9082,-88.5615 202.7844,-83.6192 217.5927,-80.3645"/>
+<polygon fill="#000000" stroke="#000000" points="218.6643,-83.7215 227.8088,-78.371 217.3235,-76.8511 218.6643,-83.7215"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node16" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node16"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="555,-398 491,-398 491,-374 555,-374 555,-398"/>
+<text text-anchor="middle" x="523" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge9" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M335.0227,-344.5953C375.6589,-353.546 439.0993,-367.5197 480.8581,-376.7176"/>
+<polygon fill="#000000" stroke="#000000" points="480.2015,-380.1568 490.7203,-378.8899 481.7073,-373.3207 480.2015,-380.1568"/>
+</g>
+<!-- proc~to_upper -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node18" class="node">
+<title>proc~to_upper</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node18"><a xlink:href="../proc/to_upper.html" xlink:title="to_upper">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="553,-24 493,-24 493,0 553,0 553,-24"/>
+<text text-anchor="middle" x="523" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">to_upper</text>
+</a>
+</g>
+</g>
+<!-- proc~atomic_structure_center&#45;&gt;proc~to_upper -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge10" class="edge">
+<title>proc~atomic_structure_center&#45;&gt;proc~to_upper</title>
+<path fill="none" stroke="#000000" d="M405.0671,-188.9607C409.329,-186.3887 413.3381,-183.4198 417,-180 466.1597,-134.0896 406.6723,-81.7667 453,-33 460.8949,-24.6895 471.9354,-19.6292 482.9181,-16.5602"/>
+<polygon fill="#000000" stroke="#000000" points="483.9351,-19.9178 492.8961,-14.2654 482.366,-13.0959 483.9351,-19.9178"/>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge12" class="edge">
+<title>proc~multipole_integrals&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M313.4005,-255.1293C341.3853,-273.9657 398.7631,-309.8626 453,-327 586.6209,-369.2207 642.455,-298.8656 766,-365 787.6753,-376.6029 784.5225,-389.7089 802,-407 809.1508,-414.0745 817.4351,-421.2964 825.0129,-427.5718"/>
+<polygon fill="#000000" stroke="#000000" points="822.9035,-430.3675 832.8714,-433.958 827.3182,-424.9351 822.9035,-430.3675"/>
+</g>
+<!-- interface~bas_norm_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node10" class="node">
+<title>interface~bas_norm_matrix</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node10"><a xlink:href="../interface/bas_norm_matrix.html" xlink:title="bas_norm_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="575.5,-150 470.5,-150 470.5,-126 575.5,-126 575.5,-150"/>
+<text text-anchor="middle" x="523" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bas_norm_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge11" class="edge">
+<title>proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M353.5023,-243.1196C375.0242,-240.6998 398.6729,-234.8568 417,-222 443.4006,-203.4795 427.7537,-179.0654 453,-159 455.5825,-156.9474 458.3625,-155.0952 461.2732,-153.4238"/>
+<polygon fill="#000000" stroke="#000000" points="462.9267,-156.5106 470.3308,-148.9323 459.8169,-150.2393 462.9267,-156.5106"/>
+</g>
+<!-- none~alloc~2 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node11" class="node">
+<title>none~alloc~2</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node11"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc~2" xlink:title="shpair_t%alloc">
+<polygon fill="#a7506f" stroke="#a7506f" points="568,-108 478,-108 478,-84 568,-84 568,-108"/>
+<text text-anchor="middle" x="523" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~alloc~2 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge13" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~alloc~2</title>
+<path fill="none" stroke="#000000" d="M353.6148,-244.9844C375.6562,-242.9017 399.6423,-236.8042 417,-222 454.5354,-189.9864 417.4452,-151.1999 453,-117 457.3935,-112.7739 462.6036,-109.3944 468.169,-106.6926"/>
+<polygon fill="#000000" stroke="#000000" points="469.8598,-109.7825 477.7891,-102.7557 467.2084,-103.304 469.8598,-109.7825"/>
+</g>
+<!-- none~fetch_by_id -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node12" class="node">
+<title>none~fetch_by_id</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node12"><a xlink:href="../type/shell_t.html#boundprocedure-fetch_by_id" xlink:title="shell_t%fetch_by_id">
+<polygon fill="#a7506f" stroke="#a7506f" points="581,-66 465,-66 465,-42 581,-42 581,-66"/>
+<text text-anchor="middle" x="523" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shell_t%fetch_by_id</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~fetch_by_id -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge14" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M353.6901,-245.8179C376.0061,-243.9099 400.171,-237.7166 417,-222 466.1597,-176.0896 406.6723,-123.7667 453,-75 454.065,-73.8789 455.1873,-72.817 456.359,-71.8111"/>
+<polygon fill="#000000" stroke="#000000" points="458.541,-74.5559 464.7252,-65.9532 454.526,-68.8218 458.541,-74.5559"/>
+</g>
+<!-- none~shell_pair -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node13" class="node">
+<title>none~shell_pair</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node13"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair" xlink:title="shpair_t%shell_pair">
+<polygon fill="#a7506f" stroke="#a7506f" points="580.5,-318 465.5,-318 465.5,-294 580.5,-294 580.5,-318"/>
+<text text-anchor="middle" x="523" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;none~shell_pair -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge15" class="edge">
+<title>proc~multipole_integrals&#45;&gt;none~shell_pair</title>
+<path fill="none" stroke="#000000" d="M339.4993,-255.0725C376.6459,-265.3819 430.2047,-280.2462 469.8788,-291.2571"/>
+<polygon fill="#000000" stroke="#000000" points="469.0761,-294.6666 479.6479,-293.9684 470.9481,-287.9215 469.0761,-294.6666"/>
+</g>
+<!-- proc~comp_allmult_int1_prim -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node14" class="node">
+<title>proc~comp_allmult_int1_prim</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node14"><a xlink:href="../proc/comp_allmult_int1_prim.html" xlink:title="comp_allmult_int1_prim">
+<polygon fill="#d9534f" stroke="#d9534f" points="593,-276 453,-276 453,-252 593,-252 593,-276"/>
+<text text-anchor="middle" x="523" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_allmult_int1_prim</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~comp_allmult_int1_prim -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge16" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~comp_allmult_int1_prim</title>
+<path fill="none" stroke="#000000" d="M353.5751,-248.3263C380.5993,-250.8264 413.2627,-253.8481 442.6694,-256.5685"/>
+<polygon fill="#000000" stroke="#000000" points="442.6405,-260.0807 452.9205,-257.5169 443.2854,-253.1105 442.6405,-260.0807"/>
+</g>
+<!-- proc~print_sym_labeled -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node17" class="node">
+<title>proc~print_sym_labeled</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node17"><a xlink:href="../proc/print_sym_labeled.html" xlink:title="print_sym_labeled">
+<polygon fill="#d9534f" stroke="#d9534f" points="577.5,-234 468.5,-234 468.5,-210 577.5,-210 577.5,-234"/>
+<text text-anchor="middle" x="523" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_sym_labeled</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~print_sym_labeled -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge17" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~print_sym_labeled</title>
+<path fill="none" stroke="#000000" d="M353.5751,-237.6737C385.4767,-234.7224 425.2367,-231.0442 458.221,-227.9928"/>
+<polygon fill="#000000" stroke="#000000" points="458.5887,-231.4738 468.2237,-227.0674 457.9438,-224.5036 458.5887,-231.4738"/>
+</g>
+<!-- proc~update_triang_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node19" class="node">
+<title>proc~update_triang_matrix</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node19"><a xlink:href="../proc/update_triang_matrix.html" xlink:title="update_triang_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="586.5,-192 459.5,-192 459.5,-168 586.5,-168 586.5,-192"/>
+<text text-anchor="middle" x="523" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_triang_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge18" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M353.7227,-237.2532C374.127,-234.1135 396.9714,-229.3101 417,-222 434.4005,-215.6491 436.0102,-208.3796 453,-201 457.6805,-198.967 462.618,-197.0545 467.6163,-195.2748"/>
+<polygon fill="#000000" stroke="#000000" points="468.8983,-198.5361 477.2517,-192.0192 466.6575,-191.9044 468.8983,-198.5361"/>
+</g>
+<!-- proc~orthogonal_transform&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge19" class="edge">
+<title>proc~orthogonal_transform&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M587.7459,-501.7062C637.1644,-498.8459 706.6298,-492.4221 766,-478 781.8895,-474.1402 798.8276,-467.9582 813.1957,-462.0524"/>
+<polygon fill="#000000" stroke="#000000" points="814.8397,-465.1573 822.6877,-458.0397 812.1141,-458.7098 814.8397,-465.1573"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node15" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node15"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="748,-554 647,-554 647,-530 748,-530 748,-554"/>
+<text text-anchor="middle" x="697.5" y="-539.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge20" class="edge">
+<title>proc~orthogonal_transform&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M578.2129,-516.0234C596.9191,-520.097 617.9069,-524.6674 637.0021,-528.8257"/>
+<polygon fill="#000000" stroke="#000000" points="636.2772,-532.2498 646.793,-530.9578 637.7667,-525.4101 636.2772,-532.2498"/>
+</g>
+<!-- proc~mulquadgausshermite -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node22" class="node">
+<title>proc~mulquadgausshermite</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node22"><a xlink:href="../proc/mulquadgausshermite.html" xlink:title="mulQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="766,-276 629,-276 629,-252 766,-252 766,-276"/>
+<text text-anchor="middle" x="697.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mulQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_allmult_int1_prim&#45;&gt;proc~mulquadgausshermite -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge21" class="edge">
+<title>proc~comp_allmult_int1_prim&#45;&gt;proc~mulquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M593.2215,-264C601.5704,-264 610.1356,-264 618.5953,-264"/>
+<polygon fill="#000000" stroke="#000000" points="618.8402,-267.5001 628.8402,-264 618.8402,-260.5001 618.8402,-267.5001"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge23" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M736.253,-529.9158C746.26,-526.0972 756.7982,-521.431 766,-516 789.8313,-501.9345 813.5554,-480.876 829.4035,-465.531"/>
+<polygon fill="#000000" stroke="#000000" points="832.2771,-467.6121 836.932,-458.0946 827.3579,-462.632 832.2771,-467.6121"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node20" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="875.5,-554 821.5,-554 821.5,-530 875.5,-530 875.5,-554"/>
+<text text-anchor="middle" x="848.5" y="-539.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge22" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M748.2009,-542C768.876,-542 792.3423,-542 811.376,-542"/>
+<polygon fill="#000000" stroke="#000000" points="811.4484,-545.5001 821.4484,-542 811.4484,-538.5001 811.4484,-545.5001"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge24" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M555.4426,-392.5996C576.4088,-396.8221 604.2933,-402.3582 629,-407 684.2289,-417.3762 747.4159,-428.5274 791.7692,-436.2369"/>
+<polygon fill="#000000" stroke="#000000" points="791.3271,-439.7124 801.7783,-437.9738 792.5241,-432.8155 791.3271,-439.7124"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node23" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node23"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="742,-398 653,-398 653,-374 742,-374 742,-398"/>
+<text text-anchor="middle" x="697.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge25" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M555.006,-386C579.4548,-386 613.7352,-386 642.5455,-386"/>
+<polygon fill="#000000" stroke="#000000" points="642.884,-389.5001 652.884,-386 642.884,-382.5001 642.884,-389.5001"/>
+</g>
+<!-- none~bf_label -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node21" class="node">
+<title>none~bf_label</title>
+<g id="a_proc~~get_td_transition_dipole~~CallsGraph_node21"><a xlink:href="../type/basis_set.html#boundprocedure-bf_label" xlink:title="basis_set%bf_label">
+<polygon fill="#a7506f" stroke="#a7506f" points="753.5,-234 641.5,-234 641.5,-210 753.5,-210 753.5,-234"/>
+<text text-anchor="middle" x="697.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_set%bf_label</text>
+</a>
+</g>
+</g>
+<!-- proc~print_sym_labeled&#45;&gt;none~bf_label -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge26" class="edge">
+<title>proc~print_sym_labeled&#45;&gt;none~bf_label</title>
+<path fill="none" stroke="#000000" d="M577.7341,-222C594.6954,-222 613.5698,-222 631.226,-222"/>
+<polygon fill="#000000" stroke="#000000" points="631.4572,-225.5001 641.4572,-222 631.4572,-218.5001 631.4572,-225.5001"/>
+</g>
+<!-- abrt -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node24" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="875.5,-276 821.5,-276 821.5,-252 875.5,-252 875.5,-276"/>
+<text text-anchor="middle" x="848.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~mulquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge27" class="edge">
+<title>proc~mulquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M766.3719,-264C781.7157,-264 797.4275,-264 810.946,-264"/>
+<polygon fill="#000000" stroke="#000000" points="811.2685,-267.5001 821.2684,-264 811.2684,-260.5001 811.2685,-267.5001"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge29" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M729.9783,-398.1136C741.3934,-402.4278 754.2906,-407.366 766,-412 780.5126,-417.7434 796.3802,-424.2322 810.2886,-429.9901"/>
+<polygon fill="#000000" stroke="#000000" points="808.9859,-433.2389 819.5636,-433.8415 811.6704,-426.7741 808.9859,-433.2389"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_node25" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="875.5,-398 821.5,-398 821.5,-374 875.5,-374 875.5,-398"/>
+<text text-anchor="middle" x="848.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~get_td_transition_dipole~~CallsGraph_edge28" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M742.3961,-386C764.261,-386 790.2478,-386 811.031,-386"/>
+<polygon fill="#000000" stroke="#000000" points="811.0744,-389.5001 821.0743,-386 811.0743,-382.5001 811.0744,-389.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_td_transition_dipoleCallsGraph = svgPanZoom('#procget_td_transition_dipoleCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_td_transition_dipole~~CalledByGraph Pages: 1 -->
+<svg id="procget_td_transition_dipoleCalledByGraph" width="384pt" height="32pt"
+ viewBox="0.00 0.00 384.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_td_transition_dipole~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~get_td_transition_dipole~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 380,-28 380,4 -4,4"/>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~get_td_transition_dipole~~CalledByGraph_node1" class="node">
+<title>proc~get_td_transition_dipole</title>
+<polygon fill="none" stroke="#000000" points="376,-24 237,-24 237,0 376,0 376,-24"/>
+<text text-anchor="middle" x="306.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_td_transition_dipole</text>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~get_td_transition_dipole~~CalledByGraph_node2" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~get_td_transition_dipole~~CalledByGraph_node2"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="201,-24 125,-24 125,0 201,0 201,-24"/>
+<text text-anchor="middle" x="163" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole -->
+<g id="proc~~get_td_transition_dipole~~CalledByGraph_edge1" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M201.0786,-12C209.1023,-12 217.8525,-12 226.7691,-12"/>
+<polygon fill="#000000" stroke="#000000" points="226.8773,-15.5001 236.8772,-12 226.8772,-8.5001 226.8773,-15.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~get_td_transition_dipole~~CalledByGraph_node3" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~get_td_transition_dipole~~CalledByGraph_node3"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="89,-24 0,-24 0,0 89,0 89,-24"/>
+<text text-anchor="middle" x="44.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~get_td_transition_dipole~~CalledByGraph_edge2" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M89.2998,-12C97.5938,-12 106.2902,-12 114.6833,-12"/>
+<polygon fill="#000000" stroke="#000000" points="114.7233,-15.5001 124.7233,-12 114.7233,-8.5001 114.7233,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

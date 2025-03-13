@@ -1,0 +1,1199 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>eijden &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>eijden
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">48 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/grd1.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/grd1.f90.html'>grd1.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/grd1.html'>grd1</a></li>
+            <li class="breadcrumb-item active" aria-current="page">eijden</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/eijden.html#src">eijden</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine eijden(eps, nbf, infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~eijden~~UsesGraph Pages: 1 -->
+<svg id="proceijdenUsesGraph" width="641pt" height="230pt"
+ viewBox="0.00 0.00 641.00 229.92" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~eijden~~UsesGraph" class="graph" transform="scale(.7742 .7742) rotate(0) translate(4 293)">
+<title>proc~~eijden~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-293 824,-293 824,4 -4,4"/>
+<!-- proc~eijden -->
+<g id="proc~~eijden~~UsesGraph_node1" class="node">
+<title>proc~eijden</title>
+<polygon fill="none" stroke="#000000" points="820,-127 766,-127 766,-103 820,-103 820,-127"/>
+<text text-anchor="middle" x="793" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">eijden</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~eijden~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~eijden~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="696.5,-127 642.5,-127 642.5,-103 696.5,-103 696.5,-127"/>
+<text text-anchor="middle" x="669.5" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;module~mathlib -->
+<g id="proc~~eijden~~UsesGraph_edge1" class="edge">
+<title>proc~eijden&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M765.8974,-115C748.5235,-115 725.7392,-115 706.684,-115"/>
+<polygon fill="#000000" stroke="#000000" points="706.5394,-111.5001 696.5394,-115 706.5393,-118.5001 706.5394,-111.5001"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~eijden~~UsesGraph_node3" class="node">
+<title>module~messages</title>
+<g id="a_proc~~eijden~~UsesGraph_node3"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-226 261.5,-226 261.5,-202 327.5,-202 327.5,-226"/>
+<text text-anchor="middle" x="294.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;module~messages -->
+<g id="proc~~eijden~~UsesGraph_edge2" class="edge">
+<title>proc~eijden&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M765.9029,-124.7258C754.8486,-128.5114 741.8917,-132.7184 730,-136 608.4811,-169.5337 577.4144,-176.692 453,-197 414.35,-203.3088 370.0007,-207.8373 338.0615,-210.626"/>
+<polygon fill="#000000" stroke="#000000" points="337.399,-207.1697 327.7319,-211.5051 337.9927,-214.1444 337.399,-207.1697"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~eijden~~UsesGraph_node4" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~eijden~~UsesGraph_node4"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="730,-66 609,-66 609,-42 730,-42 730,-66"/>
+<text text-anchor="middle" x="669.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~eijden~~UsesGraph_edge3" class="edge">
+<title>proc~eijden&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M768.6004,-102.9484C749.8247,-93.6745 723.6695,-80.7558 702.9436,-70.5187"/>
+<polygon fill="#000000" stroke="#000000" points="704.3649,-67.3171 693.8489,-66.0266 701.2649,-73.5933 704.3649,-67.3171"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~eijden~~UsesGraph_node9" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~eijden~~UsesGraph_node9"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="564.5,-146 497.5,-146 497.5,-122 564.5,-122 564.5,-146"/>
+<text text-anchor="middle" x="531" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~eijden~~UsesGraph_edge4" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M642.467,-118.7085C623.2344,-121.3469 596.9765,-124.9491 574.7768,-127.9945"/>
+<polygon fill="#000000" stroke="#000000" points="574.0103,-124.5668 564.5788,-129.3935 574.9617,-131.5019 574.0103,-124.5668"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~eijden~~UsesGraph_node10" class="node">
+<title>module~precision</title>
+<g id="a_proc~~eijden~~UsesGraph_node10"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-163 142,-163 142,-139 203,-139 203,-163"/>
+<text text-anchor="middle" x="172.5" y="-148.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~eijden~~UsesGraph_edge5" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M642.0679,-109.9C579.9159,-99.1223 423.7208,-76.4113 294.5,-94"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-94C259.0163,-99.2008 222.2512,-118.6359 198.4817,-133.3786"/>
+<polygon fill="#000000" stroke="#000000" points="196.59,-130.4338 190.0379,-138.7597 200.352,-136.337 196.59,-130.4338"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~eijden~~UsesGraph_node5" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-289 130,-289 130,-265 215,-265 215,-289"/>
+<text text-anchor="middle" x="172.5" y="-274.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~eijden~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-226.1119C256.0979,-234.5918 234.3205,-246.1255 215,-256 212.2312,-257.4151 209.354,-258.8699 206.4607,-260.3219"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-257.3053 197.2773,-264.8978 207.7887,-263.5706 204.6667,-257.3053"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~eijden~~UsesGraph_node6" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-247 136.5,-247 136.5,-223 208.5,-223 208.5,-247"/>
+<text text-anchor="middle" x="172.5" y="-232.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~eijden~~UsesGraph_edge7" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-219.6829C248.3109,-221.9506 232.9133,-224.601 218.6653,-227.0535"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-223.6503 208.5419,-228.7961 218.9907,-230.5489 217.8032,-223.6503"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~eijden~~UsesGraph_node8" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~eijden~~UsesGraph_node8"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-205 133,-205 133,-181 212,-181 212,-205"/>
+<text text-anchor="middle" x="172.5" y="-190.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~eijden~~UsesGraph_edge8" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-208.3171C249.3385,-206.2263 235.302,-203.8102 222.0189,-201.5237"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-198.0553 212.052,-199.8081 221.3133,-204.9538 222.5008,-198.0553"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~eijden~~UsesGraph_edge9" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-201.8881C256.0979,-193.4082 234.3205,-181.8745 215,-172 212.2312,-170.5849 209.354,-169.1301 206.4607,-167.6781"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-164.4294 197.2773,-163.1022 204.6667,-170.6947 207.7887,-164.4294"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~eijden~~UsesGraph_node7" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~eijden~~UsesGraph_node7"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="573,-24 489,-24 489,0 573,0 573,-24"/>
+<text text-anchor="middle" x="531" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~eijden~~UsesGraph_edge10" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M629.8115,-41.9645C614.454,-37.3074 596.7087,-31.9261 580.53,-27.0199"/>
+<polygon fill="#000000" stroke="#000000" points="581.2797,-23.5899 570.6943,-24.0373 579.2483,-30.2887 581.2797,-23.5899"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~eijden~~UsesGraph_node11" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="560,-66 502,-66 502,-42 560,-42 560,-66"/>
+<text text-anchor="middle" x="531" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~eijden~~UsesGraph_edge11" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.7519,-54C595.71,-54 582.2597,-54 570.289,-54"/>
+<polygon fill="#000000" stroke="#000000" points="570.1978,-50.5001 560.1978,-54 570.1977,-57.5001 570.1978,-50.5001"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~eijden~~UsesGraph_node13" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~eijden~~UsesGraph_node13"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-146 380.5,-146 380.5,-122 446.5,-122 446.5,-146"/>
+<text text-anchor="middle" x="413.5" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~eijden~~UsesGraph_edge12" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M497.3292,-134C484.8079,-134 470.4155,-134 457.13,-134"/>
+<polygon fill="#000000" stroke="#000000" points="456.7695,-130.5001 446.7695,-134 456.7694,-137.5001 456.7695,-130.5001"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~eijden~~UsesGraph_node14" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~eijden~~UsesGraph_node14"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-188 374,-188 374,-164 453,-164 453,-188"/>
+<text text-anchor="middle" x="413.5" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~eijden~~UsesGraph_edge13" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M497.3292,-146.0355C484.6691,-150.5608 470.0962,-155.7699 456.6886,-160.5624"/>
+<polygon fill="#000000" stroke="#000000" points="455.4141,-157.301 447.1757,-163.9627 457.7703,-163.8925 455.4141,-157.301"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~eijden~~UsesGraph_node12" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~eijden~~UsesGraph_node12"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-163 0,-163 0,-139 94,-139 94,-163"/>
+<text text-anchor="middle" x="47" y="-148.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~eijden~~UsesGraph_edge14" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-151C130.4618,-151 117.2165,-151 104.2832,-151"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-147.5001 94.0202,-151 104.0202,-154.5001 104.0203,-147.5001"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~eijden~~UsesGraph_edge16" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-146.0951C384.2087,-148.88 378.8585,-151.9299 374,-155 354.1394,-167.5499 332.823,-183.5183 317.2673,-195.6768"/>
+<polygon fill="#000000" stroke="#000000" points="314.945,-193.0509 309.2638,-201.9937 319.2818,-198.5456 314.945,-193.0509"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~eijden~~UsesGraph_edge17" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-121.7986C371.6437,-108.2816 331.214,-89.0027 294.5,-94"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~eijden~~UsesGraph_node15" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~eijden~~UsesGraph_node15"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-146 251,-146 251,-122 338,-122 338,-146"/>
+<text text-anchor="middle" x="294.5" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~eijden~~UsesGraph_edge15" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-134C370.4498,-134 359.3275,-134 348.4544,-134"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-130.5001 338.1539,-134 348.1539,-137.5001 348.154,-130.5001"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~eijden~~UsesGraph_edge19" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-188.0234C363.7049,-191.901 350.1523,-196.2287 337.6451,-200.2226"/>
+<polygon fill="#000000" stroke="#000000" points="336.347,-196.9629 327.8856,-203.3391 338.4764,-203.6312 336.347,-196.9629"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~eijden~~UsesGraph_edge20" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-171.8998C329.6221,-167.299 258.0316,-159.8726 213.2045,-155.2225"/>
+<polygon fill="#000000" stroke="#000000" points="213.5495,-151.7396 203.2418,-154.189 212.8272,-158.7022 213.5495,-151.7396"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~eijden~~UsesGraph_edge18" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-163.9645C366.5776,-159.4392 351.8187,-154.2301 338.2399,-149.4376"/>
+<polygon fill="#000000" stroke="#000000" points="339.2004,-146.0651 328.6056,-146.0373 336.8706,-152.666 339.2004,-146.0651"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panproceijdenUsesGraph = svgPanZoom('#proceijdenUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Compute "energy weighted density matrix"</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This quantity is actually the Lagrangian matrix,</p>
+</div>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-eps"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>eps</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~86"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~53"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~eijden~~CallsGraph Pages: 1 -->
+<svg id="proceijdenCallsGraph" width="641pt" height="225pt"
+ viewBox="0.00 0.00 641.00 225.22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~eijden~~CallsGraph" class="graph" transform="scale(.9625 .9625) rotate(0) translate(4 230)">
+<title>proc~~eijden~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-230 662,-230 662,4 -4,4"/>
+<!-- proc~eijden -->
+<g id="proc~~eijden~~CallsGraph_node1" class="node">
+<title>proc~eijden</title>
+<polygon fill="none" stroke="#000000" points="54,-125 0,-125 0,-101 54,-101 54,-125"/>
+<text text-anchor="middle" x="27" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">eijden</text>
+</g>
+<!-- interface~data_has_tags -->
+<g id="proc~~eijden~~CallsGraph_node2" class="node">
+<title>interface~data_has_tags</title>
+<g id="a_proc~~eijden~~CallsGraph_node2"><a xlink:href="../interface/data_has_tags.html" xlink:title="data_has_tags">
+<polygon fill="#a7506f" stroke="#a7506f" points="189,-187 101,-187 101,-163 189,-163 189,-187"/>
+<text text-anchor="middle" x="145" y="-172.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">data_has_tags</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;interface~data_has_tags -->
+<g id="proc~~eijden~~CallsGraph_edge1" class="edge">
+<title>proc~eijden&#45;&gt;interface~data_has_tags</title>
+<path fill="none" stroke="#000000" d="M43.5281,-125.1493C55.9082,-133.8986 73.4857,-145.594 90,-154 93.487,-155.7749 97.1609,-157.4886 100.888,-159.1197"/>
+<polygon fill="#000000" stroke="#000000" points="99.6086,-162.3782 110.1857,-162.9917 102.2998,-155.9161 99.6086,-162.3782"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~eijden~~CallsGraph_node3" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~eijden~~CallsGraph_node3"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="200,-145 90,-145 90,-121 200,-121 200,-145"/>
+<text text-anchor="middle" x="145" y="-130.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~eijden~~CallsGraph_edge2" class="edge">
+<title>proc~eijden&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M54.0716,-117.5884C61.8667,-118.9096 70.7258,-120.4112 79.7826,-121.9462"/>
+<polygon fill="#000000" stroke="#000000" points="79.2024,-125.3977 89.6467,-123.6181 80.3722,-118.4961 79.2024,-125.3977"/>
+</g>
+<!-- interface~unpack_matrix -->
+<g id="proc~~eijden~~CallsGraph_node4" class="node">
+<title>interface~unpack_matrix</title>
+<g id="a_proc~~eijden~~CallsGraph_node4"><a xlink:href="../interface/unpack_matrix.html" xlink:title="unpack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="190.5,-64 99.5,-64 99.5,-40 190.5,-40 190.5,-64"/>
+<text text-anchor="middle" x="145" y="-49.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">unpack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~eijden~~CallsGraph_edge3" class="edge">
+<title>proc~eijden&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M48.7573,-100.9907C60.8444,-94.3866 76.1885,-86.1137 90,-79 96.6964,-75.551 103.8965,-71.9442 110.8092,-68.5308"/>
+<polygon fill="#000000" stroke="#000000" points="112.5477,-71.5764 119.9832,-64.029 109.464,-65.2922 112.5477,-71.5764"/>
+</g>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~eijden~~CallsGraph_node5" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<g id="a_proc~~eijden~~CallsGraph_node5"><a xlink:href="../proc/orthogonal_transform_sym.html" xlink:title="orthogonal_transform_sym">
+<polygon fill="#d9534f" stroke="#d9534f" points="392,-125 236,-125 236,-101 392,-101 392,-125"/>
+<text text-anchor="middle" x="314" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform_sym</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~eijden~~CallsGraph_edge4" class="edge">
+<title>proc~eijden&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M54.2876,-112.4725C65.3696,-112.2828 78.2958,-112.0929 90,-112 134.8175,-111.6443 184.6801,-111.8116 225.9622,-112.103"/>
+<polygon fill="#000000" stroke="#000000" points="225.9653,-115.603 235.991,-112.1774 226.0173,-108.6032 225.9653,-115.603"/>
+</g>
+<!-- proc~unpack_f90 -->
+<g id="proc~~eijden~~CallsGraph_node11" class="node">
+<title>proc~unpack_f90</title>
+<g id="a_proc~~eijden~~CallsGraph_node11"><a xlink:href="../proc/unpack_f90.html" xlink:title="UNPACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="353.5,-64 274.5,-64 274.5,-40 353.5,-40 353.5,-64"/>
+<text text-anchor="middle" x="314" y="-49.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">UNPACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~unpack_matrix&#45;&gt;proc~unpack_f90 -->
+<g id="proc~~eijden~~CallsGraph_edge5" class="edge">
+<title>interface~unpack_matrix&#45;&gt;proc~unpack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M190.7338,-52C213.4697,-52 240.9859,-52 264.2478,-52"/>
+<polygon fill="#000000" stroke="#000000" points="264.2661,-55.5001 274.2661,-52 264.266,-48.5001 264.2661,-55.5001"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_node6" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~eijden~~CallsGraph_node6"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="658,-142 565,-142 565,-118 658,-118 658,-142"/>
+<text text-anchor="middle" x="611.5" y="-127.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge6" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M392.1646,-117.4665C443.2211,-120.3841 508.7207,-124.1269 554.801,-126.7601"/>
+<polygon fill="#000000" stroke="#000000" points="554.7249,-130.2613 564.9083,-127.3376 555.1243,-123.2727 554.7249,-130.2613"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~eijden~~CallsGraph_node7" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~eijden~~CallsGraph_node7"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="529,-226 428,-226 428,-202 529,-202 529,-226"/>
+<text text-anchor="middle" x="478.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~eijden~~CallsGraph_edge7" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M329.1562,-125.2594C350.3613,-142.024 390.5043,-172.3699 428,-193 431.0027,-194.6521 434.1625,-196.2557 437.3755,-197.7918"/>
+<polygon fill="#000000" stroke="#000000" points="435.9323,-200.9804 446.4849,-201.9259 438.8252,-194.6061 435.9323,-200.9804"/>
+</g>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~eijden~~CallsGraph_node8" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<g id="a_proc~~eijden~~CallsGraph_node8"><a xlink:href="../proc/oqp_dsymm_i64.html" xlink:title="oqp_dsymm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="528,-184 429,-184 429,-160 528,-160 528,-184"/>
+<text text-anchor="middle" x="478.5" y="-169.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsymm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~eijden~~CallsGraph_edge8" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M347.686,-125.0819C372.9683,-134.1497 407.7884,-146.6384 435.1482,-156.4513"/>
+<polygon fill="#000000" stroke="#000000" points="434.2645,-159.8527 444.8591,-159.9343 436.6278,-153.2636 434.2645,-159.8527"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~eijden~~CallsGraph_node9" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~eijden~~CallsGraph_node9"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="523,-24 434,-24 434,0 523,0 523,-24"/>
+<text text-anchor="middle" x="478.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~eijden~~CallsGraph_edge9" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M339.7838,-100.9106C355.2226,-93.3949 375.0722,-83.24 392,-73 413.8243,-59.798 437.4119,-42.9792 454.4347,-30.3469"/>
+<polygon fill="#000000" stroke="#000000" points="456.7861,-32.9588 462.694,-24.164 452.5911,-27.355 456.7861,-32.9588"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~eijden~~CallsGraph_node10" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~eijden~~CallsGraph_node10"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="523,-104 434,-104 434,-80 523,-80 523,-104"/>
+<text text-anchor="middle" x="478.5" y="-89.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~eijden~~CallsGraph_edge10" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M392.3958,-102.992C402.9595,-101.6435 413.6082,-100.2841 423.6428,-99.003"/>
+<polygon fill="#000000" stroke="#000000" points="424.3721,-102.4384 433.8483,-97.7002 423.4856,-95.4948 424.3721,-102.4384"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge12" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M513.607,-201.9333C518.9931,-199.3775 524.3135,-196.4036 529,-193 548.8928,-178.5528 545.3269,-165.745 565,-151 566.7853,-149.6619 568.6695,-148.3838 570.6157,-147.1669"/>
+<polygon fill="#000000" stroke="#000000" points="572.4194,-150.1683 579.4325,-142.2267 568.9977,-144.0616 572.4194,-150.1683"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~eijden~~CallsGraph_node12" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="638.5,-226 584.5,-226 584.5,-202 638.5,-202 638.5,-226"/>
+<text text-anchor="middle" x="611.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~eijden~~CallsGraph_edge11" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M529.161,-214C544.1366,-214 560.25,-214 574.2172,-214"/>
+<polygon fill="#000000" stroke="#000000" points="574.4252,-217.5001 584.4252,-214 574.4251,-210.5001 574.4252,-217.5001"/>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge14" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M516.6125,-159.9645C531.2209,-155.3513 548.0793,-150.0276 563.4968,-145.1589"/>
+<polygon fill="#000000" stroke="#000000" points="564.9001,-148.3862 573.382,-142.0373 562.7922,-141.7111 564.9001,-148.3862"/>
+</g>
+<!-- dsymm -->
+<g id="proc~~eijden~~CallsGraph_node13" class="node">
+<title>dsymm</title>
+<polygon fill="#777777" stroke="#777777" points="638.5,-184 584.5,-184 584.5,-160 638.5,-160 638.5,-184"/>
+<text text-anchor="middle" x="611.5" y="-169.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsymm</text>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;dsymm -->
+<g id="proc~~eijden~~CallsGraph_edge13" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M528.0243,-172C543.2084,-172 559.658,-172 573.9084,-172"/>
+<polygon fill="#000000" stroke="#000000" points="574.3198,-175.5001 584.3198,-172 574.3197,-168.5001 574.3198,-175.5001"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge16" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M509.402,-24.0354C516.422,-27.7671 523.439,-32.4045 529,-38 553.9399,-63.0949 539.4251,-84.5526 565,-109 566.1205,-110.0711 567.3052,-111.094 568.5399,-112.0701"/>
+<polygon fill="#000000" stroke="#000000" points="566.9978,-115.2468 577.2675,-117.8512 570.8634,-109.4109 566.9978,-115.2468"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~eijden~~CallsGraph_node14" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="638.5,-24 584.5,-24 584.5,0 638.5,0 638.5,-24"/>
+<text text-anchor="middle" x="611.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~eijden~~CallsGraph_edge15" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M523.1571,-12C539.5895,-12 558.0237,-12 573.7848,-12"/>
+<polygon fill="#000000" stroke="#000000" points="574.2118,-15.5001 584.2117,-12 574.2117,-8.5001 574.2118,-15.5001"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge18" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M520.582,-104.0234C532.9536,-107.5582 546.6344,-111.467 559.546,-115.156"/>
+<polygon fill="#000000" stroke="#000000" points="558.6584,-118.5424 569.2352,-117.9244 560.5815,-111.8117 558.6584,-118.5424"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~eijden~~CallsGraph_node15" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="638.5,-100 584.5,-100 584.5,-76 638.5,-76 638.5,-100"/>
+<text text-anchor="middle" x="611.5" y="-85.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~eijden~~CallsGraph_edge17" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M523.1571,-90.6569C539.5895,-90.1627 558.0237,-89.6083 573.7848,-89.1343"/>
+<polygon fill="#000000" stroke="#000000" points="574.3215,-92.6198 584.2117,-88.8207 574.111,-85.623 574.3215,-92.6198"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~eijden~~CallsGraph_edge19" class="edge">
+<title>proc~unpack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M353.8645,-47.3865C398.7769,-43.9766 472.8281,-43.8464 529,-71 549.9456,-81.1251 546.0427,-95.5146 565,-109 566.8767,-110.335 568.8518,-111.6154 570.886,-112.8386"/>
+<polygon fill="#000000" stroke="#000000" points="569.6038,-116.1253 580.0611,-117.8266 572.9472,-109.9753 569.6038,-116.1253"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~eijden~~CallsGraph_edge20" class="edge">
+<title>proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M353.8209,-42.3171C374.8595,-37.2013 400.9983,-30.8454 423.9004,-25.2765"/>
+<polygon fill="#000000" stroke="#000000" points="424.9381,-28.6262 433.828,-22.8625 423.2841,-21.8244 424.9381,-28.6262"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panproceijdenCallsGraph = svgPanZoom('#proceijdenCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~eijden~~CalledByGraph Pages: 1 -->
+<svg id="proceijdenCalledByGraph" width="433pt" height="74pt"
+ viewBox="0.00 0.00 433.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~eijden~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~eijden~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 429,-70 429,4 -4,4"/>
+<!-- proc~eijden -->
+<g id="proc~~eijden~~CalledByGraph_node1" class="node">
+<title>proc~eijden</title>
+<polygon fill="none" stroke="#000000" points="425,-45 371,-45 371,-21 425,-21 425,-45"/>
+<text text-anchor="middle" x="398" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">eijden</text>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~eijden~~CalledByGraph_node2" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~eijden~~CalledByGraph_node2"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="330.5,-66 257.5,-66 257.5,-42 330.5,-42 330.5,-66"/>
+<text text-anchor="middle" x="294" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~eijden -->
+<g id="proc~~eijden~~CalledByGraph_edge1" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M330.6665,-46.5962C340.4758,-44.6155 351.0845,-42.4733 360.9161,-40.4881"/>
+<polygon fill="#000000" stroke="#000000" points="361.7049,-43.8996 370.8142,-38.4894 360.3193,-37.038 361.7049,-43.8996"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~eijden~~CalledByGraph_node3" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~eijden~~CalledByGraph_node3"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="335,-24 253,-24 253,0 335,0 335,-24"/>
+<text text-anchor="middle" x="294" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~eijden -->
+<g id="proc~~eijden~~CalledByGraph_edge2" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M335.1036,-20.2998C343.6609,-22.0277 352.6305,-23.8388 361.028,-25.5345"/>
+<polygon fill="#000000" stroke="#000000" points="360.4264,-28.9836 370.9213,-27.5322 361.8119,-22.1221 360.4264,-28.9836"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~eijden~~CalledByGraph_node4" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~eijden~~CalledByGraph_node4"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~eijden~~CalledByGraph_edge3" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M217.29,-12C225.459,-12 234.1015,-12 242.5254,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6458,-15.5001 252.6458,-12 242.6457,-8.5001 242.6458,-15.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~eijden~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~eijden~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~eijden~~CalledByGraph_edge4" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">eijden</span><span class="p">(</span><span class="n">eps</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">orthogonal_transform_sym</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;eijden&quot;</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">ij</span><span class="p">,</span><span class="w"> </span><span class="n">ne</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">eps</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">scr</span><span class="p">(:),</span><span class="n">tempd</span><span class="p">(:)</span>
+
+<span class="w">    </span><span class="c">! tagarray</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">mo_energy_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">fock_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(:),</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">OQP_FOCK_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_FOCK_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="o">&gt;</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">       allocate</span><span class="p">(</span><span class="n">c</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="n">scr</span><span class="p">(</span><span class="mi">8</span><span class="o">*</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="n">tempd</span><span class="p">(</span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end if</span>
+
+<span class="k">    </span><span class="n">ne</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec</span><span class="o">/</span><span class="mi">2</span>
+
+<span class="w">    </span><span class="k">select case</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="p">)</span>
+<span class="c">!   RHF case</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="w">      </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">)</span>
+
+<span class="w">       </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">       </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">          </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<span class="w">             </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ij</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">             </span><span class="n">eps</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">2</span><span class="o">*</span><span class="nb">sum</span><span class="p">(</span><span class="n">mo_energy_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">ne</span><span class="p">)&amp;</span>
+<span class="w">                             </span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="n">ne</span><span class="p">)&amp;</span>
+<span class="w">                             </span><span class="o">*</span><span class="n">mo_a</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="n">ne</span><span class="p">))</span>
+<span class="w">          </span><span class="k">end do</span>
+<span class="k">       end do</span>
+
+<span class="c">!   U/ROHF case</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="p">:)</span>
+
+<span class="w">      </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_FOCK_A</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_FOCK_B</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">)</span>
+
+<span class="c">!     Alpha part</span>
+<span class="w">      </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">dmat_a</span><span class="p">,</span><span class="n">c</span><span class="p">,</span><span class="n">nbf</span><span class="p">,</span><span class="s1">&#39;U&#39;</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">orthogonal_transform_sym</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">tempd</span><span class="p">)</span>
+
+<span class="c">!     Beta part</span>
+<span class="w">      </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">dmat_b</span><span class="p">,</span><span class="n">c</span><span class="p">,</span><span class="n">nbf</span><span class="p">,</span><span class="s1">&#39;U&#39;</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">orthogonal_transform_sym</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">eps</span><span class="p">)</span>
+<span class="w">      </span><span class="n">eps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">eps</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">tempd</span>
+
+<span class="c">!     Half the diagonal</span>
+<span class="w">      </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">      </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">         </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ij</span><span class="o">+</span><span class="n">i</span>
+<span class="w">         </span><span class="n">eps</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5d0</span><span class="o">*</span><span class="n">eps</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+
+<span class="k">    end select</span>
+
+<span class="k">  end subroutine </span><span class="n">eijden</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

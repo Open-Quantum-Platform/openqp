@@ -1,0 +1,1998 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>int1 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>int1
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 1.1% of total for modules and submodules.">501 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/int1.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/int1.f90.html'>int1.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">int1</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/int1.html#variable-blocksize">blocksize</a>
+            <a class="list-group-item" href="../module/int1.html#variable-mult_bs">mult_bs</a>
+            <a class="list-group-item" href="../module/int1.html#variable-mult_all_bs">mult_all_bs</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#inters-0"
+         aria-expanded="false" aria-controls="inters-0">
+         <h4 class="card-header bg-primary text-white">Interfaces</h4>
+      </a>
+      <div id="inters-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/int1.html#interface-int1_coul">int1_coul</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/int1.html#proc-omp_hst">omp_hst</a>
+            <a class="list-group-item" href="../module/int1.html#proc-multipole_integrals">multipole_integrals</a>
+            <a class="list-group-item" href="../module/int1.html#proc-electrostatic_potential">electrostatic_potential</a>
+            <a class="list-group-item" href="../module/int1.html#proc-basis_overlap">basis_overlap</a>
+            <a class="list-group-item" href="../module/int1.html#proc-overlap">overlap</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      <p>@author  Vladimir Mironov
+@brief This module contains subroutines for 1-electron integrals
+ calculation.
+@date <em>Sep, 2018</em> Initial release</p>
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='mod_1e_primitives.html'>mod_1e_primitives</a></li>
+                  <li class="list-inline-item"><a href='messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='mod_shell_tools.html'>mod_shell_tools</a></li>
+                  <li class="list-inline-item"><a href='basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_fortran_env'>iso_fortran_env</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~int1~~UsesGraph Pages: 1 -->
+<svg id="moduleint1UsesGraph" width="641pt" height="373pt"
+ viewBox="0.00 0.00 641.00 372.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~int1~~UsesGraph" class="graph" transform="scale(.7309 .7309) rotate(0) translate(4 505.7782)">
+<title>module~~int1~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-505.7782 873,-505.7782 873,4 -4,4"/>
+<!-- module~int1 -->
+<g id="module~~int1~~UsesGraph_node1" class="node">
+<title>module~int1</title>
+<polygon fill="none" stroke="#000000" points="869,-257.8352 815,-257.8352 815,-233.8352 869,-233.8352 869,-257.8352"/>
+<text text-anchor="middle" x="842" y="-243.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int1</text>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_node2" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~int1~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-297.8352 0,-297.8352 0,-273.8352 94,-273.8352 94,-297.8352"/>
+<text text-anchor="middle" x="47" y="-283.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_edge1" class="edge">
+<title>module~int1&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570,-387.8352C474.0531,-373.1713 463.2228,-452.0347 368,-470.8352 264.2255,-491.3241 218.7947,-528.3194 130,-470.8352 73.4263,-434.2104 55.0498,-348.9004 49.3794,-308.2058"/>
+<polygon fill="#000000" stroke="#000000" points="52.8426,-307.694 48.1205,-298.2097 45.8975,-308.5687 52.8426,-307.694"/>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~int1~~UsesGraph_node3" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~int1~~UsesGraph_node3"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-379.8352 404,-379.8352 404,-355.8352 474,-355.8352 474,-379.8352"/>
+<text text-anchor="middle" x="439" y="-365.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~basis_tools -->
+<g id="module~~int1~~UsesGraph_edge2" class="edge">
+<title>module~int1&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570,-387.8352C541.4164,-383.4667 509.3237,-378.567 484.0572,-374.7106"/>
+<polygon fill="#000000" stroke="#000000" points="484.4431,-371.229 474.0295,-373.1802 483.3869,-378.1489 484.4431,-371.229"/>
+</g>
+<!-- module~messages -->
+<g id="module~~int1~~UsesGraph_node4" class="node">
+<title>module~messages</title>
+<g id="a_module~~int1~~UsesGraph_node4"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="472,-276.8352 406,-276.8352 406,-252.8352 472,-252.8352 472,-276.8352"/>
+<text text-anchor="middle" x="439" y="-262.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~messages -->
+<g id="module~~int1~~UsesGraph_edge3" class="edge">
+<title>module~int1&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M722.5,-387.8352C656.7522,-404.2989 636.9998,-398.075 570,-387.8352"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M570,-387.8352C513.0217,-379.127 470.0525,-318.9195 450.5502,-286.0854"/>
+<polygon fill="#000000" stroke="#000000" points="453.4848,-284.1672 445.47,-277.2381 447.4144,-287.653 453.4848,-284.1672"/>
+</g>
+<!-- module~mod_1e_primitives -->
+<g id="module~~int1~~UsesGraph_node5" class="node">
+<title>module~mod_1e_primitives</title>
+<g id="a_module~~int1~~UsesGraph_node5"><a xlink:href="../module/mod_1e_primitives.html" xlink:title="mod_1e_primitives">
+<polygon fill="#337ab7" stroke="#337ab7" points="779,-136.8352 666,-136.8352 666,-112.8352 779,-112.8352 779,-136.8352"/>
+<text text-anchor="middle" x="722.5" y="-122.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="module~~int1~~UsesGraph_edge4" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M830.105,-233.7909C809.4537,-212.8804 766.7915,-169.6826 741.8353,-144.4132"/>
+<polygon fill="#000000" stroke="#000000" points="744.2198,-141.8467 734.7027,-137.1911 739.2393,-146.7655 744.2198,-141.8467"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="module~~int1~~UsesGraph_node6" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_module~~int1~~UsesGraph_node6"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="618.5,-277.8352 521.5,-277.8352 521.5,-253.8352 618.5,-253.8352 618.5,-277.8352"/>
+<text text-anchor="middle" x="570" y="-263.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_shell_tools -->
+<g id="module~~int1~~UsesGraph_edge5" class="edge">
+<title>module~int1&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M837.4735,-258.1248C825.03,-289.5891 786.8868,-371.7123 722.5,-387.8352"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M722.5,-387.8352C658.8271,-403.7793 604.2451,-325.8397 581.4175,-286.8929"/>
+<polygon fill="#000000" stroke="#000000" points="584.2968,-284.8757 576.3119,-277.9121 578.2115,-288.3353 584.2968,-284.8757"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-367.8352C250.3117,-351.6135 228.9261,-389.4427 172,-367.8352"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-367.8352C132.4519,-352.8239 92.5944,-323.6895 68.8516,-304.4996"/>
+<polygon fill="#000000" stroke="#000000" points="70.8088,-301.5775 60.8638,-297.9242 66.36,-306.9819 70.8088,-301.5775"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~int1~~UsesGraph_node9" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~int1~~UsesGraph_node9"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-461.8352 250,-461.8352 250,-437.8352 368,-437.8352 368,-461.8352"/>
+<text text-anchor="middle" x="309" y="-447.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~int1~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.5593,-380.0895C415.8392,-384.2918 409.5339,-389.1255 404,-393.8352 387.006,-408.2983 386.9466,-417.0454 368,-428.8352 365.2306,-430.5585 362.3001,-432.1663 359.2842,-433.662"/>
+<polygon fill="#000000" stroke="#000000" points="357.7381,-430.5196 350.0562,-437.8161 360.6116,-436.9027 357.7381,-430.5196"/>
+</g>
+<!-- module~constants -->
+<g id="module~~int1~~UsesGraph_node10" class="node">
+<title>module~constants</title>
+<g id="a_module~~int1~~UsesGraph_node10"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-175.8352 277,-175.8352 277,-151.8352 341,-151.8352 341,-175.8352"/>
+<text text-anchor="middle" x="309" y="-161.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~int1~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.6108,-355.6805C426.5865,-339.7332 414.0173,-310.8359 404,-285.8352 387.0516,-243.5363 399.3017,-222.9509 368,-189.8352 363.1439,-184.6977 357.0929,-180.5126 350.7321,-177.1227"/>
+<polygon fill="#000000" stroke="#000000" points="351.8353,-173.7747 341.2944,-172.7068 348.8686,-180.115 351.8353,-173.7747"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~int1~~UsesGraph_node11" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~int1~~UsesGraph_node11"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-339.8352 269.5,-339.8352 269.5,-315.8352 348.5,-315.8352 348.5,-339.8352"/>
+<text text-anchor="middle" x="309" y="-325.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~int1~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-357.0107C389.7562,-352.6833 373.3144,-347.6243 358.1087,-342.9456"/>
+<polygon fill="#000000" stroke="#000000" points="358.9194,-339.5332 348.3322,-339.9375 356.8607,-346.2236 358.9194,-339.5332"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~int1~~UsesGraph_node13" class="node">
+<title>module~parallel</title>
+<g id="a_module~~int1~~UsesGraph_node13"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-419.8352 282,-419.8352 282,-395.8352 336,-395.8352 336,-419.8352"/>
+<text text-anchor="middle" x="309" y="-405.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~int1~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-378.6598C385.9283,-384.165 364.188,-390.8543 346.0401,-396.4383"/>
+<polygon fill="#000000" stroke="#000000" points="344.9033,-393.126 336.3749,-399.4122 346.962,-399.8165 344.9033,-393.126"/>
+</g>
+<!-- module~precision -->
+<g id="module~~int1~~UsesGraph_node14" class="node">
+<title>module~precision</title>
+<g id="a_module~~int1~~UsesGraph_node14"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-215.8352 141.5,-215.8352 141.5,-191.8352 202.5,-191.8352 202.5,-215.8352"/>
+<text text-anchor="middle" x="172" y="-201.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8345,-372.8342C377.2841,-375.4188 340.2166,-376.4637 309,-367.8352"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-367.8352C282.4473,-360.4959 271.1691,-366.4643 250,-348.8352 210.3334,-315.802 187.8161,-257.2197 177.9918,-225.5713"/>
+<polygon fill="#000000" stroke="#000000" points="181.3368,-224.5405 175.1402,-215.9467 174.6252,-226.529 181.3368,-224.5405"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~int1~~UsesGraph_node7" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-297.8352 266.5,-297.8352 266.5,-273.8352 351.5,-273.8352 351.5,-297.8352"/>
+<text text-anchor="middle" x="309" y="-283.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~int1~~UsesGraph_edge12" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-270.1887C392.5347,-272.3412 376.8373,-274.8769 362.0035,-277.2731"/>
+<polygon fill="#000000" stroke="#000000" points="361.2255,-273.8533 351.9117,-278.9033 362.3419,-280.7638 361.2255,-273.8533"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~int1~~UsesGraph_node8" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-255.8352 273,-255.8352 273,-231.8352 345,-231.8352 345,-255.8352"/>
+<text text-anchor="middle" x="309" y="-241.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~int1~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-259.4817C390.5342,-257.0061 372.0702,-254.0235 355.3913,-251.3292"/>
+<polygon fill="#000000" stroke="#000000" points="355.7113,-247.8356 345.2811,-249.696 354.5949,-254.746 355.7113,-247.8356"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~int1~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.8455,-276.8949C406.8061,-285.8916 386.6757,-298.0871 368,-306.8352 364.1232,-308.6512 360.0432,-310.4054 355.9142,-312.0737"/>
+<polygon fill="#000000" stroke="#000000" points="354.3318,-308.9328 346.2636,-315.7997 356.8531,-315.463 354.3318,-308.9328"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.4258,-252.7182C398.7123,-236.4352 353.0822,-208.9371 309,-203.8352"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_edge16" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M715.4921,-112.5404C702.1121,-90.383 670.6083,-44.1687 630,-23.8352 553.7203,14.3596 524.3079,-4.8352 439,-4.8352 439,-4.8352 439,-4.8352 309,-4.8352 167.1784,-4.8352 80.2031,-198.6804 54.8014,-264.3682"/>
+<polygon fill="#000000" stroke="#000000" points="51.5129,-263.1693 51.2543,-273.761 58.0615,-265.6424 51.5129,-263.1693"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="module~~int1~~UsesGraph_edge19" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M709.4979,-136.8568C683.0701,-161.2917 622.8823,-216.9408 590.8918,-246.5189"/>
+<polygon fill="#000000" stroke="#000000" points="588.3703,-244.0834 583.4039,-253.4421 593.1225,-249.2232 588.3703,-244.0834"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="module~~int1~~UsesGraph_edge17" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M676.1983,-136.9422C661.5203,-140.3495 645.1659,-143.7038 630,-145.8352 530.7236,-159.7879 412.7422,-163.0226 351.1706,-163.7106"/>
+<polygon fill="#000000" stroke="#000000" points="351.032,-160.2117 341.0655,-163.806 351.0982,-167.2114 351.032,-160.2117"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="module~~int1~~UsesGraph_node12" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_module~~int1~~UsesGraph_node12"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="630,-136.8352 510,-136.8352 510,-112.8352 630,-112.8352 630,-136.8352"/>
+<text text-anchor="middle" x="570" y="-122.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="module~~int1~~UsesGraph_edge18" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M665.7146,-124.8352C657.4666,-124.8352 648.8929,-124.8352 640.416,-124.8352"/>
+<polygon fill="#000000" stroke="#000000" points="640.1523,-121.3353 630.1523,-124.8352 640.1523,-128.3353 640.1523,-121.3353"/>
+</g>
+<!-- module~rys -->
+<g id="module~~int1~~UsesGraph_node15" class="node">
+<title>module~rys</title>
+<g id="a_module~~int1~~UsesGraph_node15"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="466,-95.8352 412,-95.8352 412,-71.8352 466,-71.8352 466,-95.8352"/>
+<text text-anchor="middle" x="439" y="-81.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="module~~int1~~UsesGraph_edge20" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M674.227,-112.7358C660.0459,-109.4913 644.4601,-106.225 630,-103.8352 576.9301,-95.0645 514.8931,-89.4053 476.2681,-86.4192"/>
+<polygon fill="#000000" stroke="#000000" points="476.2563,-82.9085 466.0216,-85.6475 475.7305,-89.8888 476.2563,-82.9085"/>
+</g>
+<!-- module~xyz_order -->
+<g id="module~~int1~~UsesGraph_node16" class="node">
+<title>module~xyz_order</title>
+<g id="a_module~~int1~~UsesGraph_node16"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="602,-56.8352 538,-56.8352 538,-32.8352 602,-32.8352 602,-56.8352"/>
+<text text-anchor="middle" x="570" y="-42.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="module~~int1~~UsesGraph_edge21" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M703.3848,-112.7704C684.936,-101.3446 656.0466,-84.0221 630,-70.8352 623.3152,-67.4508 616.0892,-64.0834 609.0454,-60.9491"/>
+<polygon fill="#000000" stroke="#000000" points="610.1865,-57.6284 599.621,-56.8398 607.3887,-64.045 610.1865,-57.6284"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="module~~int1~~UsesGraph_edge22" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M554.4582,-277.9365C531.7082,-295.6502 489.1618,-328.778 462.5549,-349.4948"/>
+<polygon fill="#000000" stroke="#000000" points="460.2617,-346.8445 454.5216,-355.7497 464.5622,-352.3677 460.2617,-346.8445"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge23" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M532.0311,-253.8257C481.6729,-238.5918 389.7317,-213.1788 309,-203.8352"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-203.8352C276.9342,-198.6697 240.0962,-199.0149 212.7009,-200.4616"/>
+<polygon fill="#000000" stroke="#000000" points="212.4663,-196.9693 202.6934,-201.0608 212.8848,-203.9568 212.4663,-196.9693"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~int1~~UsesGraph_node17" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~int1~~UsesGraph_node17"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-461.8352 130,-461.8352 130,-437.8352 214,-437.8352 214,-461.8352"/>
+<text text-anchor="middle" x="172" y="-447.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~int1~~UsesGraph_edge24" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-449.8352C241.1722,-449.8352 232.4436,-449.8352 224.0637,-449.8352"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-446.3353 214.0516,-449.8352 224.0516,-453.3353 224.0516,-446.3353"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge25" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-173.2134C257.5772,-178.8492 232.8455,-186.0701 212.2467,-192.0844"/>
+<polygon fill="#000000" stroke="#000000" points="211.1267,-188.7652 202.5084,-194.9277 213.0886,-195.4846 211.1267,-188.7652"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge26" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.7155,-117.7584C443.6964,-112.3616 335.7977,-110.546 250,-142.8352 226.6503,-151.6227 204.7075,-170.0505 190.0802,-184.3646"/>
+<polygon fill="#000000" stroke="#000000" points="187.272,-182.2277 182.7442,-191.8063 192.257,-187.142 187.272,-182.2277"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_edge28" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8114,-401.2467C253.8672,-394.1629 209.2959,-381.9916 172,-367.8352"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge29" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8051,-400.6155C270.8138,-396.5768 258.6975,-390.5508 250,-381.8352 205.5073,-337.2501 184.4264,-263.0313 176.2726,-226.11"/>
+<polygon fill="#000000" stroke="#000000" points="179.6157,-224.9966 174.1456,-215.9231 172.7635,-226.4274 179.6157,-224.9966"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~int1~~UsesGraph_edge27" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-416.1331C264.5765,-421.4541 241.5349,-428.518 221.0312,-434.8038"/>
+<polygon fill="#000000" stroke="#000000" points="219.7406,-431.5386 211.2057,-437.816 221.7924,-438.2311 219.7406,-431.5386"/>
+</g>
+<!-- mpi -->
+<g id="module~~int1~~UsesGraph_node19" class="node">
+<title>mpi</title>
+<g id="a_module~~int1~~UsesGraph_node19"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-419.8352 145,-419.8352 145,-395.8352 199,-395.8352 199,-419.8352"/>
+<text text-anchor="middle" x="172" y="-405.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~int1~~UsesGraph_edge30" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-407.8352C261.1051,-407.8352 232.0908,-407.8352 209.0994,-407.8352"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-404.3353 199.0106,-407.8352 209.0105,-411.3353 209.0106,-404.3353"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~int1~~UsesGraph_edge31" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M153.5558,-215.9346C132.5997,-229.6818 98.1987,-252.2489 74.1711,-268.011"/>
+<polygon fill="#000000" stroke="#000000" points="71.9615,-265.2745 65.5199,-273.6862 75.8011,-271.1276 71.9615,-265.2745"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="module~~int1~~UsesGraph_edge32" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M419.2558,-95.9855C397.3676,-109.4552 361.8874,-131.2891 337.1053,-146.5397"/>
+<polygon fill="#000000" stroke="#000000" points="335.1863,-143.6109 328.5041,-151.8327 338.855,-149.5725 335.1863,-143.6109"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="module~~int1~~UsesGraph_edge33" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.4113,-71.8024C375.0451,-55.6773 301.6168,-32.4009 250,-62.8352 206.2657,-88.6219 185.3393,-148.7097 176.8623,-181.5052"/>
+<polygon fill="#000000" stroke="#000000" points="173.3959,-180.9497 174.4498,-191.4919 180.2002,-182.5934 173.3959,-180.9497"/>
+</g>
+<!-- module~rys_lut -->
+<g id="module~~int1~~UsesGraph_node18" class="node">
+<title>module~rys_lut</title>
+<g id="a_module~~int1~~UsesGraph_node18"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-95.8352 282,-95.8352 282,-71.8352 336,-71.8352 336,-95.8352"/>
+<text text-anchor="middle" x="309" y="-81.4352" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="module~~int1~~UsesGraph_edge34" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.7477,-83.8352C392.7673,-83.8352 367.2154,-83.8352 346.3415,-83.8352"/>
+<polygon fill="#000000" stroke="#000000" points="346.2164,-80.3353 336.2164,-83.8352 346.2163,-87.3353 346.2164,-80.3353"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmoduleint1UsesGraph = svgPanZoom('#moduleint1UsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~int1~~UsedByGraph Pages: 1 -->
+<svg id="moduleint1UsedByGraph" width="251pt" height="284pt"
+ viewBox="0.00 0.00 251.00 284.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~int1~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 280)">
+<title>module~~int1~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-280 247,-280 247,4 -4,4"/>
+<!-- module~int1 -->
+<g id="module~~int1~~UsedByGraph_node1" class="node">
+<title>module~int1</title>
+<polygon fill="none" stroke="#000000" points="54,-150 0,-150 0,-126 54,-126 54,-150"/>
+<text text-anchor="middle" x="27" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int1</text>
+</g>
+<!-- proc~electric_moments -->
+<g id="module~~int1~~UsedByGraph_node2" class="node">
+<title>proc~electric_moments</title>
+<g id="a_module~~int1~~UsedByGraph_node2"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="220.5,-276 112.5,-276 112.5,-252 220.5,-252 220.5,-276"/>
+<text text-anchor="middle" x="166.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge1" class="edge">
+<title>proc~electric_moments&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M112.2131,-254.7045C104.2821,-251.8027 96.5828,-247.9953 90,-243 61.8242,-221.6187 43.6616,-183.6783 34.3979,-159.7342"/>
+<polygon fill="#000000" stroke="#000000" points="37.6005,-158.3022 30.8663,-150.1229 31.03,-160.7164 37.6005,-158.3022"/>
+</g>
+<!-- proc~get_structures_ao_overlap -->
+<g id="module~~int1~~UsedByGraph_node3" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<g id="a_module~~int1~~UsedByGraph_node3"><a xlink:href="../proc/get_structures_ao_overlap.html" xlink:title="get_structures_ao_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="243,-234 90,-234 90,-210 243,-210 243,-234"/>
+<text text-anchor="middle" x="166.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge2" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M109.5801,-209.9602C102.7612,-207.4879 96.0722,-204.5306 90,-201 71.1748,-190.0544 54.0021,-172.095 42.3576,-158.146"/>
+<polygon fill="#000000" stroke="#000000" points="44.856,-155.6683 35.8562,-150.0776 39.4053,-160.0604 44.856,-155.6683"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="module~~int1~~UsedByGraph_node4" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_module~~int1~~UsedByGraph_node4"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="236,-192 97,-192 97,-168 236,-168 236,-192"/>
+<text text-anchor="middle" x="166.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge3" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M121.0782,-167.9646C110.8266,-165.128 100.0155,-162.0415 90,-159 81.516,-156.4236 72.4437,-153.4999 63.9023,-150.6701"/>
+<polygon fill="#000000" stroke="#000000" points="64.7802,-147.2732 54.1863,-147.4178 62.5581,-153.9112 64.7802,-147.2732"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="module~~int1~~UsedByGraph_node5" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_module~~int1~~UsedByGraph_node5"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="228.5,-150 104.5,-150 104.5,-126 228.5,-126 228.5,-150"/>
+<text text-anchor="middle" x="166.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge4" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M104.0943,-138C90.5161,-138 76.5625,-138 64.3225,-138"/>
+<polygon fill="#000000" stroke="#000000" points="64.0599,-134.5001 54.0598,-138 64.0598,-141.5001 64.0599,-134.5001"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="module~~int1~~UsedByGraph_node6" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_module~~int1~~UsedByGraph_node6"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="208.5,-108 124.5,-108 124.5,-84 208.5,-84 208.5,-108"/>
+<text text-anchor="middle" x="166.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge5" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M124.2954,-107.1483C113.1115,-110.2218 101.0698,-113.6383 90,-117 81.516,-119.5764 72.4437,-122.5001 63.9023,-125.3299"/>
+<polygon fill="#000000" stroke="#000000" points="62.5581,-122.0888 54.1863,-128.5822 64.7802,-128.7268 62.5581,-122.0888"/>
+</g>
+<!-- proc~int1e -->
+<g id="module~~int1~~UsedByGraph_node7" class="node">
+<title>proc~int1e</title>
+<g id="a_module~~int1~~UsedByGraph_node7"><a xlink:href="../proc/int1e.html" xlink:title="int1e">
+<polygon fill="#d9534f" stroke="#d9534f" points="193.5,-66 139.5,-66 139.5,-42 193.5,-42 193.5,-66"/>
+<text text-anchor="middle" x="166.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e</text>
+</a>
+</g>
+</g>
+<!-- proc~int1e&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge6" class="edge">
+<title>proc~int1e&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M139.3204,-57.9257C124.0665,-60.9712 105.121,-66.2082 90,-75 71.1748,-85.9456 54.0021,-103.905 42.3576,-117.854"/>
+<polygon fill="#000000" stroke="#000000" points="39.4053,-115.9396 35.8562,-125.9224 44.856,-120.3317 39.4053,-115.9396"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~int1~~UsedByGraph_node8" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~int1~~UsedByGraph_node8"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="221,-24 112,-24 112,0 221,0 221,-24"/>
+<text text-anchor="middle" x="166.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~int1 -->
+<g id="module~~int1~~UsedByGraph_edge7" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M111.8167,-21.4413C104.0258,-24.3246 96.473,-28.0879 90,-33 61.8242,-54.3813 43.6616,-92.3217 34.3979,-116.2658"/>
+<polygon fill="#000000" stroke="#000000" points="31.03,-115.2836 30.8663,-125.8771 37.6005,-117.6978 31.03,-115.2836"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blocksize"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>blocksize</strong></td>
+<td> =</td>
+                <td>28*28</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mult_bs"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>mult_bs</strong>(0:MAX_EL_MOM)</td>
+<td> =</td>
+                <td>[1, 3, 6, 10]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mult_all_bs"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>mult_all_bs</strong>(MAX_EL_MOM)</td>
+<td> =</td>
+                <td>[3, 9, 19]</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Interfaces</h2>
+              <div class="card">
+    <div class="card-header bg-light codesum">
+      <span class="anchor" id="interface-int1_coul"></span>
+      <h3>public        interface <a href='../interface/int1_coul.html'>int1_coul</a> 
+      </h3>
+    </div>
+    <ul class="list-group">
+          <li class="list-group-item">
+                <h3>
+    private  subroutine int1_coul_xyzc(cntp, xyzc, nat, chgtol, blk)  
+
+    </h3>
+  <p>@brief Compute contracted block of Coulomb 1e integrals
+@param[in]       cntp        shell pair data
+@param[in]       xyzc        coordinates and charges of particles
+@param[in]       nat         number of particles
+@param[in]       chgtol      cut-off for charge
+@param[inout]    blk         block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cntp~13"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cntp</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xyzc"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>xyzc</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nat~24"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nat</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-chgtol~4"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>chgtol</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blk~6"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>blk</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+          <li class="list-group-item">
+                <h3>
+    private  subroutine int1_coul_x_y_z_c(cntp, x, y, z, c, nat, chgtol, blk)  
+
+    </h3>
+  <p>@brief Compute contracted block of Coulomb 1e integrals
+@param[in]       cntp        shell pair data
+@param[in]       x           <code>X</code> coordinates of charged particles
+@param[in]       y           <code>Y</code> coordinates of charged particles
+@param[in]       z           <code>Z</code> coordinates of charged particles
+@param[in]       c           charges of particles
+@param[in]       nat         number of particles
+@param[in]       chgtol      cut-off for charge
+@param[inout]    blk         block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cntp~14"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cntp</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x~162"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>x</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-y~101"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>y</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z~69"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>z</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~50"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nat~25"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nat</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-chgtol~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>chgtol</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blk~7"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>blk</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+          <li class="list-group-item">
+                <h3>
+    private  subroutine int1_coul_xyz_c(cntp, xyz, c, nat, chgtol, blk)  
+
+    </h3>
+  <p>@brief Compute contracted block of Coulomb 1e integrals
+@param[in]       cntp        shell pair data
+@param[in]       xyz         coordinates of particles
+@param[in]       c           charges of particles
+@param[in]       nat         number of particles
+@param[in]       chgtol      cut-off for charge
+@param[inout]    blk         block of 1e Coulomb integrals
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cntp~12"></span>
+              type(<a href='../type/shpair_t.html'>shpair_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cntp</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xyz~13"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>xyz</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~48"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nat~23"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nat</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-chgtol~3"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>chgtol</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-blk~5"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>blk</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+    </ul>
+  </div>
+
+        </section>
+        <br>
+
+
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-omp_hst"></span> <h3>public  subroutine <a href='../proc/omp_hst.html'>omp_hst</a>(basis, coord, zq, h, s, t, z, debug, logtol, comm, usempi)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Driver for conventional h, S, and T integrals
+@details  Compute one electron integrals and core Hamiltonian,
+ - S is evaluated by Gauss-Hermite quadrature,
+ - T is an overlap with -2,0,+2 angular momentum shifts,
+ - V is evaluated by Gauss-Rys quadrature, then \f$ h = T+V \f$
+ Also, do \f$ L_z \f$ integrals if requested</p><a href="../proc/omp_hst.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~82"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coord~5"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>coord</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zq"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>zq</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-h~4"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>h</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s~11"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>s</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-t~9"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>t</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z~63"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td>optional,</td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>z</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-debug~3"></span>
+              logical,
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>debug</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-logtol~2"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>logtol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-comm~5"></span>
+              integer(kind=int32)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>comm</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-usempi~3"></span>
+              logical(kind=c_bool),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>usempi</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-multipole_integrals"></span> <h3>public  subroutine <a href='../proc/multipole_integrals.html'>multipole_integrals</a>(basis, ints, r, mxmom, debug, logtol)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Driver for multipole integrals
+@details  Compute one electron multipole integrals
+ Integrals are evaluated by Gauss-Hermite quadrature,
+@author Vladimir Mironov
+@date <em>Feb, 2023</em> Initial release</p><a href="../proc/multipole_integrals.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~83"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ints~10"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>ints</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-r~11"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>r</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mxmom~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mxmom</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-debug~4"></span>
+              logical,
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>debug</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-logtol~3"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>logtol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-electrostatic_potential"></span> <h3>public  subroutine <a href='../proc/electrostatic_potential.html'>electrostatic_potential</a>(basis, x, y, z, wt, d, pot, logtol)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute electronic contribution to electrostatic potential on a grid
+@author   Vladimir Mironov
+@date <em>Sep, 2023</em> Initial release</p><a href="../proc/electrostatic_potential.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~84"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x~158"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>x</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-y~97"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>y</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z~64"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>z</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wt~3"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>wt</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d~24"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>d</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pot~6"></span>
+              real(kind=real64),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>pot</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-logtol~4"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>logtol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-basis_overlap"></span> <h3>public  subroutine <a href='../proc/basis_overlap.html'>basis_overlap</a>(s, basis1, basis2, tol)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute overlap matrix between two basis sets
+@details Overlap integrals are computed using Gauss-Hermite quadrature formula
+@author   Igor S. Gerasimov
+@date <em>Oct, 2022</em> Initial release</p><a href="../proc/basis_overlap.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s~12"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>s</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis1"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis1</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis2"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis2</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tol~12"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-overlap"></span> <h3>public  subroutine <a href='../proc/overlap.html'>overlap</a>(s, basis, tol)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute overlap and integrals
+@details Overlap integrals
+ are computed using Gauss-Hermite quadrature formula
+@author   Vladimir Mironov
+@date <em>Mar, 2023</em> Initial release</p><a href="../proc/overlap.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s~13"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>s</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~85"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tol~13"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

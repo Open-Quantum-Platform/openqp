@@ -1,0 +1,5127 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mod_dft_gridint &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mod_dft_gridint
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 2.3% of total for modules and submodules.">1084 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_gridint.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/dft_gridint.f90.html'>dft_gridint.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mod_dft_gridint</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-oqp_funtyp_lda">OQP_FUNTYP_LDA</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-oqp_funtyp_gga">OQP_FUNTYP_GGA</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-oqp_funtyp_mgga">OQP_FUNTYP_MGGA</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-x__~2">X__</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-y__~2">Y__</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-z__~2">Z__</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xx_~2">XX_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-yy_~2">YY_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-zz_~2">ZZ_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xy_~2">XY_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-yz_~2">YZ_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xz_~2">XZ_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dxx">dXX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dxy">dXY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dxz">dXZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dyx">dYX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dyy">dYY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dyz">dYZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dzx">dZX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dzy">dZY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-dzz">dZZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xxx~2">XXX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-yyy~2">YYY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-zzz~2">ZZZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xxy~2">XXY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xxz~2">XXZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-yyx~2">YYX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-yyz~2">YYZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-zzx~2">ZZX</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-zzy~2">ZZY</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-xyz~2">XYZ</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#variable-sq_to_tr">SQ_TO_TR</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#absints-0"
+         aria-expanded="false" aria-controls="absints-0">
+         <h4 class="card-header bg-primary text-white">Abstract Interfaces</h4>
+      </a>
+      <div id="absints-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-xc_consumer_parallel_start">xc_consumer_parallel_start</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-xc_consumer_parallel_stop">xc_consumer_parallel_stop</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-xc_consumer_clean">xc_consumer_clean</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-xc_consumer_update">xc_consumer_update</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-xc_consumer_postupdate">xc_consumer_postUpdate</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-compute_density">compute_density</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-compute_density_grad">compute_density_grad</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#interface-compute_density_tau">compute_density_tau</a>
+        </div>
+      </div>
+    </div>
+
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#type-xc_consumer_t">xc_consumer_t</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#type-xc_options_t">xc_options_t</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#type-xc_engine_t">xc_engine_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-mo_tran_symm_">mo_tran_symm_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-mo_tran_gemm_">mo_tran_gemm_</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-compatgradrho">compAtGradRho</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-compatgraddrho">compAtGradDRho</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-compatgradtau">compAtGradTau</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-xc_der1">xc_der1</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-xc_der2_contr">xc_der2_contr</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-xc_der3_contr">xc_der3_contr</a>
+            <a class="list-group-item" href="../module/mod_dft_gridint.html#proc-run_xc">run_xc</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='mod_dft_xc_libxc.html'>mod_dft_xc_libxc</a></li>
+                  <li class="list-inline-item"><a href='functionals.html'>functionals</a></li>
+                  <li class="list-inline-item"><a href='parallel.html'>parallel</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='oqp_linalg.html'>oqp_linalg</a></li>
+                  <li class="list-inline-item"><a href='io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='mod_dft_molgrid.html'>mod_dft_molgrid</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_gridint~~UsesGraph Pages: 1 -->
+<svg id="modulemod_dft_gridintUsesGraph" width="641pt" height="509pt"
+ viewBox="0.00 0.00 641.00 508.82" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_gridint~~UsesGraph" class="graph" transform="scale(.8145 .8145) rotate(0) translate(4 620.7177)">
+<title>module~~mod_dft_gridint~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-620.7177 783,-620.7177 783,4 -4,4"/>
+<!-- module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node1" class="node">
+<title>module~mod_dft_gridint</title>
+<polygon fill="none" stroke="#000000" points="779,-235.7177 683,-235.7177 683,-211.7177 779,-211.7177 779,-235.7177"/>
+<text text-anchor="middle" x="731" y="-221.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_gridint</text>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="491.5,-498.7177 421.5,-498.7177 421.5,-474.7177 491.5,-474.7177 491.5,-498.7177"/>
+<text text-anchor="middle" x="456.5" y="-484.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~basis_tools -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge1" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-486.7177C567.669,-503.6864 530.51,-502.7486 501.6145,-498.0764"/>
+<polygon fill="#000000" stroke="#000000" points="502.2312,-494.6312 491.7673,-496.2913 500.9826,-501.519 502.2312,-494.6312"/>
+</g>
+<!-- module~functionals -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node3" class="node">
+<title>module~functionals</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node3"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="345.5,-418.7177 274.5,-418.7177 274.5,-394.7177 345.5,-394.7177 345.5,-418.7177"/>
+<text text-anchor="middle" x="310" y="-404.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~functionals -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge2" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M729.1999,-235.8275C721.9986,-279.3824 690.8843,-428.561 595.5,-486.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-486.7177C581.7782,-495.084 472.225,-450.0355 456.5,-446.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.5,-446.7177C422.2317,-439.4874 384.081,-428.9905 355.304,-420.5638"/>
+<polygon fill="#000000" stroke="#000000" points="356.1198,-417.1553 345.5379,-417.6783 354.1363,-423.8684 356.1198,-417.1553"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node4" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node4"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-456.7177 133,-456.7177 133,-432.7177 212,-432.7177 212,-456.7177"/>
+<text text-anchor="middle" x="172.5" y="-442.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge3" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.5,-446.7177C375.8834,-429.7084 279.5079,-434.052 222.2938,-439.1201"/>
+<polygon fill="#000000" stroke="#000000" points="221.712,-435.659 212.079,-440.0698 222.3601,-442.6289 221.712,-435.659"/>
+</g>
+<!-- module~mod_dft_molgrid -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node5" class="node">
+<title>module~mod_dft_molgrid</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node5"><a xlink:href="../module/mod_dft_molgrid.html" xlink:title="mod_dft_molgrid">
+<polygon fill="#337ab7" stroke="#337ab7" points="508,-195.7177 405,-195.7177 405,-171.7177 508,-171.7177 508,-195.7177"/>
+<text text-anchor="middle" x="456.5" y="-181.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_molgrid</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge4" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-122.7177C551.3323,-113.1988 503.9808,-143.7887 477.5195,-165.0343"/>
+<polygon fill="#000000" stroke="#000000" points="475.1449,-162.4569 469.6928,-171.5412 479.62,-167.8397 475.1449,-162.4569"/>
+</g>
+<!-- module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node6" class="node">
+<title>module~mod_dft_xc_libxc</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node6"><a xlink:href="../module/mod_dft_xc_libxc.html" xlink:title="mod_dft_xc_libxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="647,-336.7177 544,-336.7177 544,-312.7177 647,-312.7177 647,-336.7177"/>
+<text text-anchor="middle" x="595.5" y="-322.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_xc_libxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge5" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M714.6555,-235.9006C691.1552,-253.4175 647.6366,-285.8557 620.1997,-306.3068"/>
+<polygon fill="#000000" stroke="#000000" points="617.8284,-303.7089 611.9024,-312.4915 622.0119,-309.3214 617.8284,-303.7089"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node7" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node7"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="629,-94.7177 562,-94.7177 562,-70.7177 629,-70.7177 629,-94.7177"/>
+<text text-anchor="middle" x="595.5" y="-80.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~oqp_linalg -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge6" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M724.6612,-211.5083C712.3466,-188.7634 683.1931,-139.4342 647,-108.7177 643.0911,-105.4003 638.6864,-102.37 634.1405,-99.6447"/>
+<polygon fill="#000000" stroke="#000000" points="635.7652,-96.5438 625.3175,-94.7843 632.3876,-102.6751 635.7652,-96.5438"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node8" class="node">
+<title>module~parallel</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node8"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="337,-578.7177 283,-578.7177 283,-554.7177 337,-554.7177 337,-578.7177"/>
+<text text-anchor="middle" x="310" y="-564.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~parallel -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge7" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-486.7177C515.2326,-535.6574 404.1861,-555.4853 347.1291,-562.8306"/>
+<polygon fill="#000000" stroke="#000000" points="346.6212,-559.3666 337.1232,-564.061 347.4757,-566.3142 346.6212,-559.3666"/>
+</g>
+<!-- module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node9" class="node">
+<title>module~precision</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node9"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-276.7177 142,-276.7177 142,-252.7177 203,-252.7177 203,-276.7177"/>
+<text text-anchor="middle" x="172.5" y="-262.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge8" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M721.4235,-211.6706C701.2791,-187.6012 651.7165,-134.8333 595.5,-122.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-122.7177C533.4796,-109.3512 366.6056,-94.0644 310,-122.7177"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.2144,-487.5263C391.5032,-487.8982 347.9087,-487.7205 310,-484.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-484.7177C275.4561,-481.9814 237.7673,-470.3671 210.5985,-460.3534"/>
+<polygon fill="#000000" stroke="#000000" points="211.6818,-457.0212 201.0902,-456.756 209.2047,-463.5683 211.6818,-457.0212"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.2404,-498.7394C421.1728,-502.7525 412.498,-507.5357 405,-512.7177 387.1442,-525.058 387.5949,-534.522 369,-545.7177 362.1232,-549.858 354.3059,-553.3569 346.6624,-556.2399"/>
+<polygon fill="#000000" stroke="#000000" points="345.4413,-552.959 337.1574,-559.5642 347.7523,-559.5665 345.4413,-552.959"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.9358,-474.7147C416.2705,-471.0675 409.8444,-466.4588 405,-460.7177 369.9139,-419.1368 407.219,-382.4386 369,-343.7177 349.6478,-324.1113 335.1413,-335.9794 310,-324.7177"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node11" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node11"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-496.7177 0,-496.7177 0,-472.7177 94,-472.7177 94,-496.7177"/>
+<text text-anchor="middle" x="47" y="-482.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-484.7177C239.3773,-479.1235 157.7522,-480.3104 104.4033,-482.1135"/>
+<polygon fill="#000000" stroke="#000000" points="103.9909,-478.6259 94.1222,-482.4805 104.2407,-485.6214 103.9909,-478.6259"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node12" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node12"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="369,-536.7177 251,-536.7177 251,-512.7177 369,-512.7177 369,-536.7177"/>
+<text text-anchor="middle" x="310" y="-522.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.4096,-495.8196C404.9062,-500.1004 384.8173,-505.3111 366.2664,-510.123"/>
+<polygon fill="#000000" stroke="#000000" points="365.244,-506.7723 356.4431,-512.671 367.0016,-513.548 365.244,-506.7723"/>
+</g>
+<!-- module~constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node15" class="node">
+<title>module~constants</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node15"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="342,-376.7177 278,-376.7177 278,-352.7177 342,-352.7177 342,-376.7177"/>
+<text text-anchor="middle" x="310" y="-362.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.3611,-474.5797C417.3858,-470.8898 410.4686,-466.2968 405,-460.7177 379.1179,-434.3126 396.4879,-410.4467 369,-385.7177 363.9494,-381.174 357.8494,-377.5973 351.5131,-374.7862"/>
+<polygon fill="#000000" stroke="#000000" points="352.7455,-371.5103 342.1554,-371.192 350.2356,-378.0448 352.7455,-371.5103"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge16" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.3619,-398.2339C266.1463,-395.1824 257.8252,-391.1096 251,-385.7177 217.0254,-358.8773 193.1336,-313.0936 181.2035,-286.2011"/>
+<polygon fill="#000000" stroke="#000000" points="184.374,-284.7136 177.2208,-276.8981 177.9389,-287.4686 184.374,-284.7136"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node10" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node10"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214.5,-536.7177 130.5,-536.7177 130.5,-512.7177 214.5,-512.7177 214.5,-536.7177"/>
+<text text-anchor="middle" x="172.5" y="-522.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge15" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M295.803,-418.9013C271.8219,-439.4814 223.1256,-481.2717 194.6305,-505.7257"/>
+<polygon fill="#000000" stroke="#000000" points="192.1351,-503.255 186.8258,-512.4235 196.6939,-508.5671 192.1351,-503.255"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node21" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="213,-414.7177 132,-414.7177 132,-390.7177 213,-390.7177 213,-414.7177"/>
+<text text-anchor="middle" x="172.5" y="-400.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge17" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-405.6772C258.813,-405.2286 240.4926,-404.6956 223.6759,-404.2064"/>
+<polygon fill="#000000" stroke="#000000" points="223.5365,-400.701 213.4389,-403.9086 223.3329,-407.698 223.5365,-400.701"/>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge21" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M435.2001,-195.8165C417.8621,-205.1994 392.4991,-217.8853 369,-225.7177 316.4888,-243.2198 253.3254,-254.0333 213.0479,-259.7102"/>
+<polygon fill="#000000" stroke="#000000" points="212.5043,-256.2519 203.072,-261.077 213.4545,-263.1872 212.5043,-256.2519"/>
+</g>
+<!-- module~bragg_slater_radii -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node14" class="node">
+<title>module~bragg_slater_radii</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node14"><a xlink:href="../module/bragg_slater_radii.html" xlink:title="bragg_slater_radii">
+<polygon fill="#337ab7" stroke="#337ab7" points="364.5,-216.7177 255.5,-216.7177 255.5,-192.7177 364.5,-192.7177 364.5,-216.7177"/>
+<text text-anchor="middle" x="310" y="-202.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bragg_slater_radii</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~bragg_slater_radii -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge18" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~bragg_slater_radii</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.8496,-191.1215C395.0876,-192.5208 384.7636,-194.0007 374.6606,-195.4489"/>
+<polygon fill="#000000" stroke="#000000" points="374.0624,-191.9988 364.6602,-196.8824 375.0557,-198.928 374.0624,-191.9988"/>
+</g>
+<!-- module~lebedev -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node17" class="node">
+<title>module~lebedev</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node17"><a xlink:href="../module/lebedev.html" xlink:title="lebedev">
+<polygon fill="#337ab7" stroke="#337ab7" points="337.5,-174.7177 282.5,-174.7177 282.5,-150.7177 337.5,-150.7177 337.5,-174.7177"/>
+<text text-anchor="middle" x="310" y="-160.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lebedev</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~lebedev -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge19" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~lebedev</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.8496,-176.3139C386.1572,-173.6344 365.4039,-170.6595 348.0877,-168.1773"/>
+<polygon fill="#000000" stroke="#000000" points="348.1947,-164.657 337.7992,-166.7025 347.2013,-171.5861 348.1947,-164.657"/>
+</g>
+<!-- module~mod_grid_storage -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node19" class="node">
+<title>module~mod_grid_storage</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node19"><a xlink:href="../module/mod_grid_storage.html" xlink:title="mod_grid_storage">
+<polygon fill="#337ab7" stroke="#337ab7" points="364.5,-296.7177 255.5,-296.7177 255.5,-272.7177 364.5,-272.7177 364.5,-296.7177"/>
+<text text-anchor="middle" x="310" y="-282.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_grid_storage</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~mod_grid_storage -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge20" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~mod_grid_storage</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.663,-195.8892C428.6396,-211.8659 398.6309,-240.0641 369,-258.7177 363.5295,-262.1615 357.5246,-265.3747 351.505,-268.2861"/>
+<polygon fill="#000000" stroke="#000000" points="349.7342,-265.2478 342.1079,-272.6024 352.6561,-271.6089 349.7342,-265.2478"/>
+</g>
+<!-- module~mod_dft_xc_libxc&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge23" class="edge">
+<title>module~mod_dft_xc_libxc&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M543.946,-329.6898C473.2484,-335.6671 350.3723,-342.802 310,-324.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-324.7177C284.954,-313.2454 276.4118,-316.355 251,-305.7177 234.4791,-298.8021 216.7401,-289.6912 202.312,-281.8147"/>
+<polygon fill="#000000" stroke="#000000" points="203.7984,-278.637 193.3549,-276.8525 200.4061,-284.7601 203.7984,-278.637"/>
+</g>
+<!-- module~mod_dft_xclib -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node18" class="node">
+<title>module~mod_dft_xclib</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node18"><a xlink:href="../module/mod_dft_xclib.html" xlink:title="mod_dft_xclib">
+<polygon fill="#337ab7" stroke="#337ab7" points="499.5,-376.7177 413.5,-376.7177 413.5,-352.7177 499.5,-352.7177 499.5,-376.7177"/>
+<text text-anchor="middle" x="456.5" y="-362.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_xclib</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge22" class="edge">
+<title>module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M553.7954,-336.719C539.495,-340.8342 523.3148,-345.4904 508.3125,-349.8076"/>
+<polygon fill="#000000" stroke="#000000" points="507.2976,-346.4575 498.6556,-352.5866 509.2335,-353.1845 507.2976,-346.4575"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node13" class="node">
+<title>module~blas_wrap</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node13"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="489.5,-94.7177 423.5,-94.7177 423.5,-70.7177 489.5,-70.7177 489.5,-94.7177"/>
+<text text-anchor="middle" x="456.5" y="-80.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge24" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561.852,-82.7177C543.2417,-82.7177 519.9085,-82.7177 499.9344,-82.7177"/>
+<polygon fill="#000000" stroke="#000000" points="499.8382,-79.2178 489.8382,-82.7177 499.8381,-86.2178 499.8382,-79.2178"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node16" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node16"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="496,-52.7177 417,-52.7177 417,-28.7177 496,-28.7177 496,-52.7177"/>
+<text text-anchor="middle" x="456.5" y="-38.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge25" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561.852,-72.5506C545.0297,-67.4677 524.3485,-61.2186 505.7774,-55.6072"/>
+<polygon fill="#000000" stroke="#000000" points="506.5885,-52.1961 496.0035,-52.654 504.5637,-58.8969 506.5885,-52.1961"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge28" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.9429,-563.008C271.5715,-560.106 259.1239,-554.9343 251,-545.7177 201.6557,-489.7362 235.7846,-453.3891 215,-381.7177 205.1868,-347.879 190.6359,-309.6888 181.3616,-286.4133"/>
+<polygon fill="#000000" stroke="#000000" points="184.4883,-284.8079 177.5077,-276.8379 177.9946,-287.4216 184.4883,-284.8079"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge26" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-558.4198C265.3352,-553.0746 242.0783,-545.9707 221.4297,-539.6635"/>
+<polygon fill="#000000" stroke="#000000" points="222.435,-536.311 211.8488,-536.7369 220.3901,-543.0056 222.435,-536.311"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge27" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7298,-567.7972C246.5349,-568.2915 181.2329,-565.8824 130,-545.7177 105.7689,-536.1806 82.249,-517.7565 66.4713,-503.6413"/>
+<polygon fill="#000000" stroke="#000000" points="68.6891,-500.9255 58.9636,-496.7226 63.9454,-506.0731 68.6891,-500.9255"/>
+</g>
+<!-- mpi -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node20" class="node">
+<title>mpi</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node20"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199.5,-616.7177 145.5,-616.7177 145.5,-592.7177 199.5,-592.7177 199.5,-616.7177"/>
+<text text-anchor="middle" x="172.5" y="-602.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge29" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-574.2252C261.8362,-580.0284 232.5476,-588.1227 209.4233,-594.5134"/>
+<polygon fill="#000000" stroke="#000000" points="208.3155,-591.1883 199.6091,-597.2257 210.1802,-597.9354 208.3155,-591.1883"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge30" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M165.5738,-276.8592C145.1319,-312.6937 84.874,-418.325 59.0127,-463.6596"/>
+<polygon fill="#000000" stroke="#000000" points="55.8197,-462.1933 53.9048,-472.6137 61.9,-465.6618 55.8197,-462.1933"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge31" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8896,-524.7177C242.1961,-524.7177 233.2927,-524.7177 224.7506,-524.7177"/>
+<polygon fill="#000000" stroke="#000000" points="224.5485,-521.2178 214.5485,-524.7177 224.5484,-528.2178 224.5485,-521.2178"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge34" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.4948,-90.9813C383.5007,-101.1111 320.1737,-117.5678 310,-122.7177"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-122.7177C285.4211,-135.1593 272.8111,-124.8894 251,-141.7177 216.1421,-168.6122 192.4334,-215.68 180.8016,-243.1344"/>
+<polygon fill="#000000" stroke="#000000" points="177.4714,-242.032 176.9368,-252.6133 183.9533,-244.6749 177.4714,-242.032"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node22" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node22"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="353.5,-52.7177 266.5,-52.7177 266.5,-28.7177 353.5,-28.7177 353.5,-52.7177"/>
+<text text-anchor="middle" x="310" y="-38.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge32" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.2569,-73.1872C405.1195,-67.9874 382.2616,-61.4343 361.8383,-55.5792"/>
+<polygon fill="#000000" stroke="#000000" points="362.6166,-52.1614 352.0393,-52.7699 360.6875,-58.8903 362.6166,-52.1614"/>
+</g>
+<!-- module~messages -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node23" class="node">
+<title>module~messages</title>
+<g id="a_module~~mod_dft_gridint~~UsesGraph_node23"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="343,-94.7177 277,-94.7177 277,-70.7177 343,-70.7177 343,-94.7177"/>
+<text text-anchor="middle" x="310" y="-80.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge33" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.2569,-82.7177C402.5592,-82.7177 375.7141,-82.7177 353.3549,-82.7177"/>
+<polygon fill="#000000" stroke="#000000" points="353.1116,-79.2178 343.1116,-82.7177 353.1115,-86.2178 353.1116,-79.2178"/>
+</g>
+<!-- module~bragg_slater_radii&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge35" class="edge">
+<title>module~bragg_slater_radii&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.1748,-216.8596C261.3011,-225.9681 232.5139,-238.5298 209.6698,-248.4981"/>
+<polygon fill="#000000" stroke="#000000" points="208.0494,-245.3864 200.2838,-252.5938 210.849,-251.8022 208.0494,-245.3864"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge36" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.7289,-352.855C268.7469,-348.9343 259.2097,-344.161 251,-338.7177 227.7377,-323.2939 204.9574,-300.751 189.9807,-284.604"/>
+<polygon fill="#000000" stroke="#000000" points="192.2158,-281.8595 182.899,-276.8148 187.0364,-286.5684 192.2158,-281.8595"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge39" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M432.2332,-28.6477C390.7619,-9.9306 305.4646,20.0235 251,-19.7177 246.3083,-23.141 197.3949,-182.8173 179.2364,-242.5125"/>
+<polygon fill="#000000" stroke="#000000" points="175.7799,-241.8495 176.2213,-252.4352 182.4775,-243.8847 175.7799,-241.8495"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge37" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.855,-40.7177C400.4917,-40.7177 381.2719,-40.7177 363.6778,-40.7177"/>
+<polygon fill="#000000" stroke="#000000" points="363.5404,-37.2178 353.5404,-40.7177 363.5404,-44.2178 363.5404,-37.2178"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge38" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.855,-52.0835C397.1372,-57.7364 373.2717,-64.5784 353.101,-70.3611"/>
+<polygon fill="#000000" stroke="#000000" points="351.8799,-67.0701 343.2317,-73.1905 353.809,-73.799 351.8799,-67.0701"/>
+</g>
+<!-- module~lebedev&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge40" class="edge">
+<title>module~lebedev&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.3588,-169.6676C272.0311,-172.9888 260.5105,-177.6014 251,-183.7177 225.5216,-200.1028 202.1722,-226.261 187.6814,-244.399"/>
+<polygon fill="#000000" stroke="#000000" points="184.6923,-242.5408 181.3089,-252.5809 190.2149,-246.8421 184.6923,-242.5408"/>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~functionals -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge41" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.519,-376.7532C396.0279,-382.0544 374.2641,-388.2938 355.397,-393.7028"/>
+<polygon fill="#000000" stroke="#000000" points="354.1892,-390.408 345.541,-396.5284 356.1183,-397.137 354.1892,-390.408"/>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge42" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.3763,-354.5067C377.1406,-345.6402 328.407,-332.9628 310,-324.7177"/>
+</g>
+<!-- module~mod_grid_storage&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge43" class="edge">
+<title>module~mod_grid_storage&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M255.2613,-276.7557C241.3151,-274.7271 226.5657,-272.5818 213.4421,-270.6729"/>
+<polygon fill="#000000" stroke="#000000" points="213.7119,-267.1754 203.3122,-269.1994 212.7042,-274.1025 213.7119,-267.1754"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge46" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292.6779,-94.8678C278.9352,-105.533 260.5083,-122.3409 251,-141.7177 195.3392,-255.1475 288.3543,-320.8411 215,-423.7177 214.4565,-424.4799 213.8774,-425.2159 213.2669,-425.9264"/>
+<polygon fill="#000000" stroke="#000000" points="210.8899,-423.3562 205.7185,-432.6032 215.5277,-428.5994 210.8899,-423.3562"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge47" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.9617,-92.5836C267.7636,-96.505 258.3033,-101.7786 251,-108.7177 210.9366,-146.7831 188.1282,-209.7274 178.3137,-242.8255"/>
+<polygon fill="#000000" stroke="#000000" points="174.9445,-241.8777 175.5784,-252.4535 181.6781,-243.7907 174.9445,-241.8777"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node24" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-115.7177 130,-115.7177 130,-91.7177 215,-91.7177 215,-115.7177"/>
+<text text-anchor="middle" x="172.5" y="-101.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge44" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-87.8012C261.2346,-90.1655 242.4505,-93.0343 225.1166,-95.6817"/>
+<polygon fill="#000000" stroke="#000000" points="224.471,-92.2396 215.1141,-97.2093 225.5279,-99.1594 224.471,-92.2396"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~mod_dft_gridint~~UsesGraph_node25" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-73.7177 136.5,-73.7177 136.5,-49.7177 208.5,-49.7177 208.5,-73.7177"/>
+<text text-anchor="middle" x="172.5" y="-59.3177" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~mod_dft_gridint~~UsesGraph_edge45" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-77.6342C259.3333,-74.9795 237.7866,-71.6887 218.8042,-68.7896"/>
+<polygon fill="#000000" stroke="#000000" points="219.2708,-65.3203 208.857,-67.2704 218.2139,-72.2401 219.2708,-65.3203"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulemod_dft_gridintUsesGraph = svgPanZoom('#modulemod_dft_gridintUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_gridint~~UsedByGraph Pages: 1 -->
+<svg id="modulemod_dft_gridintUsedByGraph" width="595pt" height="530pt"
+ viewBox="0.00 0.00 595.00 530.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_gridint~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 526)">
+<title>module~~mod_dft_gridint~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-526 591,-526 591,4 -4,4"/>
+<!-- module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node1" class="node">
+<title>module~mod_dft_gridint</title>
+<polygon fill="none" stroke="#000000" points="96,-255 0,-255 0,-231 96,-231 96,-255"/>
+<text text-anchor="middle" x="48" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_gridint</text>
+</g>
+<!-- module~mod_dft_gridint_energy -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node2" class="node">
+<title>module~mod_dft_gridint_energy</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node2"><a xlink:href="../module/mod_dft_gridint_energy.html" xlink:title="mod_dft_gridint_energy">
+<polygon fill="#337ab7" stroke="#337ab7" points="278.5,-503 139.5,-503 139.5,-479 278.5,-479 278.5,-503"/>
+<text text-anchor="middle" x="209" y="-488.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_energy</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge1" class="edge">
+<title>module~mod_dft_gridint_energy&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M174.8779,-478.9883C160.0923,-472.3585 143.5587,-462.8253 132,-450 82.2911,-394.8443 59.9526,-306.4159 51.8475,-265.3269"/>
+<polygon fill="#000000" stroke="#000000" points="55.2473,-264.4664 49.967,-255.2812 48.3668,-265.7545 55.2473,-264.4664"/>
+</g>
+<!-- module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node3" class="node">
+<title>module~mod_dft_gridint_fxc</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node3"><a xlink:href="../module/mod_dft_gridint_fxc.html" xlink:title="mod_dft_gridint_fxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="267.5,-441 150.5,-441 150.5,-417 267.5,-417 267.5,-441"/>
+<text text-anchor="middle" x="209" y="-426.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_fxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge2" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.2214,-416.874C148.1531,-413.1382 139.2989,-408.2864 132,-402 88.6694,-364.68 64.3409,-299.3618 54.0059,-265.2197"/>
+<polygon fill="#000000" stroke="#000000" points="57.2785,-263.9375 51.1357,-255.3051 50.5545,-265.884 57.2785,-263.9375"/>
+</g>
+<!-- module~mod_dft_gridint_grad -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node4" class="node">
+<title>module~mod_dft_gridint_grad</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node4"><a xlink:href="../module/mod_dft_gridint_grad.html" xlink:title="mod_dft_gridint_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="272,-360 146,-360 146,-336 272,-336 272,-360"/>
+<text text-anchor="middle" x="209" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge3" class="edge">
+<title>module~mod_dft_gridint_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M151.7084,-335.9918C144.8448,-333.5141 138.1121,-330.547 132,-327 103.8468,-310.6621 78.4797,-282.5416 63.1641,-263.3768"/>
+<polygon fill="#000000" stroke="#000000" points="65.7641,-261.0187 56.8606,-255.276 60.2396,-265.3176 65.7641,-261.0187"/>
+</g>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node5" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node5"><a xlink:href="../module/mod_dft_gridint_gxc.html" xlink:title="mod_dft_gridint_gxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="442,-400 322,-400 322,-376 442,-376 442,-400"/>
+<text text-anchor="middle" x="382" y="-385.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_gxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge4" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M321.8572,-397.5014C268.3206,-402.8485 189.7655,-402.7934 132,-369 91.7809,-345.4715 66.9889,-294.1286 55.5404,-264.7617"/>
+<polygon fill="#000000" stroke="#000000" points="58.6875,-263.1827 51.9224,-255.0289 52.1262,-265.6218 58.6875,-263.1827"/>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge14" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M331.03,-400.0796C311.8456,-404.6262 289.839,-409.8416 269.8436,-414.5804"/>
+<polygon fill="#000000" stroke="#000000" points="268.8277,-411.2241 259.9044,-416.936 270.442,-418.0355 268.8277,-411.2241"/>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node6" class="node">
+<title>module~mod_dft_gridint_tdxc_grad</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node6"><a xlink:href="../module/mod_dft_gridint_tdxc_grad.html" xlink:title="mod_dft_gridint_tdxc_grad">
+<polygon fill="#337ab7" stroke="#337ab7" points="286,-318 132,-318 132,-294 286,-294 286,-318"/>
+<text text-anchor="middle" x="209" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_tdxc_grad</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge5" class="edge">
+<title>module~mod_dft_gridint_tdxc_grad&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M159.2428,-293.9803C150.0795,-291.3308 140.6723,-288.3134 132,-285 113.7111,-278.0124 94.0981,-268.3395 78.427,-260.0376"/>
+<polygon fill="#000000" stroke="#000000" points="79.6899,-256.7425 69.226,-255.082 76.3705,-262.9054 79.6899,-256.7425"/>
+</g>
+<!-- proc~derexc_blk -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node7" class="node">
+<title>proc~derexc_blk</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node7"><a xlink:href="../proc/derexc_blk.html" xlink:title="derexc_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="244,-276 174,-276 174,-252 244,-252 244,-276"/>
+<text text-anchor="middle" x="209" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">derexc_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~derexc_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge6" class="edge">
+<title>proc~derexc_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M173.6679,-259.3915C153.9213,-256.8158 128.8135,-253.5409 106.2401,-250.5965"/>
+<polygon fill="#000000" stroke="#000000" points="106.444,-247.0936 96.0753,-249.2707 105.5386,-254.0348 106.444,-247.0936"/>
+</g>
+<!-- proc~dmatd_blk -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node8" class="node">
+<title>proc~dmatd_blk</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node8"><a xlink:href="../proc/dmatd_blk.html" xlink:title="dmatd_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="243,-234 175,-234 175,-210 243,-210 243,-234"/>
+<text text-anchor="middle" x="209" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dmatd_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge7" class="edge">
+<title>proc~dmatd_blk&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M174.856,-226.4536C154.9153,-229.0545 129.2178,-232.4064 106.1716,-235.4124"/>
+<polygon fill="#000000" stroke="#000000" points="105.605,-231.9566 96.1417,-236.7206 106.5104,-238.8978 105.605,-231.9566"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node9" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node9"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="238,-192 180,-192 180,-168 238,-168 238,-192"/>
+<text text-anchor="middle" x="209" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge8" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.6801,-186.5494C165.1242,-190.1636 147.4031,-195.115 132,-201 113.7111,-207.9876 94.0981,-217.6605 78.427,-225.9624"/>
+<polygon fill="#000000" stroke="#000000" points="76.3705,-223.0946 69.226,-230.918 79.6899,-229.2575 76.3705,-223.0946"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node10" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node10"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="239.5,-150 178.5,-150 178.5,-126 239.5,-126 239.5,-150"/>
+<text text-anchor="middle" x="209" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge9" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M178.3257,-142.5736C163.6062,-145.6904 146.1417,-150.7933 132,-159 103.8468,-175.3379 78.4797,-203.4584 63.1641,-222.6232"/>
+<polygon fill="#000000" stroke="#000000" points="60.2396,-220.6824 56.8606,-230.724 65.7641,-224.9813 60.2396,-220.6824"/>
+</g>
+<!-- proc~tddft_xc_gradient -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node11" class="node">
+<title>proc~tddft_xc_gradient</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node11"><a xlink:href="../proc/tddft_xc_gradient.html" xlink:title="tddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="261.5,-108 156.5,-108 156.5,-84 261.5,-84 261.5,-108"/>
+<text text-anchor="middle" x="209" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge10" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M156.1713,-104.9687C147.6037,-107.9097 139.1941,-111.8148 132,-117 94.5795,-143.9712 68.9955,-193.1574 56.6007,-221.4389"/>
+<polygon fill="#000000" stroke="#000000" points="53.2998,-220.2588 52.6335,-230.8327 59.7483,-222.9822 53.2998,-220.2588"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node12" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node12"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="241.5,-66 176.5,-66 176.5,-42 241.5,-42 241.5,-66"/>
+<text text-anchor="middle" x="209" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge11" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M176.2544,-56.8293C161.4053,-59.5426 144.4302,-64.8097 132,-75 85.1494,-113.4083 62.0597,-184.5477 52.918,-220.684"/>
+<polygon fill="#000000" stroke="#000000" points="49.4446,-220.1596 50.5178,-230.7 56.2519,-221.7909 49.4446,-220.1596"/>
+</g>
+<!-- proc~utddft_xc_gradient -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node13" class="node">
+<title>proc~utddft_xc_gradient</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node13"><a xlink:href="../proc/utddft_xc_gradient.html" xlink:title="utddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="265,-24 153,-24 153,0 265,0 265,-24"/>
+<text text-anchor="middle" x="209" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge12" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M152.8305,-20.6551C145.2306,-23.6478 137.998,-27.651 132,-33 75.2371,-83.6217 56.2824,-177.8573 50.4183,-220.731"/>
+<polygon fill="#000000" stroke="#000000" points="46.9113,-220.5693 49.1421,-230.9266 53.8571,-221.4388 46.9113,-220.5693"/>
+</g>
+<!-- proc~dftder -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node14" class="node">
+<title>proc~dftder</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node14"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="409,-358 355,-358 355,-334 409,-334 409,-358"/>
+<text text-anchor="middle" x="382" y="-343.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;module~mod_dft_gridint_grad -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge17" class="edge">
+<title>proc~dftder&#45;&gt;module~mod_dft_gridint_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M354.9688,-346.3125C335.4212,-346.5385 308.0204,-346.8553 282.2314,-347.1534"/>
+<polygon fill="#000000" stroke="#000000" points="282.0277,-343.6554 272.0688,-347.2709 282.1086,-350.655 282.0277,-343.6554"/>
+</g>
+<!-- proc~dftexcor -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node15" class="node">
+<title>proc~dftexcor</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node15"><a xlink:href="../proc/dftexcor.html" xlink:title="dftexcor">
+<polygon fill="#d9534f" stroke="#d9534f" points="410.5,-522 353.5,-522 353.5,-498 410.5,-498 410.5,-522"/>
+<text text-anchor="middle" x="382" y="-507.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftexcor</text>
+</a>
+</g>
+</g>
+<!-- proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge13" class="edge">
+<title>proc~dftexcor&#45;&gt;module~mod_dft_gridint_energy</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M353.4326,-506.8625C335.7095,-504.9161 311.9814,-502.3101 288.8859,-499.7736"/>
+<polygon fill="#000000" stroke="#000000" points="289.0181,-496.2672 278.6958,-498.6544 288.2539,-503.2253 289.0181,-496.2672"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node16" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node16"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="587,-441 478,-441 478,-417 587,-417 587,-441"/>
+<text text-anchor="middle" x="532.5" y="-426.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge15" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.8816,-441.0588C476.4161,-445.0706 458.5362,-449.0189 442,-451 389.0453,-457.3441 375.087,-456.1197 322,-451 304.9486,-449.3556 286.6482,-446.3461 269.8465,-443.0701"/>
+<polygon fill="#000000" stroke="#000000" points="270.0977,-439.5504 259.6033,-441.0057 268.7147,-446.4124 270.0977,-439.5504"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge18" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.159,-416.9204C471.8507,-412.4776 453.1982,-407.3962 436.1245,-402.7449"/>
+<polygon fill="#000000" stroke="#000000" points="436.8522,-399.3156 426.2839,-400.064 435.0123,-406.0695 436.8522,-399.3156"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node17" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node17"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="420,-442 344,-442 344,-418 420,-418 420,-442"/>
+<text text-anchor="middle" x="382" y="-427.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge16" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M343.6057,-429.7781C324.269,-429.6663 300.2296,-429.5273 277.8392,-429.3979"/>
+<polygon fill="#000000" stroke="#000000" points="277.7107,-425.8972 267.6906,-429.3393 277.6701,-432.8971 277.7107,-425.8972"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~mod_dft_gridint~~UsedByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="424,-316 340,-316 340,-292 424,-292 424,-316"/>
+<text text-anchor="middle" x="382" y="-301.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad -->
+<g id="module~~mod_dft_gridint~~UsedByGraph_edge19" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mod_dft_gridint_tdxc_grad</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M339.6794,-304.4893C326.594,-304.6405 311.6647,-304.8131 296.6879,-304.9863"/>
+<polygon fill="#000000" stroke="#000000" points="296.2927,-301.4905 286.3339,-305.106 296.3737,-308.49 296.2927,-301.4905"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oqp_funtyp_lda"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>OQP_FUNTYP_LDA</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oqp_funtyp_gga"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>OQP_FUNTYP_GGA</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-oqp_funtyp_mgga"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>OQP_FUNTYP_MGGA</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x__~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>X__</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-y__~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>Y__</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z__~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>Z__</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xx_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XX_</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-yy_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>YY_</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zz_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ZZ_</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xy_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XY_</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-yz_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>YZ_</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xz_~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XZ_</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dxx"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dXX</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dxy"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dXY</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dxz"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dXZ</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dyx"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dYX</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dyy"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dYY</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dyz"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dYZ</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dzx"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dZX</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dzy"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dZY</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dzz"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>dZZ</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xxx~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XXX</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-yyy~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>YYY</strong></td>
+<td> =</td>
+                <td>2</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zzz~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ZZZ</strong></td>
+<td> =</td>
+                <td>3</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xxy~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XXY</strong></td>
+<td> =</td>
+                <td>4</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xxz~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XXZ</strong></td>
+<td> =</td>
+                <td>5</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-yyx~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>YYX</strong></td>
+<td> =</td>
+                <td>6</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-yyz~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>YYZ</strong></td>
+<td> =</td>
+                <td>7</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zzx~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ZZX</strong></td>
+<td> =</td>
+                <td>8</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zzy~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ZZY</strong></td>
+<td> =</td>
+                <td>9</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xyz~2"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>XYZ</strong></td>
+<td> =</td>
+                <td>10</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sq_to_tr"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>SQ_TO_TR</strong>(3,3)</td>
+<td> =</td>
+                <td>reshape([XX_, XY_, XZ_, XY_, YY_, YZ_, XZ_, YZ_, ZZ_], shape(SQ_TO_TR))</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+        <section>
+          <h2>Abstract Interfaces</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-xc_consumer_parallel_start"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine xc_consumer_parallel_start(self, xce, nthreads)  
+
+    </h3>
+  <p>@brief Initialization of the data for XC consumer</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This class should handle multithreaded runs by its own means</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+</div>
+<p>This subroutine is executed inside the parallel region by master thread only</p>
+</div>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~89"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~9"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nthreads~10"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nthreads</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-xc_consumer_parallel_stop"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine xc_consumer_parallel_stop(self)  
+
+    </h3>
+  <p>@brief Finalization of data in parallel run</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This subroutine is executed outside of the parallel region</p>
+</div>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~90"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-xc_consumer_clean"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine xc_consumer_clean(self)  
+
+    </h3>
+  <p>@brief Release resources of xc_consumer_t</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This subroutine is executed outside of the parallel region</p>
+</div>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~91"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-xc_consumer_update"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine xc_consumer_update(self, xce, mythread)  
+
+    </h3>
+  <p>@brief Main subroutine to consume XC functional values provided by xc_engine_t</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This subroutine is executed inside the parallel region by every thread</p>
+</div>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~92"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~10"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mythread~8"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mythread</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-xc_consumer_postupdate"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine xc_consumer_postUpdate(self, xce, mythread)  
+
+    </h3>
+  <div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>This subroutine is executed inside the parallel region by every thread</p>
+</div>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~93"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~11"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mythread~9"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mythread</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-compute_density"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine compute_density(self, rho)  
+
+    </h3>
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~94"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rho~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rho</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-compute_density_grad"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine compute_density_grad(self, drho, sigma)  
+
+    </h3>
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~95"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-drho~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>drho</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sigma"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>sigma</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="interface-compute_density_tau"></span><h3>abstract interface
+        
+    </h3></div>
+    <ul class="list-group">
+      <li class="list-group-item">
+            <h3>
+    public  subroutine compute_density_tau(self, tau)  
+
+    </h3>
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-self~96"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>self</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tau~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tau</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+      </li>
+    </ul>
+  </div>
+
+        </section>
+        <br>
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_consumer_t"></span>
+      <h3>
+        type, public, abstract&nbsp;::&nbsp;
+        <a href='../type/xc_consumer_t.html'>xc_consumer_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      <p>@brief Basic type to consume XC values on a grid</p>
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_xc~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_xc</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_exch~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_exch</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_corr~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_corr</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n_elec"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>N_elec</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_kin"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_kin</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_total"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>G_total</strong>(3)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pe~6"></span>
+              type(<a href='../type/par_env_t.html'>par_env_t</a>),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>pe</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure(<a href='../interface/xc_consumer_parallel_start.html'>xc_consumer_parallel_start</a>), public, deferred, pass ::
+  <strong><a href='../type/xc_consumer_t.html#boundprocedure-parallel_start~8'>parallel_start</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/xc_consumer_parallel_stop.html'>xc_consumer_parallel_stop</a>), public, deferred, pass ::
+  <strong><a href='../type/xc_consumer_t.html#boundprocedure-parallel_stop~6'>parallel_stop</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/xc_consumer_update.html'>xc_consumer_update</a>), public, deferred, pass ::
+  <strong><a href='../type/xc_consumer_t.html#boundprocedure-update~10'>update</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/xc_consumer_postupdate.html'>xc_consumer_postUpdate</a>), public, deferred, pass ::
+  <strong><a href='../type/xc_consumer_t.html#boundprocedure-postupdate~3'>postUpdate</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/xc_consumer_clean.html'>xc_consumer_clean</a>), public, deferred, pass ::
+  <strong><a href='../type/xc_consumer_t.html#boundprocedure-clean~20'>clean</a></strong></td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_options_t"></span>
+      <h3>
+        type, public&nbsp;::&nbsp;
+        <a href='../type/xc_options_t.html'>xc_options_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      <p>@brief Interface structure to set up XC engine options</p>
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-isgga"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isGGA</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-needtau"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>needTau</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hasbeta"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hasBeta</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-iswfvecs"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isWFVecs</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxpts~5"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-limpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>limPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numatoms"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAtoms</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxangmom"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxAngMom</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nder~4"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nxcder"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nXCDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaovecs"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOVecs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numtmpvec"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numTmpVec</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccalpha"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccAlpha</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccbeta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccBeta</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dft_threshold~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dft_threshold</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_threshold"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_threshold</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_sparsity_ratio"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_sparsity_ratio</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfalpha"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfAlpha</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfbeta"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfBeta</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-molgrid~12"></span>
+              type(<a href='../type/dft_grid_t.html'>dft_grid_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>molGrid</strong></td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-functional~3"></span>
+              type(<a href='../type/functional_t.html'>functional_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>functional</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_engine_t"></span>
+      <h3>
+        type, public&nbsp;::&nbsp;
+        <a href='../type/xc_engine_t.html'>xc_engine_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      <p>@brief Main class which knows how to compute XC functional values, AO and MO
+  values and gradients on a grid
+@details It is complemented with xc_consumer_t class to use calculation results</p>
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xyzw"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>xyzw</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aomem_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>aoMem_</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-momema_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>moMemA_</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-momemb_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>moMemB_</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tmpwfalpha"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>tmpWfAlpha</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tmpwfbeta"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>tmpWfBeta</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-indices_p"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>indices_p</strong>(:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aomem"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>aoMem</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-momema"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moMemA</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-momemb"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moMemB</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aov"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>aoV</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mova"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moVA</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-movb"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moVB</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog1"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>aoG1</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>aoG2</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog1a"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moG1A</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog2a"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moG2A</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog1b"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moG1B</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog2b"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>moG2B</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wts~6"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wts</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfalpha~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfAlpha</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfbeta~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfBeta</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfalpha_p"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfAlpha_p</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfbeta_p"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfBeta_p</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-isgga~2"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isGGA</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-needtau~2"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>needTau</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hasbeta~2"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hasBeta</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-iswfvecs~2"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isWFVecs</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos_p"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs_p</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-skip_p"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>skip_p</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numpts~4"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numatoms~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAtoms</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxpts~6"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxangmom~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxAngMom</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-naoder"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nAODer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nxcder~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nXCDer</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-funtyp"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>funTyp</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaovecs~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOVecs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numtmpvec~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numTmpVec</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccalpha~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccAlpha</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccbeta~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccBeta</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-threshold"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>threshold</strong></td>
+<td> =</td>
+                <td>1.0d-15</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_threshold~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_threshold</strong></td>
+<td> =</td>
+                <td>1.0d-15</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_sparsity_ratio~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_sparsity_ratio</strong></td>
+<td> =</td>
+                <td>0.90d+0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xclib"></span>
+              type(<a href='../type/xc_libxc_t.html'>xc_libxc_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>XCLib</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dbglevel"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dbgLevel</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n_elec~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>N_elec</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_kin~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_kin</strong></td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_total~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>G_total</strong>(3)</td>
+<td> =</td>
+                <td>0.0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-comprho"></span>
+              procedure(<a href='../interface/compute_density.html'>compute_density</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer, pass
+            </td>
+            <td>::</td>
+            <td><strong>compRho</strong></td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-compdrho"></span>
+              procedure(<a href='../interface/compute_density_grad.html'>compute_density_grad</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer, pass
+            </td>
+            <td>::</td>
+            <td><strong>compDRho</strong></td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-comptau"></span>
+              procedure(<a href='../interface/compute_density_tau.html'>compute_density_tau</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer, pass
+            </td>
+            <td>::</td>
+            <td><strong>compTau</strong></td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-init~18'>init</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-echo~2'>echo</a></strong> => echoVars</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-getstats'>getStats</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-resetpointers'>resetPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-resetorbpointers~2'>resetOrbPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-resetxcpointers'>resetXCPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-compaos'>compAOs</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-pruneaos'>pruneAOs</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-resetprunedpointers'>resetPrunedPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-compmos'>compMOs</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprmos'>compRMOs</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprmogs'>compRMOGs</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  generic, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprrho'>compRRho</a></strong> => compRRho_ab, compRRho_a</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  generic, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprdrho'>compRDRho</a></strong> => compRDRho_ab, compRDRho_a</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  generic, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprtau'>compRTau</a></strong> => compRTau_ab, compRTau_a</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-comprhoall'>compRhoAll</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_engine_t.html#boundprocedure-compxc'>compXC</a></strong></td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mo_tran_symm_"></span> <h3>public  subroutine <a href='../proc/mo_tran_symm_.html'>mo_tran_symm_</a>(numAOs, nVecs, nPts, A, B, C)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nvecs"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nVecs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nPts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~6"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>B</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>C</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mo_tran_gemm_"></span> <h3>public  subroutine <a href='../proc/mo_tran_gemm_.html'>mo_tran_gemm_</a>(numMOs, numAOs, nVecs, nPts, numAOs_active, A, B, C)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nummos"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numMOs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos~4"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nvecs~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nVecs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nPts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos_active"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs_active</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~7"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>B</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>C</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-compatgradrho"></span> <h3>public  subroutine <a href='../proc/compatgradrho.html'>compAtGradRho</a>(bfGrad, fGrad, moV, aoG1, nPts)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute XC contributions to the gradient from a grid point, LDA part
+@param[in]    iPt      index of a grid point
+@param[inout] bfGrad   array of gradient contributions per basis function
+@param[in]    fgrad    XC gradient
+@param[in]    moV      MO-like orbital values
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bfgrad"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>bfGrad</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fgrad"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>fGrad</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mov"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>moV</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog1~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>aoG1</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nPts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-compatgraddrho"></span> <h3>public  subroutine <a href='../proc/compatgraddrho.html'>compAtGradDRho</a>(bfGrad, fGrad, moV, moG1, aoG1, aoG2, npts)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute XC contributions to the gradient from a grid point, GGA part
+@param[inout] bfGrad   array of gradient contributions per basis function
+@param[in]    fgrad    XC gradient
+@param[in]    moV      MO-like orbital values
+@param[in]    moG1     MO-like orbital gradients
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bfgrad~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>bfGrad</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fgrad~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>fGrad</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mov~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>moV</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog1~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>moG1</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog1~3"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>aoG1</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog2~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>aoG2</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts~8"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>npts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-compatgradtau"></span> <h3>public  subroutine <a href='../proc/compatgradtau.html'>compAtGradTau</a>(bfGrad, fgrad, moG1, aoG2, npts)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute XC contributions to the gradient from a grid point, mGGA part
+@param[in]    iPt      index of a grid point
+@param[inout] bfGrad   array of gradient contributinos per basis function
+@param[in]    dedta    XC energy, mGGA contribution, alpha-spin
+@param[in]    dedtb    XC energy, mGGA contribution, beta-spin
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bfgrad~3"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>bfGrad</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fgrad"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>fgrad</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog1~5"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>moG1</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-aog2~3"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous
+            </td>
+            <td>::</td>
+            <td><strong>aoG2</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-npts~9"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>npts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-xc_der1"></span> <h3>public  subroutine <a href='../proc/xc_der1.html'>xc_der1</a>(xce, beta, ipt, d_r, d_s, d_t)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Get first derivative of the XC functional
+@param[in] xce    XC engine
+@param[in] beta   Whether to return spin-polarized quantities
+@param[out] d_r   dE_xc / d_rho (alpha, beta)
+@param[out] d_s   dE_xc / d_sigma (alpha-alpha, beta-beta, alpha-beta)
+@param[out] d_t   dE_xc / d_tau (alpha, beta)</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~20"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta~47"></span>
+              logical
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipt~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipt</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d_r"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>d_r</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d_s"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>d_s</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d_t"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>d_t</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-xc_der2_contr"></span> <h3>public  subroutine <a href='../proc/xc_der2_contr.html'>xc_der2_contr</a>(xce, beta, ipt, dr, ds, dt, f_r, f_s, f_t)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Get second derivative of the XC functional contracted with response densities
+@param[in] xce    XC engine
+@param[in] beta   Whether to return spin-polarized quantities
+@param[in] d_r    \delta_rho (alpha, beta)
+@param[in] d_s    \delta_sigma (alpha-alpha, beta-beta, alpha-beta)
+@param[in] d_t    \delta_tau (alpha, beta)
+@param[out] f_r   \sum_i d2E_xc / (d_rho   * d_zeta_i) (alpha, beta)
+@param[out] f_s   \sum_i d2E_xc / (d_sigma * d_zeta_i) (alpha-alpha, beta-beta, alpha-beta)
+@param[out] f_t   \sum_i d2E_xc / (d_tau   * d_zeta_i) (alpha, beta)</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~21"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta~48"></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipt~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipt</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dr"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dr</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ds"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ds</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dt"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dt</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f_r"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>f_r</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f_s"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>f_s</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f_t"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>f_t</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-xc_der3_contr"></span> <h3>public  subroutine <a href='../proc/xc_der3_contr.html'>xc_der3_contr</a>(xce, ipt, dr, ds, dt, ss, f_s, g_r, g_s, g_t)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Get third derivative of the XC functional contracted with response densities,
+ spin-polarized version
+@param[in] xce    XC engine
+@param[in] d_r    \delta_rho (alpha, beta)
+@param[in] d_s    \delta_sigma (alpha-alpha, beta-beta, alpha-beta)
+@param[in] d_t    \delta_tau (alpha, beta)
+@param[in] ss     (\nabla\rho(T)<em>\nabla\rho(T)) (alpha-alpha, beta-beta, alpha-beta)
+@param[out] g_r   \sum_i,j d2E_xc / (d_rho   * d_zeta_i</em>d_zeta_j) (alpha, beta)
+@param[out] g_s   \sum_i,j d2E_xc / (d_sigma * d_zeta_i<em>d_zeta_j) (alpha-alpha, beta-beta, alpha-beta)
+@param[out] g_t   \sum_i,j d2E_xc / (d_tau   * d_zeta_i</em>d_zeta_j) (alpha, beta)</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xce~24"></span>
+              class(<a href='../type/xc_engine_t.html'>xc_engine_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xce</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ipt~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ipt</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dr~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dr</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ds~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ds</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dt~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dt</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ss~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ss</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f_s~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>f_s</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_r"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>g_r</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_s"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>g_s</strong>(3)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_t"></span>
+              real(kind=fp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>g_t</strong>(2)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-run_xc"></span> <h3>public  subroutine <a href='../proc/run_xc.html'>run_xc</a>(xc_opts, xc_dat, basis)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xc_opts~3"></span>
+              type(<a href='../type/xc_options_t.html'>xc_options_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xc_opts</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xc_dat"></span>
+              class(<a href='../type/xc_consumer_t.html'>xc_consumer_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>xc_dat</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~68"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

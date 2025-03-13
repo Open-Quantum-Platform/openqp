@@ -1,0 +1,3433 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>tdhf_mrsf_lib &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>tdhf_mrsf_lib
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 2.3% of total for modules and submodules.">1050 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_mrsf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_mrsf_lib.f90.html'>tdhf_mrsf_lib.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">tdhf_mrsf_lib</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#type-int2_mrsf_data_t">int2_mrsf_data_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-int2_mrsf_data_t_parallel_start">int2_mrsf_data_t_parallel_start</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-int2_mrsf_data_t_parallel_stop">int2_mrsf_data_t_parallel_stop</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-int2_mrsf_data_t_clean">int2_mrsf_data_t_clean</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-int2_mrsf_data_t_init_screen">int2_mrsf_data_t_init_screen</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-shell_den_screen_mrsf">shell_den_screen_mrsf</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-int2_mrsf_data_t_update">int2_mrsf_data_t_update</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrinivec">mrinivec</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfcbc">mrsfcbc</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfmntoia">mrsfmntoia</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfesum">mrsfesum</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfqroesum">mrsfqroesum</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-get_mrsf_transitions">get_mrsf_transitions</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfxvec">mrsfxvec</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfsp">mrsfsp</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfrowcal">mrsfrowcal</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfqrorhs">mrsfqrorhs</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfqropcal">mrsfqropcal</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-mrsfqrowcal">mrsfqrowcal</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-get_mrsf_transition_density">get_mrsf_transition_density</a>
+            <a class="list-group-item" href="../module/tdhf_mrsf_lib.html#proc-get_trans_den">get_trans_den</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='int2_compute.html'>int2_compute</a></li>
+                  <li class="list-inline-item"><a href='oqp_linalg.html'>oqp_linalg</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~tdhf_mrsf_lib~~UsesGraph Pages: 1 -->
+<svg id="moduletdhf_mrsf_libUsesGraph" width="641pt" height="473pt"
+ viewBox="0.00 0.00 641.00 472.86" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~tdhf_mrsf_lib~~UsesGraph" class="graph" transform="scale(.7523 .7523) rotate(0) translate(4 624.5152)">
+<title>module~~tdhf_mrsf_lib~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-624.5152 848,-624.5152 848,4 -4,4"/>
+<!-- module~tdhf_mrsf_lib -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node1" class="node">
+<title>module~tdhf_mrsf_lib</title>
+<polygon fill="none" stroke="#000000" points="844,-220.5152 763,-220.5152 763,-196.5152 844,-196.5152 844,-220.5152"/>
+<text text-anchor="middle" x="803.5" y="-206.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">tdhf_mrsf_lib</text>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="482.5,-520.5152 412.5,-520.5152 412.5,-496.5152 482.5,-496.5152 482.5,-520.5152"/>
+<text text-anchor="middle" x="447.5" y="-506.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~basis_tools -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge1" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M800.4205,-220.6592C787.2532,-269.6882 730.5823,-453.6983 606,-522.5152 569.3564,-542.7565 520.5552,-534.1281 486.8303,-523.7164"/>
+<polygon fill="#000000" stroke="#000000" points="487.9025,-520.3847 477.31,-520.607 485.7292,-527.0388 487.9025,-520.3847"/>
+</g>
+<!-- module~int2_compute -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node3" class="node">
+<title>module~int2_compute</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node3"><a xlink:href="../module/int2_compute.html" xlink:title="int2_compute">
+<polygon fill="#337ab7" stroke="#337ab7" points="727,-240.5152 642,-240.5152 642,-216.5152 727,-216.5152 727,-240.5152"/>
+<text text-anchor="middle" x="684.5" y="-226.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~int2_compute -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge2" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M762.8798,-215.3422C754.6528,-216.7249 745.8886,-218.1978 737.3121,-219.6393"/>
+<polygon fill="#000000" stroke="#000000" points="736.6553,-216.2005 727.3737,-221.3096 737.8155,-223.1037 736.6553,-216.2005"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node4" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node4"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="718,-140.5152 651,-140.5152 651,-116.5152 718,-116.5152 718,-140.5152"/>
+<text text-anchor="middle" x="684.5" y="-126.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge3" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M787.0034,-196.398C771.6554,-185.2381 748.0517,-168.3632 727,-154.5152 722.6845,-151.6765 718.0696,-148.7473 713.5299,-145.9243"/>
+<polygon fill="#000000" stroke="#000000" points="715.3437,-142.9309 704.991,-140.6783 711.6794,-148.8952 715.3437,-142.9309"/>
+</g>
+<!-- module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node5" class="node">
+<title>module~precision</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node5"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-300.5152 141.5,-300.5152 141.5,-276.5152 202.5,-276.5152 202.5,-300.5152"/>
+<text text-anchor="middle" x="172" y="-286.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge4" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M762.9982,-198.7836C697.0158,-184.0971 562.1612,-158.9469 447.5,-168.5152"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.4178,-508.0995C383.6629,-506.6796 342.4097,-502.1303 309,-488.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-488.5152C232.1441,-457.195 192.403,-355.4595 178.2001,-310.3707"/>
+<polygon fill="#000000" stroke="#000000" points="181.5156,-309.2429 175.2706,-300.6843 174.8154,-311.2693 181.5156,-309.2429"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node6" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-500.5152 0,-500.5152 0,-476.5152 94,-476.5152 94,-500.5152"/>
+<text text-anchor="middle" x="47" y="-486.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-488.5152C242.7769,-461.528 159.08,-467.6876 104.347,-476.4598"/>
+<polygon fill="#000000" stroke="#000000" points="103.7556,-473.01 94.4749,-478.1208 104.9171,-479.913 103.7556,-473.01"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node7" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node7"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-540.5152 250,-540.5152 250,-516.5152 368,-516.5152 368,-540.5152"/>
+<text text-anchor="middle" x="309" y="-526.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M412.1922,-513.6138C401.7359,-515.1238 389.9078,-516.8318 378.0861,-518.5389"/>
+<polygon fill="#000000" stroke="#000000" points="377.5847,-515.0749 368.1877,-519.9683 378.5853,-522.003 377.5847,-515.0749"/>
+</g>
+<!-- module~constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node9" class="node">
+<title>module~constants</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node9"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-380.5152 277,-380.5152 277,-356.5152 341,-356.5152 341,-380.5152"/>
+<text text-anchor="middle" x="309" y="-366.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.4601,-496.1693C432.0725,-472.204 406.0227,-419.14 368,-389.5152 362.8781,-385.5246 356.9352,-382.2531 350.8331,-379.5823"/>
+<polygon fill="#000000" stroke="#000000" points="351.7974,-376.2027 341.208,-375.8627 349.2741,-382.7321 351.7974,-376.2027"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node13" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node13"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-300.5152 269.5,-300.5152 269.5,-276.5152 348.5,-276.5152 348.5,-300.5152"/>
+<text text-anchor="middle" x="309" y="-286.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.1557,-496.4362C427.5665,-463.6808 386.8909,-373.8631 368,-347.5152 357.4385,-332.7848 343.1065,-318.3591 331.2128,-307.4592"/>
+<polygon fill="#000000" stroke="#000000" points="333.233,-304.5706 323.4446,-300.5161 328.5681,-309.7898 333.233,-304.5706"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node16" class="node">
+<title>module~parallel</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node16"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-582.5152 282,-582.5152 282,-558.5152 336,-558.5152 336,-582.5152"/>
+<text text-anchor="middle" x="309" y="-568.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M425.9472,-520.6305C410.1668,-529.2529 388.0901,-540.8062 368,-549.5152 360.8558,-552.6123 353.0913,-555.62 345.6128,-558.346"/>
+<polygon fill="#000000" stroke="#000000" points="344.2749,-555.1069 336.0224,-561.7511 346.6171,-561.7034 344.2749,-555.1069"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~basis_tools -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge12" class="edge">
+<title>module~int2_compute&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M566.5,-508.5152C544.2123,-520.4567 516.0365,-520.9802 492.6966,-518.2738"/>
+<polygon fill="#000000" stroke="#000000" points="493.0732,-514.7926 482.6874,-516.8866 492.1123,-521.7264 493.0732,-514.7926"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge18" class="edge">
+<title>module~int2_compute&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M566.5,-208.5152C515.2044,-195.6312 500.253,-212.3045 447.5,-208.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-208.5152C383.5933,-203.9248 370.4331,-150.3188 309,-168.5152"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~atomic_structure_m -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge11" class="edge">
+<title>module~int2_compute&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M566.5,-508.5152C515.78,-535.6904 504.2465,-549.9841 447.5,-559.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-559.5152C430.3782,-562.391 390.1379,-552.707 357.4197,-543.4194"/>
+<polygon fill="#000000" stroke="#000000" points="358.1199,-539.9786 347.5412,-540.5642 356.1761,-546.7033 358.1199,-539.9786"/>
+</g>
+<!-- module~int2_pairs -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node10" class="node">
+<title>module~int2_pairs</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node10"><a xlink:href="../module/int2_pairs.html" xlink:title="int2_pairs">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-220.5152 277,-220.5152 277,-196.5152 341,-196.5152 341,-220.5152"/>
+<text text-anchor="middle" x="309" y="-206.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2_pairs -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge13" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-208.5152C415.2813,-206.201 378.7378,-206.3156 351.2805,-206.9472"/>
+<polygon fill="#000000" stroke="#000000" points="351.1349,-203.4497 341.2301,-207.2106 351.3184,-210.4473 351.1349,-203.4497"/>
+</g>
+<!-- module~int2e_libint -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node11" class="node">
+<title>module~int2e_libint</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node11"><a xlink:href="../module/int2e_libint.html" xlink:title="int2e_libint">
+<polygon fill="#337ab7" stroke="#337ab7" points="483,-401.5152 412,-401.5152 412,-377.5152 483,-377.5152 483,-401.5152"/>
+<text text-anchor="middle" x="447.5" y="-387.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_libint</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_libint -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge14" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.5398,-240.5569C668.9473,-290.6058 618.1127,-480.8617 566.5,-508.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M566.5,-508.5152C516.2864,-535.4191 473.5319,-452.3125 456.002,-411.1631"/>
+<polygon fill="#000000" stroke="#000000" points="459.1471,-409.6088 452.0996,-401.6978 452.6755,-412.277 459.1471,-409.6088"/>
+</g>
+<!-- module~int2e_rys -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node12" class="node">
+<title>module~int2e_rys</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node12"><a xlink:href="../module/int2e_rys.html" xlink:title="int2e_rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="597,-260.5152 536,-260.5152 536,-236.5152 597,-236.5152 597,-260.5152"/>
+<text text-anchor="middle" x="566.5" y="-246.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_rys</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_rys -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge15" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M641.8993,-235.7357C630.5777,-237.6546 618.381,-239.7218 607.1657,-241.6227"/>
+<polygon fill="#000000" stroke="#000000" points="606.4696,-238.1907 597.1951,-243.3127 607.6394,-245.0923 606.4696,-238.1907"/>
+</g>
+<!-- module~messages -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node15" class="node">
+<title>module~messages</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node15"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="480.5,-140.5152 414.5,-140.5152 414.5,-116.5152 480.5,-116.5152 480.5,-140.5152"/>
+<text text-anchor="middle" x="447.5" y="-126.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~messages -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge16" class="edge">
+<title>module~int2_compute&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M641.8399,-222.9298C619.2667,-219.5618 591.1866,-214.7159 566.5,-208.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M566.5,-208.5152C526.4878,-198.4652 525.5128,-177.1171 491,-154.5152 486.6045,-151.6367 481.8925,-148.6863 477.251,-145.8541"/>
+<polygon fill="#000000" stroke="#000000" points="478.8878,-142.7545 468.5136,-140.6037 475.2823,-148.7545 478.8878,-142.7545"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~parallel -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge17" class="edge">
+<title>module~int2_compute&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-559.5152C413.5403,-565.2191 374.3849,-567.9822 346.3898,-569.3106"/>
+<polygon fill="#000000" stroke="#000000" points="346.0791,-565.8207 336.2409,-569.7526 346.3837,-572.814 346.0791,-565.8207"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node8" class="node">
+<title>module~blas_wrap</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node8"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="599.5,-140.5152 533.5,-140.5152 533.5,-116.5152 599.5,-116.5152 599.5,-140.5152"/>
+<text text-anchor="middle" x="566.5" y="-126.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge19" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.6859,-128.5152C637.8783,-128.5152 623.1213,-128.5152 609.575,-128.5152"/>
+<polygon fill="#000000" stroke="#000000" points="609.5044,-125.0153 599.5044,-128.5152 609.5044,-132.0153 609.5044,-125.0153"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node14" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node14"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="606,-98.5152 527,-98.5152 527,-74.5152 606,-74.5152 606,-98.5152"/>
+<text text-anchor="middle" x="566.5" y="-84.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge20" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.6859,-116.4797C637.9719,-111.9544 623.337,-106.7454 609.8724,-101.9529"/>
+<polygon fill="#000000" stroke="#000000" points="610.9137,-98.6085 600.319,-98.5525 608.5664,-105.2032 610.9137,-98.6085"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge21" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M164.3689,-300.7251C143.6166,-333.9287 85.9756,-426.1543 59.994,-467.7248"/>
+<polygon fill="#000000" stroke="#000000" points="56.8633,-466.1302 54.5313,-476.4652 62.7993,-469.8402 56.8633,-466.1302"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node19" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node19"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-540.5152 130,-540.5152 130,-516.5152 214,-516.5152 214,-540.5152"/>
+<text text-anchor="middle" x="172" y="-526.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge22" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-528.5152C241.1722,-528.5152 232.4436,-528.5152 224.0637,-528.5152"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-525.0153 214.0516,-528.5152 224.0516,-532.0153 224.0516,-525.0153"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge25" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M542.1741,-140.5579C518.6322,-151.2698 481.6006,-165.6696 447.5,-168.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-168.5152C386.1577,-173.6342 368.0209,-151.0333 309,-168.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-168.5152C282.586,-176.3391 272.5425,-171.6802 250,-187.5152 220.0189,-208.5755 196.2229,-244.5745 183.1323,-267.4228"/>
+<polygon fill="#000000" stroke="#000000" points="179.9826,-265.8857 178.1907,-276.3279 186.1033,-269.2822 179.9826,-265.8857"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge24" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M533.3519,-128.5152C520.3089,-128.5152 505.1487,-128.5152 491.2296,-128.5152"/>
+<polygon fill="#000000" stroke="#000000" points="490.8831,-125.0153 480.8831,-128.5152 490.8831,-132.0153 490.8831,-125.0153"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node21" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node21"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-98.5152 404,-98.5152 404,-74.5152 491,-74.5152 491,-98.5152"/>
+<text text-anchor="middle" x="447.5" y="-84.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge23" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M533.3519,-116.8159C520.4024,-112.2455 505.366,-106.9385 491.5291,-102.0549"/>
+<polygon fill="#000000" stroke="#000000" points="492.3075,-98.6181 481.7127,-98.5903 489.9777,-105.219 492.3075,-98.6181"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge26" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.7498,-356.5003C269.3539,-352.4216 259.0837,-347.6 250,-342.5152 231.018,-331.8898 210.8604,-317.8544 195.793,-306.7559"/>
+<polygon fill="#000000" stroke="#000000" points="197.6645,-303.7854 187.5571,-300.6087 193.4775,-309.3951 197.6645,-303.7854"/>
+</g>
+<!-- module~int2_pairs&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge27" class="edge">
+<title>module~int2_pairs&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.7498,-220.5302C269.3539,-224.6088 259.0837,-229.4305 250,-234.5152 231.018,-245.1407 210.8604,-259.1761 195.793,-270.2745"/>
+<polygon fill="#000000" stroke="#000000" points="193.4775,-267.6354 187.5571,-276.4218 197.6645,-273.2451 193.4775,-267.6354"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge32" class="edge">
+<title>module~int2e_libint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.1063,-377.3301C411.3516,-368.2676 388.7969,-356.0448 368,-347.5152 339.7607,-335.9333 261.1671,-313.329 212.5119,-299.7097"/>
+<polygon fill="#000000" stroke="#000000" points="213.1856,-296.264 202.6128,-296.9471 211.3039,-303.0064 213.1856,-296.264"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge29" class="edge">
+<title>module~int2e_libint&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.8328,-384.1072C393.3533,-381.3053 370.6641,-377.865 351.3039,-374.9295"/>
+<polygon fill="#000000" stroke="#000000" points="351.6435,-371.4411 341.2318,-373.4024 350.5941,-378.362 351.6435,-371.4411"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~int2_pairs -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge30" class="edge">
+<title>module~int2e_libint&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.6097,-377.1668C427.7002,-354.471 398.4169,-305.0168 368,-267.5152 356.5822,-253.4381 342.231,-239.027 330.5414,-227.9715"/>
+<polygon fill="#000000" stroke="#000000" points="332.6473,-225.1501 322.9427,-220.8991 327.8782,-230.2741 332.6473,-225.1501"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;iso_c_binding -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge28" class="edge">
+<title>module~int2e_libint&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.631,-401.5473C410.8177,-410.4154 388.4025,-422.4593 368,-431.5152 316.9819,-454.1605 299.5747,-448.8636 250,-474.5152 230.5574,-484.5755 210.2778,-498.7458 195.2714,-510.0463"/>
+<polygon fill="#000000" stroke="#000000" points="192.8994,-507.4545 187.0914,-516.3155 197.1575,-513.0105 192.8994,-507.4545"/>
+</g>
+<!-- module~libint_f -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node20" class="node">
+<title>module~libint_f</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node20"><a xlink:href="../module/libint_f.html" xlink:title="libint_f">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-422.5152 282,-422.5152 282,-398.5152 336,-398.5152 336,-422.5152"/>
+<text text-anchor="middle" x="309" y="-408.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">libint_f</text>
+</a>
+</g>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~libint_f -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge31" class="edge">
+<title>module~int2e_libint&#45;&gt;module~libint_f</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.8328,-394.9233C391.7666,-397.9658 366.7367,-401.7609 346.3953,-404.8452"/>
+<polygon fill="#000000" stroke="#000000" points="345.5989,-401.4259 336.2366,-406.3855 346.6483,-408.3468 345.5989,-401.4259"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~basis_tools -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge33" class="edge">
+<title>module~int2e_rys&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M560.92,-260.7068C542.1807,-301.6498 481.3368,-434.586 457.3504,-486.9934"/>
+<polygon fill="#000000" stroke="#000000" points="454.0472,-485.8005 453.0679,-496.35 460.4122,-488.7138 454.0472,-485.8005"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge35" class="edge">
+<title>module~int2e_rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M535.8275,-245.124C511.5874,-243.2536 477.0353,-242.3926 447.5,-248.5152"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-248.5152C361.1527,-266.4149 336.767,-251.7755 250,-267.5152 237.7106,-269.7446 224.5314,-272.9645 212.5691,-276.2159"/>
+<polygon fill="#000000" stroke="#000000" points="211.5408,-272.8691 202.8531,-278.9334 213.4263,-279.6103 211.5408,-272.8691"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge34" class="edge">
+<title>module~int2e_rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-248.5152C432.7292,-251.5772 363.8283,-315.9644 329.1083,-349.1313"/>
+<polygon fill="#000000" stroke="#000000" points="326.6544,-346.6352 321.8553,-356.0808 331.4973,-351.6895 326.6544,-346.6352"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge38" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548.2617,-74.459C496.0799,-41.6169 343.9108,42.4342 250,-27.5152 210.8056,-56.7092 184.0572,-208.8844 175.2055,-266.4362"/>
+<polygon fill="#000000" stroke="#000000" points="171.7443,-265.9171 173.7185,-276.3263 178.6665,-266.9579 171.7443,-265.9171"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge37" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M532.3994,-98.5508C519.3566,-103.1541 504.3092,-108.4649 490.5386,-113.3251"/>
+<polygon fill="#000000" stroke="#000000" points="489.0491,-110.1392 480.7841,-116.7679 491.3789,-116.7401 489.0491,-110.1392"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge36" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.8747,-86.5152C518.6134,-86.5152 509.7746,-86.5152 501.1044,-86.5152"/>
+<polygon fill="#000000" stroke="#000000" points="501.0486,-83.0153 491.0485,-86.5152 501.0485,-90.0153 501.0486,-83.0153"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge42" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.6489,-116.4742C382.7002,-99.0331 303.2902,-72.4522 250,-107.5152 195.3919,-143.4454 178.8491,-226.546 173.9697,-266.4066"/>
+<polygon fill="#000000" stroke="#000000" points="170.4817,-266.1079 172.8809,-276.4275 177.4407,-266.8642 170.4817,-266.1079"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge41" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M438.6412,-140.7032C424.4051,-160.0682 395.2626,-198.8125 368,-229.5152 355.8089,-243.2447 341.2265,-257.8421 329.6093,-269.0823"/>
+<polygon fill="#000000" stroke="#000000" points="326.9025,-266.8287 322.1062,-276.2757 331.7469,-271.8816 326.9025,-266.8287"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node17" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-140.5152 266.5,-140.5152 266.5,-116.5152 351.5,-116.5152 351.5,-140.5152"/>
+<text text-anchor="middle" x="309" y="-126.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge39" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.3258,-128.5152C398.6048,-128.5152 379.4423,-128.5152 361.7935,-128.5152"/>
+<polygon fill="#000000" stroke="#000000" points="361.6146,-125.0153 351.6146,-128.5152 361.6145,-132.0153 361.6146,-125.0153"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node18" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-60.5152 273,-60.5152 273,-36.5152 345,-36.5152 345,-60.5152"/>
+<text text-anchor="middle" x="309" y="-46.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge40" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M419.2134,-116.3511C414.0014,-113.6974 408.7198,-110.7156 404,-107.5152 386.0353,-95.334 386.1732,-86.3831 368,-74.5152 362.6491,-71.0209 356.7504,-67.792 350.8143,-64.8839"/>
+<polygon fill="#000000" stroke="#000000" points="352.074,-61.6102 341.5287,-60.5861 349.1337,-67.9628 352.074,-61.6102"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge45" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9576,-566.438C270.7271,-563.4681 258.3859,-558.3449 250,-549.5152 216.4905,-514.2323 186.4536,-367.028 175.9586,-310.6326"/>
+<polygon fill="#000000" stroke="#000000" points="179.3698,-309.8298 174.1249,-300.6243 172.4844,-311.0914 179.3698,-309.8298"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge44" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8805,-571.5665C245.8858,-572.0295 180.9457,-569.5858 130,-549.5152 105.772,-539.9704 82.2517,-521.5473 66.473,-507.4345"/>
+<polygon fill="#000000" stroke="#000000" points="68.6908,-504.7188 58.9647,-500.5172 63.9478,-509.867 68.6908,-504.7188"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge43" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-562.2174C264.5765,-556.8963 241.5349,-549.8325 221.0312,-543.5467"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-540.1193 211.2057,-540.5345 219.7406,-546.8119 221.7924,-540.1193"/>
+</g>
+<!-- mpi -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_node22" class="node">
+<title>mpi</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsesGraph_node22"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-620.5152 145,-620.5152 145,-596.5152 199,-596.5152 199,-620.5152"/>
+<text text-anchor="middle" x="172" y="-606.1152" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge46" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-578.0228C261.0113,-583.826 231.8293,-591.9203 208.789,-598.311"/>
+<polygon fill="#000000" stroke="#000000" points="207.7112,-594.9777 199.0106,-601.0233 209.5823,-601.723 207.7112,-594.9777"/>
+</g>
+<!-- module~libint_f&#45;&gt;iso_c_binding -->
+<g id="module~~tdhf_mrsf_lib~~UsesGraph_edge47" class="edge">
+<title>module~libint_f&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.762,-419.5227C271.2572,-423.7392 259.5076,-429.4169 250,-436.5152 223.2263,-456.5044 199.5258,-487.3167 185.469,-507.6945"/>
+<polygon fill="#000000" stroke="#000000" points="182.3929,-505.9965 179.7126,-516.2467 188.2,-509.9052 182.3929,-505.9965"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmoduletdhf_mrsf_libUsesGraph = svgPanZoom('#moduletdhf_mrsf_libUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~tdhf_mrsf_lib~~UsedByGraph Pages: 1 -->
+<svg id="moduletdhf_mrsf_libUsedByGraph" width="237pt" height="74pt"
+ viewBox="0.00 0.00 237.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>module~~tdhf_mrsf_lib~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 233,-70 233,4 -4,4"/>
+<!-- module~tdhf_mrsf_lib -->
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph_node1" class="node">
+<title>module~tdhf_mrsf_lib</title>
+<polygon fill="none" stroke="#000000" points="81,-45 0,-45 0,-21 81,-21 81,-45"/>
+<text text-anchor="middle" x="40.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">tdhf_mrsf_lib</text>
+</g>
+<!-- proc~get_states_overlap -->
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph_node2" class="node">
+<title>proc~get_states_overlap</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsedByGraph_node2"><a xlink:href="../proc/get_states_overlap.html" xlink:title="get_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="229,-66 117,-66 117,-42 229,-42 229,-66"/>
+<text text-anchor="middle" x="173" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph_edge1" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M116.8081,-45.0941C108.2835,-43.743 99.5315,-42.3559 91.1343,-41.0251"/>
+<polygon fill="#000000" stroke="#000000" points="91.5315,-37.5444 81.1069,-39.4358 90.4357,-44.4581 91.5315,-37.5444"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph_node3" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_module~~tdhf_mrsf_lib~~UsedByGraph_node3"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="226,-24 120,-24 120,0 226,0 226,-24"/>
+<text text-anchor="middle" x="173" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="module~~tdhf_mrsf_lib~~UsedByGraph_edge2" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M119.8706,-20.4205C110.4593,-21.9121 100.6799,-23.4621 91.3339,-24.9433"/>
+<polygon fill="#000000" stroke="#000000" points="90.7293,-21.4954 81.4005,-26.5177 91.8251,-28.4091 90.7293,-21.4954"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+
+
+
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-int2_mrsf_data_t"></span>
+      <h3>
+        type, public, extends(<a href='../type/int2_fock_data_t.html'>int2_fock_data_t</a>)&nbsp;::&nbsp;
+        <a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-multipass"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>multipass</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-num_passes"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>num_passes</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cur_pass"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cur_pass</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-scale_coulomb"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>scale_coulomb</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-scale_exchange"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>scale_exchange</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pe~4"></span>
+              type(<a href='../type/par_env_t.html'>par_env_t</a>),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>pe</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nshells"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nshells</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fockdim"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>fockdim</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nthreads~3"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nthreads</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nfocks~8"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nfocks</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f~6"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>f</strong>(:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dsh~2"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>dsh</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_den"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>max_den</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d~15"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>d</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-f3"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>f3</strong>(:,:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d3"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>d3</strong>(:,:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tamm_dancoff"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tamm_dancoff</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  generic, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-screen~3'>screen</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/type/int2_fock_data_t.html#boundprocedure-screen_ij~2'>screen_ij</a>, <a href='/bighome/mohsen/ford/openqp/doc/ford/type/int2_fock_data_t.html#boundprocedure-screen_ijkl~2'>screen_ijkl</a></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_fock_data_t.html#boundprocedure-screen_ij~2'>screen_ij</a></strong> => int2_fock_data_t_screen_ij</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_fock_data_t.html#boundprocedure-screen_ijkl~2'>screen_ijkl</a></strong> => int2_fock_data_t_screen_ijkl</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_fock_data_t.html#boundprocedure-int2_fock_data_t_parallel_start'>int2_fock_data_t_parallel_start</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_fock_data_t.html#boundprocedure-int2_fock_data_t_parallel_stop'>int2_fock_data_t_parallel_stop</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-parallel_start'>parallel_start</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/proc/int2_mrsf_data_t_parallel_start.html'>int2_mrsf_data_t_parallel_start</a></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-parallel_stop'>parallel_stop</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/proc/int2_mrsf_data_t_parallel_stop.html'>int2_mrsf_data_t_parallel_stop</a></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-init_screen'>init_screen</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/proc/int2_mrsf_data_t_init_screen.html'>int2_mrsf_data_t_init_screen</a></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-update'>update</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/proc/int2_mrsf_data_t_update.html'>int2_mrsf_data_t_update</a></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/int2_mrsf_data_t.html#boundprocedure-clean~3'>clean</a></strong> => <a href='/bighome/mohsen/ford/openqp/doc/ford/proc/int2_mrsf_data_t_clean.html'>int2_mrsf_data_t_clean</a></td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-int2_mrsf_data_t_parallel_start"></span> <h3>public  subroutine <a href='../proc/int2_mrsf_data_t_parallel_start.html'>int2_mrsf_data_t_parallel_start</a>(this, basis, nthreads)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~4"></span>
+              class(<a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~8"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nthreads"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nthreads</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-int2_mrsf_data_t_parallel_stop"></span> <h3>public  subroutine <a href='../proc/int2_mrsf_data_t_parallel_stop.html'>int2_mrsf_data_t_parallel_stop</a>(this)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~5"></span>
+              class(<a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-int2_mrsf_data_t_clean"></span> <h3>public  subroutine <a href='../proc/int2_mrsf_data_t_clean.html'>int2_mrsf_data_t_clean</a>(this)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~6"></span>
+              class(<a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-int2_mrsf_data_t_init_screen"></span> <h3>public  subroutine <a href='../proc/int2_mrsf_data_t_init_screen.html'>int2_mrsf_data_t_init_screen</a>(this, basis)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~7"></span>
+              class(<a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~9"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-shell_den_screen_mrsf"></span> <h3>public  subroutine <a href='../proc/shell_den_screen_mrsf.html'>shell_den_screen_mrsf</a>(dsh, da, basis)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dsh"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dsh</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-da~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:,:)
+            </td>
+            <td>::</td>
+            <td><strong>da</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~10"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-int2_mrsf_data_t_update"></span> <h3>public  subroutine <a href='../proc/int2_mrsf_data_t_update.html'>int2_mrsf_data_t_update</a>(this, buf)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-this~8"></span>
+              class(<a href='../type/int2_mrsf_data_t.html'>int2_mrsf_data_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>this</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-buf"></span>
+              type(<a href='../type/int2_storage_t.html'>int2_storage_t</a>),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>buf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrinivec"></span> <h3>public  subroutine <a href='../proc/mrinivec.html'>mrinivec</a>(infos, ea, eb, bvec_mo, xm, nvec)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~12"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ea"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>ea</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-eb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>eb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bvec_mo"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>bvec_mo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xm"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>xm</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nvec"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nvec</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfcbc"></span> <h3>public  subroutine <a href='../proc/mrsfcbc.html'>mrsfcbc</a>(infos, va, vb, bvec, fmrsf)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~13"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-va"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>va</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>vb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bvec"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>bvec</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fmrsf"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target, dimension(:,:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fmrsf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfmntoia"></span> <h3>public  subroutine <a href='../proc/mrsfmntoia.html'>mrsfmntoia</a>(infos, fmrsf, pmo, va, vb, ivec)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~14"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fmrsf~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target, dimension(:,:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fmrsf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pmo"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>pmo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-va~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>va</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>vb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ivec"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ivec</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfesum"></span> <h3>public  subroutine <a href='../proc/mrsfesum.html'>mrsfesum</a>(infos, wrk, fij, fab, pmo, iv)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~15"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wrk~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>wrk</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fij"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fij</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fab"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fab</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pmo~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>pmo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-iv"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>iv</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfqroesum"></span> <h3>public  subroutine <a href='../proc/mrsfqroesum.html'>mrsfqroesum</a>(fbzzfa, pmo, noca, nocb, nbf, ivec)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fbzzfa"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>fbzzfa</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pmo~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>pmo</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~17"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ivec~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ivec</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-get_mrsf_transitions"></span> <h3>public  subroutine <a href='../proc/get_mrsf_transitions.html'>get_mrsf_transitions</a>(trans, noca, nocb, nbf)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans"></span>
+              integer,
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~18"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfxvec"></span> <h3>public  subroutine <a href='../proc/mrsfxvec.html'>mrsfxvec</a>(infos, xv, xv12)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@details This subroutine transforms Multi-Reference Spin-Flip (MRSF) response vectors
+         from a compressed representation to an expanded form. It handles both
+         singlet (mrst=1) and triplet (mrst=3) cases.</p><a href="../proc/mrsfxvec.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~16"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xv"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>xv</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xv12"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>xv12</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfsp"></span> <h3>public  subroutine <a href='../proc/mrsfsp.html'>mrsfsp</a>(xhxa, xhxb, ca, cb, xv, fmrsf, noca, nocb)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief    Spin-pairing parts
+          of singlet and triplet MRSF Lagrangian</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxa"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ca"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>ca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>cb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xv~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xv</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fmrsf~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target, dimension(:,:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fmrsf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~5"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~5"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfrowcal"></span> <h3>public  subroutine <a href='../proc/mrsfrowcal.html'>mrsfrowcal</a>(wmo, mo_energy_a, fa, fb, xk, xhxa, xhxb, hppija, hppijb, noca, nocb)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wmo"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>wmo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_energy_a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>mo_energy_a</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fa~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xk"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>xk</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxa~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppija"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppija</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppijb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppijb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfqrorhs"></span> <h3>public  subroutine <a href='../proc/mrsfqrorhs.html'>mrsfqrorhs</a>(rhs, xhxa, xhxb, hpta, hptb, tab, tij, fa, fb, noca, nocb)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rhs"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>rhs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxa~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxb~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hpta"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hpta</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hptb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hptb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tab"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>tab</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tij"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>tij</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fa~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fb~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~7"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~7"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfqropcal"></span> <h3>public  subroutine <a href='../proc/mrsfqropcal.html'>mrsfqropcal</a>(pa, pb, tab, tij, z, noca, nocb)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pa"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>pa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>pb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tab~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>tab</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tij~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>tij</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>z</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~8"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~8"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-mrsfqrowcal"></span> <h3>public  subroutine <a href='../proc/mrsfqrowcal.html'>mrsfqrowcal</a>(w, mo_energy_a, fa, fb, z, xhxa, xhxb, hppija, hppijb, noca, nocb)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-w~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>w</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_energy_a~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>mo_energy_a</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fa~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fb~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-z~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>z</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxa~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxa</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxb~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppija~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppija</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppijb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppijb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~9"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~9"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-get_mrsf_transition_density"></span> <h3>public  subroutine <a href='../proc/get_mrsf_transition_density.html'>get_mrsf_transition_density</a>(infos, trden, bvec_mo, ist, jst)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~17"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trden"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>trden</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bvec_mo~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>bvec_mo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ist"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ist</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-jst"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>jst</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-get_trans_den"></span> <h3>public  subroutine <a href='../proc/get_trans_den.html'>get_trans_den</a>(trden, xv12i, xv12j, noca, nocb, nvirb)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trden~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>trden</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xv12i~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xv12i</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xv12j~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xv12j</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~11"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~11"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nvirb~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nvirb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

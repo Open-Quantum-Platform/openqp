@@ -1,0 +1,1516 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_structures_ao_overlap &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_structures_ao_overlap
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for procedures.">56 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/get_basis_overlap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/get_basis_overlap.f90.html'>get_basis_overlap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/get_structures_ao_overlap_mod.html'>get_structures_ao_overlap_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_structures_ao_overlap</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/get_structures_ao_overlap.html#src">get_structures_ao_overlap</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine get_structures_ao_overlap(infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/int1.html'>int1</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='../module/atomic_structure_m.html'>atomic_structure_m</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/util.html'>util</a></li>
+                  <li class="list-inline-item"><a href='../module/constants.html'>constants</a></li>
+                  <li class="list-inline-item"><a href='../module/io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/strings.html'>strings</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_structures_ao_overlap~~UsesGraph Pages: 1 -->
+<svg id="procget_structures_ao_overlapUsesGraph" width="641pt" height="393pt"
+ viewBox="0.00 0.00 641.00 392.96" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_structures_ao_overlap~~UsesGraph" class="graph" transform="scale(.5739 .5739) rotate(0) translate(4 680.7718)">
+<title>proc~~get_structures_ao_overlap~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-680.7718 1113,-680.7718 1113,4 -4,4"/>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node1" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<polygon fill="none" stroke="#000000" points="1109,-227.5865 956,-227.5865 956,-203.5865 1109,-203.5865 1109,-227.5865"/>
+<text text-anchor="middle" x="1032.5" y="-213.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_structures_ao_overlap</text>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node2" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node2"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-116.5865 250,-116.5865 250,-92.5865 368,-92.5865 368,-116.5865"/>
+<text text-anchor="middle" x="309" y="-102.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge1" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1021.8545,-203.4215C989.0637,-167.32 885.0489,-62.8464 773.5,-55.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-55.5865C613.3536,-18.0476 552.6421,35.8519 404,-34.5865 381.167,-45.4065 388.1135,-63.2938 368,-78.5865 363.3192,-82.1453 358.0751,-85.3385 352.6959,-88.166"/>
+<polygon fill="#000000" stroke="#000000" points="351.063,-85.068 343.5913,-92.5796 354.1165,-91.3669 351.063,-85.068"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node3" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node3"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="499,-347.5865 429,-347.5865 429,-323.5865 499,-323.5865 499,-347.5865"/>
+<text text-anchor="middle" x="464" y="-333.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~basis_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge2" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-335.5865C583.4971,-342.2181 540.7776,-341.6814 509.3295,-339.7877"/>
+<polygon fill="#000000" stroke="#000000" points="509.3332,-336.2801 499.1211,-339.1019 508.8639,-343.2644 509.3332,-336.2801"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node4" class="node">
+<title>module~constants</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node4"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-501.5865 277,-501.5865 277,-477.5865 341,-477.5865 341,-501.5865"/>
+<text text-anchor="middle" x="309" y="-487.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge3" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1030.811,-227.6606C1020.5225,-296.1971 960.3816,-632.4467 773.5,-609.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-609.5865C700.3297,-613.861 537.0621,-501.4257 464,-495.5865"/>
+</g>
+<!-- module~int1 -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node5" class="node">
+<title>module~int1</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node5"><a xlink:href="../module/int1.html" xlink:title="int1">
+<polygon fill="#337ab7" stroke="#337ab7" points="920,-385.5865 866,-385.5865 866,-361.5865 920,-361.5865 920,-385.5865"/>
+<text text-anchor="middle" x="893" y="-371.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~int1 -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge4" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~int1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1021.7853,-227.7221C997.9061,-254.7681 940.1179,-320.2199 910.7576,-353.4739"/>
+<polygon fill="#000000" stroke="#000000" points="907.9385,-351.3787 903.9436,-361.1915 913.1859,-356.0117 907.9385,-351.3787"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node6" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node6"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-327.5865 269.5,-327.5865 269.5,-303.5865 348.5,-303.5865 348.5,-327.5865"/>
+<text text-anchor="middle" x="309" y="-313.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~io_constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge5" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M893,-215.5865C860.0219,-212.9473 653.0647,-329.7502 620.5,-335.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-335.5865C549.5546,-346.5764 535.789,-294.9775 464,-295.5865"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node7" class="node">
+<title>module~messages</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node7"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="806.5,-227.5865 740.5,-227.5865 740.5,-203.5865 806.5,-203.5865 806.5,-227.5865"/>
+<text text-anchor="middle" x="773.5" y="-213.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~messages -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge6" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M893,-215.5865C867.7284,-213.3828 839.3361,-213.2842 816.5695,-213.7825"/>
+<polygon fill="#000000" stroke="#000000" points="816.4403,-210.2846 806.5364,-214.0481 816.6255,-217.2822 816.4403,-210.2846"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node8" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node8"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="681,-67.5865 560,-67.5865 560,-43.5865 681,-43.5865 681,-67.5865"/>
+<text text-anchor="middle" x="620.5" y="-53.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge7" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-55.5865C746.7068,-53.8427 717.2183,-53.476 691.3404,-53.6707"/>
+<polygon fill="#000000" stroke="#000000" points="691.2036,-50.1719 681.2406,-53.776 691.2766,-57.1715 691.2036,-50.1719"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node9" class="node">
+<title>module~precision</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node9"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-423.5865 141.5,-423.5865 141.5,-399.5865 202.5,-399.5865 202.5,-423.5865"/>
+<text text-anchor="middle" x="172" y="-409.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge8" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-609.5865C715.5451,-614.9765 298.1021,-623.3584 250,-590.5865 222.5663,-571.8959 191.4557,-477.0359 178.351,-433.4921"/>
+<polygon fill="#000000" stroke="#000000" points="181.6873,-432.4317 175.4888,-423.8393 174.9761,-434.4217 181.6873,-432.4317"/>
+</g>
+<!-- module~strings -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node10" class="node">
+<title>module~strings</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node10"><a xlink:href="../module/strings.html" xlink:title="strings">
+<polygon fill="#337ab7" stroke="#337ab7" points="920,-147.5865 866,-147.5865 866,-123.5865 920,-123.5865 920,-147.5865"/>
+<text text-anchor="middle" x="893" y="-133.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~strings -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge9" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~strings</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M1011.313,-203.4362C987.7222,-189.9075 949.418,-167.9409 922.8099,-152.6817"/>
+<polygon fill="#000000" stroke="#000000" points="924.3453,-149.5276 913.9294,-147.589 920.8629,-155.6 924.3453,-149.5276"/>
+</g>
+<!-- module~types -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node11" class="node">
+<title>module~types</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node11"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="647.5,-147.5865 593.5,-147.5865 593.5,-123.5865 647.5,-123.5865 647.5,-147.5865"/>
+<text text-anchor="middle" x="620.5" y="-133.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~types -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge10" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M955.6481,-217.9797C935.253,-217.9612 913.2668,-217.3537 893,-215.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M893,-215.5865C853.5517,-212.1466 865.9405,-169.2082 830,-152.5865 774.3122,-126.832 701.4031,-127.5746 657.9158,-131.1181"/>
+<polygon fill="#000000" stroke="#000000" points="657.4274,-127.648 647.7851,-132.0384 658.0608,-134.6192 657.4274,-127.648"/>
+</g>
+<!-- module~util -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node12" class="node">
+<title>module~util</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node12"><a xlink:href="../module/util.html" xlink:title="util">
+<polygon fill="#337ab7" stroke="#337ab7" points="800.5,-185.5865 746.5,-185.5865 746.5,-161.5865 800.5,-161.5865 800.5,-185.5865"/>
+<text text-anchor="middle" x="773.5" y="-171.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;module~util -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge11" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;module~util</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M893,-215.5865C888.6508,-215.2072 843.703,-199.1329 810.2054,-186.984"/>
+<polygon fill="#000000" stroke="#000000" points="811.2644,-183.6449 800.6703,-183.5198 808.8741,-190.2242 811.2644,-183.6449"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node15" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node15"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-154.5865 130,-154.5865 130,-130.5865 214,-130.5865 214,-154.5865"/>
+<text text-anchor="middle" x="172" y="-140.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge12" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M265.6523,-116.6099C252.4053,-120.2843 237.7009,-124.3628 223.9441,-128.1786"/>
+<polygon fill="#000000" stroke="#000000" points="222.8296,-124.8555 214.129,-130.9011 224.7006,-131.6008 222.8296,-124.8555"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M458.5476,-323.2119C445.344,-293.9257 409.6533,-218.6944 368,-163.5865 357.0707,-149.1268 342.7303,-134.7072 330.9244,-123.7428"/>
+<polygon fill="#000000" stroke="#000000" points="332.9825,-120.8837 323.229,-116.7461 328.2734,-126.063 332.9825,-120.8837"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M451.8374,-347.6706C425.013,-374.322 360.5943,-438.3251 328.2347,-470.4758"/>
+<polygon fill="#000000" stroke="#000000" points="325.7332,-468.0274 321.1061,-477.5585 330.6669,-472.9932 325.7332,-468.0274"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.8281,-331.0481C408.1472,-328.3796 381.6654,-324.9626 358.8587,-322.0198"/>
+<polygon fill="#000000" stroke="#000000" points="359.0384,-318.5141 348.6727,-320.7055 358.1425,-325.4565 359.0384,-318.5141"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge18" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.8135,-345.2221C397.5339,-353.5456 350.4674,-365.4785 309,-373.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-373.5865C276.1358,-380.0123 239.6281,-390.2997 212.5685,-398.551"/>
+<polygon fill="#000000" stroke="#000000" points="211.2102,-395.3073 202.6876,-401.6014 213.2751,-401.9958 211.2102,-395.3073"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node16" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node16"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-423.5865 0,-423.5865 0,-399.5865 94,-399.5865 94,-423.5865"/>
+<text text-anchor="middle" x="47" y="-409.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M440.5828,-347.6338C399.8328,-369.1292 314.1071,-416.7276 250,-468.5865 211.144,-500.0187 219.0343,-566.4847 172,-549.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-549.5865C116.4761,-527.581 75.9873,-465.4568 57.7528,-432.5857"/>
+<polygon fill="#000000" stroke="#000000" points="60.8314,-430.9205 53.0104,-423.7732 54.6673,-434.2377 60.8314,-430.9205"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node20" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node20"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-238.5865 282,-238.5865 282,-214.5865 336,-214.5865 336,-238.5865"/>
+<text text-anchor="middle" x="309" y="-224.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge17" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M452.2154,-323.2985C434.9851,-305.8477 401.3299,-273.6682 368,-252.5865 361.0055,-248.1623 353.1297,-244.1249 345.4652,-240.6199"/>
+<polygon fill="#000000" stroke="#000000" points="346.8596,-237.4097 336.2944,-236.6183 344.0601,-243.8255 346.8596,-237.4097"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge19" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.8036,-477.4744C269.4103,-473.3911 259.1279,-468.5913 250,-463.5865 231.3901,-453.3826 211.4999,-440.0811 196.4628,-429.4855"/>
+<polygon fill="#000000" stroke="#000000" points="198.3901,-426.5611 188.2164,-423.6036 194.3252,-432.26 198.3901,-426.5611"/>
+</g>
+<!-- module~int1&#45;&gt;module~basis_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge21" class="edge">
+<title>module~int1&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.9151,-372.5853C841.6732,-371.9276 805.1752,-371.525 773.5,-373.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-373.5865C679.0251,-379.7351 569.1928,-359.7494 509.0745,-346.4665"/>
+<polygon fill="#000000" stroke="#000000" points="509.6768,-343.0146 499.1525,-344.2349 508.1407,-349.844 509.6768,-343.0146"/>
+</g>
+<!-- module~int1&#45;&gt;module~messages -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge22" class="edge">
+<title>module~int1&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M883.8215,-361.4508C863.4525,-334.5195 814.2817,-269.507 789.0328,-236.1235"/>
+<polygon fill="#000000" stroke="#000000" points="791.6984,-233.8458 782.8746,-227.9814 786.1154,-238.0684 791.6984,-233.8458"/>
+</g>
+<!-- module~int1&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge20" class="edge">
+<title>module~int1&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M891.7435,-385.7209C886.7656,-431.2986 866.8797,-591.3057 830,-623.5865 759.4789,-685.3135 709.0028,-616.7527 620.5,-647.5865"/>
+</g>
+<!-- module~mod_1e_primitives -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node18" class="node">
+<title>module~mod_1e_primitives</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node18"><a xlink:href="../module/mod_1e_primitives.html" xlink:title="mod_1e_primitives">
+<polygon fill="#337ab7" stroke="#337ab7" points="830,-487.5865 717,-487.5865 717,-463.5865 830,-463.5865 830,-487.5865"/>
+<text text-anchor="middle" x="773.5" y="-473.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_1e_primitives -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge23" class="edge">
+<title>module~int1&#45;&gt;module~mod_1e_primitives</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M878.8225,-385.6877C858.1595,-403.3248 819.5939,-436.2427 795.3031,-456.9763"/>
+<polygon fill="#000000" stroke="#000000" points="792.9928,-454.3466 787.659,-463.5009 797.5374,-459.6708 792.9928,-454.3466"/>
+</g>
+<!-- module~mod_shell_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node19" class="node">
+<title>module~mod_shell_tools</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node19"><a xlink:href="../module/mod_shell_tools.html" xlink:title="mod_shell_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="669,-425.5865 572,-425.5865 572,-401.5865 669,-401.5865 669,-425.5865"/>
+<text text-anchor="middle" x="620.5" y="-411.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_shell_tools</text>
+</a>
+</g>
+</g>
+<!-- module~int1&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge24" class="edge">
+<title>module~int1&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.5,-373.5865C734.8548,-376.1016 692.3461,-387.9889 661.964,-398.1567"/>
+<polygon fill="#000000" stroke="#000000" points="660.4722,-394.9682 652.1485,-401.523 662.7431,-401.5896 660.4722,-394.9682"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge27" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M741.8774,-227.6655C733.4482,-231.5346 724.5836,-236.2273 717,-241.5865 698.2626,-254.8277 701.7718,-268.842 681,-278.5865 593.4184,-319.6726 560.7396,-295.8315 464,-295.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-295.5865C428.5325,-295.8873 388.8709,-301.0959 358.5466,-306.1216"/>
+<polygon fill="#000000" stroke="#000000" points="357.9092,-302.6797 348.6403,-307.8116 359.0865,-309.58 357.9092,-302.6797"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge28" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M740.742,-203.549C703.045,-190.314 643.3943,-171.4312 620.5,-175.5865"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node13" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="663,-269.5865 578,-269.5865 578,-245.5865 663,-245.5865 663,-269.5865"/>
+<text text-anchor="middle" x="620.5" y="-255.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge25" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M740.3013,-224.6998C720.6258,-230.101 695.2521,-237.0663 672.9249,-243.1953"/>
+<polygon fill="#000000" stroke="#000000" points="671.9581,-239.8311 663.2414,-245.8535 673.8112,-246.5814 671.9581,-239.8311"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node14" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="656.5,-227.5865 584.5,-227.5865 584.5,-203.5865 656.5,-203.5865 656.5,-227.5865"/>
+<text text-anchor="middle" x="620.5" y="-213.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge26" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M740.3013,-215.5865C718.7883,-215.5865 690.4633,-215.5865 666.7567,-215.5865"/>
+<polygon fill="#000000" stroke="#000000" points="666.5727,-212.0866 656.5727,-215.5865 666.5726,-219.0866 666.5727,-212.0866"/>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge29" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M574.6891,-43.5159C558.7635,-39.8818 540.7063,-36.3832 524,-34.5865 470.9725,-28.8834 456.7108,-26.4614 404,-34.5865 360.2394,-41.3319 350.6211,-49.481 309,-64.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-64.5865C282.3918,-71.7222 274.4408,-70.8757 250,-83.5865 229.0282,-94.4931 207.7983,-110.9861 192.7933,-123.7638"/>
+<polygon fill="#000000" stroke="#000000" points="190.3873,-121.2178 185.1388,-130.4213 194.9811,-126.4996 190.3873,-121.2178"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node21" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="493,-67.5865 435,-67.5865 435,-43.5865 493,-43.5865 493,-67.5865"/>
+<text text-anchor="middle" x="464" y="-53.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge30" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M559.993,-55.5865C541.0458,-55.5865 520.6335,-55.5865 503.524,-55.5865"/>
+<polygon fill="#000000" stroke="#000000" points="503.3403,-52.0866 493.3403,-55.5865 503.3403,-59.0866 503.3403,-52.0866"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge31" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-411.5865C130.2434,-411.5865 117.203,-411.5865 104.4454,-411.5865"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-408.0866 94.3156,-411.5865 104.3156,-415.0866 104.3156,-408.0866"/>
+</g>
+<!-- module~strings&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge32" class="edge">
+<title>module~strings&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M865.749,-130.9994C854.6724,-129.2032 841.7403,-127.1927 830,-125.5865 641.1773,-99.7531 593.2092,-99.4175 404,-76.5865 361.7488,-71.4882 350.1053,-53.563 309,-64.5865"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M593.3878,-146.8037C562.6397,-158.8763 510.7,-177.3231 464,-184.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-184.5865C415.6281,-192.1098 411.7835,-152.4828 368,-130.5865 361.3237,-127.2476 354.122,-123.8839 347.1217,-120.7349"/>
+<polygon fill="#000000" stroke="#000000" points="348.33,-117.4423 337.7689,-116.5964 345.4974,-123.8436 348.33,-117.4423"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge35" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M604.1658,-147.6931C590.5579,-158.573 571.5919,-175.7078 560,-194.5865 531.9761,-240.2264 559.8205,-269.7714 524,-309.5865 519.6649,-314.405 514.2791,-318.3675 508.5269,-321.6161"/>
+<polygon fill="#000000" stroke="#000000" points="506.7184,-318.6048 499.2844,-326.1538 509.8034,-324.8884 506.7184,-318.6048"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge38" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-184.5865C413.6294,-192.7872 414.0383,-225.5655 368,-247.5865 343.1482,-259.4735 332.4908,-252.1956 309,-266.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-266.5865C284.2498,-281.7488 271.9558,-275.602 250,-294.5865 218.5361,-321.7923 194.4029,-364.6112 181.7798,-390.209"/>
+<polygon fill="#000000" stroke="#000000" points="178.5333,-388.8848 177.3711,-399.4157 184.8468,-391.9081 178.5333,-388.8848"/>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-184.5865C420.8433,-191.2987 411.1104,-170.5899 368,-163.5865 319.6264,-155.728 264.0408,-150.0902 224.4486,-146.6476"/>
+<polygon fill="#000000" stroke="#000000" points="224.4953,-143.139 214.2342,-145.7773 223.9009,-150.1137 224.4953,-143.139"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node17" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node17"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-196.5865 273.5,-196.5865 273.5,-172.5865 344.5,-172.5865 344.5,-196.5865"/>
+<text text-anchor="middle" x="309" y="-182.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge36" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-184.5865C427.5685,-190.2527 385.7351,-189.8538 354.7174,-188.2588"/>
+<polygon fill="#000000" stroke="#000000" points="354.8209,-184.7591 344.6364,-187.6791 354.419,-191.7475 354.8209,-184.7591"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge37" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-184.5865C422.7347,-191.0045 376.6937,-204.291 345.5932,-214.2111"/>
+<polygon fill="#000000" stroke="#000000" points="344.4823,-210.8918 336.0456,-217.3006 346.6374,-217.5518 344.4823,-210.8918"/>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge39" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M596.731,-123.4362C570.0343,-109.7893 526.5415,-87.5565 496.6636,-72.2835"/>
+<polygon fill="#000000" stroke="#000000" points="497.9771,-69.0242 487.4799,-67.589 494.7909,-75.2571 497.9771,-69.0242"/>
+</g>
+<!-- module~util&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge40" class="edge">
+<title>module~util&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M746.4315,-171.2526C715.6498,-169.2176 664.0194,-167.6879 620.5,-175.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-175.5865C611.6305,-177.1962 316.6867,-261.8775 309,-266.5865"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge42" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.4136,-191.741C264.9122,-194.8413 256.4446,-199.2695 250,-205.5865 197.3532,-257.1902 179.7655,-347.887 174.2893,-389.5396"/>
+<polygon fill="#000000" stroke="#000000" points="170.8144,-389.1217 173.095,-399.4682 177.7643,-389.9578 170.8144,-389.1217"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge41" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-173.6611C257.4565,-168.7848 238.4524,-162.9587 221.2204,-157.6759"/>
+<polygon fill="#000000" stroke="#000000" points="221.9027,-154.2244 211.316,-154.6395 219.851,-160.9169 221.9027,-154.2244"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node26" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-196.5865 131.5,-196.5865 131.5,-172.5865 212.5,-172.5865 212.5,-196.5865"/>
+<text text-anchor="middle" x="172" y="-182.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge43" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-184.5865C257.9991,-184.5865 239.7453,-184.5865 222.9899,-184.5865"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-181.0866 212.79,-184.5865 222.79,-188.0866 222.7901,-181.0866"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge45" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-495.5865C550.9448,-495.3589 533.3345,-501.1278 464,-495.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M464,-495.5865C425.8937,-492.5409 382.389,-491.0281 351.1895,-490.2846"/>
+<polygon fill="#000000" stroke="#000000" points="351.1813,-486.7836 341.1061,-490.0608 351.0259,-493.7819 351.1813,-486.7836"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge44" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M768.5415,-487.6823C753.1184,-523.2326 702.0785,-626.2304 620.5,-647.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-647.5865C460.8675,-689.3759 401.2113,-689.6473 250,-623.5865 206.2109,-604.456 216.4238,-567.1927 172,-549.5865"/>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_shell_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge47" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_shell_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M747.8265,-463.5184C729.3967,-455.0251 703.8773,-443.609 681,-434.5865 676.273,-432.7222 671.3055,-430.8542 666.3341,-429.0433"/>
+<polygon fill="#000000" stroke="#000000" points="667.4257,-425.7167 656.8311,-425.6472 665.0699,-432.3084 667.4257,-425.7167"/>
+</g>
+<!-- module~mod_gauss_hermite -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node22" class="node">
+<title>module~mod_gauss_hermite</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node22"><a xlink:href="../module/mod_gauss_hermite.html" xlink:title="mod_gauss_hermite">
+<polygon fill="#337ab7" stroke="#337ab7" points="524,-464.5865 404,-464.5865 404,-440.5865 524,-440.5865 524,-464.5865"/>
+<text text-anchor="middle" x="464" y="-450.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_gauss_hermite</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge46" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~mod_gauss_hermite</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M716.6947,-486.6704C687.9765,-491.3402 652.5121,-495.6912 620.5,-495.5865"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.5,-495.5865C578.1669,-495.4479 531.6201,-480.6618 500.386,-468.4684"/>
+<polygon fill="#000000" stroke="#000000" points="501.3919,-465.1008 490.8078,-464.6225 498.7835,-471.5967 501.3919,-465.1008"/>
+</g>
+<!-- module~rys -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node23" class="node">
+<title>module~rys</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node23"><a xlink:href="../module/rys.html" xlink:title="rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-564.5865 437,-564.5865 437,-540.5865 491,-540.5865 491,-564.5865"/>
+<text text-anchor="middle" x="464" y="-550.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~rys -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge48" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M744.3093,-487.6521C726.2937,-494.7622 702.5778,-503.5232 681,-509.5865 618.8329,-527.0551 544.7202,-540.1262 501.1701,-547.0409"/>
+<polygon fill="#000000" stroke="#000000" points="500.3837,-543.6212 491.0448,-548.6247 501.4656,-550.5371 500.3837,-543.6212"/>
+</g>
+<!-- module~xyz_order -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node24" class="node">
+<title>module~xyz_order</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node24"><a xlink:href="../module/xyz_order.html" xlink:title="xyz_order">
+<polygon fill="#337ab7" stroke="#337ab7" points="652.5,-467.5865 588.5,-467.5865 588.5,-443.5865 652.5,-443.5865 652.5,-467.5865"/>
+<text text-anchor="middle" x="620.5" y="-453.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xyz_order</text>
+</a>
+</g>
+</g>
+<!-- module~mod_1e_primitives&#45;&gt;module~xyz_order -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge49" class="edge">
+<title>module~mod_1e_primitives&#45;&gt;module~xyz_order</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M716.9631,-468.196C699.0576,-465.8554 679.5833,-463.3098 662.8512,-461.1226"/>
+<polygon fill="#000000" stroke="#000000" points="663.1954,-457.6379 652.8261,-459.8121 662.2881,-464.5788 663.1954,-457.6379"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~basis_tools -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge50" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M588.7784,-401.5004C579.3113,-397.485 569.0505,-392.7167 560,-387.5865 542.8301,-377.8537 541.1552,-371.3451 524,-361.5865 517.9668,-358.1545 511.393,-354.8788 504.881,-351.8805"/>
+<polygon fill="#000000" stroke="#000000" points="506.0148,-348.5546 495.4545,-347.7002 503.177,-354.9536 506.0148,-348.5546"/>
+</g>
+<!-- module~mod_shell_tools&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge51" class="edge">
+<title>module~mod_shell_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M584.2802,-401.4511C525.9455,-383.58 407.7271,-354.2827 309,-373.5865"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge54" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9517,-233.16C270.7201,-237.1195 258.3797,-243.2617 250,-252.5865 214.7685,-291.7912 240.3819,-319.9546 214,-365.5865 208.3979,-375.2762 200.4604,-384.6499 192.9917,-392.3792"/>
+<polygon fill="#000000" stroke="#000000" points="190.4303,-389.9899 185.7831,-399.5112 195.3535,-394.9661 190.4303,-389.9899"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge52" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7526,-220.1287C271.2465,-216.8357 259.4985,-212.1135 250,-205.5865 229.7374,-191.6627 233.3784,-178.7166 214,-163.5865 212.4096,-162.3447 210.7342,-161.1468 209.005,-159.9959"/>
+<polygon fill="#000000" stroke="#000000" points="210.4355,-156.7733 200.0562,-154.6468 206.844,-162.7818 210.4355,-156.7733"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge53" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.862,-236.8723C271.596,-241.1909 259.9863,-246.6037 250,-252.5865 178.1846,-295.6113 102.9647,-360.6239 67.637,-392.5409"/>
+<polygon fill="#000000" stroke="#000000" points="64.9736,-390.2323 59.932,-399.5507 69.6842,-395.4101 64.9736,-390.2323"/>
+</g>
+<!-- mpi -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node25" class="node">
+<title>mpi</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node25"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-238.5865 145,-238.5865 145,-214.5865 199,-214.5865 199,-238.5865"/>
+<text text-anchor="middle" x="172" y="-224.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge55" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-226.5865C261.1051,-226.5865 232.0908,-226.5865 209.0994,-226.5865"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-223.0866 199.0106,-226.5865 209.0105,-230.0866 209.0106,-223.0866"/>
+</g>
+<!-- module~mod_gauss_hermite&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge56" class="edge">
+<title>module~mod_gauss_hermite&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8515,-444.1409C346.6491,-436.1091 262.1772,-424.2483 212.5498,-417.2801"/>
+<polygon fill="#000000" stroke="#000000" points="212.9007,-413.7951 202.5111,-415.8705 211.9273,-420.7271 212.9007,-413.7951"/>
+</g>
+<!-- module~rys&#45;&gt;module~constants -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge57" class="edge">
+<title>module~rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-541.4683C412.0792,-531.4831 375.7313,-516.7095 348.099,-505.4783"/>
+<polygon fill="#000000" stroke="#000000" points="349.3041,-502.1901 338.7222,-501.6671 346.6683,-508.6749 349.3041,-502.1901"/>
+</g>
+<!-- module~rys&#45;&gt;module~precision -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge58" class="edge">
+<title>module~rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.8442,-553.1103C393.9881,-552.7208 309.4407,-546.919 250,-510.5865 218.9615,-491.6145 195.3411,-455.5317 182.5941,-432.5633"/>
+<polygon fill="#000000" stroke="#000000" points="185.6088,-430.7788 177.8068,-423.6108 179.4359,-434.0797 185.6088,-430.7788"/>
+</g>
+<!-- module~rys_lut -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_node27" class="node">
+<title>module~rys_lut</title>
+<g id="a_proc~~get_structures_ao_overlap~~UsesGraph_node27"><a xlink:href="../module/rys_lut.html" xlink:title="rys_lut">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-581.5865 282,-581.5865 282,-557.5865 336,-557.5865 336,-581.5865"/>
+<text text-anchor="middle" x="309" y="-567.1865" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_lut</text>
+</a>
+</g>
+</g>
+<!-- module~rys&#45;&gt;module~rys_lut -->
+<g id="proc~~get_structures_ao_overlap~~UsesGraph_edge59" class="edge">
+<title>module~rys&#45;&gt;module~rys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M436.6459,-555.5866C411.5231,-558.342 374.0798,-562.4487 346.2362,-565.5025"/>
+<polygon fill="#000000" stroke="#000000" points="345.6394,-562.0469 336.0806,-566.6163 346.4026,-569.0051 345.6394,-562.0469"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_structures_ao_overlapUsesGraph = svgPanZoom('#procget_structures_ao_overlapUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Calculate AO overlap between two different geometries
+@param[in,out] infos Information structure containing all necessary data</p>
+<p>This subroutine calculates the overlap between basis sets (Atomic Orbitals)
+of two different geometries. It computes both AO and derived MO overlaps
+and stores the results in the infos structure.</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>Output AO overlap is written to mol.data["OQP::overlap_ao_non_orthogonal"]
+      Output MO overlap is written to mol.data["OQP::overlap_mo_non_orthogonal"]
+      Current geometry (xyz) is taken from mol.data["OQP::xyz"]
+      Current MO coefficients (mo_a) are taken from mol.data["OQP::VEC_MO_A"]
+      Current MO energies (e_a) are taken from mol.data["OQP::E_MO_A"]
+      Old geometry (xyz_old) is taken from mol.data["OQP::xyz_old"]
+      Old MO coefficients (mo_a_old) are taken from mol.data["OQP::VEC_MO_A_old"]
+      Old MO energies (e_a_old) are taken from mol.data["OQP::E_MO_A_old"]</p>
+</div>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~38"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                <p>Information structure containing all necessary data</p>
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_structures_ao_overlap~~CallsGraph Pages: 1 -->
+<svg id="procget_structures_ao_overlapCallsGraph" width="641pt" height="330pt"
+ viewBox="0.00 0.00 641.00 329.83" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_structures_ao_overlap~~CallsGraph" class="graph" transform="scale(.8479 .8479) rotate(0) translate(4 385)">
+<title>proc~~get_structures_ao_overlap~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-385 752,-385 752,4 -4,4"/>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node1" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<polygon fill="none" stroke="#000000" points="153,-192 0,-192 0,-168 153,-168 153,-192"/>
+<text text-anchor="middle" x="76.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_structures_ao_overlap</text>
+</g>
+<!-- interface~data_has_tags -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node2" class="node">
+<title>interface~data_has_tags</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node2"><a xlink:href="../interface/data_has_tags.html" xlink:title="data_has_tags">
+<polygon fill="#a7506f" stroke="#a7506f" points="288,-360 200,-360 200,-336 288,-336 288,-360"/>
+<text text-anchor="middle" x="244" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">data_has_tags</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;interface~data_has_tags -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge1" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;interface~data_has_tags</title>
+<path fill="none" stroke="#000000" d="M82.6786,-192.0901C97.4034,-219.7776 137.2329,-288.3643 189,-327 191.0427,-328.5245 193.2093,-329.9513 195.4563,-331.2849"/>
+<polygon fill="#000000" stroke="#000000" points="193.9461,-334.4448 204.4296,-335.9765 197.1895,-328.2415 193.9461,-334.4448"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node3" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node3"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="299,-318 189,-318 189,-294 299,-294 299,-318"/>
+<text text-anchor="middle" x="244" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge2" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M86.781,-192.3193C105.257,-213.7778 146.1605,-258.271 189,-285 191.6042,-286.6248 194.3542,-288.1574 197.1801,-289.5971"/>
+<polygon fill="#000000" stroke="#000000" points="195.835,-292.8315 206.378,-293.8778 198.7886,-286.4851 195.835,-292.8315"/>
+</g>
+<!-- proc~basis_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node4" class="node">
+<title>proc~basis_overlap</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node4"><a xlink:href="../proc/basis_overlap.html" xlink:title="basis_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="286.5,-276 201.5,-276 201.5,-252 286.5,-252 286.5,-276"/>
+<text text-anchor="middle" x="244" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~basis_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge3" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~basis_overlap</title>
+<path fill="none" stroke="#000000" d="M95.9571,-192.0458C118.0313,-205.438 155.3422,-227.2527 189,-243 192.8015,-244.7786 196.7985,-246.5269 200.8305,-248.2089"/>
+<polygon fill="#000000" stroke="#000000" points="199.6432,-251.5039 210.2266,-251.9962 202.2602,-245.0114 199.6432,-251.5039"/>
+</g>
+<!-- proc~measure_time -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node5" class="node">
+<title>proc~measure_time</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node5"><a xlink:href="../proc/measure_time.html" xlink:title="measure_time">
+<polygon fill="#d9534f" stroke="#d9534f" points="288.5,-234 199.5,-234 199.5,-210 288.5,-210 288.5,-234"/>
+<text text-anchor="middle" x="244" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">measure_time</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~measure_time -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge4" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M124.4988,-192.0355C144.8618,-197.1415 168.6961,-203.1178 189.6989,-208.3842"/>
+<polygon fill="#000000" stroke="#000000" points="188.8886,-211.7893 199.4396,-210.8266 190.5911,-204.9995 188.8886,-211.7893"/>
+</g>
+<!-- proc~mo_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node6" class="node">
+<title>proc~mo_overlap</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node6"><a xlink:href="../proc/mo_overlap.html" xlink:title="mo_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="282,-192 206,-192 206,-168 282,-168 282,-192"/>
+<text text-anchor="middle" x="244" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~mo_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge5" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~mo_overlap</title>
+<path fill="none" stroke="#000000" d="M153.3867,-180C167.7732,-180 182.4317,-180 195.6486,-180"/>
+<polygon fill="#000000" stroke="#000000" points="195.9066,-183.5001 205.9066,-180 195.9065,-176.5001 195.9066,-183.5001"/>
+</g>
+<!-- proc~print_geo -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node7" class="node">
+<title>proc~print_geo</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node7"><a xlink:href="../proc/print_geo.html" xlink:title="print_geo">
+<polygon fill="#d9534f" stroke="#d9534f" points="275.5,-150 212.5,-150 212.5,-126 275.5,-126 275.5,-150"/>
+<text text-anchor="middle" x="244" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_geo</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~print_geo -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge6" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~print_geo</title>
+<path fill="none" stroke="#000000" d="M124.4988,-167.9645C149.1984,-161.7711 179.0054,-154.2972 202.6715,-148.363"/>
+<polygon fill="#000000" stroke="#000000" points="203.5569,-151.7494 212.4054,-145.9222 201.8543,-144.9596 203.5569,-151.7494"/>
+</g>
+<!-- proc~print_results -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node8" class="node">
+<title>proc~print_results</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node8"><a xlink:href="../proc/print_results.html" xlink:title="print_results">
+<polygon fill="#d9534f" stroke="#d9534f" points="283,-108 205,-108 205,-84 283,-84 283,-108"/>
+<text text-anchor="middle" x="244" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_results</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~print_results -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge7" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~print_results</title>
+<path fill="none" stroke="#000000" d="M95.9571,-167.9542C118.0313,-154.562 155.3422,-132.7473 189,-117 192.8015,-115.2214 196.7985,-113.4731 200.8305,-111.7911"/>
+<polygon fill="#000000" stroke="#000000" points="202.2602,-114.9886 210.2266,-108.0038 199.6432,-108.4961 202.2602,-114.9886"/>
+</g>
+<!-- remove_records -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node9" class="node">
+<title>remove_records</title>
+<polygon fill="#777777" stroke="#777777" points="294,-66 194,-66 194,-42 294,-42 294,-66"/>
+<text text-anchor="middle" x="244" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">remove_records</text>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;remove_records -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge8" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;remove_records</title>
+<path fill="none" stroke="#000000" d="M86.781,-167.6807C105.257,-146.2222 146.1605,-101.729 189,-75 191.6042,-73.3752 194.3542,-71.8426 197.1801,-70.4029"/>
+<polygon fill="#000000" stroke="#000000" points="198.7886,-73.5149 206.378,-66.1222 195.835,-67.1685 198.7886,-73.5149"/>
+</g>
+<!-- reserve_data -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node10" class="node">
+<title>reserve_data</title>
+<polygon fill="#777777" stroke="#777777" points="285,-24 203,-24 203,0 285,0 285,-24"/>
+<text text-anchor="middle" x="244" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">reserve_data</text>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;reserve_data -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge9" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;reserve_data</title>
+<path fill="none" stroke="#000000" d="M82.6786,-167.9099C97.4034,-140.2224 137.2329,-71.6357 189,-33 191.0427,-31.4755 193.2093,-30.0487 195.4563,-28.7151"/>
+<polygon fill="#000000" stroke="#000000" points="197.1895,-31.7585 204.4296,-24.0235 193.9461,-25.5552 197.1895,-31.7585"/>
+</g>
+<!-- none~alloc2 -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node12" class="node">
+<title>none~alloc2</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node12"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc2" xlink:title="shpair_t%alloc2">
+<polygon fill="#a7506f" stroke="#a7506f" points="462,-381 365,-381 365,-357 462,-357 462,-381"/>
+<text text-anchor="middle" x="413.5" y="-366.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~alloc2 -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge10" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~alloc2</title>
+<path fill="none" stroke="#000000" d="M285.1423,-276.0254C290.1172,-278.5117 294.8855,-281.4764 299,-285 323.4944,-305.9768 309.4549,-328.3163 335,-348 340.9158,-352.5584 347.7416,-356.1295 354.8483,-358.9268"/>
+<polygon fill="#000000" stroke="#000000" points="354.0595,-362.356 364.6541,-362.2816 356.3255,-355.7329 354.0595,-362.356"/>
+</g>
+<!-- none~fetch_by_id -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node13" class="node">
+<title>none~fetch_by_id</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node13"><a xlink:href="../type/shell_t.html#boundprocedure-fetch_by_id" xlink:title="shell_t%fetch_by_id">
+<polygon fill="#a7506f" stroke="#a7506f" points="471.5,-339 355.5,-339 355.5,-315 471.5,-315 471.5,-339"/>
+<text text-anchor="middle" x="413.5" y="-324.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shell_t%fetch_by_id</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~fetch_by_id -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge11" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M278.1079,-276.0271C285.1074,-278.7718 292.3621,-281.8229 299,-285 315.7081,-292.997 317.9012,-298.8766 335,-306 340.0463,-308.1023 345.3636,-310.0493 350.7541,-311.8399"/>
+<polygon fill="#000000" stroke="#000000" points="349.9043,-315.2414 360.4934,-314.8937 351.9987,-308.562 349.9043,-315.2414"/>
+</g>
+<!-- none~shell_pair2 -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node14" class="node">
+<title>none~shell_pair2</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node14"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair2" xlink:title="shpair_t%shell_pair2">
+<polygon fill="#a7506f" stroke="#a7506f" points="474.5,-297 352.5,-297 352.5,-273 474.5,-273 474.5,-297"/>
+<text text-anchor="middle" x="413.5" y="-282.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~shell_pair2 -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge12" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~shell_pair2</title>
+<path fill="none" stroke="#000000" d="M286.772,-269.2992C303.6477,-271.39 323.4943,-273.8488 342.4086,-276.1922"/>
+<polygon fill="#000000" stroke="#000000" points="342.1392,-279.6855 352.4937,-277.4417 343,-272.7386 342.1392,-279.6855"/>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node15" class="node">
+<title>proc~comp_kin_ovl_int1_prim</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node15"><a xlink:href="../proc/comp_kin_ovl_int1_prim.html" xlink:title="comp_kin_ovl_int1_prim">
+<polygon fill="#d9534f" stroke="#d9534f" points="483.5,-255 343.5,-255 343.5,-231 483.5,-231 483.5,-255"/>
+<text text-anchor="middle" x="413.5" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_kin_ovl_int1_prim</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge13" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim</title>
+<path fill="none" stroke="#000000" d="M286.772,-258.7008C300.9848,-256.9399 317.3049,-254.918 333.4006,-252.9238"/>
+<polygon fill="#000000" stroke="#000000" points="333.8789,-256.3914 343.3726,-251.6883 333.0181,-249.4445 333.8789,-256.3914"/>
+</g>
+<!-- proc~update_rectangular_matrix -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node16" class="node">
+<title>proc~update_rectangular_matrix</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node16"><a xlink:href="../proc/update_rectangular_matrix.html" xlink:title="update_rectangular_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="492,-213 335,-213 335,-189 492,-189 492,-213"/>
+<text text-anchor="middle" x="413.5" y="-198.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_rectangular_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge14" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix</title>
+<path fill="none" stroke="#000000" d="M278.1079,-251.9729C285.1074,-249.2282 292.3621,-246.1771 299,-243 315.7081,-235.003 317.9012,-229.1234 335,-222 340.0463,-219.8977 345.3636,-217.9507 350.7541,-216.1601"/>
+<polygon fill="#000000" stroke="#000000" points="351.9987,-219.438 360.4934,-213.1063 349.9043,-212.7586 351.9987,-219.438"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node11" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="440.5,-171 386.5,-171 386.5,-147 440.5,-147 440.5,-171"/>
+<text text-anchor="middle" x="413.5" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~mo_overlap&#45;&gt;dgemm -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge15" class="edge">
+<title>proc~mo_overlap&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M282.0391,-175.2872C310.1675,-171.8023 348.2794,-167.0804 376.2248,-163.6182"/>
+<polygon fill="#000000" stroke="#000000" points="376.9016,-167.0612 386.3954,-162.3581 376.0409,-160.1143 376.9016,-167.0612"/>
+</g>
+<!-- proc~doquadgausshermite -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node17" class="node">
+<title>proc~doquadgausshermite</title>
+<g id="a_proc~~get_structures_ao_overlap~~CallsGraph_node17"><a xlink:href="../proc/doquadgausshermite.html" xlink:title="doQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="658,-255 528,-255 528,-231 658,-231 658,-255"/>
+<text text-anchor="middle" x="593" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">doQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge16" class="edge">
+<title>proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M483.6706,-243C494.8125,-243 506.3776,-243 517.6329,-243"/>
+<polygon fill="#000000" stroke="#000000" points="517.8613,-246.5001 527.8613,-243 517.8612,-239.5001 517.8613,-246.5001"/>
+</g>
+<!-- abrt -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_node18" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="748,-255 694,-255 694,-231 748,-231 748,-255"/>
+<text text-anchor="middle" x="721" y="-240.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~doquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~get_structures_ao_overlap~~CallsGraph_edge17" class="edge">
+<title>proc~doquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M658.1249,-243C666.8851,-243 675.6171,-243 683.6643,-243"/>
+<polygon fill="#000000" stroke="#000000" points="683.7933,-246.5001 693.7933,-243 683.7933,-239.5001 683.7933,-246.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_structures_ao_overlapCallsGraph = svgPanZoom('#procget_structures_ao_overlapCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_structures_ao_overlap~~CalledByGraph Pages: 1 -->
+<svg id="procget_structures_ao_overlapCalledByGraph" width="363pt" height="32pt"
+ viewBox="0.00 0.00 363.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_structures_ao_overlap~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~get_structures_ao_overlap~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 359,-28 359,4 -4,4"/>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CalledByGraph_node1" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<polygon fill="none" stroke="#000000" points="355,-24 202,-24 202,0 355,0 355,-24"/>
+<text text-anchor="middle" x="278.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_structures_ao_overlap</text>
+</g>
+<!-- proc~get_structures_ao_overlap_c -->
+<g id="proc~~get_structures_ao_overlap~~CalledByGraph_node2" class="node">
+<title>proc~get_structures_ao_overlap_c</title>
+<g id="a_proc~~get_structures_ao_overlap~~CalledByGraph_node2"><a xlink:href="../proc/get_structures_ao_overlap_c.html" xlink:title="get_structures_ao_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="166,-24 0,-24 0,0 166,0 166,-24"/>
+<text text-anchor="middle" x="83" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap -->
+<g id="proc~~get_structures_ao_overlap~~CalledByGraph_edge1" class="edge">
+<title>proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap</title>
+<path fill="none" stroke="#000000" d="M166.1931,-12C174.616,-12 183.1864,-12 191.6465,-12"/>
+<polygon fill="#000000" stroke="#000000" points="191.894,-15.5001 201.894,-12 191.894,-8.5001 191.894,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">get_structures_ao_overlap</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">Cstring</span><span class="p">,</span><span class="w"> </span><span class="n">fstring</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">    </span><span class="k">use </span><span class="n">atomic_structure_m</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">atomic_structure</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<span class="w">    </span><span class="k">use </span><span class="n">int1</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_overlap</span>
+<span class="w">    </span><span class="k">use </span><span class="n">constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">tol_int</span>
+<span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;get_structures_ao_overlap&quot;</span>
+
+<span class="w">    </span><span class="c">!&gt; Information structure containing all necessary data</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_old</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">atomic_structure</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">target</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">atoms_old</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+
+<span class="w">    </span><span class="c">! Tagarray definitions and data pointers</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">OQP_XYZ_old</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A_old</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A_old</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alloc</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">OQP_overlap_mo</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_overlap_ao</span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xyz_old</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">overlap_ao_out</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">overlap_mo_out</span><span class="p">(:,:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">e_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">e_a_old</span><span class="p">(:)</span>
+
+<span class="w">    </span><span class="c">! Open log file</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Initialize basis sets and atomic structures</span>
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">basis_old</span><span class="p">,</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span><span class="p">)</span>
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">atoms_old</span><span class="p">,</span><span class="w"> </span><span class="n">source</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+
+<span class="w">    </span><span class="c">! Allocate and prepare data for output</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">(</span><span class="n">tags_alloc</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_overlap_mo</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_overlap_mo_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_overlap_ao</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_overlap_ao_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alloc</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_overlap_mo</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_mo_out</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_overlap_ao</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_ao_out</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Load data from python level</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_xyz_old</span><span class="p">,</span><span class="w"> </span><span class="n">xyz_old</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">e_a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A_old</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A_old</span><span class="p">,</span><span class="w"> </span><span class="n">e_a_old</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Apply old geometry to old basis</span>
+<span class="w">    </span><span class="n">atoms_old</span><span class="p">%</span><span class="n">xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xyz_old</span>
+<span class="w">    </span><span class="n">basis_old</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">atoms_old</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">print_geo</span><span class="p">(</span><span class="n">basis_old</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Previous geometry&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">print_geo</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot; Current geometry&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">overlap_ao_out</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">    </span><span class="n">overlap_mo_out</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+
+<span class="w">    </span><span class="c">! Calculate AO overlap between old and new basis sets</span>
+<span class="w">    </span><span class="k">call </span><span class="n">basis_overlap</span><span class="p">(</span><span class="n">overlap_ao_out</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">basis_old</span><span class="p">,</span><span class="w"> </span><span class="n">tol</span><span class="o">=</span><span class="nb">log</span><span class="p">(</span><span class="mi">1</span><span class="mf">0.0_dp</span><span class="p">)</span><span class="o">*</span><span class="n">tol_int</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Normalize AO overlap</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="n">overlap_ao_out</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">overlap_ao_out</span><span class="p">(:,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">basis_old</span><span class="p">%</span><span class="n">bfnrm</span><span class="p">(:)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="w">    </span><span class="c">! Calculate MO overlap: &lt;old(I)|new(J&#39;)&gt; = transpose[Cold(AI)] . &lt;old(A)|new(A&#39;)&gt; . Cnew(A&#39;J&#39;)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">mo_overlap</span><span class="p">(</span><span class="n">overlap_mo_out</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a_old</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_ao_out</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Output results: overlap between old and current MOs</span>
+<span class="w">    </span><span class="k">call </span><span class="n">print_results</span><span class="p">(</span><span class="n">overlap_mo_out</span><span class="p">,</span><span class="w"> </span><span class="n">e_a</span><span class="p">,</span><span class="w"> </span><span class="n">e_a_old</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_a</span><span class="p">,</span><span class="w"> </span><span class="n">iw</span><span class="p">)</span>
+
+<span class="c">!   Print timings</span>
+<span class="w">    </span><span class="k">call </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="o">=</span><span class="n">iw</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="nb">flush</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">get_structures_ao_overlap</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

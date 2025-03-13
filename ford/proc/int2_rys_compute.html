@@ -1,0 +1,1148 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>int2_rys_compute &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>int2_rys_compute
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for procedures.">80 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/int_rys.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/int_rys.f90.html'>int_rys.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/int2e_rys.html'>int2e_rys</a></li>
+            <li class="breadcrumb-item active" aria-current="page">int2_rys_compute</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/int2_rys_compute.html#src">int2_rys_compute</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/int2_pairs.html'>int2_pairs</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~int2_rys_compute~~UsesGraph Pages: 1 -->
+<svg id="procint2_rys_computeUsesGraph" width="441pt" height="32pt"
+ viewBox="0.00 0.00 441.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~int2_rys_compute~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~int2_rys_compute~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 437,-28 437,4 -4,4"/>
+<!-- proc~int2_rys_compute -->
+<g id="proc~~int2_rys_compute~~UsesGraph_node1" class="node">
+<title>proc~int2_rys_compute</title>
+<polygon fill="none" stroke="#000000" points="433,-24 327,-24 327,0 433,0 433,-24"/>
+<text text-anchor="middle" x="380" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int2_rys_compute</text>
+</g>
+<!-- module~int2_pairs -->
+<g id="proc~~int2_rys_compute~~UsesGraph_node2" class="node">
+<title>module~int2_pairs</title>
+<g id="a_proc~~int2_rys_compute~~UsesGraph_node2"><a xlink:href="../module/int2_pairs.html" xlink:title="int2_pairs">
+<polygon fill="#337ab7" stroke="#337ab7" points="291,-24 227,-24 227,0 291,0 291,-24"/>
+<text text-anchor="middle" x="259" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_rys_compute&#45;&gt;module~int2_pairs -->
+<g id="proc~~int2_rys_compute~~UsesGraph_edge1" class="edge">
+<title>proc~int2_rys_compute&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M326.9276,-12C318.3554,-12 309.5811,-12 301.3073,-12"/>
+<polygon fill="#000000" stroke="#000000" points="301.1478,-8.5001 291.1478,-12 301.1477,-15.5001 301.1478,-8.5001"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~int2_rys_compute~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_proc~~int2_rys_compute~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="191,-24 130,-24 130,0 191,0 191,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~int2_pairs&#45;&gt;module~precision -->
+<g id="proc~~int2_rys_compute~~UsesGraph_edge2" class="edge">
+<title>module~int2_pairs&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.7474,-12C218.6102,-12 209.7673,-12 201.2715,-12"/>
+<polygon fill="#000000" stroke="#000000" points="201.1514,-8.5001 191.1513,-12 201.1513,-15.5001 201.1514,-8.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~int2_rys_compute~~UsesGraph_node4" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~int2_rys_compute~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~int2_rys_compute~~UsesGraph_edge3" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.7853,-12C121.9522,-12 113.2743,-12 104.5707,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3906,-8.5001 94.3906,-12 104.3906,-15.5001 104.3906,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ints"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ints</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-gdat~4"></span>
+              type(<a href='../type/int2_rys_data_t.html'>int2_rys_data_t</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>gdat</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ppairs"></span>
+              type(<a href='../type/int2_pair_storage.html'>int2_pair_storage</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ppairs</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zero_shq"></span>
+              logical
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>zero_shq</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mu2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mu2</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~int2_rys_compute~~CallsGraph Pages: 1 -->
+<svg id="procint2_rys_computeCallsGraph" width="271pt" height="32pt"
+ viewBox="0.00 0.00 271.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~int2_rys_compute~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~int2_rys_compute~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 267,-28 267,4 -4,4"/>
+<!-- proc~int2_rys_compute -->
+<g id="proc~~int2_rys_compute~~CallsGraph_node1" class="node">
+<title>proc~int2_rys_compute</title>
+<polygon fill="none" stroke="#000000" points="106,-24 0,-24 0,0 106,0 106,-24"/>
+<text text-anchor="middle" x="53" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int2_rys_compute</text>
+</g>
+<!-- none~evaluate -->
+<g id="proc~~int2_rys_compute~~CallsGraph_node2" class="node">
+<title>none~evaluate</title>
+<g id="a_proc~~int2_rys_compute~~CallsGraph_node2"><a xlink:href="../type/rys_root_t.html#boundprocedure-evaluate" xlink:title="rys_root_t%evaluate">
+<polygon fill="#a7506f" stroke="#a7506f" points="263,-24 142,-24 142,0 263,0 263,-24"/>
+<text text-anchor="middle" x="202.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys_root_t%evaluate</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_rys_compute&#45;&gt;none~evaluate -->
+<g id="proc~~int2_rys_compute~~CallsGraph_edge1" class="edge">
+<title>proc~int2_rys_compute&#45;&gt;none~evaluate</title>
+<path fill="none" stroke="#000000" d="M106.1291,-12C114.4536,-12 123.1695,-12 131.8128,-12"/>
+<polygon fill="#000000" stroke="#000000" points="131.8981,-15.5001 141.898,-12 131.898,-8.5001 131.8981,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~int2_rys_compute~~CalledByGraph Pages: 1 -->
+<svg id="procint2_rys_computeCalledByGraph" width="641pt" height="159pt"
+ viewBox="0.00 0.00 641.00 159.27" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~int2_rys_compute~~CalledByGraph" class="graph" transform="scale(.5608 .5608) rotate(0) translate(4 280)">
+<title>proc~~int2_rys_compute~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-280 1139,-280 1139,4 -4,4"/>
+<!-- proc~int2_rys_compute -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node1" class="node">
+<title>proc~int2_rys_compute</title>
+<polygon fill="none" stroke="#000000" points="1135,-151 1029,-151 1029,-127 1135,-127 1135,-151"/>
+<text text-anchor="middle" x="1082" y="-136.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">int2_rys_compute</text>
+</g>
+<!-- none~run_generic -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node2" class="node">
+<title>none~run_generic</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node2"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run_generic" xlink:title="int2_compute_t%run_generic">
+<polygon fill="#a7506f" stroke="#a7506f" points="868,-171 700,-171 700,-147 868,-147 868,-171"/>
+<text text-anchor="middle" x="784" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run_generic</text>
+</a>
+</g>
+</g>
+<!-- none~run_generic&#45;&gt;proc~int2_rys_compute -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge1" class="edge">
+<title>none~run_generic&#45;&gt;proc~int2_rys_compute</title>
+<path fill="none" stroke="#000000" d="M868.1999,-153.349C916.0017,-150.1408 974.8544,-146.191 1018.7031,-143.2481"/>
+<polygon fill="#000000" stroke="#000000" points="1019.2032,-146.7225 1028.9463,-142.5606 1018.7344,-139.7382 1019.2032,-146.7225"/>
+</g>
+<!-- proc~ints_exchange -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node3" class="node">
+<title>proc~ints_exchange</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node3"><a xlink:href="../proc/ints_exchange.html" xlink:title="ints_exchange">
+<polygon fill="#d9534f" stroke="#d9534f" points="993,-131 904,-131 904,-107 993,-107 993,-131"/>
+<text text-anchor="middle" x="948.5" y="-116.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ints_exchange</text>
+</a>
+</g>
+</g>
+<!-- none~run_generic&#45;&gt;proc~ints_exchange -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge5" class="edge">
+<title>none~run_generic&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M833.3554,-146.9987C852.5428,-142.333 874.5897,-136.9721 894.2227,-132.1981"/>
+<polygon fill="#000000" stroke="#000000" points="895.0517,-135.5986 903.9416,-129.8349 893.3977,-128.7968 895.0517,-135.5986"/>
+</g>
+<!-- proc~ints_exchange&#45;&gt;proc~int2_rys_compute -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge2" class="edge">
+<title>proc~ints_exchange&#45;&gt;proc~int2_rys_compute</title>
+<path fill="none" stroke="#000000" d="M993.3249,-125.7153C1001.4916,-126.9388 1010.1508,-128.2361 1018.7329,-129.5218"/>
+<polygon fill="#000000" stroke="#000000" points="1018.33,-133.0004 1028.7382,-131.0207 1019.3672,-126.0777 1018.33,-133.0004"/>
+</g>
+<!-- none~run_cam -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node4" class="node">
+<title>none~run_cam</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node4"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run_cam" xlink:title="int2_compute_t%run_cam">
+<polygon fill="#a7506f" stroke="#a7506f" points="664,-171 513,-171 513,-147 664,-147 664,-171"/>
+<text text-anchor="middle" x="588.5" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run_cam</text>
+</a>
+</g>
+</g>
+<!-- none~run_cam&#45;&gt;none~run_generic -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge3" class="edge">
+<title>none~run_cam&#45;&gt;none~run_generic</title>
+<path fill="none" stroke="#000000" d="M664.0854,-159C672.5033,-159 681.1528,-159 689.7657,-159"/>
+<polygon fill="#000000" stroke="#000000" points="689.8439,-162.5001 699.8438,-159 689.8438,-155.5001 689.8439,-162.5001"/>
+</g>
+<!-- none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node5" class="node">
+<title>none~run~6</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node5"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run~6" xlink:title="int2_compute_t%run">
+<polygon fill="#a7506f" stroke="#a7506f" points="449,-192 327,-192 327,-168 449,-168 449,-192"/>
+<text text-anchor="middle" x="388" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run</text>
+</a>
+</g>
+</g>
+<!-- none~run~6&#45;&gt;none~run_generic -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge4" class="edge">
+<title>none~run~6&#45;&gt;none~run_generic</title>
+<path fill="none" stroke="#000000" d="M449.2468,-183.0305C505.2637,-185.0831 590.3657,-186.3944 664,-180 681.3495,-178.4934 699.9527,-175.7834 717.2083,-172.8001"/>
+<polygon fill="#000000" stroke="#000000" points="717.9628,-176.2208 727.1927,-171.019 716.7334,-169.3296 717.9628,-176.2208"/>
+</g>
+<!-- none~run~6&#45;&gt;none~run_cam -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge8" class="edge">
+<title>none~run~6&#45;&gt;none~run_cam</title>
+<path fill="none" stroke="#000000" d="M449.2461,-173.5852C466.0751,-171.8226 484.6416,-169.8779 502.5827,-167.9988"/>
+<polygon fill="#000000" stroke="#000000" points="503.1811,-171.4554 512.7621,-166.9327 502.4518,-164.4935 503.1811,-171.4554"/>
+</g>
+<!-- none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node6" class="node">
+<title>none~set_screening~2</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node6"><a xlink:href="../type/int2_compute_t.html#boundprocedure-set_screening~2" xlink:title="int2_compute_t%set_screening">
+<polygon fill="#a7506f" stroke="#a7506f" points="477,-150 299,-150 299,-126 477,-126 477,-150"/>
+<text text-anchor="middle" x="388" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%set_screening</text>
+</a>
+</g>
+</g>
+<!-- none~set_screening~2&#45;&gt;proc~ints_exchange -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge6" class="edge">
+<title>none~set_screening~2&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M477.1226,-134.9789C594.393,-131.0036 796.9415,-124.1376 893.8107,-120.8539"/>
+<polygon fill="#000000" stroke="#000000" points="894.0938,-124.3464 903.9695,-120.5095 893.8566,-117.3504 894.0938,-124.3464"/>
+</g>
+<!-- proc~grd2_driver -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node7" class="node">
+<title>proc~grd2_driver</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node7"><a xlink:href="../proc/grd2_driver.html" xlink:title="grd2_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="821,-79 747,-79 747,-55 821,-55 821,-79"/>
+<text text-anchor="middle" x="784" y="-64.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~grd2_driver&#45;&gt;proc~ints_exchange -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge7" class="edge">
+<title>proc~grd2_driver&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M821.3276,-78.7996C844.8431,-86.2331 875.4255,-95.9005 900.7065,-103.892"/>
+<polygon fill="#000000" stroke="#000000" points="899.8751,-107.2998 910.465,-106.9768 901.985,-100.6254 899.8751,-107.2998"/>
+</g>
+<!-- proc~fock_jk -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node8" class="node">
+<title>proc~fock_jk</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node8"><a xlink:href="../proc/fock_jk.html" xlink:title="fock_jk">
+<polygon fill="#d9534f" stroke="#d9534f" points="235.5,-150 181.5,-150 181.5,-126 235.5,-126 235.5,-150"/>
+<text text-anchor="middle" x="208.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">fock_jk</text>
+</a>
+</g>
+</g>
+<!-- proc~fock_jk&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge9" class="edge">
+<title>proc~fock_jk&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M235.7622,-144.3789C259.8335,-150.0112 295.8103,-158.4292 326.7468,-165.6678"/>
+<polygon fill="#000000" stroke="#000000" points="326.0581,-169.1011 336.5925,-167.9715 327.653,-162.2852 326.0581,-169.1011"/>
+</g>
+<!-- proc~fock_jk&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge15" class="edge">
+<title>proc~fock_jk&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M235.7622,-138C250.2942,-138 269.1652,-138 288.6468,-138"/>
+<polygon fill="#000000" stroke="#000000" points="288.8704,-141.5001 298.8704,-138 288.8703,-134.5001 288.8704,-141.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node9" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node9"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="625,-37 552,-37 552,-13 625,-13 625,-37"/>
+<text text-anchor="middle" x="588.5" y="-22.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grd2_driver -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge21" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grd2_driver</title>
+<path fill="none" stroke="#000000" d="M625.2721,-32.8999C656.8828,-39.6909 702.6588,-49.5252 736.9377,-56.8894"/>
+<polygon fill="#000000" stroke="#000000" points="736.216,-60.3142 746.7281,-58.9927 737.6864,-53.4703 736.216,-60.3142"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node10" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node10"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="263,-108 154,-108 154,-84 263,-84 263,-108"/>
+<text text-anchor="middle" x="208.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge10" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M246.9689,-108.036C252.5846,-110.5724 258.1135,-113.5484 263,-117 283.081,-131.1844 278.0011,-146.2136 299,-159 304.5171,-162.3594 310.5287,-165.1814 316.7382,-167.552"/>
+<polygon fill="#000000" stroke="#000000" points="316.0217,-171.0055 326.6162,-170.918 318.2796,-164.3796 316.0217,-171.0055"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge16" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M259.9375,-108.0355C280.78,-112.9123 305.0162,-118.5832 326.7607,-123.671"/>
+<polygon fill="#000000" stroke="#000000" points="326.0205,-127.0923 336.555,-125.9627 327.6154,-120.2764 326.0205,-127.0923"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node11" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node11"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="240.5,-66 176.5,-66 176.5,-42 240.5,-42 240.5,-66"/>
+<text text-anchor="middle" x="208.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge11" class="edge">
+<title>proc~scf_driver&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M240.6572,-61.5869C248.7002,-64.6954 256.7935,-69.0196 263,-75 292.2487,-103.1831 267.903,-132.8705 299,-159 304.3898,-163.5288 310.5827,-167.1188 317.1389,-169.9592"/>
+<polygon fill="#000000" stroke="#000000" points="316.3602,-173.4037 326.9531,-173.6067 318.7988,-166.8422 316.3602,-173.4037"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge17" class="edge">
+<title>proc~scf_driver&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M240.7053,-65.8018C248.0878,-68.6747 255.8623,-71.8355 263,-75 295.5043,-89.411 331.6841,-107.9276 356.7212,-121.1498"/>
+<polygon fill="#000000" stroke="#000000" points="355.2669,-124.3403 365.7405,-125.9385 358.5495,-118.1577 355.2669,-124.3403"/>
+</g>
+<!-- proc~tdhf_2e_grad -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_2e_grad</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_2e_grad.html" xlink:title="tdhf_2e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="629.5,-79 547.5,-79 547.5,-55 629.5,-55 629.5,-79"/>
+<text text-anchor="middle" x="588.5" y="-64.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_2e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_2e_grad&#45;&gt;proc~grd2_driver -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge22" class="edge">
+<title>proc~tdhf_2e_grad&#45;&gt;proc~grd2_driver</title>
+<path fill="none" stroke="#000000" d="M629.9605,-67C661.2124,-67 704.1089,-67 736.699,-67"/>
+<polygon fill="#000000" stroke="#000000" points="736.8902,-70.5001 746.8902,-67 736.8902,-63.5001 736.8902,-70.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="246.5,-276 170.5,-276 170.5,-252 246.5,-252 246.5,-276"/>
+<text text-anchor="middle" x="208.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M241.2814,-251.9737C248.4913,-249.1611 256.0477,-246.0823 263,-243 295.5043,-228.589 331.6841,-210.0724 356.7212,-196.8502"/>
+<polygon fill="#000000" stroke="#000000" points="358.5495,-199.8423 365.7405,-192.0615 355.2669,-193.6597 358.5495,-199.8423"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge18" class="edge">
+<title>proc~tdhf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M246.5985,-253.8799C252.584,-251.0668 258.3269,-247.5029 263,-243 292.2487,-214.8169 267.903,-185.1295 299,-159 300.5497,-157.6978 302.1658,-156.4733 303.8379,-155.3219"/>
+<polygon fill="#000000" stroke="#000000" points="305.7746,-158.2432 312.6159,-150.1532 302.2228,-152.2112 305.7746,-158.2432"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node14" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node14"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="261.5,-234 155.5,-234 155.5,-210 261.5,-210 261.5,-234"/>
+<text text-anchor="middle" x="208.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M259.9375,-209.9645C280.78,-205.0877 305.0162,-199.4168 326.7607,-194.329"/>
+<polygon fill="#000000" stroke="#000000" points="327.6154,-197.7236 336.555,-192.0373 326.0205,-190.9077 327.6154,-197.7236"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge19" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M246.9689,-209.964C252.5846,-207.4276 258.1135,-204.4516 263,-201 283.081,-186.8156 278.0011,-171.7864 299,-159 302.0064,-157.1694 305.1597,-155.4983 308.4118,-153.9729"/>
+<polygon fill="#000000" stroke="#000000" points="309.9229,-157.1348 317.7988,-150.0481 307.2226,-150.6766 309.9229,-157.1348"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="254,-192 163,-192 163,-168 254,-168 254,-192"/>
+<text text-anchor="middle" x="208.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M254.2599,-180C273.1837,-180 295.5739,-180 316.5676,-180"/>
+<polygon fill="#000000" stroke="#000000" points="316.7401,-183.5001 326.7401,-180 316.74,-176.5001 316.7401,-183.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge20" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M254.2599,-169.293C276.2543,-164.1466 302.9315,-157.9046 326.6561,-152.3535"/>
+<polygon fill="#000000" stroke="#000000" points="327.6811,-155.7082 336.6207,-150.0219 326.0863,-148.8923 327.6811,-155.7082"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node16" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node16"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="92,-66 26,-66 26,-42 92,-42 92,-66"/>
+<text text-anchor="middle" x="59" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge24" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M92.1789,-54C114.0597,-54 142.9087,-54 166.402,-54"/>
+<polygon fill="#000000" stroke="#000000" points="166.44,-57.5001 176.44,-54 166.4399,-50.5001 166.44,-57.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node17" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node17"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-276 14.5,-276 14.5,-252 103.5,-252 103.5,-276"/>
+<text text-anchor="middle" x="59" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge26" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.8549,-264C121.6243,-264 142.0923,-264 160.1875,-264"/>
+<polygon fill="#000000" stroke="#000000" points="160.2457,-267.5001 170.2457,-264 160.2457,-260.5001 160.2457,-267.5001"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="430,-66 346,-66 346,-42 430,-42 430,-66"/>
+<text text-anchor="middle" x="388" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_2e_grad -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge25" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_2e_grad</title>
+<path fill="none" stroke="#000000" d="M430.0314,-56.7252C461.2508,-58.7494 503.9978,-61.5211 537.2271,-63.6756"/>
+<polygon fill="#000000" stroke="#000000" points="537.0052,-67.1684 547.2108,-64.3229 537.4582,-60.1831 537.0052,-67.1684"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node19" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node19"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-234 0,-234 0,-210 118,-210 118,-234"/>
+<text text-anchor="middle" x="59" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge27" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.0864,-222C126.9813,-222 136.1861,-222 145.1658,-222"/>
+<polygon fill="#000000" stroke="#000000" points="145.18,-225.5001 155.18,-222 145.18,-218.5001 145.18,-225.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node20" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node20"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-192 7.5,-192 7.5,-168 110.5,-168 110.5,-192"/>
+<text text-anchor="middle" x="59" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge28" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.8683,-180C124.3091,-180 138.8422,-180 152.4852,-180"/>
+<polygon fill="#000000" stroke="#000000" points="152.7119,-183.5001 162.7118,-180 152.7118,-176.5001 152.7119,-183.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node21" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node21"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="107,-108 11,-108 11,-84 107,-84 107,-108"/>
+<text text-anchor="middle" x="59" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge23" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M107.1257,-96C118.7958,-96 131.4618,-96 143.7598,-96"/>
+<polygon fill="#000000" stroke="#000000" points="143.9736,-99.5001 153.9735,-96 143.9735,-92.5001 143.9736,-99.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_node22" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~int2_rys_compute~~CalledByGraph_node22"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="257,-24 160,-24 160,0 257,0 257,-24"/>
+<text text-anchor="middle" x="208.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~int2_rys_compute~~CalledByGraph_edge29" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M257.0753,-23.3658C281.4403,-29.0668 310.9742,-35.9772 335.8204,-41.7908"/>
+<polygon fill="#000000" stroke="#000000" points="335.2629,-45.2549 345.7974,-44.1253 336.8578,-38.439 335.2629,-45.2549"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocint2_rys_computeCalledByGraph = svgPanZoom('#procint2_rys_computeCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">int2_rys_compute</span><span class="p">(</span><span class="n">ints</span><span class="p">,</span><span class="w"> </span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ppairs</span><span class="p">,</span><span class="w"> </span><span class="n">zero_shq</span><span class="p">,</span><span class="w"> </span><span class="n">mu2</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">use </span><span class="n">int2_pairs</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">int2_pair_storage</span>
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    type</span><span class="p">(</span><span class="n">int2_rys_data_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">gdat</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">int2_pair_storage</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ppairs</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ints</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">optional</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mu2</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">zero_shq</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ijg</span><span class="p">,</span><span class="w"> </span><span class="n">klg</span><span class="p">,</span><span class="w"> </span><span class="n">maxgg</span><span class="p">,</span><span class="w"> </span><span class="n">mmax</span><span class="p">,</span><span class="w"> </span><span class="n">ng</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nmax</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">aa</span><span class="p">,</span><span class="w"> </span><span class="n">ab</span><span class="p">,</span><span class="w"> </span><span class="n">aandb1</span><span class="p">,</span><span class="w"> </span><span class="n">bb</span><span class="p">,</span><span class="w"> </span><span class="n">da</span><span class="p">,</span><span class="w"> </span><span class="n">db</span><span class="p">,</span><span class="w"> </span><span class="n">test</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pfac</span><span class="p">,</span><span class="w"> </span><span class="n">rho</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">p</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">q</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">first</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">id1</span><span class="p">,</span><span class="w"> </span><span class="n">id2</span><span class="p">,</span><span class="w"> </span><span class="n">ppid_p</span><span class="p">,</span><span class="w"> </span><span class="n">ppid_q</span><span class="p">,</span><span class="w"> </span><span class="n">npp_p</span><span class="p">,</span><span class="w"> </span><span class="n">npp_q</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mu2_1</span>
+
+<span class="w">    </span><span class="c">! Range-separation parameter for Erfc-attenuated integrals</span>
+<span class="w">    </span><span class="n">mu2_1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">present</span><span class="p">(</span><span class="n">mu2</span><span class="p">))</span><span class="w"> </span><span class="n">mu2_1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span><span class="o">/</span><span class="n">mu2</span>
+
+<span class="c">!   Prepare shell block</span>
+<span class="w">    </span><span class="k">call </span><span class="n">set_shells</span><span class="p">(</span><span class="n">gdat</span><span class="p">)</span>
+
+
+<span class="w">    </span><span class="n">id1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">maxval</span><span class="p">(</span><span class="n">gdat</span><span class="p">%</span><span class="n">id</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">))</span>
+<span class="w">    </span><span class="n">id2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">minval</span><span class="p">(</span><span class="n">gdat</span><span class="p">%</span><span class="n">id</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">))</span>
+<span class="w">    </span><span class="n">npp_p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">id1</span><span class="o">*</span><span class="p">(</span><span class="n">id1</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">id2</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ppid_p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">id1</span><span class="o">*</span><span class="p">(</span><span class="n">id1</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">id2</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">id1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">maxval</span><span class="p">(</span><span class="n">gdat</span><span class="p">%</span><span class="n">id</span><span class="p">(</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">))</span>
+<span class="w">    </span><span class="n">id2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">minval</span><span class="p">(</span><span class="n">gdat</span><span class="p">%</span><span class="n">id</span><span class="p">(</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">))</span>
+<span class="w">    </span><span class="n">npp_q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">id1</span><span class="o">*</span><span class="p">(</span><span class="n">id1</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">id2</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ppid_q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ppid</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">id1</span><span class="o">*</span><span class="p">(</span><span class="n">id1</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="n">id2</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">zero_shq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">npp_p</span><span class="o">*</span><span class="n">npp_q</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">zero_shq</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+
+<span class="k">    </span><span class="n">nmax</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gdat</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">+</span><span class="n">gdat</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">    </span><span class="n">mmax</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gdat</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">+</span><span class="n">gdat</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span>
+
+<span class="w">    </span><span class="n">maxgg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MAXCONTR</span><span class="o">/</span><span class="n">gdat</span><span class="p">%</span><span class="n">nroots</span>
+
+<span class="c">!   Pair of k,l primitives</span>
+
+<span class="w">    </span><span class="n">first</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<span class="w">    </span><span class="n">zero_shq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<span class="w">    </span><span class="n">ng</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">klg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">npp_q</span>
+<span class="w">      </span><span class="n">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">k</span><span class="p">(</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span><span class="o">*</span><span class="n">ppairs</span><span class="p">%</span><span class="n">ginv</span><span class="p">(</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+<span class="w">      </span><span class="n">bb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">g</span><span class="p">(</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+<span class="w">      </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">P</span><span class="p">(:,</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+
+<span class="c">!     Pair of i,j primitives</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ijg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">npp_p</span>
+<span class="w">        </span><span class="n">da</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">k</span><span class="p">(</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span><span class="o">*</span><span class="n">ppairs</span><span class="p">%</span><span class="n">ginv</span><span class="p">(</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+<span class="w">        </span><span class="n">aa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">g</span><span class="p">(</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+<span class="w">        </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">P</span><span class="p">(:,</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+
+<span class="w">        </span><span class="c">! 2nd term is used for Erfc-attenuated integrals</span>
+<span class="w">        </span><span class="c">! It is zero for regular integrals</span>
+<span class="w">        </span><span class="n">ab</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">aa</span><span class="o">+</span><span class="n">bb</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">aa</span><span class="o">*</span><span class="n">bb</span><span class="o">*</span><span class="n">mu2_1</span>
+
+<span class="w">        </span><span class="n">pfac</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">da</span><span class="o">*</span><span class="n">db</span>
+<span class="w">        </span><span class="n">test</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pfac</span><span class="o">*</span><span class="n">pfac</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">test</span><span class="o">&lt;</span><span class="n">gdat</span><span class="p">%</span><span class="n">quartet_cutoff</span><span class="o">*</span><span class="n">ab</span><span class="p">)</span><span class="w"> </span><span class="k">cycle</span>
+
+<span class="k">        </span><span class="n">ng</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ng</span><span class="o">+</span><span class="mi">1</span>
+
+<span class="w">        </span><span class="n">aandb1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0_dp</span><span class="o">/</span><span class="n">ab</span>
+<span class="w">        </span><span class="n">rho</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aa</span><span class="o">*</span><span class="n">bb</span><span class="o">*</span><span class="n">aandb1</span>
+
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ginv</span><span class="p">(</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">ginv</span><span class="p">(</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rho</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pfac</span><span class="o">*</span><span class="nb">sqrt</span><span class="p">(</span><span class="n">aandb1</span><span class="p">)</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aandb1</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">abv</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rho</span><span class="o">*</span><span class="nb">sum</span><span class="p">((</span><span class="n">p</span><span class="o">-</span><span class="n">q</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">PQ</span><span class="p">(:,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="o">-</span><span class="n">q</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nmax</span><span class="o">&gt;</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">gdat</span><span class="p">%</span><span class="n">pb</span><span class="p">(:,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">PB</span><span class="p">(:,</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">mmax</span><span class="o">&gt;</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">gdat</span><span class="p">%</span><span class="n">qd</span><span class="p">(:,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">PB</span><span class="p">(:,</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">dij</span><span class="p">(:,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">PA</span><span class="p">(:,</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span><span class="o">-</span><span class="n">ppairs</span><span class="p">%</span><span class="n">PB</span><span class="p">(:,</span><span class="n">ppid_p</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">ijg</span><span class="p">)</span>
+<span class="w">        </span><span class="n">gdat</span><span class="p">%</span><span class="n">dkl</span><span class="p">(:,</span><span class="n">ng</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppairs</span><span class="p">%</span><span class="n">PA</span><span class="p">(:,</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span><span class="o">-</span><span class="n">ppairs</span><span class="p">%</span><span class="n">PB</span><span class="p">(:,</span><span class="n">ppid_q</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">klg</span><span class="p">)</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ng</span><span class="o">==</span><span class="n">maxgg</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">          if</span><span class="w"> </span><span class="p">(</span><span class="n">ng</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            if</span><span class="w"> </span><span class="p">(</span><span class="n">first</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">clear_ints</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ints</span><span class="p">)</span>
+<span class="w">            </span><span class="n">first</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">            </span><span class="k">call </span><span class="n">compute</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ng</span><span class="p">,</span><span class="w"> </span><span class="n">nmax</span><span class="p">,</span><span class="w"> </span><span class="n">mmax</span><span class="p">,</span><span class="w"> </span><span class="n">ints</span><span class="p">)</span>
+<span class="w">            </span><span class="n">ng</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">            </span><span class="n">zero_shq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">          </span><span class="k">end if</span>
+<span class="k">        end if</span>
+
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+<span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="n">ng</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      if</span><span class="w"> </span><span class="p">(</span><span class="n">first</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">clear_ints</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ints</span><span class="p">)</span>
+<span class="w">      </span><span class="n">first</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">      </span><span class="k">call </span><span class="n">compute</span><span class="p">(</span><span class="n">gdat</span><span class="p">,</span><span class="w"> </span><span class="n">ng</span><span class="p">,</span><span class="w"> </span><span class="n">nmax</span><span class="p">,</span><span class="w"> </span><span class="n">mmax</span><span class="p">,</span><span class="w"> </span><span class="n">ints</span><span class="p">)</span>
+<span class="w">      </span><span class="n">ng</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">      </span><span class="n">zero_shq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">    </span><span class="k">end if</span>
+
+
+<span class="k">  end subroutine </span><span class="n">int2_rys_compute</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

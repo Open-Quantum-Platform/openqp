@@ -1,0 +1,478 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>grid_3d_pt &ndash; OPENQP </title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>grid_3d_pt
+      <small>Derived Type</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title="<p> 0.3% of total for derived types.</p>Including implementation: 3 statements,  0.0% of total for derived types.">3 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/grid_storage.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/grid_storage.f90.html'>grid_storage.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mod_grid_storage.html'>mod_grid_storage</a></li>
+            <li class="breadcrumb-item active" aria-current="page">grid_3d_pt</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../type/grid_3d_pt.html#variable-p~15">p</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+      <h2 id="type-def-statement">
+        type, public :: grid_3d_pt</h2>
+    <p>@brief Pointer to 3D grid container (to be used in arrays)
+@author Vladimir Mironov</p>
+<br>      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inherits</h3>
+        </div>
+        <div class="card-body">
+          <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: type~~grid_3d_pt~~InheritsGraph Pages: 1 -->
+<svg id="typegrid_3d_ptInheritsGraph" width="180pt" height="32pt"
+ viewBox="0.00 0.00 180.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="type~~grid_3d_pt~~InheritsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>type~~grid_3d_pt~~InheritsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 176,-28 176,4 -4,4"/>
+<!-- type~grid_3d_pt -->
+<g id="type~~grid_3d_pt~~InheritsGraph_node1" class="node">
+<title>type~grid_3d_pt</title>
+<polygon fill="none" stroke="#000000" points="172,-24 104,-24 104,0 172,0 172,-24"/>
+<text text-anchor="middle" x="138" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">grid_3d_pt</text>
+</g>
+<!-- type~grid_3d_t -->
+<g id="type~~grid_3d_pt~~InheritsGraph_node2" class="node">
+<title>type~grid_3d_t</title>
+<g id="a_type~~grid_3d_pt~~InheritsGraph_node2"><a xlink:href="../type/grid_3d_t.html" xlink:title="grid_3d_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="61,-24 0,-24 0,0 61,0 61,-24"/>
+<text text-anchor="middle" x="30.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grid_3d_t</text>
+</a>
+</g>
+</g>
+<!-- type~grid_3d_pt&#45;&gt;type~grid_3d_t -->
+<g id="type~~grid_3d_pt~~InheritsGraph_edge1" class="edge">
+<title>type~grid_3d_pt&#45;&gt;type~grid_3d_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M103.9863,-12C93.5447,-12 81.9491,-12 71.1124,-12"/>
+<polygon fill="#000000" stroke="#000000" points="71.0177,-8.5001 61.0176,-12 71.0176,-15.5001 71.0177,-8.5001"/>
+<text text-anchor="middle" x="82.5" y="-14.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">p</text>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#InheritsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="InheritsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="184pt" height="32pt"
+ viewBox="0.00 0.00 184.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 180,-28 180,4 -4,4"/>
+<!-- Type -->
+<g id="node1" class="node">
+<title>Type</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="176,-24 72,-24 72,0 176,0 176,-24"/>
+<text text-anchor="middle" x="124" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a derived type to the parent type which it
+extends. Dashed arrows point from a derived type to the other
+types it contains as a components, with a label listing the name(s) of
+said component(s).
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inherited by</h3>
+        </div>
+        <div class="card-body">
+          <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: type~~grid_3d_pt~~InheritedByGraph Pages: 1 -->
+<svg id="typegrid_3d_ptInheritedByGraph" width="641pt" height="64pt"
+ viewBox="0.00 0.00 641.00 64.10" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="type~~grid_3d_pt~~InheritedByGraph" class="graph" transform="scale(.8662 .8662) rotate(0) translate(4 70)">
+<title>type~~grid_3d_pt~~InheritedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 736,-70 736,4 -4,4"/>
+<!-- type~grid_3d_pt -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node1" class="node">
+<title>type~grid_3d_pt</title>
+<polygon fill="none" stroke="#000000" points="68,-45 0,-45 0,-21 68,-21 68,-45"/>
+<text text-anchor="middle" x="34" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">grid_3d_pt</text>
+</g>
+<!-- type~list_grid_3d_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node2" class="node">
+<title>type~list_grid_3d_t</title>
+<g id="a_type~~grid_3d_pt~~InheritedByGraph_node2"><a xlink:href="../type/list_grid_3d_t.html" xlink:title="list_grid_3d_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="211,-45 129,-45 129,-21 211,-21 211,-45"/>
+<text text-anchor="middle" x="170" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">list_grid_3d_t</text>
+</a>
+</g>
+</g>
+<!-- type~list_grid_3d_t&#45;&gt;type~grid_3d_pt -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_edge1" class="edge">
+<title>type~list_grid_3d_t&#45;&gt;type~grid_3d_pt</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M128.8264,-33C112.9216,-33 94.685,-33 78.4806,-33"/>
+<polygon fill="#000000" stroke="#000000" points="78.1704,-29.5001 68.1704,-33 78.1704,-36.5001 78.1704,-29.5001"/>
+<text text-anchor="middle" x="98.5" y="-35.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">elem</text>
+</g>
+<!-- type~atomic_grid_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node3" class="node">
+<title>type~atomic_grid_t</title>
+<g id="a_type~~grid_3d_pt~~InheritedByGraph_node3"><a xlink:href="../type/atomic_grid_t.html" xlink:title="atomic_grid_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="406,-66 321,-66 321,-42 406,-42 406,-66"/>
+<text text-anchor="middle" x="363.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_grid_t</text>
+</a>
+</g>
+</g>
+<!-- type~atomic_grid_t&#45;&gt;type~list_grid_3d_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_edge2" class="edge">
+<title>type~atomic_grid_t&#45;&gt;type~list_grid_3d_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M320.5561,-49.3394C291.2464,-46.1585 252.2768,-41.9293 221.3284,-38.5705"/>
+<polygon fill="#000000" stroke="#000000" points="221.4852,-35.0671 211.1659,-37.4676 220.7298,-42.0262 221.4852,-35.0671"/>
+<text text-anchor="middle" x="266" y="-49.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">spherical_grids</text>
+</g>
+<!-- type~sorted_grid_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node4" class="node">
+<title>type~sorted_grid_t</title>
+<g id="a_type~~grid_3d_pt~~InheritedByGraph_node4"><a xlink:href="../type/sorted_grid_t.html" xlink:title="sorted_grid_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="404.5,-24 322.5,-24 322.5,0 404.5,0 404.5,-24"/>
+<text text-anchor="middle" x="363.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sorted_grid_t</text>
+</a>
+</g>
+</g>
+<!-- type~sorted_grid_t&#45;&gt;type~list_grid_3d_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_edge3" class="edge">
+<title>type~sorted_grid_t&#45;&gt;type~list_grid_3d_t</title>
+<path fill="none" stroke="#000000" d="M322.4636,-16.4536C292.9329,-19.6584 252.8974,-24.0034 221.2623,-27.4366"/>
+<polygon fill="#000000" stroke="#000000" points="220.8743,-23.9581 211.3103,-28.5167 221.6296,-30.9173 220.8743,-23.9581"/>
+</g>
+<!-- type~dft_grid_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node5" class="node">
+<title>type~dft_grid_t</title>
+<g id="a_type~~grid_3d_pt~~InheritedByGraph_node5"><a xlink:href="../type/dft_grid_t.html" xlink:title="dft_grid_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="578,-24 516,-24 516,0 578,0 578,-24"/>
+<text text-anchor="middle" x="547" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_grid_t</text>
+</a>
+</g>
+</g>
+<!-- type~dft_grid_t&#45;&gt;type~sorted_grid_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_edge4" class="edge">
+<title>type~dft_grid_t&#45;&gt;type~sorted_grid_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M515.8717,-12C488.2839,-12 447.4604,-12 415.011,-12"/>
+<polygon fill="#000000" stroke="#000000" points="414.7972,-8.5001 404.7971,-12 414.7971,-15.5001 414.7972,-8.5001"/>
+<text text-anchor="middle" x="461" y="-14.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">spherical_grids</text>
+</g>
+<!-- type~xc_options_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_node6" class="node">
+<title>type~xc_options_t</title>
+<g id="a_type~~grid_3d_pt~~InheritedByGraph_node6"><a xlink:href="../type/xc_options_t.html" xlink:title="xc_options_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="732,-24 654,-24 654,0 732,0 732,-24"/>
+<text text-anchor="middle" x="693" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_options_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_options_t&#45;&gt;type~dft_grid_t -->
+<g id="type~~grid_3d_pt~~InheritedByGraph_edge5" class="edge">
+<title>type~xc_options_t&#45;&gt;type~dft_grid_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M653.8747,-12C633.6423,-12 608.9491,-12 588.3973,-12"/>
+<polygon fill="#000000" stroke="#000000" points="588.3767,-8.5001 578.3767,-12 588.3767,-15.5001 588.3767,-8.5001"/>
+<text text-anchor="middle" x="616" y="-14.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">molGrid</text>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pantypegrid_3d_ptInheritedByGraph = svgPanZoom('#typegrid_3d_ptInheritedByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#InheritedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="InheritedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="184pt" height="32pt"
+ viewBox="0.00 0.00 184.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 180,-28 180,4 -4,4"/>
+<!-- Type -->
+<g id="node1" class="node">
+<title>Type</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="176,-24 72,-24 72,0 176,0 176,-24"/>
+<text text-anchor="middle" x="124" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a derived type to the parent type which it
+extends. Dashed arrows point from a derived type to the other
+types it contains as a components, with a label listing the name(s) of
+said component(s).
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    <br>
+
+    <section>
+    <h2>Components</h2>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-p~15"></span>
+              type(<a href='grid_3d_t.html'>grid_3d_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>p</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    </section>
+    <br>
+    
+
+
+
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

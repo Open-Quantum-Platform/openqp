@@ -1,0 +1,1081 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>orthogonal_transform_sym &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>orthogonal_transform_sym
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">24 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mathlib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mathlib.f90.html'>mathlib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mathlib.html'>mathlib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">orthogonal_transform_sym</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine orthogonal_transform_sym(n, m, a, u, ldu, b)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~orthogonal_transform_sym~~UsesGraph Pages: 1 -->
+<svg id="procorthogonal_transform_symUsesGraph" width="517pt" height="158pt"
+ viewBox="0.00 0.00 517.00 158.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~orthogonal_transform_sym~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 154)">
+<title>proc~~orthogonal_transform_sym~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-154 513,-154 513,4 -4,4"/>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node1" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<polygon fill="none" stroke="#000000" points="509,-87 353,-87 353,-63 509,-63 509,-87"/>
+<text text-anchor="middle" x="431" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">orthogonal_transform_sym</text>
+</g>
+<!-- module~messages -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node2" class="node">
+<title>module~messages</title>
+<g id="a_proc~~orthogonal_transform_sym~~UsesGraph_node2"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="317,-87 251,-87 251,-63 317,-63 317,-87"/>
+<text text-anchor="middle" x="284" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;module~messages -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge1" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M352.7656,-75C344.0888,-75 335.5003,-75 327.4865,-75"/>
+<polygon fill="#000000" stroke="#000000" points="327.3236,-71.5001 317.3236,-75 327.3235,-78.5001 327.3236,-71.5001"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node3" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-150 130,-150 130,-126 215,-126 215,-150"/>
+<text text-anchor="middle" x="172.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge2" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M265.2267,-87.0426C251.498,-95.6971 232.3258,-107.4704 215,-117 212.3454,-118.4601 209.5754,-119.9345 206.7781,-121.389"/>
+<polygon fill="#000000" stroke="#000000" points="205.1858,-118.2721 197.8583,-125.9244 208.3586,-124.5118 205.1858,-118.2721"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node4" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-108 136.5,-108 136.5,-84 208.5,-84 208.5,-108"/>
+<text text-anchor="middle" x="172.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge3" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8482,-81.2438C240.827,-83.1312 229.6331,-85.2395 218.9133,-87.2585"/>
+<polygon fill="#000000" stroke="#000000" points="218.0139,-83.8663 208.8345,-89.1567 219.3096,-90.7453 218.0139,-83.8663"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node5" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~orthogonal_transform_sym~~UsesGraph_node5"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-66 133,-66 133,-42 212,-42 212,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge4" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8482,-68.7562C241.7959,-67.0512 231.7867,-65.1661 222.0345,-63.3294"/>
+<polygon fill="#000000" stroke="#000000" points="222.4905,-59.8538 212.0155,-61.4424 221.1949,-66.7329 222.4905,-59.8538"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node6" class="node">
+<title>module~precision</title>
+<g id="a_proc~~orthogonal_transform_sym~~UsesGraph_node6"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-24 142,-24 142,0 203,0 203,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge5" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M265.2267,-62.9574C251.498,-54.3029 232.3258,-42.5296 215,-33 212.3454,-31.5399 209.5754,-30.0655 206.7781,-28.611"/>
+<polygon fill="#000000" stroke="#000000" points="208.3586,-25.4882 197.8583,-24.0756 205.1858,-31.7279 208.3586,-25.4882"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_node7" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~orthogonal_transform_sym~~UsesGraph_node7"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~orthogonal_transform_sym~~UsesGraph_edge6" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-12C130.4618,-12 117.2165,-12 104.2832,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-8.5001 94.0202,-12 104.0202,-15.5001 104.0203,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Compute orthogonal transformation of a symmetric marix A
+       in packed format:
+       B = U^T * A * U
+@param[in]    a      Matrix to transform
+@param[in]    u      Orthogonal matrix U(ldu,m)
+@param[in]    n      dimension of matrix A
+@param[in]    m      dimension of matrix B
+@param[in]    ldu    leading dimension of matrix U
+@param[out]   b      Result
+@param[inout] wrk    Scratch space
+@author Vladimir Mironov</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~220"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~39"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~141"></span>
+              real(kind=8),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-u"></span>
+              real(kind=8),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>u</strong>(n,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldu"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldu</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~84"></span>
+              real(kind=8),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~orthogonal_transform_sym~~CallsGraph Pages: 1 -->
+<svg id="procorthogonal_transform_symCallsGraph" width="430pt" height="200pt"
+ viewBox="0.00 0.00 430.00 200.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~orthogonal_transform_sym~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 196)">
+<title>proc~~orthogonal_transform_sym~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-196 426,-196 426,4 -4,4"/>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node1" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<polygon fill="none" stroke="#000000" points="156,-108 0,-108 0,-84 156,-84 156,-108"/>
+<text text-anchor="middle" x="78" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">orthogonal_transform_sym</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~orthogonal_transform_sym~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="422,-108 329,-108 329,-84 422,-84 422,-108"/>
+<text text-anchor="middle" x="375.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge1" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M156.1646,-96C207.2211,-96 272.7207,-96 318.801,-96"/>
+<polygon fill="#000000" stroke="#000000" points="318.9084,-99.5001 328.9083,-96 318.9083,-92.5001 318.9084,-99.5001"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node3" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~orthogonal_transform_sym~~CallsGraph_node3"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="293,-190 192,-190 192,-166 293,-166 293,-190"/>
+<text text-anchor="middle" x="242.5" y="-175.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge2" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M99.1142,-108.0964C121.7621,-120.8818 158.9388,-141.326 192,-157 195.5191,-158.6684 199.2068,-160.3412 202.9189,-161.9742"/>
+<polygon fill="#000000" stroke="#000000" points="201.5444,-165.193 212.1139,-165.9263 204.3086,-158.7619 201.5444,-165.193"/>
+</g>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node4" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<g id="a_proc~~orthogonal_transform_sym~~CallsGraph_node4"><a xlink:href="../proc/oqp_dsymm_i64.html" xlink:title="oqp_dsymm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="292,-148 193,-148 193,-124 292,-124 292,-148"/>
+<text text-anchor="middle" x="242.5" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsymm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge3" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M127.3554,-108.0013C144.8427,-112.2535 164.7051,-117.0833 182.9507,-121.5199"/>
+<polygon fill="#000000" stroke="#000000" points="182.3515,-124.9761 192.8953,-123.9381 184.0055,-118.1743 182.3515,-124.9761"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node5" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~orthogonal_transform_sym~~CallsGraph_node5"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="287,-68 198,-68 198,-44 287,-44 287,-68"/>
+<text text-anchor="middle" x="242.5" y="-53.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge4" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M127.3554,-83.9987C146.5428,-79.333 168.5897,-73.9721 188.2227,-69.1981"/>
+<polygon fill="#000000" stroke="#000000" points="189.0517,-72.5986 197.9416,-66.8349 187.3977,-65.7968 189.0517,-72.5986"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node6" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~orthogonal_transform_sym~~CallsGraph_node6"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="287,-26 198,-26 198,-2 287,-2 287,-26"/>
+<text text-anchor="middle" x="242.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge5" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M99.1142,-83.9036C121.7621,-71.1182 158.9388,-50.674 192,-35 195.5191,-33.3316 199.2068,-31.6588 202.9189,-30.0258"/>
+<polygon fill="#000000" stroke="#000000" points="204.3086,-33.2381 212.1139,-26.0737 201.5444,-26.807 204.3086,-33.2381"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge7" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M277.2706,-165.9589C282.7556,-163.3872 288.1952,-160.4015 293,-157 312.5209,-143.1804 309.6893,-131.1119 329,-117 330.8595,-115.6411 332.8209,-114.3417 334.8444,-113.1036"/>
+<polygon fill="#000000" stroke="#000000" points="336.9138,-115.9599 343.9896,-108.0742 333.5406,-109.8262 336.9138,-115.9599"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node7" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="402.5,-192 348.5,-192 348.5,-168 402.5,-168 402.5,-192"/>
+<text text-anchor="middle" x="375.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge6" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M293.161,-178.7618C308.1366,-178.987 324.25,-179.2293 338.2172,-179.4394"/>
+<polygon fill="#000000" stroke="#000000" points="338.3736,-182.942 348.4252,-179.5929 338.4789,-175.9428 338.3736,-182.942"/>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge9" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M282.4044,-123.9987C295.9572,-119.9226 311.2745,-115.3159 325.5135,-111.0335"/>
+<polygon fill="#000000" stroke="#000000" points="326.5959,-114.363 335.1641,-108.1311 324.5798,-107.6596 326.5959,-114.363"/>
+</g>
+<!-- dsymm -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node8" class="node">
+<title>dsymm</title>
+<polygon fill="#777777" stroke="#777777" points="402.5,-150 348.5,-150 348.5,-126 402.5,-126 402.5,-150"/>
+<text text-anchor="middle" x="375.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsymm</text>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;dsymm -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge8" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M292.0243,-136.7447C307.2084,-136.9731 323.658,-137.2204 337.9084,-137.4347"/>
+<polygon fill="#000000" stroke="#000000" points="338.2682,-140.9404 348.3198,-137.5913 338.3736,-133.9412 338.2682,-140.9404"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge11" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M282.4044,-68.0013C295.9572,-72.0774 311.2745,-76.6841 325.5135,-80.9665"/>
+<polygon fill="#000000" stroke="#000000" points="324.5798,-84.3404 335.1641,-83.8689 326.5959,-77.637 324.5798,-84.3404"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node9" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="402.5,-66 348.5,-66 348.5,-42 402.5,-42 402.5,-66"/>
+<text text-anchor="middle" x="375.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge10" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M287.1571,-55.3285C303.5895,-55.0814 322.0237,-54.8042 337.7848,-54.5671"/>
+<polygon fill="#000000" stroke="#000000" points="338.2655,-58.0604 348.2117,-54.4103 338.1602,-51.0612 338.2655,-58.0604"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge13" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M277.2706,-26.0411C282.7556,-28.6128 288.1952,-31.5985 293,-35 312.5209,-48.8196 309.6893,-60.8881 329,-75 330.8595,-76.3589 332.8209,-77.6583 334.8444,-78.8964"/>
+<polygon fill="#000000" stroke="#000000" points="333.5406,-82.1738 343.9896,-83.9258 336.9138,-76.0401 333.5406,-82.1738"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_node10" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="402.5,-24 348.5,-24 348.5,0 402.5,0 402.5,-24"/>
+<text text-anchor="middle" x="375.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~orthogonal_transform_sym~~CallsGraph_edge12" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M287.1571,-13.3285C303.5895,-13.0814 322.0237,-12.8042 337.7848,-12.5671"/>
+<polygon fill="#000000" stroke="#000000" points="338.2655,-16.0604 348.2117,-12.4103 338.1602,-9.0612 338.2655,-16.0604"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~orthogonal_transform_sym~~CalledByGraph Pages: 1 -->
+<svg id="procorthogonal_transform_symCalledByGraph" width="641pt" height="214pt"
+ viewBox="0.00 0.00 641.00 213.67" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph" class="graph" transform="scale(.8829 .8829) rotate(0) translate(4 238)">
+<title>proc~~orthogonal_transform_sym~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-238 722,-238 722,4 -4,4"/>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node1" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<polygon fill="none" stroke="#000000" points="718,-108 562,-108 562,-84 718,-84 718,-108"/>
+<text text-anchor="middle" x="640" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">orthogonal_transform_sym</text>
+</g>
+<!-- proc~eijden -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node2" class="node">
+<title>proc~eijden</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node2"><a xlink:href="../proc/eijden.html" xlink:title="eijden">
+<polygon fill="#d9534f" stroke="#d9534f" points="500,-192 446,-192 446,-168 500,-168 500,-192"/>
+<text text-anchor="middle" x="473" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eijden</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge1" class="edge">
+<title>proc~eijden&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M500.247,-169.9729C508.605,-166.6925 517.7658,-162.8871 526,-159 555.6548,-145.0009 588.2946,-126.6454 611.0212,-113.3615"/>
+<polygon fill="#000000" stroke="#000000" points="612.9742,-116.2734 619.8166,-108.1844 609.4233,-110.2408 612.9742,-116.2734"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node3" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node3"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="519.5,-150 426.5,-150 426.5,-126 519.5,-126 519.5,-150"/>
+<text text-anchor="middle" x="473" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge2" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M519.5188,-126.3007C539.0096,-121.3988 561.8693,-115.6496 582.4078,-110.4843"/>
+<polygon fill="#000000" stroke="#000000" points="583.4347,-113.8351 592.279,-108.0017 581.7273,-107.0465 583.4347,-113.8351"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node4" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node4"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="515,-108 431,-108 431,-84 515,-84 515,-108"/>
+<text text-anchor="middle" x="473" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge3" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M515.1412,-96C526.349,-96 538.8868,-96 551.5768,-96"/>
+<polygon fill="#000000" stroke="#000000" points="551.7641,-99.5001 561.7641,-96 551.764,-92.5001 551.7641,-99.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="526,-66 420,-66 420,-42 526,-42 526,-66"/>
+<text text-anchor="middle" x="473" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge4" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M520.8555,-66.0355C539.9845,-70.8464 562.1861,-76.43 582.2039,-81.4645"/>
+<polygon fill="#000000" stroke="#000000" points="581.5858,-84.9179 592.1375,-83.9627 583.2932,-78.1293 581.5858,-84.9179"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="518.5,-24 427.5,-24 427.5,0 518.5,0 518.5,-24"/>
+<text text-anchor="middle" x="473" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M505.232,-24.0095C512.1542,-26.7997 519.3769,-29.8734 526,-33 555.6548,-46.9991 588.2946,-65.3546 611.0212,-78.6385"/>
+<polygon fill="#000000" stroke="#000000" points="609.4233,-81.7592 619.8166,-83.8156 612.9742,-75.7266 609.4233,-81.7592"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node7" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node7"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="367,-108 283,-108 283,-84 367,-84 367,-108"/>
+<text text-anchor="middle" x="325" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge9" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M367.015,-96C383.7317,-96 403.1449,-96 420.7543,-96"/>
+<polygon fill="#000000" stroke="#000000" points="420.88,-99.5001 430.88,-96 420.8799,-92.5001 420.88,-99.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node8" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node8"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="361.5,-234 288.5,-234 288.5,-210 361.5,-210 361.5,-234"/>
+<text text-anchor="middle" x="325" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~eijden -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge6" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M361.5843,-211.618C384.2521,-205.1852 413.2764,-196.9486 436.0181,-190.4949"/>
+<polygon fill="#000000" stroke="#000000" points="436.9959,-193.8557 445.6605,-187.7585 435.0848,-187.1216 436.9959,-193.8557"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node9" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node9"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="357,-150 293,-150 293,-126 357,-126 357,-150"/>
+<text text-anchor="middle" x="325" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~form_rohf_fock -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge8" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~form_rohf_fock</title>
+<path fill="none" stroke="#000000" d="M357.1138,-138C374.3441,-138 396.0918,-138 416.0807,-138"/>
+<polygon fill="#000000" stroke="#000000" points="416.3402,-141.5001 426.3401,-138 416.3401,-134.5001 416.3402,-141.5001"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node10" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node10"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="366,-192 284,-192 284,-168 366,-168 366,-192"/>
+<text text-anchor="middle" x="325" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~eijden -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge7" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M366.2263,-180C388.0307,-180 414.5926,-180 435.7687,-180"/>
+<polygon fill="#000000" stroke="#000000" points="435.9917,-183.5001 445.9917,-180 435.9917,-176.5001 435.9917,-183.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node11" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node11"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="384,-66 266,-66 266,-42 384,-42 384,-66"/>
+<text text-anchor="middle" x="325" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M384.3445,-54C392.6918,-54 401.2982,-54 409.7157,-54"/>
+<polygon fill="#000000" stroke="#000000" points="409.8594,-57.5001 419.8593,-54 409.8593,-50.5001 409.8594,-57.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="376.5,-24 273.5,-24 273.5,0 376.5,0 376.5,-24"/>
+<text text-anchor="middle" x="325" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge11" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M376.7632,-12C389.7865,-12 403.8227,-12 417.0411,-12"/>
+<polygon fill="#000000" stroke="#000000" points="417.4317,-15.5001 427.4317,-12 417.4316,-8.5001 417.4317,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node13" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node13"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="230,-108 133,-108 133,-84 230,-84 230,-108"/>
+<text text-anchor="middle" x="181.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge12" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M230.0826,-96C243.6892,-96 258.5411,-96 272.3706,-96"/>
+<polygon fill="#000000" stroke="#000000" points="272.7093,-99.5001 282.7093,-96 272.7093,-92.5001 272.7093,-99.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node14" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node14"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="214.5,-150 148.5,-150 148.5,-126 214.5,-126 214.5,-150"/>
+<text text-anchor="middle" x="181.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge13" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M214.7825,-138C234.9898,-138 260.9766,-138 282.6412,-138"/>
+<polygon fill="#000000" stroke="#000000" points="282.8852,-141.5001 292.8851,-138 282.8851,-134.5001 282.8852,-141.5001"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="223.5,-192 139.5,-192 139.5,-168 223.5,-168 223.5,-192"/>
+<text text-anchor="middle" x="181.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M223.7786,-180C239.2412,-180 256.914,-180 273.1189,-180"/>
+<polygon fill="#000000" stroke="#000000" points="273.518,-183.5001 283.5179,-180 273.5179,-176.5001 273.518,-183.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_node16" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~orthogonal_transform_sym~~CalledByGraph_node16"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-192 0,-192 0,-168 97,-168 97,-192"/>
+<text text-anchor="middle" x="48.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~orthogonal_transform_sym~~CalledByGraph_edge15" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.2691,-180C107.6112,-180 118.5705,-180 129.043,-180"/>
+<polygon fill="#000000" stroke="#000000" points="129.3124,-183.5001 139.3123,-180 129.3123,-176.5001 129.3124,-183.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocorthogonal_transform_symCalledByGraph = svgPanZoom('#procorthogonal_transform_symCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

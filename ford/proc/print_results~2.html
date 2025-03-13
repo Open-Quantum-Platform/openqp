@@ -1,0 +1,976 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>print_results &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>print_results
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for procedures.">63 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_sf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_sf_lib.f90.html'>tdhf_sf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_sf_lib.html'>tdhf_sf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">print_results</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/print_results~2.html#src">print_results</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine print_results(infos, bvec_mo, excitation_energy, trans, dip, spin_square, nstates)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/physical_constants.html'>physical_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~print_results~2~~UsesGraph Pages: 1 -->
+<svg id="procprint_results2UsesGraph" width="641pt" height="311pt"
+ viewBox="0.00 0.00 641.00 310.94" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~print_results~2~~UsesGraph" class="graph" transform="scale(.8616 .8616) rotate(0) translate(4 356.9052)">
+<title>proc~~print_results~2~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-356.9052 740,-356.9052 740,4 -4,4"/>
+<!-- proc~print_results~2 -->
+<g id="proc~~print_results~2~~UsesGraph_node1" class="node">
+<title>proc~print_results~2</title>
+<polygon fill="none" stroke="#000000" points="736,-199.2513 658,-199.2513 658,-175.2513 736,-175.2513 736,-199.2513"/>
+<text text-anchor="middle" x="697" y="-184.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">print_results</text>
+</g>
+<!-- module~physical_constants -->
+<g id="proc~~print_results~2~~UsesGraph_node2" class="node">
+<title>module~physical_constants</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node2"><a xlink:href="../module/physical_constants.html" xlink:title="physical_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="622,-76.2513 510,-76.2513 510,-52.2513 622,-52.2513 622,-76.2513"/>
+<text text-anchor="middle" x="566" y="-61.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~print_results~2&#45;&gt;module~physical_constants -->
+<g id="proc~~print_results~2~~UsesGraph_edge1" class="edge">
+<title>proc~print_results~2&#45;&gt;module~physical_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M683.9603,-175.008C661.1062,-153.5496 613.6617,-109.0024 586.4205,-83.4248"/>
+<polygon fill="#000000" stroke="#000000" points="588.6729,-80.7386 578.987,-76.4452 583.8814,-85.8418 588.6729,-80.7386"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-257.2513 141.5,-257.2513 141.5,-233.2513 202.5,-233.2513 202.5,-257.2513"/>
+<text text-anchor="middle" x="172" y="-242.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~print_results~2&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge2" class="edge">
+<title>proc~print_results~2&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M684.0675,-199.2666C636.0676,-242.3823 462.957,-384.7563 309,-346.2513"/>
+</g>
+<!-- module~types -->
+<g id="proc~~print_results~2~~UsesGraph_node4" class="node">
+<title>module~types</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node4"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="593,-199.2513 539,-199.2513 539,-175.2513 593,-175.2513 593,-199.2513"/>
+<text text-anchor="middle" x="566" y="-184.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~print_results~2&#45;&gt;module~types -->
+<g id="proc~~print_results~2~~UsesGraph_edge3" class="edge">
+<title>proc~print_results~2&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.6957,-187.2513C640.4701,-187.2513 620.3505,-187.2513 603.3535,-187.2513"/>
+<polygon fill="#000000" stroke="#000000" points="603.2278,-183.7514 593.2278,-187.2513 603.2278,-190.7514 603.2278,-183.7514"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~print_results~2~~UsesGraph_node6" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-198.2513 0,-198.2513 0,-174.2513 94,-174.2513 94,-198.2513"/>
+<text text-anchor="middle" x="47" y="-183.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~physical_constants&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_results~2~~UsesGraph_edge4" class="edge">
+<title>module~physical_constants&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M537.1334,-52.152C462.7886,-23.0629 261.3911,42.4157 130,-41.2513 85.377,-69.6663 62.2082,-131.1901 52.5732,-164.2247"/>
+<polygon fill="#000000" stroke="#000000" points="49.094,-163.6762 49.8131,-174.2466 55.8427,-165.5349 49.094,-163.6762"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_results~2~~UsesGraph_edge5" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M146.4027,-233.1694C127.7811,-224.38 102.35,-212.3766 81.8726,-202.7112"/>
+<polygon fill="#000000" stroke="#000000" points="83.1003,-199.4204 72.563,-198.3171 80.1123,-205.7507 83.1003,-199.4204"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge11" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-308.2513C384.7813,-334.4017 367.3969,-360.8565 309,-346.2513"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-346.2513C282.2748,-339.5673 272.9391,-342.5062 250,-327.2513 229.5281,-313.6372 230.9233,-303.0852 214,-285.2513 207.424,-278.3215 199.9535,-271.0342 193.1548,-264.6062"/>
+<polygon fill="#000000" stroke="#000000" points="195.2734,-261.7957 185.5762,-257.5279 190.4954,-266.9115 195.2734,-261.7957"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~print_results~2~~UsesGraph_node5" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-74.2513 130,-74.2513 130,-50.2513 214,-50.2513 214,-74.2513"/>
+<text text-anchor="middle" x="172" y="-59.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~print_results~2~~UsesGraph_edge6" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M558.3974,-174.8686C541.138,-148.11 496.0308,-85.439 439,-62.2513"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-62.2513C360.7069,-30.4189 333.7873,-30.1696 250,-41.2513 239.7814,-42.6029 229.0009,-44.9094 218.8234,-47.5111"/>
+<polygon fill="#000000" stroke="#000000" points="217.6355,-44.2062 208.8901,-50.1868 219.4563,-50.9653 217.6355,-44.2062"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~print_results~2~~UsesGraph_node7" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node7"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-74.2513 250,-74.2513 250,-50.2513 368,-50.2513 368,-74.2513"/>
+<text text-anchor="middle" x="309" y="-59.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~print_results~2~~UsesGraph_edge7" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-62.2513C420.1306,-54.5794 398.4084,-52.3169 378.19,-52.6032"/>
+<polygon fill="#000000" stroke="#000000" points="377.965,-49.1088 368.0921,-52.9528 378.2072,-56.1046 377.965,-49.1088"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~print_results~2~~UsesGraph_node8" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node8"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-178.2513 404,-178.2513 404,-154.2513 474,-154.2513 474,-178.2513"/>
+<text text-anchor="middle" x="439" y="-163.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~print_results~2~~UsesGraph_edge8" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M538.7553,-182.7463C522.9628,-180.1349 502.6709,-176.7796 484.5164,-173.7777"/>
+<polygon fill="#000000" stroke="#000000" points="484.8466,-170.2848 474.4095,-172.1065 483.7046,-177.191 484.8466,-170.2848"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~print_results~2~~UsesGraph_node9" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node9"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-318.2513 273.5,-318.2513 273.5,-294.2513 344.5,-294.2513 344.5,-318.2513"/>
+<text text-anchor="middle" x="309" y="-303.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~print_results~2~~UsesGraph_edge9" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M557.4829,-199.4169C539.1144,-224.5845 493.0371,-282.1886 439,-308.2513"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-308.2513C413.0646,-320.7603 380.6966,-320.3061 354.7467,-316.7018"/>
+<polygon fill="#000000" stroke="#000000" points="355.2066,-313.2311 344.7821,-315.1229 354.1111,-320.1449 355.2066,-313.2311"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~print_results~2~~UsesGraph_node10" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node10"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-116.2513 282,-116.2513 282,-92.2513 336,-92.2513 336,-116.2513"/>
+<text text-anchor="middle" x="309" y="-101.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~print_results~2~~UsesGraph_edge10" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439,-62.2513C434.4998,-60.4216 382.5011,-78.1411 345.6522,-91.1337"/>
+<polygon fill="#000000" stroke="#000000" points="344.44,-87.8499 336.1812,-94.4862 346.7759,-94.4486 344.44,-87.8499"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~print_results~2~~UsesGraph_node11" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="468,-220.2513 410,-220.2513 410,-196.2513 468,-196.2513 468,-220.2513"/>
+<text text-anchor="middle" x="439" y="-205.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~print_results~2~~UsesGraph_edge12" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M538.7553,-191.7564C521.1287,-194.671 497.897,-198.5125 478.2882,-201.7549"/>
+<polygon fill="#000000" stroke="#000000" points="477.7081,-198.3032 468.4131,-203.3878 478.8502,-205.2094 477.7081,-198.3032"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~print_results~2~~UsesGraph_edge13" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-62.2513C241.1722,-62.2513 232.4436,-62.2513 224.0637,-62.2513"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-58.7514 214.0516,-62.2513 224.0516,-65.7514 224.0516,-58.7514"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge19" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.2446,-178.3186C411.2353,-180.9466 407.3071,-183.9443 404,-187.2513 382.0101,-209.2412 395.0618,-231.9292 368,-247.2513 319.9887,-274.4349 254.1748,-266.384 212.3656,-256.8252"/>
+<polygon fill="#000000" stroke="#000000" points="213.0793,-253.397 202.5368,-254.4489 211.4342,-260.201 213.0793,-253.397"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_results~2~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8388,-167.3033C352.61,-169.1936 254.5585,-174.1626 172,-186.2513"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~print_results~2~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.5701,-154.0625C420.0614,-136.1402 396.2778,-102.7035 368,-83.2513 365.6486,-81.6338 363.159,-80.1272 360.5844,-78.7258"/>
+<polygon fill="#000000" stroke="#000000" points="362.1051,-75.5734 351.5802,-74.3579 359.0499,-81.8715 362.1051,-75.5734"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~print_results~2~~UsesGraph_edge18" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.2167,-154.1446C406.1867,-145.4165 386.3485,-133.729 368,-125.2513 360.9314,-121.9854 353.2003,-118.9033 345.7305,-116.1577"/>
+<polygon fill="#000000" stroke="#000000" points="346.7337,-112.7999 336.1389,-112.7551 344.3933,-119.3971 346.7337,-112.7999"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~print_results~2~~UsesGraph_node12" class="node">
+<title>module~constants</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node12"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-238.2513 277,-238.2513 277,-214.2513 341,-214.2513 341,-238.2513"/>
+<text text-anchor="middle" x="309" y="-223.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~print_results~2~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.1182,-178.4028C400.5374,-184.9755 383.3982,-193.1738 368,-200.2513 361.0776,-203.4331 353.6656,-206.7609 346.5137,-209.9321"/>
+<polygon fill="#000000" stroke="#000000" points="344.7301,-206.8934 336.9927,-214.131 347.5547,-213.2982 344.7301,-206.8934"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~print_results~2~~UsesGraph_node13" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node13"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-158.2513 269.5,-158.2513 269.5,-134.2513 348.5,-134.2513 348.5,-158.2513"/>
+<text text-anchor="middle" x="309" y="-143.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~print_results~2~~UsesGraph_edge17" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-160.8391C390.0124,-158.7148 373.9125,-156.2379 358.9407,-153.9345"/>
+<polygon fill="#000000" stroke="#000000" points="359.2137,-150.4354 348.7978,-152.3741 358.1493,-157.354 359.2137,-150.4354"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge21" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.6653,-294.2511C271.6928,-289.8611 260.3301,-284.8451 250,-280.2513 236.2494,-274.1366 221.1557,-267.3753 207.9397,-261.4387"/>
+<polygon fill="#000000" stroke="#000000" points="209.2502,-258.1905 198.6943,-257.2828 206.3802,-264.5751 209.2502,-258.1905"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~print_results~2~~UsesGraph_edge20" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M292.3959,-294.0859C278.8946,-283.2923 260.4315,-266.3124 250,-247.2513 214.1746,-181.7889 259.8487,-142.1299 214,-83.2513 213.3238,-82.383 212.6022,-81.5478 211.8417,-80.7448"/>
+<polygon fill="#000000" stroke="#000000" points="214.0632,-78.0401 204.13,-74.3546 209.5968,-83.4301 214.0632,-78.0401"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~print_results~2~~UsesGraph_node15" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-318.2513 131.5,-318.2513 131.5,-294.2513 212.5,-294.2513 212.5,-318.2513"/>
+<text text-anchor="middle" x="172" y="-303.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~print_results~2~~UsesGraph_edge22" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-306.2513C257.9991,-306.2513 239.7453,-306.2513 222.9899,-306.2513"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-302.7514 212.79,-306.2513 222.79,-309.7514 222.7901,-302.7514"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge25" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9942,-109.1465C271.0349,-112.2504 258.8913,-117.2525 250,-125.2513 222.5121,-149.9804 234.8537,-169.7188 214,-200.2513 207.8917,-209.1946 200.0376,-218.1093 192.7771,-225.6165"/>
+<polygon fill="#000000" stroke="#000000" points="189.8427,-223.6008 185.2425,-233.1449 194.7904,-228.5526 189.8427,-223.6008"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~print_results~2~~UsesGraph_edge23" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-95.9535C264.5765,-90.6324 241.5349,-83.5686 221.0312,-77.2828"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-73.8554 211.2057,-74.2706 219.7406,-80.548 221.7924,-73.8554"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_results~2~~UsesGraph_edge24" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7791,-111.9068C271.5029,-115.3147 259.9079,-119.8023 250,-125.2513 211.4382,-146.4594 215.5446,-179.8752 172,-186.2513"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-186.2513C150.0411,-189.4667 125.6787,-190.1132 104.3373,-189.73"/>
+<polygon fill="#000000" stroke="#000000" points="104.2143,-186.2258 94.1271,-189.466 104.0332,-193.2234 104.2143,-186.2258"/>
+</g>
+<!-- mpi -->
+<g id="proc~~print_results~2~~UsesGraph_node14" class="node">
+<title>mpi</title>
+<g id="a_proc~~print_results~2~~UsesGraph_node14"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-116.2513 145,-116.2513 145,-92.2513 199,-92.2513 199,-116.2513"/>
+<text text-anchor="middle" x="172" y="-101.8513" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~print_results~2~~UsesGraph_edge26" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-104.2513C261.1051,-104.2513 232.0908,-104.2513 209.0994,-104.2513"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-100.7514 199.0106,-104.2513 209.0105,-107.7514 209.0106,-100.7514"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~print_results~2~~UsesGraph_edge27" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-230.706C257.6649,-233.3708 233.0702,-236.7818 212.5278,-239.6307"/>
+<polygon fill="#000000" stroke="#000000" points="211.9328,-236.1796 202.5084,-241.0202 212.8945,-243.1133 211.9328,-236.1796"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocprint_results2UsesGraph = svgPanZoom('#procprint_results2UsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~48"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-bvec_mo~6"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>bvec_mo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-excitation_energy"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>excitation_energy</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans~51"></span>
+              integer,
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dip~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:,:)
+            </td>
+            <td>::</td>
+            <td><strong>dip</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-spin_square~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>spin_square</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nstates~7"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nstates</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~print_results~2~~CalledByGraph Pages: 1 -->
+<svg id="procprint_results2CalledByGraph" width="382pt" height="74pt"
+ viewBox="0.00 0.00 382.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~print_results~2~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~print_results~2~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 378,-70 378,4 -4,4"/>
+<!-- proc~print_results~2 -->
+<g id="proc~~print_results~2~~CalledByGraph_node1" class="node">
+<title>proc~print_results~2</title>
+<polygon fill="none" stroke="#000000" points="374,-45 296,-45 296,-21 374,-21 374,-45"/>
+<text text-anchor="middle" x="335" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">print_results</text>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~print_results~2~~CalledByGraph_node2" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~print_results~2~~CalledByGraph_node2"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="260,-66 154,-66 154,-42 260,-42 260,-66"/>
+<text text-anchor="middle" x="207" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~print_results~2 -->
+<g id="proc~~print_results~2~~CalledByGraph_edge1" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~print_results~2</title>
+<path fill="none" stroke="#000000" d="M260.1715,-45.2765C268.6683,-43.8825 277.4274,-42.4455 285.826,-41.0676"/>
+<polygon fill="#000000" stroke="#000000" points="286.5485,-44.496 295.8499,-39.4231 285.4151,-37.5883 286.5485,-44.496"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~print_results~2~~CalledByGraph_node3" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~print_results~2~~CalledByGraph_node3"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="252.5,-24 161.5,-24 161.5,0 252.5,0 252.5,-24"/>
+<text text-anchor="middle" x="207" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~print_results~2 -->
+<g id="proc~~print_results~2~~CalledByGraph_edge2" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~print_results~2</title>
+<path fill="none" stroke="#000000" d="M252.8494,-19.5222C263.5043,-21.2702 274.8908,-23.1383 285.6878,-24.9097"/>
+<polygon fill="#000000" stroke="#000000" points="285.3811,-28.4061 295.8158,-26.5713 286.5144,-21.4985 285.3811,-28.4061"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~print_results~2~~CalledByGraph_node4" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~print_results~2~~CalledByGraph_node4"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-66 0,-66 0,-42 118,-42 118,-66"/>
+<text text-anchor="middle" x="59" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~print_results~2~~CalledByGraph_edge3" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.3445,-54C126.6918,-54 135.2982,-54 143.7157,-54"/>
+<polygon fill="#000000" stroke="#000000" points="143.8594,-57.5001 153.8593,-54 143.8593,-50.5001 143.8594,-57.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~print_results~2~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~print_results~2~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-24 7.5,-24 7.5,0 110.5,0 110.5,-24"/>
+<text text-anchor="middle" x="59" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~print_results~2~~CalledByGraph_edge4" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.7632,-12C123.7865,-12 137.8227,-12 151.0411,-12"/>
+<polygon fill="#000000" stroke="#000000" points="151.4317,-15.5001 161.4317,-12 151.4316,-8.5001 151.4317,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">print_results</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_mo</span><span class="p">,</span><span class="w"> </span><span class="n">excitation_energy</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                           </span><span class="n">trans</span><span class="p">,</span><span class="w"> </span><span class="n">dip</span><span class="p">,</span><span class="w"> </span><span class="n">spin_square</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">physical_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">toev</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ev2htree</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bvec_mo</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">excitation_energy</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">trans</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dip</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">spin_square</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nstates</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">istat</span><span class="p">,</span><span class="w"> </span><span class="n">jstat</span><span class="p">,</span><span class="w"> </span><span class="n">ij</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="p">,</span><span class="w"> </span><span class="n">xvec_dim</span><span class="p">,</span><span class="w"> </span><span class="n">ndeex</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ydum</span><span class="p">,</span><span class="w"> </span><span class="n">xdum</span><span class="p">,</span><span class="w"> </span><span class="n">threshold</span><span class="p">,</span><span class="w"> </span><span class="n">ROHF_energy</span><span class="p">,</span><span class="w"> </span><span class="n">energ</span><span class="p">,</span><span class="w"> </span><span class="n">f</span>
+
+<span class="w">    </span><span class="n">threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">conf_print_threshold</span>
+<span class="w">    </span><span class="n">xvec_dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">bvec_mo</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">ROHF_energy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_energy</span><span class="p">%</span><span class="n">energy</span>
+<span class="w">    </span><span class="n">nocca</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_A</span>
+<span class="w">    </span><span class="n">noccb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_B</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">istat</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nstates</span>
+<span class="w">      </span><span class="n">ydum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">toev</span><span class="o">*</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(/,1x,&quot;State #&quot;,I4,2X,&quot;Energy =&quot;,F12.6,1X,&quot;eV&quot;)&#39;</span><span class="p">)</span><span class="w"> </span><span class="n">istat</span><span class="p">,</span><span class="w"> </span><span class="n">ydum</span>
+<span class="c">!     write(*,&#39;(3x,&quot;Symmetry of state =&quot;,4x,a)&#39;) &#39;?a?a?&#39;</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(15x,&quot;&lt;S^2&gt; =&quot;,1x,f9.4)&#39;</span><span class="p">)</span><span class="w"> </span><span class="n">spin_square</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(8x,&quot;DRF&quot;,4x,&quot;Coeff&quot;,8x,&quot;OCC&quot;,7x,&quot;VIR&quot;)&#39;</span><span class="p">)</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(8x,3(&quot;-&quot;),2x,8(&quot;-&quot;),5x,6(&quot;-&quot;),4x,6(&quot;-&quot;))&#39;</span><span class="p">)</span>
+<span class="w">      </span><span class="k">do </span><span class="n">ij</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">xvec_dim</span>
+<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">trans</span><span class="p">(</span><span class="n">ij</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">        </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">trans</span><span class="p">(</span><span class="n">ij</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">        </span><span class="n">xdum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bvec_mo</span><span class="p">(</span><span class="n">ij</span><span class="p">,</span><span class="n">istat</span><span class="p">)</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">xdum</span><span class="p">)</span><span class="o">&gt;</span><span class="n">threshold</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">          write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(7x,i4,1x,f9.6,6x,i4,2x,&quot;-&gt;&quot;,2x,i4,2x)&#39;</span><span class="p">)</span><span class="w"> </span><span class="n">ij</span><span class="p">,</span><span class="n">xdum</span><span class="p">,</span><span class="n">i</span><span class="p">,</span><span class="n">j</span>
+<span class="w">        </span><span class="k">end if</span>
+<span class="k">      end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(/5x, &quot;Summary table&quot;,/)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(1x, &quot;State&quot;, 6x, &quot;Energy&quot;, 7x,&quot;Excitation&quot;, 3x, &quot;Excitation(eV)&quot;, &amp;</span>
+<span class="s1">             &amp;2x, &quot;&lt;S^2&gt;&quot;, 9x, &quot;Transition dipole moment, a.u.&quot;,&amp;</span>
+<span class="s1">             &amp;8x, &quot;Oscillator&quot;)&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(11x, &quot;Hartree&quot;, 11x, &quot;eV&quot;, 10x, &quot;rel. GS&quot; &amp;</span>
+<span class="s1">             &amp;18x, &quot;X&quot;, 10x, &quot;Y&quot;, 10x, &quot;Z&quot;, 8x,&quot;Abs.&quot;, 6x, &quot;strength&quot;)&#39;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">ndeex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">do </span><span class="n">istat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">if</span><span class="p">(</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span><span class="o">&lt;</span><span class="mf">0.0_dp</span><span class="p">)</span><span class="w"> </span><span class="n">ndeex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ndeex</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="w">    </span><span class="c">! De-excitation</span>
+<span class="w">    </span><span class="k">do </span><span class="n">istat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">ndeex</span>
+<span class="w">      </span><span class="n">energ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span><span class="o">-</span><span class="n">excitation_energy</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">      </span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">2.0d0</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">3.0d0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">energ</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(x, i3, 1x, f17.10, 2f13.6, 6x, &amp;</span>
+<span class="s1">               &amp;f5.3, 4(1x,f10.4),2x,f10.4)&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">istat</span><span class="p">,</span><span class="w"> </span><span class="n">ROHF_energy</span><span class="o">+</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="n">toev</span><span class="o">*</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">toev</span><span class="o">*</span><span class="n">energ</span><span class="p">,</span><span class="w"> </span><span class="n">spin_square</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="nb">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)),</span><span class="w"> </span><span class="n">f</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="w">    </span><span class="c">! Reference ROHF state</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(1x, i3, 1x, f17.10, 2f13.6, 8x,&amp;</span>
+<span class="s1">            &amp;&quot;(ROHF/UHF Reference state)&quot;)&#39;</span><span class="p">)</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">ROHF_energy</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="n">excitation_energy</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">toev</span>
+
+<span class="w">    </span><span class="c">! Excitation</span>
+<span class="w">    </span><span class="k">do </span><span class="n">istat</span><span class="o">=</span><span class="n">ndeex</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">nstates</span>
+<span class="w">      </span><span class="n">energ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span><span class="o">-</span><span class="n">excitation_energy</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">      </span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">2.0d0</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">3.0d0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">energ</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s1">&#39;(x, i3, 1x, f17.10, 2f13.6, 6x, &amp;</span>
+<span class="s1">               &amp;f5.3, 4(1x,f10.4),2x,f10.4)&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">istat</span><span class="p">,</span><span class="w"> </span><span class="n">ROHF_energy</span><span class="o">+</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="n">toev</span><span class="o">*</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">toev</span><span class="o">*</span><span class="n">energ</span><span class="p">,</span><span class="w"> </span><span class="n">spin_square</span><span class="p">(</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="n">dip</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">),</span><span class="w"> </span><span class="nb">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="mi">1</span><span class="p">,</span><span class="n">istat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)),</span><span class="w"> </span><span class="n">f</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="k">    write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s2">&quot;(2x,&#39;Transition&#39;,3x,&#39;Excitation&#39;,9x,&#39;Transition dipole, a.u.&#39;,19x,&#39;Oscillator&#39;,&amp;</span>
+<span class="s2">          &amp;/18x,&#39;eV&#39;,14x,&#39;x&#39;,10x,&#39;y&#39;,10x,&#39;z&#39;,9x,&#39;Abs.&#39;,7x,&#39;strength&#39;)&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">istat</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">       </span><span class="k">do </span><span class="n">jstat</span><span class="o">=</span><span class="n">istat</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">          </span><span class="n">energ</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">jstat</span><span class="p">)</span><span class="o">-</span><span class="n">excitation_energy</span><span class="p">(</span><span class="n">istat</span><span class="p">)</span>
+<span class="w">          </span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">2.0d0</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">3.0d0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">energ</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="n">istat</span><span class="p">,</span><span class="n">jstat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="s2">&quot;(3x,i0,1x,&#39;-&gt;&#39;,1x,i0,t11,3x,f11.6,3x,3f11.4,1x,f11.4,2x,f11.4)&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">istat</span><span class="p">,</span><span class="n">jstat</span><span class="p">,</span><span class="n">toev</span><span class="o">*</span><span class="n">energ</span><span class="p">,</span><span class="n">dip</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="n">istat</span><span class="p">,</span><span class="n">jstat</span><span class="p">),</span><span class="w"> </span><span class="nb">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dip</span><span class="p">(:,</span><span class="n">istat</span><span class="p">,</span><span class="n">jstat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)),</span><span class="w"> </span><span class="n">f</span>
+<span class="w">       </span><span class="k">enddo</span>
+<span class="k">    enddo</span>
+<span class="k">    write</span><span class="p">(</span><span class="o">*</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">print_results</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

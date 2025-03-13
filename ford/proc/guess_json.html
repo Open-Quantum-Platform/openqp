@@ -1,0 +1,1738 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>guess_json &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>guess_json
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for procedures.">69 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess_json.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/guess_json.f90.html'>guess_json.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/guess_json_mod.html'>guess_json_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">guess_json</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/guess_json.html#src">guess_json</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine guess_json(infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/parallel.html'>parallel</a></li>
+                  <li class="list-inline-item"><a href='../module/printing.html'>printing</a></li>
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/guess.html'>guess</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/util.html'>util</a></li>
+                  <li class="list-inline-item"><a href='../module/io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~guess_json~~UsesGraph Pages: 1 -->
+<svg id="procguess_jsonUsesGraph" width="641pt" height="408pt"
+ viewBox="0.00 0.00 641.00 408.29" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~guess_json~~UsesGraph" class="graph" transform="scale(.7586 .7586) rotate(0) translate(4 534.2259)">
+<title>proc~~guess_json~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-534.2259 841,-534.2259 841,4 -4,4"/>
+<!-- proc~guess_json -->
+<g id="proc~~guess_json~~UsesGraph_node1" class="node">
+<title>proc~guess_json</title>
+<polygon fill="none" stroke="#000000" points="837,-314.2259 767,-314.2259 767,-290.2259 837,-290.2259 837,-314.2259"/>
+<text text-anchor="middle" x="802" y="-299.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">guess_json</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~guess_json~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~guess_json~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="479.5,-214.2259 409.5,-214.2259 409.5,-190.2259 479.5,-190.2259 479.5,-214.2259"/>
+<text text-anchor="middle" x="444.5" y="-199.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~basis_tools -->
+<g id="proc~~guess_json~~UsesGraph_edge1" class="edge">
+<title>proc~guess_json&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M580.5,-202.2259C550.4669,-198.0047 516.3332,-198.0195 489.775,-199.0822"/>
+<polygon fill="#000000" stroke="#000000" points="489.4534,-195.5933 479.6265,-199.5533 489.7781,-202.5857 489.4534,-195.5933"/>
+</g>
+<!-- module~guess -->
+<g id="proc~~guess_json~~UsesGraph_node3" class="node">
+<title>module~guess</title>
+<g id="a_proc~~guess_json~~UsesGraph_node3"><a xlink:href="../module/guess.html" xlink:title="guess">
+<polygon fill="#337ab7" stroke="#337ab7" points="731,-376.2259 677,-376.2259 677,-352.2259 731,-352.2259 731,-376.2259"/>
+<text text-anchor="middle" x="704" y="-361.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~guess -->
+<g id="proc~~guess_json~~UsesGraph_edge2" class="edge">
+<title>proc~guess_json&#45;&gt;module~guess</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M782.6384,-314.4751C768.048,-323.7057 747.8418,-336.4892 731.5654,-346.7865"/>
+<polygon fill="#000000" stroke="#000000" points="729.5675,-343.9088 722.988,-352.2131 733.31,-349.8244 729.5675,-343.9088"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~guess_json~~UsesGraph_node4" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~guess_json~~UsesGraph_node4"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-530.2259 133,-530.2259 133,-506.2259 212,-506.2259 212,-530.2259"/>
+<text text-anchor="middle" x="172.5" y="-515.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~io_constants -->
+<g id="proc~~guess_json~~UsesGraph_edge3" class="edge">
+<title>proc~guess_json&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-518.2259C366.9214,-521.1945 276.8055,-520.3502 222.2507,-519.366"/>
+<polygon fill="#000000" stroke="#000000" points="222.2232,-515.8649 212.1587,-519.1749 222.0906,-522.8637 222.2232,-515.8649"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~guess_json~~UsesGraph_node5" class="node">
+<title>module~messages</title>
+<g id="a_proc~~guess_json~~UsesGraph_node5"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="343,-490.2259 277,-490.2259 277,-466.2259 343,-466.2259 343,-490.2259"/>
+<text text-anchor="middle" x="310" y="-475.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~messages -->
+<g id="proc~~guess_json~~UsesGraph_edge4" class="edge">
+<title>proc~guess_json&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M794.1333,-314.3743C782.2486,-331.945 758.1954,-364.5994 731,-385.2259 619.1478,-470.0609 584.5026,-528.5781 444.5,-518.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-518.2259C426.4096,-518.9181 383.9904,-505.3243 351.5888,-493.7991"/>
+<polygon fill="#000000" stroke="#000000" points="352.4872,-490.4026 341.8928,-490.3068 350.1151,-496.9884 352.4872,-490.4026"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~guess_json~~UsesGraph_node6" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~guess_json~~UsesGraph_node6"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="641,-52.2259 520,-52.2259 520,-28.2259 641,-28.2259 641,-52.2259"/>
+<text text-anchor="middle" x="580.5" y="-37.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~guess_json~~UsesGraph_edge5" class="edge">
+<title>proc~guess_json&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M792.9219,-290.1668C780.1344,-273.6031 755.6171,-243.3517 731,-221.2259 720.0868,-211.4171 715.7049,-211.0748 704,-202.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M704,-202.2259C651.8766,-162.8208 610.6612,-95.9112 591.759,-61.7241"/>
+<polygon fill="#000000" stroke="#000000" points="594.665,-59.7405 586.8246,-52.6146 588.51,-63.0745 594.665,-59.7405"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~guess_json~~UsesGraph_node7" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~guess_json~~UsesGraph_node7"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="337,-136.2259 283,-136.2259 283,-112.2259 337,-112.2259 337,-136.2259"/>
+<text text-anchor="middle" x="310" y="-121.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~parallel -->
+<g id="proc~~guess_json~~UsesGraph_edge6" class="edge">
+<title>proc~guess_json&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M704,-202.2259C660.2152,-169.1247 634.8546,-209.8654 580.5,-202.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M580.5,-202.2259C534.882,-195.8143 409.7772,-156.5524 346.9806,-136.2954"/>
+<polygon fill="#000000" stroke="#000000" points="347.6885,-132.8459 337.0967,-133.098 345.5339,-139.5061 347.6885,-132.8459"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~guess_json~~UsesGraph_node8" class="node">
+<title>module~precision</title>
+<g id="a_proc~~guess_json~~UsesGraph_node8"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-254.2259 142,-254.2259 142,-230.2259 203,-230.2259 203,-254.2259"/>
+<text text-anchor="middle" x="172.5" y="-239.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge7" class="edge">
+<title>proc~guess_json&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M766.6889,-294.9247C722.9611,-286.8313 646.2043,-275.7231 580.5,-282.2259"/>
+</g>
+<!-- module~printing -->
+<g id="proc~~guess_json~~UsesGraph_node9" class="node">
+<title>module~printing</title>
+<g id="a_proc~~guess_json~~UsesGraph_node9"><a xlink:href="../module/printing.html" xlink:title="printing">
+<polygon fill="#337ab7" stroke="#337ab7" points="731,-254.2259 677,-254.2259 677,-230.2259 731,-230.2259 731,-254.2259"/>
+<text text-anchor="middle" x="704" y="-239.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">printing</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~printing -->
+<g id="proc~~guess_json~~UsesGraph_edge8" class="edge">
+<title>proc~guess_json&#45;&gt;module~printing</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M782.1682,-290.084C767.9552,-281.3821 748.5942,-269.5284 732.697,-259.7954"/>
+<polygon fill="#000000" stroke="#000000" points="734.1584,-256.5863 723.8023,-254.3497 730.5032,-262.5563 734.1584,-256.5863"/>
+</g>
+<!-- module~types -->
+<g id="proc~~guess_json~~UsesGraph_node10" class="node">
+<title>module~types</title>
+<g id="a_proc~~guess_json~~UsesGraph_node10"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="607.5,-174.2259 553.5,-174.2259 553.5,-150.2259 607.5,-150.2259 607.5,-174.2259"/>
+<text text-anchor="middle" x="580.5" y="-159.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~types -->
+<g id="proc~~guess_json~~UsesGraph_edge9" class="edge">
+<title>proc~guess_json&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M704,-202.2259C678.6852,-183.088 643.8551,-172.9016 617.6358,-167.6093"/>
+<polygon fill="#000000" stroke="#000000" points="618.1649,-164.1477 607.6921,-165.751 616.8789,-171.0286 618.1649,-164.1477"/>
+</g>
+<!-- module~util -->
+<g id="proc~~guess_json~~UsesGraph_node11" class="node">
+<title>module~util</title>
+<g id="a_proc~~guess_json~~UsesGraph_node11"><a xlink:href="../module/util.html" xlink:title="util">
+<polygon fill="#337ab7" stroke="#337ab7" points="731,-334.2259 677,-334.2259 677,-310.2259 731,-310.2259 731,-334.2259"/>
+<text text-anchor="middle" x="704" y="-319.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;module~util -->
+<g id="proc~~guess_json~~UsesGraph_edge10" class="edge">
+<title>proc~guess_json&#45;&gt;module~util</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M766.8966,-309.3898C758.5407,-311.0951 749.5971,-312.9203 741.1528,-314.6437"/>
+<polygon fill="#000000" stroke="#000000" points="740.2716,-311.2513 731.1734,-316.6803 741.6713,-318.1099 740.2716,-311.2513"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~guess_json~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.9989,-214.4117C387.638,-247.2003 276.1016,-337.4985 251,-377.2259 221.2574,-424.2984 250.9418,-454.6979 215,-497.2259 214.2828,-498.0745 213.5231,-498.892 212.7273,-499.6793"/>
+<polygon fill="#000000" stroke="#000000" points="210.439,-497.0267 204.7664,-505.9751 214.7811,-502.5173 210.439,-497.0267"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~guess_json~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.7791,-190.2093C401.3342,-177.1929 365.3262,-156.311 339.8365,-141.5288"/>
+<polygon fill="#000000" stroke="#000000" points="341.3725,-138.3736 330.966,-136.3846 337.8607,-144.4291 341.3725,-138.3736"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-202.2259C275.3278,-204.7343 237.5102,-216.436 210.3274,-226.5399"/>
+<polygon fill="#000000" stroke="#000000" points="208.9131,-223.3333 200.8193,-230.1701 211.41,-229.8729 208.9131,-223.3333"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~guess_json~~UsesGraph_node15" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~guess_json~~UsesGraph_node15"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-214.2259 0,-214.2259 0,-190.2259 94,-190.2259 94,-214.2259"/>
+<text text-anchor="middle" x="47" y="-199.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~guess_json~~UsesGraph_edge11" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.3339,-200.8402C382.1683,-200.105 343.6538,-199.7911 310,-202.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-202.2259C239.3408,-207.3378 157.7234,-206.2533 104.3863,-204.6056"/>
+<polygon fill="#000000" stroke="#000000" points="104.2164,-201.0983 94.1076,-204.2702 103.9881,-208.0946 104.2164,-201.0983"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~guess_json~~UsesGraph_node16" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~guess_json~~UsesGraph_node16"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="369,-52.2259 251,-52.2259 251,-28.2259 369,-28.2259 369,-52.2259"/>
+<text text-anchor="middle" x="310" y="-37.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~guess_json~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M441.2852,-190.1366C433.4982,-163.1333 411.0953,-97.4495 369,-61.2259 367.4548,-59.8962 365.8194,-58.6486 364.1153,-57.4782"/>
+<polygon fill="#000000" stroke="#000000" points="365.5264,-54.25 355.1225,-52.2474 362.0068,-60.3008 365.5264,-54.25"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~guess_json~~UsesGraph_node17" class="node">
+<title>module~constants</title>
+<g id="a_proc~~guess_json~~UsesGraph_node17"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="342,-254.2259 278,-254.2259 278,-230.2259 342,-230.2259 342,-254.2259"/>
+<text text-anchor="middle" x="310" y="-239.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~guess_json~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M409.1617,-212.7354C391.6933,-217.9305 370.4852,-224.2377 352.1727,-229.6838"/>
+<polygon fill="#000000" stroke="#000000" points="350.9265,-226.4028 342.3391,-232.6083 352.9219,-233.1124 350.9265,-226.4028"/>
+</g>
+<!-- module~guess&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge18" class="edge">
+<title>module~guess&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M676.9172,-362.4668C651.8285,-361.2535 613.5193,-360.4589 580.5,-364.2259"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~guess_json~~UsesGraph_node19" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~guess_json~~UsesGraph_node19"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="614,-416.2259 547,-416.2259 547,-392.2259 614,-392.2259 614,-416.2259"/>
+<text text-anchor="middle" x="580.5" y="-401.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~guess&#45;&gt;module~oqp_linalg -->
+<g id="proc~~guess_json~~UsesGraph_edge17" class="edge">
+<title>module~guess&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M676.8974,-373.004C661.3208,-378.0491 641.3953,-384.5027 623.7073,-390.2316"/>
+<polygon fill="#000000" stroke="#000000" points="622.5876,-386.9152 614.1526,-393.3262 624.7445,-393.5746 622.5876,-386.9152"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~guess_json~~UsesGraph_edge21" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-487.9088C260.2091,-492.7105 239.9474,-498.6048 221.6923,-503.9154"/>
+<polygon fill="#000000" stroke="#000000" points="220.7019,-500.5583 212.0776,-506.7124 222.6572,-507.2797 220.7019,-500.5583"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge22" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7806,-468.9762C267.4698,-465.0583 257.9932,-459.6321 251,-452.2259 199.4874,-397.671 181.0422,-306.1995 175.0733,-264.3442"/>
+<polygon fill="#000000" stroke="#000000" points="178.5359,-263.8298 173.7573,-254.3738 171.5961,-264.7458 178.5359,-263.8298"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~guess_json~~UsesGraph_node12" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-488.2259 130,-488.2259 130,-464.2259 215,-464.2259 215,-488.2259"/>
+<text text-anchor="middle" x="172.5" y="-473.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~guess_json~~UsesGraph_edge19" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-477.7417C261.2346,-477.5166 242.4505,-477.2433 225.1166,-476.9912"/>
+<polygon fill="#000000" stroke="#000000" points="225.164,-473.4916 215.1141,-476.8457 225.0621,-480.4909 225.164,-473.4916"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~guess_json~~UsesGraph_node13" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-446.2259 136.5,-446.2259 136.5,-422.2259 208.5,-422.2259 208.5,-446.2259"/>
+<text text-anchor="middle" x="172.5" y="-431.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~guess_json~~UsesGraph_edge20" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-467.5747C259.2532,-461.9869 237.5879,-455.054 218.5419,-448.9593"/>
+<polygon fill="#000000" stroke="#000000" points="219.448,-445.5744 208.857,-445.8601 217.3145,-452.2414 219.448,-445.5744"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_node14" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~guess_json~~UsesGraph_node14"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214.5,-52.2259 130.5,-52.2259 130.5,-28.2259 214.5,-28.2259 214.5,-52.2259"/>
+<text text-anchor="middle" x="172.5" y="-37.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_edge23" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M529.4785,-28.2082C475.342,-16.5112 387.1424,-.4562 310,-.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-.2259C273.6985,.6776 234.0601,-12.4713 206.7099,-23.9313"/>
+<polygon fill="#000000" stroke="#000000" points="205.0001,-20.8578 197.2185,-28.0479 207.7855,-27.2798 205.0001,-20.8578"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~guess_json~~UsesGraph_node21" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="473.5,-52.2259 415.5,-52.2259 415.5,-28.2259 473.5,-28.2259 473.5,-52.2259"/>
+<text text-anchor="middle" x="444.5" y="-37.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~guess_json~~UsesGraph_edge24" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M519.6601,-40.2259C507.5475,-40.2259 495.1284,-40.2259 483.9633,-40.2259"/>
+<polygon fill="#000000" stroke="#000000" points="483.6937,-36.726 473.6937,-40.2259 483.6936,-43.726 483.6937,-36.726"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge27" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7735,-133.2488C272.2703,-137.4674 260.5188,-143.1425 251,-150.2259 224.1228,-170.2264 200.2536,-201.0359 186.0843,-221.41"/>
+<polygon fill="#000000" stroke="#000000" points="183.0008,-219.7208 180.2807,-229.9605 188.7927,-223.652 183.0008,-219.7208"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_edge25" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7526,-117.7681C272.2465,-114.4751 260.4985,-109.7529 251,-103.2259 230.7374,-89.3021 234.414,-76.3103 215,-61.2259 213.3915,-59.9761 211.6968,-58.7717 209.9476,-57.6156"/>
+<polygon fill="#000000" stroke="#000000" points="211.2812,-54.3375 200.8938,-52.2507 207.7127,-60.3596 211.2812,-54.3375"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~guess_json~~UsesGraph_edge26" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.7596,-122.3815C246.5977,-120.907 181.3322,-121.6707 130,-141.2259 105.6656,-150.4961 82.1599,-168.957 66.4137,-183.1534"/>
+<polygon fill="#000000" stroke="#000000" points="63.864,-180.7449 58.9234,-190.1173 68.6304,-185.8715 63.864,-180.7449"/>
+</g>
+<!-- mpi -->
+<g id="proc~~guess_json~~UsesGraph_node20" class="node">
+<title>mpi</title>
+<g id="a_proc~~guess_json~~UsesGraph_node20"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199.5,-174.2259 145.5,-174.2259 145.5,-150.2259 199.5,-150.2259 199.5,-174.2259"/>
+<text text-anchor="middle" x="172.5" y="-159.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~guess_json~~UsesGraph_edge28" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-131.7334C261.8362,-137.5366 232.5476,-145.6309 209.4233,-152.0216"/>
+<polygon fill="#000000" stroke="#000000" points="208.3155,-148.6965 199.6091,-154.7339 210.1802,-155.4436 208.3155,-148.6965"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~guess_json~~UsesGraph_edge29" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-232.4408C127.617,-227.9205 110.4491,-222.4487 94.6413,-217.4104"/>
+<polygon fill="#000000" stroke="#000000" points="95.604,-214.0438 85.0134,-214.3417 93.4782,-220.7132 95.604,-214.0438"/>
+</g>
+<!-- module~printing&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge30" class="edge">
+<title>module~printing&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M678.7003,-254.2723C654.2292,-264.9868 615.77,-279.3885 580.5,-282.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M580.5,-282.2259C434.2847,-293.9885 395.8258,-286.5231 251,-263.2259 238.486,-261.2128 225.087,-258.0262 212.9655,-254.7377"/>
+<polygon fill="#000000" stroke="#000000" points="213.7053,-251.3101 203.1313,-251.975 211.812,-258.0493 213.7053,-251.3101"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~guess_json~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M553.3052,-170.2243C535.0366,-175.5975 510.5325,-182.8045 489.4042,-189.0187"/>
+<polygon fill="#000000" stroke="#000000" points="488.2641,-185.7057 479.6581,-191.8853 490.2393,-192.4213 488.2641,-185.7057"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~guess_json~~UsesGraph_edge35" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-80.2259C442.0842,-79.3723 385.6772,-98.3242 346.6876,-111.626"/>
+<polygon fill="#000000" stroke="#000000" points="345.5245,-108.3247 337.1937,-114.8706 347.7883,-114.9486 345.5245,-108.3247"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge36" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M553.4789,-159.7468C495.9339,-155.446 357.8185,-150.362 251,-188.2259 229.4952,-195.8487 208.3755,-210.9331 193.4686,-223.2259"/>
+<polygon fill="#000000" stroke="#000000" points="190.7898,-220.9106 185.4536,-230.0635 195.3329,-226.236 190.7898,-220.9106"/>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_edge31" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M565.2357,-150.1256C541.1274,-131.7141 492.0725,-97.0344 444.5,-80.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-80.2259C426.1319,-73.736 420.4463,-73.0968 405,-61.2259 385.5064,-46.2444 389.4719,-32.84 369,-19.2259 346.0609,-3.971 337.5399,-.9113 310,-.2259"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~guess_json~~UsesGraph_edge32" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-80.2259C418.457,-71.0242 389.1003,-62.1272 364.4733,-55.0699"/>
+<polygon fill="#000000" stroke="#000000" points="365.1603,-51.6267 354.5845,-52.2616 363.248,-58.3604 365.1603,-51.6267"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~guess_json~~UsesGraph_node18" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~guess_json~~UsesGraph_node18"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="345.5,-94.2259 274.5,-94.2259 274.5,-70.2259 345.5,-70.2259 345.5,-94.2259"/>
+<text text-anchor="middle" x="310" y="-79.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~guess_json~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.5,-80.2259C416.2164,-70.2326 382.4543,-70.7712 355.8319,-73.7887"/>
+<polygon fill="#000000" stroke="#000000" points="355.1076,-70.353 345.6371,-75.1025 356.0024,-77.2956 355.1076,-70.353"/>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~guess_json~~UsesGraph_edge37" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M569.9012,-150.2241C552.8325,-131.246 517.743,-93.6506 484,-66.2259 480.6313,-63.488 476.9691,-60.7719 473.2784,-58.1854"/>
+<polygon fill="#000000" stroke="#000000" points="474.9893,-55.118 464.7394,-52.4363 471.0798,-60.9246 474.9893,-55.118"/>
+</g>
+<!-- module~util&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge38" class="edge">
+<title>module~util&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M680.6351,-334.3488C656.3561,-345.9326 616.8911,-361.9605 580.5,-364.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M580.5,-364.2259C520.4903,-367.9615 364.7968,-382.9733 310,-358.2259"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-358.2259C260.2889,-334.2464 213.6876,-288.0965 189.5912,-261.8118"/>
+<polygon fill="#000000" stroke="#000000" points="192.1514,-259.4245 182.857,-254.3388 186.9512,-264.1106 192.1514,-259.4245"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_edge39" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8896,-40.2259C242.1961,-40.2259 233.2927,-40.2259 224.7506,-40.2259"/>
+<polygon fill="#000000" stroke="#000000" points="224.5485,-36.726 214.5485,-40.2259 224.5484,-43.726 224.5485,-36.726"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge40" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.7624,-242.2259C258.4775,-242.2259 233.7931,-242.2259 213.1757,-242.2259"/>
+<polygon fill="#000000" stroke="#000000" points="213.1198,-238.726 203.1198,-242.2259 213.1197,-245.726 213.1198,-238.726"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge42" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.3656,-89.7657C265.9627,-92.8551 257.554,-97.1818 251,-103.2259 222.3377,-129.6582 234.4932,-149.4588 215,-183.2259 207.2311,-196.6836 197.1072,-210.8403 188.6892,-221.9125"/>
+<polygon fill="#000000" stroke="#000000" points="185.7366,-220.0089 182.3815,-230.0585 191.2713,-224.2946 185.7366,-220.0089"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~guess_json~~UsesGraph_edge41" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-71.3005C258.2684,-66.4242 239.1949,-60.5981 221.9,-55.3153"/>
+<polygon fill="#000000" stroke="#000000" points="222.5458,-51.853 211.9595,-52.279 220.5008,-58.5477 222.5458,-51.853"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~guess_json~~UsesGraph_node24" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="213,-94.2259 132,-94.2259 132,-70.2259 213,-70.2259 213,-94.2259"/>
+<text text-anchor="middle" x="172.5" y="-79.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~guess_json~~UsesGraph_edge43" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-82.2259C258.813,-82.2259 240.4926,-82.2259 223.6759,-82.2259"/>
+<polygon fill="#000000" stroke="#000000" points="223.4389,-78.726 213.4389,-82.2259 223.4389,-85.726 223.4389,-78.726"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~guess_json~~UsesGraph_node22" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~guess_json~~UsesGraph_node22"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="477.5,-452.2259 411.5,-452.2259 411.5,-428.2259 477.5,-428.2259 477.5,-452.2259"/>
+<text text-anchor="middle" x="444.5" y="-437.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~guess_json~~UsesGraph_edge44" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M546.882,-413.1247C528.9305,-417.8766 506.6408,-423.7768 487.4469,-428.8576"/>
+<polygon fill="#000000" stroke="#000000" points="486.5027,-425.4869 477.7313,-431.4294 488.294,-432.2538 486.5027,-425.4869"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~guess_json~~UsesGraph_node23" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~guess_json~~UsesGraph_node23"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="484,-410.2259 405,-410.2259 405,-386.2259 484,-386.2259 484,-410.2259"/>
+<text text-anchor="middle" x="444.5" y="-395.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~guess_json~~UsesGraph_edge45" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M546.882,-402.7427C530.9695,-402.0407 511.6483,-401.1883 494.0961,-400.4139"/>
+<polygon fill="#000000" stroke="#000000" points="494.1498,-396.913 484.0052,-399.9687 493.8412,-403.9062 494.1498,-396.913"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~guess_json~~UsesGraph_edge47" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.2528,-449.6191C393.7126,-454.5747 371.9845,-460.7135 353.1588,-466.0323"/>
+<polygon fill="#000000" stroke="#000000" points="352.0025,-462.7219 343.3309,-468.809 353.9058,-469.4582 352.0025,-462.7219"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge48" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.1954,-445.9522C369.5663,-451.1854 298.0744,-453.6012 251,-419.2259 199.8526,-381.8763 181.4718,-303.635 175.3309,-264.9194"/>
+<polygon fill="#000000" stroke="#000000" points="178.7464,-264.0828 173.8504,-254.6871 171.8185,-265.0852 178.7464,-264.0828"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~guess_json~~UsesGraph_node25" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~guess_json~~UsesGraph_node25"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="353.5,-410.2259 266.5,-410.2259 266.5,-386.2259 353.5,-386.2259 353.5,-410.2259"/>
+<text text-anchor="middle" x="310" y="-395.8259" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~guess_json~~UsesGraph_edge46" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.2528,-429.8438C395.2375,-424.8428 375.7307,-418.7514 358.1297,-413.2552"/>
+<polygon fill="#000000" stroke="#000000" points="359.1704,-409.9136 348.5817,-410.2737 357.0839,-416.5954 359.1704,-409.9136"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~guess_json~~UsesGraph_edge50" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.9646,-410.4057C415.6756,-413.2349 410.1159,-416.2817 405,-419.2259 381.8623,-432.5413 356.1733,-448.5737 337.3486,-460.5632"/>
+<polygon fill="#000000" stroke="#000000" points="335.2387,-457.758 328.7001,-466.0946 339.0103,-463.6551 335.2387,-457.758"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~guess_json~~UsesGraph_edge51" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.6601,-386.968C368.2599,-376.5857 318.7976,-362.1991 310,-358.2259"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~guess_json~~UsesGraph_edge49" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.873,-398.2259C392.0293,-398.2259 377.5585,-398.2259 363.8603,-398.2259"/>
+<polygon fill="#000000" stroke="#000000" points="363.5754,-394.726 353.5754,-398.2259 363.5754,-401.726 363.5754,-394.726"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocguess_jsonUsesGraph = svgPanZoom('#procguess_jsonUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~52"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~guess_json~~CallsGraph Pages: 1 -->
+<svg id="procguess_jsonCallsGraph" width="641pt" height="479pt"
+ viewBox="0.00 0.00 641.00 478.80" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~guess_json~~CallsGraph" class="graph" transform="scale(.6488 .6488) rotate(0) translate(4 734)">
+<title>proc~~guess_json~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-734 984,-734 984,4 -4,4"/>
+<!-- proc~guess_json -->
+<g id="proc~~guess_json~~CallsGraph_node1" class="node">
+<title>proc~guess_json</title>
+<polygon fill="none" stroke="#000000" points="70,-310 0,-310 0,-286 70,-286 70,-310"/>
+<text text-anchor="middle" x="35" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">guess_json</text>
+</g>
+<!-- interface~data_has_tags -->
+<g id="proc~~guess_json~~CallsGraph_node2" class="node">
+<title>interface~data_has_tags</title>
+<g id="a_proc~~guess_json~~CallsGraph_node2"><a xlink:href="../interface/data_has_tags.html" xlink:title="data_has_tags">
+<polygon fill="#a7506f" stroke="#a7506f" points="212,-541 124,-541 124,-517 212,-517 212,-541"/>
+<text text-anchor="middle" x="168" y="-526.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">data_has_tags</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;interface~data_has_tags -->
+<g id="proc~~guess_json~~CallsGraph_edge1" class="edge">
+<title>proc~guess_json&#45;&gt;interface~data_has_tags</title>
+<path fill="none" stroke="#000000" d="M35.504,-310.113C37.6382,-345.6462 48.7314,-450.6998 106,-508 108.6461,-510.6476 111.6377,-512.9615 114.842,-514.9838"/>
+<polygon fill="#000000" stroke="#000000" points="113.2535,-518.103 123.7296,-519.6847 116.5264,-511.9153 113.2535,-518.103"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~guess_json~~CallsGraph_node3" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~guess_json~~CallsGraph_node3"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="223,-499 113,-499 113,-475 223,-475 223,-499"/>
+<text text-anchor="middle" x="168" y="-484.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~guess_json~~CallsGraph_edge2" class="edge">
+<title>proc~guess_json&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M36.6693,-310.085C41.5255,-340.6638 58.4499,-421.8122 106,-466 107.3164,-467.2233 108.7067,-468.3756 110.1567,-469.461"/>
+<polygon fill="#000000" stroke="#000000" points="108.6772,-472.6626 119.0168,-474.9745 112.3756,-466.7194 108.6772,-472.6626"/>
+</g>
+<!-- none~barrier -->
+<g id="proc~~guess_json~~CallsGraph_node4" class="node">
+<title>none~barrier</title>
+<g id="a_proc~~guess_json~~CallsGraph_node4"><a xlink:href="../type/par_env_t.html#boundprocedure-barrier" xlink:title="par_env_t%barrier">
+<polygon fill="#a7506f" stroke="#a7506f" points="223.5,-457 112.5,-457 112.5,-433 223.5,-433 223.5,-457"/>
+<text text-anchor="middle" x="168" y="-442.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%barrier</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;none~barrier -->
+<g id="proc~~guess_json~~CallsGraph_edge3" class="edge">
+<title>proc~guess_json&#45;&gt;none~barrier</title>
+<path fill="none" stroke="#000000" d="M38.6283,-310.3441C46.6205,-335.4193 68.1108,-392.5935 106,-424 107.7417,-425.4437 109.5874,-426.7899 111.5104,-428.0449"/>
+<polygon fill="#000000" stroke="#000000" points="109.9169,-431.1638 120.3542,-432.9841 113.3302,-425.0523 109.9169,-431.1638"/>
+</g>
+<!-- none~bcast -->
+<g id="proc~~guess_json~~CallsGraph_node5" class="node">
+<title>none~bcast</title>
+<g id="a_proc~~guess_json~~CallsGraph_node5"><a xlink:href="../type/par_env_t.html#boundprocedure-bcast" xlink:title="par_env_t%bcast">
+<polygon fill="#a7506f" stroke="#a7506f" points="219.5,-415 116.5,-415 116.5,-391 219.5,-391 219.5,-415"/>
+<text text-anchor="middle" x="168" y="-400.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%bcast</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;none~bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge4" class="edge">
+<title>proc~guess_json&#45;&gt;none~bcast</title>
+<path fill="none" stroke="#000000" d="M50.2568,-310.0448C73.2835,-328.2238 117.1093,-362.8231 144.3112,-384.2983"/>
+<polygon fill="#000000" stroke="#000000" points="142.4939,-387.3228 152.5115,-390.7722 146.8314,-381.8286 142.4939,-387.3228"/>
+</g>
+<!-- none~init~14 -->
+<g id="proc~~guess_json~~CallsGraph_node6" class="node">
+<title>none~init~14</title>
+<g id="a_proc~~guess_json~~CallsGraph_node6"><a xlink:href="../type/par_env_t.html#boundprocedure-init~14" xlink:title="par_env_t%init">
+<polygon fill="#a7506f" stroke="#a7506f" points="213.5,-310 122.5,-310 122.5,-286 213.5,-286 213.5,-310"/>
+<text text-anchor="middle" x="168" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%init</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;none~init~14 -->
+<g id="proc~~guess_json~~CallsGraph_edge5" class="edge">
+<title>proc~guess_json&#45;&gt;none~init~14</title>
+<path fill="none" stroke="#000000" d="M70.2924,-298C83.173,-298 98.0739,-298 112.2976,-298"/>
+<polygon fill="#000000" stroke="#000000" points="112.4964,-301.5001 122.4964,-298 112.4963,-294.5001 112.4964,-301.5001"/>
+</g>
+<!-- proc~get_ab_initio_density -->
+<g id="proc~~guess_json~~CallsGraph_node7" class="node">
+<title>proc~get_ab_initio_density</title>
+<g id="a_proc~~guess_json~~CallsGraph_node7"><a xlink:href="../proc/get_ab_initio_density.html" xlink:title="get_ab_initio_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="230,-268 106,-268 106,-244 230,-244 230,-268"/>
+<text text-anchor="middle" x="168" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_density</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~guess_json~~CallsGraph_edge6" class="edge">
+<title>proc~guess_json&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M70.2924,-286.855C85.4601,-282.0652 103.4291,-276.3908 119.795,-271.2226"/>
+<polygon fill="#000000" stroke="#000000" points="121.2567,-274.4315 129.7386,-268.0826 119.1488,-267.7564 121.2567,-274.4315"/>
+</g>
+<!-- proc~measure_time -->
+<g id="proc~~guess_json~~CallsGraph_node8" class="node">
+<title>proc~measure_time</title>
+<g id="a_proc~~guess_json~~CallsGraph_node8"><a xlink:href="../proc/measure_time.html" xlink:title="measure_time">
+<polygon fill="#d9534f" stroke="#d9534f" points="212.5,-226 123.5,-226 123.5,-202 212.5,-202 212.5,-226"/>
+<text text-anchor="middle" x="168" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">measure_time</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~measure_time -->
+<g id="proc~~guess_json~~CallsGraph_edge7" class="edge">
+<title>proc~guess_json&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M45.9144,-285.714C58.9638,-271.6911 82.0596,-248.9044 106,-235 109.0403,-233.2342 112.2513,-231.5885 115.5473,-230.0597"/>
+<polygon fill="#000000" stroke="#000000" points="117.1484,-233.1825 124.9899,-226.0578 114.4169,-226.7374 117.1484,-233.1825"/>
+</g>
+<!-- proc~print_module_info -->
+<g id="proc~~guess_json~~CallsGraph_node9" class="node">
+<title>proc~print_module_info</title>
+<g id="a_proc~~guess_json~~CallsGraph_node9"><a xlink:href="../proc/print_module_info.html" xlink:title="print_module_info">
+<polygon fill="#d9534f" stroke="#d9534f" points="222.5,-184 113.5,-184 113.5,-160 222.5,-160 222.5,-184"/>
+<text text-anchor="middle" x="168" y="-169.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">print_module_info</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~print_module_info -->
+<g id="proc~~guess_json~~CallsGraph_edge8" class="edge">
+<title>proc~guess_json&#45;&gt;proc~print_module_info</title>
+<path fill="none" stroke="#000000" d="M40.0943,-285.7162C49.7462,-263.9095 72.751,-218.3499 106,-193 108.0165,-191.4626 110.1525,-190.0336 112.3718,-188.7059"/>
+<polygon fill="#000000" stroke="#000000" points="114.0165,-191.7956 121.2684,-184.0715 110.7825,-185.5874 114.0165,-191.7956"/>
+</g>
+<!-- reserve_data -->
+<g id="proc~~guess_json~~CallsGraph_node10" class="node">
+<title>reserve_data</title>
+<polygon fill="#777777" stroke="#777777" points="209,-142 127,-142 127,-118 209,-118 209,-142"/>
+<text text-anchor="middle" x="168" y="-127.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">reserve_data</text>
+</g>
+<!-- proc~guess_json&#45;&gt;reserve_data -->
+<g id="proc~~guess_json~~CallsGraph_edge9" class="edge">
+<title>proc~guess_json&#45;&gt;reserve_data</title>
+<path fill="none" stroke="#000000" d="M37.5123,-285.7834C43.888,-257.8298 63.3118,-188.7219 106,-151 109.4463,-147.9546 113.3524,-145.3473 117.4868,-143.1156"/>
+<polygon fill="#000000" stroke="#000000" points="119.2032,-146.1781 126.8124,-138.8059 116.2666,-139.8238 119.2032,-146.1781"/>
+</g>
+<!-- mpi_barrier -->
+<g id="proc~~guess_json~~CallsGraph_node12" class="node">
+<title>mpi_barrier</title>
+<polygon fill="#777777" stroke="#777777" points="418,-730 343,-730 343,-706 418,-706 418,-730"/>
+<text text-anchor="middle" x="380.5" y="-715.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_barrier</text>
+</g>
+<!-- none~barrier&#45;&gt;mpi_barrier -->
+<g id="proc~~guess_json~~CallsGraph_edge10" class="edge">
+<title>none~barrier&#45;&gt;mpi_barrier</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.3913,-457.0119C223.3713,-459.4724 227.0004,-462.4345 230,-466 296.891,-545.5113 193.5181,-622.5499 266,-697 283.0701,-714.5336 309.6071,-720.1791 332.8371,-721.2597"/>
+<polygon fill="#000000" stroke="#000000" points="332.8225,-724.76 342.8913,-721.4632 332.9642,-717.7614 332.8225,-724.76"/>
+</g>
+<!-- none~par_env_t_bcast_byte -->
+<g id="proc~~guess_json~~CallsGraph_node15" class="node">
+<title>none~par_env_t_bcast_byte</title>
+<g id="a_proc~~guess_json~~CallsGraph_node15"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_byte" xlink:title="par_env_t%par_env_t_bcast_byte">
+<polygon fill="#a7506f" stroke="#a7506f" points="474.5,-268 286.5,-268 286.5,-244 474.5,-244 474.5,-268"/>
+<text text-anchor="middle" x="380.5" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_byte</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_byte -->
+<g id="proc~~guess_json~~CallsGraph_edge11" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_byte</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M177.0568,-390.8818C200.16,-360.0342 259.8999,-280.7029 266,-277 269.4485,-274.9067 273.0553,-273.0121 276.7748,-271.2981"/>
+<polygon fill="#000000" stroke="#000000" points="278.3172,-274.448 286.2267,-267.3988 275.6476,-267.977 278.3172,-274.448"/>
+</g>
+<!-- none~par_env_t_bcast_c_bool -->
+<g id="proc~~guess_json~~CallsGraph_node16" class="node">
+<title>none~par_env_t_bcast_c_bool</title>
+<g id="a_proc~~guess_json~~CallsGraph_node16"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_c_bool" xlink:title="par_env_t%par_env_t_bcast_c_bool">
+<polygon fill="#a7506f" stroke="#a7506f" points="480,-688 281,-688 281,-664 480,-664 480,-688"/>
+<text text-anchor="middle" x="380.5" y="-673.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_c_bool</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_c_bool -->
+<g id="proc~~guess_json~~CallsGraph_edge12" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_c_bool</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.3913,-415.0119C223.3713,-417.4724 227.0004,-420.4345 230,-424 296.891,-503.5113 193.5181,-580.5499 266,-655 267.912,-656.964 269.9428,-658.7788 272.0745,-660.4547"/>
+<polygon fill="#000000" stroke="#000000" points="270.4981,-663.6106 280.7584,-666.2523 274.3849,-657.7888 270.4981,-663.6106"/>
+</g>
+<!-- none~par_env_t_bcast_dp_1d -->
+<g id="proc~~guess_json~~CallsGraph_node17" class="node">
+<title>none~par_env_t_bcast_dp_1d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node17"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_1d" xlink:title="par_env_t%par_env_t_bcast_dp_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="479,-646 282,-646 282,-622 479,-622 479,-646"/>
+<text text-anchor="middle" x="380.5" y="-631.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_1d -->
+<g id="proc~~guess_json~~CallsGraph_edge13" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.2654,-415.1196C223.2713,-417.5579 226.9409,-420.4854 230,-424 286.1406,-488.4999 205.329,-552.742 266,-613 268.2181,-615.203 270.5862,-617.2165 273.0781,-619.0553"/>
+<polygon fill="#000000" stroke="#000000" points="271.6601,-622.2979 281.9893,-624.6555 275.3849,-616.3711 271.6601,-622.2979"/>
+</g>
+<!-- none~par_env_t_bcast_dp_2d -->
+<g id="proc~~guess_json~~CallsGraph_node18" class="node">
+<title>none~par_env_t_bcast_dp_2d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node18"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_2d" xlink:title="par_env_t%par_env_t_bcast_dp_2d">
+<polygon fill="#a7506f" stroke="#a7506f" points="479,-604 282,-604 282,-580 479,-580 479,-604"/>
+<text text-anchor="middle" x="380.5" y="-589.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_2d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_2d -->
+<g id="proc~~guess_json~~CallsGraph_edge14" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_2d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M218.7778,-415.1152C222.9374,-417.5535 226.7738,-420.4823 230,-424 275.4641,-473.5728 217.06,-524.8554 266,-571 268.2401,-573.1122 270.6191,-575.0473 273.1125,-576.8191"/>
+<polygon fill="#000000" stroke="#000000" points="271.6348,-580.0172 281.9953,-582.2329 275.2779,-574.0399 271.6348,-580.0172"/>
+</g>
+<!-- none~par_env_t_bcast_dp_3d -->
+<g id="proc~~guess_json~~CallsGraph_node19" class="node">
+<title>none~par_env_t_bcast_dp_3d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node19"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_3d" xlink:title="par_env_t%par_env_t_bcast_dp_3d">
+<polygon fill="#a7506f" stroke="#a7506f" points="479,-562 282,-562 282,-538 479,-538 479,-562"/>
+<text text-anchor="middle" x="380.5" y="-547.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_3d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_3d -->
+<g id="proc~~guess_json~~CallsGraph_edge15" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_3d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M217.847,-415.0912C222.3014,-417.5343 226.4576,-420.4708 230,-424 264.9487,-458.8191 228.6179,-496.8075 266,-529 268.2612,-530.9473 270.6425,-532.7398 273.1225,-534.389"/>
+<polygon fill="#000000" stroke="#000000" points="271.4936,-537.4899 281.9036,-539.46 274.9943,-531.4281 271.4936,-537.4899"/>
+</g>
+<!-- none~par_env_t_bcast_dp_4d -->
+<g id="proc~~guess_json~~CallsGraph_node20" class="node">
+<title>none~par_env_t_bcast_dp_4d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node20"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_4d" xlink:title="par_env_t%par_env_t_bcast_dp_4d">
+<polygon fill="#a7506f" stroke="#a7506f" points="479,-520 282,-520 282,-496 479,-496 479,-520"/>
+<text text-anchor="middle" x="380.5" y="-505.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_4d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_4d -->
+<g id="proc~~guess_json~~CallsGraph_edge16" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_4d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M215.6249,-415.0412C220.778,-417.5044 225.7021,-420.4592 230,-424 254.8901,-444.5057 239.6882,-468.3536 266,-487 268.1642,-488.5337 270.4075,-489.9654 272.716,-491.3014"/>
+<polygon fill="#000000" stroke="#000000" points="271.4163,-494.5674 281.9147,-495.994 274.5973,-488.3319 271.4163,-494.5674"/>
+</g>
+<!-- none~par_env_t_bcast_dp_scalar -->
+<g id="proc~~guess_json~~CallsGraph_node21" class="node">
+<title>none~par_env_t_bcast_dp_scalar</title>
+<g id="a_proc~~guess_json~~CallsGraph_node21"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_dp_scalar" xlink:title="par_env_t%par_env_t_bcast_dp_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="488.5,-478 272.5,-478 272.5,-454 488.5,-454 488.5,-478"/>
+<text text-anchor="middle" x="380.5" y="-463.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_dp_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_dp_scalar -->
+<g id="proc~~guess_json~~CallsGraph_edge17" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_dp_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M207.492,-415.0434C215.07,-417.7266 222.8636,-420.7501 230,-424 246.8576,-431.6768 248.63,-438.5661 266,-445 272.4303,-447.3818 279.1674,-449.5011 286.017,-451.3857"/>
+<polygon fill="#000000" stroke="#000000" points="285.5538,-454.8804 296.1104,-453.9821 287.2977,-448.1011 285.5538,-454.8804"/>
+</g>
+<!-- none~par_env_t_bcast_int32_1d -->
+<g id="proc~~guess_json~~CallsGraph_node22" class="node">
+<title>none~par_env_t_bcast_int32_1d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node22"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int32_1d" xlink:title="par_env_t%par_env_t_bcast_int32_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="486,-436 275,-436 275,-412 486,-412 486,-436"/>
+<text text-anchor="middle" x="380.5" y="-421.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int32_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int32_1d -->
+<g id="proc~~guess_json~~CallsGraph_edge18" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int32_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.7116,-408.1103C233.4174,-409.4648 248.7843,-410.9834 264.4377,-412.5303"/>
+<polygon fill="#000000" stroke="#000000" points="264.4552,-416.049 274.751,-413.5495 265.1437,-409.0829 264.4552,-416.049"/>
+</g>
+<!-- none~par_env_t_bcast_int32_scalar -->
+<g id="proc~~guess_json~~CallsGraph_node23" class="node">
+<title>none~par_env_t_bcast_int32_scalar</title>
+<g id="a_proc~~guess_json~~CallsGraph_node23"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int32_scalar" xlink:title="par_env_t%par_env_t_bcast_int32_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="495,-394 266,-394 266,-370 495,-370 495,-394"/>
+<text text-anchor="middle" x="380.5" y="-379.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int32_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int32_scalar -->
+<g id="proc~~guess_json~~CallsGraph_edge19" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int32_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.7116,-397.8897C230.8595,-396.788 243.1064,-395.5777 255.7126,-394.3319"/>
+<polygon fill="#000000" stroke="#000000" points="256.2781,-397.7932 265.8854,-393.3266 255.5896,-390.8271 256.2781,-397.7932"/>
+</g>
+<!-- none~par_env_t_bcast_int64_1d -->
+<g id="proc~~guess_json~~CallsGraph_node24" class="node">
+<title>none~par_env_t_bcast_int64_1d</title>
+<g id="a_proc~~guess_json~~CallsGraph_node24"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int64_1d" xlink:title="par_env_t%par_env_t_bcast_int64_1d">
+<polygon fill="#a7506f" stroke="#a7506f" points="486,-352 275,-352 275,-328 486,-328 486,-352"/>
+<text text-anchor="middle" x="380.5" y="-337.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int64_1d</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int64_1d -->
+<g id="proc~~guess_json~~CallsGraph_edge20" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int64_1d</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M192.0023,-390.9178C211.5037,-381.5442 239.9503,-368.8628 266,-361 274.2939,-358.4966 283.0207,-356.2428 291.8029,-354.2251"/>
+<polygon fill="#000000" stroke="#000000" points="292.7052,-357.6104 301.7216,-352.0467 291.2036,-350.7734 292.7052,-357.6104"/>
+</g>
+<!-- none~par_env_t_bcast_int64_scalar -->
+<g id="proc~~guess_json~~CallsGraph_node25" class="node">
+<title>none~par_env_t_bcast_int64_scalar</title>
+<g id="a_proc~~guess_json~~CallsGraph_node25"><a xlink:href="../type/par_env_t.html#boundprocedure-par_env_t_bcast_int64_scalar" xlink:title="par_env_t%par_env_t_bcast_int64_scalar">
+<polygon fill="#a7506f" stroke="#a7506f" points="495,-310 266,-310 266,-286 495,-286 495,-310"/>
+<text text-anchor="middle" x="380.5" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">par_env_t%par_env_t_bcast_int64_scalar</text>
+</a>
+</g>
+</g>
+<!-- none~bcast&#45;&gt;none~par_env_t_bcast_int64_scalar -->
+<g id="proc~~guess_json~~CallsGraph_edge21" class="edge">
+<title>none~bcast&#45;&gt;none~par_env_t_bcast_int64_scalar</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M178.3324,-390.7105C194.8124,-371.9915 228.9861,-336.6524 266,-319 270.5576,-316.8264 275.3162,-314.8771 280.1931,-313.1289"/>
+<polygon fill="#000000" stroke="#000000" points="281.2867,-316.4538 289.6959,-310.009 279.1031,-309.803 281.2867,-316.4538"/>
+</g>
+<!-- mpi_comm_rank -->
+<g id="proc~~guess_json~~CallsGraph_node13" class="node">
+<title>mpi_comm_rank</title>
+<polygon fill="#777777" stroke="#777777" points="431,-226 330,-226 330,-202 431,-202 431,-226"/>
+<text text-anchor="middle" x="380.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_comm_rank</text>
+</g>
+<!-- none~init~14&#45;&gt;mpi_comm_rank -->
+<g id="proc~~guess_json~~CallsGraph_edge22" class="edge">
+<title>none~init~14&#45;&gt;mpi_comm_rank</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M213.0671,-285.9648C219.0063,-283.4658 224.8215,-280.5002 230,-277 250.369,-263.2324 244.6861,-247.254 266,-235 282.1875,-225.6933 301.6044,-220.369 319.8113,-217.3647"/>
+<polygon fill="#000000" stroke="#000000" points="320.3776,-220.8193 329.7736,-215.9238 319.3755,-213.8914 320.3776,-220.8193"/>
+</g>
+<!-- mpi_comm_size -->
+<g id="proc~~guess_json~~CallsGraph_node14" class="node">
+<title>mpi_comm_size</title>
+<polygon fill="#777777" stroke="#777777" points="429,-184 332,-184 332,-160 429,-160 429,-184"/>
+<text text-anchor="middle" x="380.5" y="-169.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_comm_size</text>
+</g>
+<!-- none~init~14&#45;&gt;mpi_comm_size -->
+<g id="proc~~guess_json~~CallsGraph_edge23" class="edge">
+<title>none~init~14&#45;&gt;mpi_comm_size</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M213.5255,-287.6317C219.5318,-284.8781 225.2437,-281.3977 230,-277 259.8231,-249.4254 234.2554,-218.3388 266,-193 281.6699,-180.4921 302.3901,-174.5248 321.8931,-171.9072"/>
+<polygon fill="#000000" stroke="#000000" points="322.379,-175.3752 331.9477,-170.8267 321.631,-168.4153 322.379,-175.3752"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~guess_json~~CallsGraph_node11" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~guess_json~~CallsGraph_node11"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="980,-87 887,-87 887,-63 980,-63 980,-87"/>
+<text text-anchor="middle" x="933.5" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;interface~show_message -->
+<g id="proc~~guess_json~~CallsGraph_edge24" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M216.9652,-243.955C221.7008,-241.5006 226.1616,-238.549 230,-235 259.8231,-207.4254 232.7853,-174.3787 266,-151 379.7854,-70.9105 439.3546,-132 578.5,-132 578.5,-132 578.5,-132 694,-132 765.8253,-132 846.5552,-107.4384 893.5493,-90.5614"/>
+<polygon fill="#000000" stroke="#000000" points="894.8596,-93.809 903.0499,-87.0882 892.4561,-87.2345 894.8596,-93.809"/>
+</g>
+<!-- proc~orb_to_dens -->
+<g id="proc~~guess_json~~CallsGraph_node26" class="node">
+<title>proc~orb_to_dens</title>
+<g id="a_proc~~guess_json~~CallsGraph_node26"><a xlink:href="../proc/orb_to_dens.html" xlink:title="orb_to_dens">
+<polygon fill="#d9534f" stroke="#d9534f" points="419,-85 342,-85 342,-61 419,-61 419,-85"/>
+<text text-anchor="middle" x="380.5" y="-70.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orb_to_dens</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens -->
+<g id="proc~~guess_json~~CallsGraph_edge25" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens</title>
+<path fill="none" stroke="#000000" d="M218.265,-243.8549C222.582,-241.4228 226.5934,-238.5036 230,-235 267.9268,-195.9929 229.0179,-157.904 266,-118 283.263,-99.3731 309.191,-88.3415 332.0106,-81.8681"/>
+<polygon fill="#000000" stroke="#000000" points="333.1089,-85.1987 341.899,-79.2838 331.3389,-78.4262 333.1089,-85.1987"/>
+</g>
+<!-- mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_node28" class="node">
+<title>mpi_bcast</title>
+<polygon fill="#777777" stroke="#777777" points="612,-478 545,-478 545,-454 612,-454 612,-478"/>
+<text text-anchor="middle" x="578.5" y="-463.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi_bcast</text>
+</g>
+<!-- none~par_env_t_bcast_byte&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge26" class="edge">
+<title>none~par_env_t_bcast_byte&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M474.5002,-265.1613C481.8531,-268.2349 488.8126,-272.1173 495,-277 548.7964,-319.4532 568.8019,-403.7963 575.4908,-443.8675"/>
+<polygon fill="#000000" stroke="#000000" points="572.0583,-444.5741 577.0413,-453.924 578.9765,-443.5074 572.0583,-444.5741"/>
+</g>
+<!-- none~par_env_t_bcast_c_bool&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge27" class="edge">
+<title>none~par_env_t_bcast_c_bool&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M480.0723,-664.3116C485.3713,-661.7084 490.3991,-658.6307 495,-655 548.7964,-612.5468 568.8019,-528.2037 575.4908,-488.1325"/>
+<polygon fill="#000000" stroke="#000000" points="578.9765,-488.4926 577.0413,-478.076 572.0583,-487.4259 578.9765,-488.4926"/>
+</g>
+<!-- none~par_env_t_bcast_dp_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge28" class="edge">
+<title>none~par_env_t_bcast_dp_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M479.0959,-622.0088C484.7014,-619.4892 490.0577,-616.512 495,-613 538.4206,-582.1453 562.2423,-521.1597 572.4312,-488.2709"/>
+<polygon fill="#000000" stroke="#000000" points="575.9063,-488.86 575.3726,-478.2786 569.1912,-486.8832 575.9063,-488.86"/>
+</g>
+<!-- none~par_env_t_bcast_dp_2d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge29" class="edge">
+<title>none~par_env_t_bcast_dp_2d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M476.1825,-579.9855C482.7596,-577.4995 489.107,-574.5339 495,-571 528.7068,-550.787 554.2582,-511.5976 567.7597,-487.2325"/>
+<polygon fill="#000000" stroke="#000000" points="571.0169,-488.5633 572.6439,-478.0941 564.8434,-485.2637 571.0169,-488.5633"/>
+</g>
+<!-- none~par_env_t_bcast_dp_3d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge30" class="edge">
+<title>none~par_env_t_bcast_dp_3d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.5673,-537.9213C478.3312,-535.476 486.9509,-532.5356 495,-529 519.2111,-518.3652 542.8955,-499.4451 558.8188,-485.1062"/>
+<polygon fill="#000000" stroke="#000000" points="561.4356,-487.4535 566.3999,-478.0937 556.6822,-482.3148 561.4356,-487.4535"/>
+</g>
+<!-- none~par_env_t_bcast_dp_4d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge31" class="edge">
+<title>none~par_env_t_bcast_dp_4d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M450.2769,-495.9496C465.0775,-493.1848 480.5829,-490.1316 495,-487 508.0245,-484.1709 522.1057,-480.7651 534.9274,-477.5274"/>
+<polygon fill="#000000" stroke="#000000" points="536.0733,-480.8471 544.896,-474.9811 534.3408,-474.0649 536.0733,-480.8471"/>
+</g>
+<!-- none~par_env_t_bcast_dp_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge32" class="edge">
+<title>none~par_env_t_bcast_dp_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.7692,-466C505.0286,-466 520.9516,-466 534.7632,-466"/>
+<polygon fill="#000000" stroke="#000000" points="534.884,-469.5001 544.884,-466 534.8839,-462.5001 534.884,-469.5001"/>
+</g>
+<!-- none~par_env_t_bcast_int32_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge33" class="edge">
+<title>none~par_env_t_bcast_int32_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M450.2769,-436.0504C465.0775,-438.8152 480.5829,-441.8684 495,-445 508.0245,-447.8291 522.1057,-451.2349 534.9274,-454.4726"/>
+<polygon fill="#000000" stroke="#000000" points="534.3408,-457.9351 544.896,-457.0189 536.0733,-451.1529 534.3408,-457.9351"/>
+</g>
+<!-- none~par_env_t_bcast_int32_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge34" class="edge">
+<title>none~par_env_t_bcast_int32_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.5673,-394.0787C478.3312,-396.524 486.9509,-399.4644 495,-403 519.2111,-413.6348 542.8955,-432.5549 558.8188,-446.8938"/>
+<polygon fill="#000000" stroke="#000000" points="556.6822,-449.6852 566.3999,-453.9063 561.4356,-444.5465 556.6822,-449.6852"/>
+</g>
+<!-- none~par_env_t_bcast_int64_1d&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge35" class="edge">
+<title>none~par_env_t_bcast_int64_1d&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M476.1825,-352.0145C482.7596,-354.5005 489.107,-357.4661 495,-361 528.7068,-381.213 554.2582,-420.4024 567.7597,-444.7675"/>
+<polygon fill="#000000" stroke="#000000" points="564.8434,-446.7363 572.6439,-453.9059 571.0169,-443.4367 564.8434,-446.7363"/>
+</g>
+<!-- none~par_env_t_bcast_int64_scalar&#45;&gt;mpi_bcast -->
+<g id="proc~~guess_json~~CallsGraph_edge36" class="edge">
+<title>none~par_env_t_bcast_int64_scalar&#45;&gt;mpi_bcast</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M479.3759,-310.1175C484.8798,-312.6102 490.1401,-315.5466 495,-319 538.4206,-349.8547 562.2423,-410.8403 572.4312,-443.7291"/>
+<polygon fill="#000000" stroke="#000000" points="569.1912,-445.1168 575.3726,-453.7214 575.9063,-443.14 569.1912,-445.1168"/>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~guess_json~~CallsGraph_node27" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~guess_json~~CallsGraph_node27"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="617.5,-34 539.5,-34 539.5,-10 617.5,-10 617.5,-34"/>
+<text text-anchor="middle" x="578.5" y="-19.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~orb_to_dens&#45;&gt;interface~pack_matrix -->
+<g id="proc~~guess_json~~CallsGraph_edge37" class="edge">
+<title>proc~orb_to_dens&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M419.1464,-63.0456C450.6952,-54.9194 495.467,-43.3873 529.5248,-34.6148"/>
+<polygon fill="#000000" stroke="#000000" points="530.4635,-37.9874 539.2744,-32.1036 528.7174,-31.2086 530.4635,-37.9874"/>
+</g>
+<!-- proc~oqp_dsyr2k_i64 -->
+<g id="proc~~guess_json~~CallsGraph_node29" class="node">
+<title>proc~oqp_dsyr2k_i64</title>
+<g id="a_proc~~guess_json~~CallsGraph_node29"><a xlink:href="../proc/oqp_dsyr2k_i64.html" xlink:title="oqp_dsyr2k_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="626,-85 531,-85 531,-61 626,-61 626,-85"/>
+<text text-anchor="middle" x="578.5" y="-70.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsyr2k_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64 -->
+<g id="proc~~guess_json~~CallsGraph_edge38" class="edge">
+<title>proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64</title>
+<path fill="none" stroke="#000000" d="M419.1464,-73C447.9871,-73 487.8783,-73 520.5329,-73"/>
+<polygon fill="#000000" stroke="#000000" points="520.8576,-76.5001 530.8576,-73 520.8575,-69.5001 520.8576,-76.5001"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~guess_json~~CallsGraph_node31" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~guess_json~~CallsGraph_node31"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="726,-24 662,-24 662,0 726,0 726,-24"/>
+<text text-anchor="middle" x="694" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~guess_json~~CallsGraph_edge39" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.603,-18.6145C628.6263,-17.6601 640.665,-16.6178 651.8579,-15.6487"/>
+<polygon fill="#000000" stroke="#000000" points="652.1852,-19.1335 661.846,-14.7839 651.5813,-12.1596 652.1852,-19.1335"/>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message -->
+<g id="proc~~guess_json~~CallsGraph_edge41" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M626.1855,-74.3392C637.8961,-74.6137 650.4003,-74.8611 662,-75 736.1662,-75.8881 821.7369,-75.6844 876.6694,-75.3956"/>
+<polygon fill="#000000" stroke="#000000" points="876.917,-78.8943 886.8975,-75.3389 876.8782,-71.8945 876.917,-78.8943"/>
+</g>
+<!-- dsyr2k -->
+<g id="proc~~guess_json~~CallsGraph_node30" class="node">
+<title>dsyr2k</title>
+<polygon fill="#777777" stroke="#777777" points="721,-66 667,-66 667,-42 721,-42 721,-66"/>
+<text text-anchor="middle" x="694" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyr2k</text>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k -->
+<g id="proc~~guess_json~~CallsGraph_edge40" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k</title>
+<path fill="none" stroke="#000000" d="M626.1451,-65.1623C636.3672,-63.4807 647.0252,-61.7275 656.7838,-60.1221"/>
+<polygon fill="#000000" stroke="#000000" points="657.6576,-63.5255 666.9568,-58.4487 656.5213,-56.6184 657.6576,-63.5255"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~guess_json~~CallsGraph_edge42" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M726.3119,-23.6434C737.5365,-27.4973 750.2544,-31.6524 762,-35 799.9706,-45.822 843.2748,-55.9046 876.8689,-63.2398"/>
+<polygon fill="#000000" stroke="#000000" points="876.452,-66.7306 886.9662,-65.4258 877.9332,-59.8891 876.452,-66.7306"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~guess_json~~CallsGraph_node32" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~guess_json~~CallsGraph_node32"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="851,-26 762,-26 762,-2 851,-2 851,-26"/>
+<text text-anchor="middle" x="806.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~guess_json~~CallsGraph_edge43" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M726.238,-12.5731C734.1715,-12.7142 742.8895,-12.8691 751.5657,-13.0234"/>
+<polygon fill="#000000" stroke="#000000" points="751.6215,-16.5248 761.6822,-13.2032 751.746,-9.5259 751.6215,-16.5248"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~guess_json~~CallsGraph_edge45" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M831.5911,-26.0516C850.9859,-35.3672 878.0378,-48.3607 899.3963,-58.6195"/>
+<polygon fill="#000000" stroke="#000000" points="897.9315,-61.7987 908.461,-62.9734 900.9623,-55.4888 897.9315,-61.7987"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~guess_json~~CallsGraph_node33" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="960.5,-26 906.5,-26 906.5,-2 960.5,-2 960.5,-26"/>
+<text text-anchor="middle" x="933.5" y="-11.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~guess_json~~CallsGraph_edge44" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M851.2754,-14C865.9578,-14 882.1068,-14 896.1772,-14"/>
+<polygon fill="#000000" stroke="#000000" points="896.4731,-17.5001 906.4731,-14 896.473,-10.5001 896.4731,-17.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocguess_jsonCallsGraph = svgPanZoom('#procguess_jsonCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~guess_json~~CalledByGraph Pages: 1 -->
+<svg id="procguess_jsonCalledByGraph" width="197pt" height="32pt"
+ viewBox="0.00 0.00 197.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~guess_json~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~guess_json~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 193,-28 193,4 -4,4"/>
+<!-- proc~guess_json -->
+<g id="proc~~guess_json~~CalledByGraph_node1" class="node">
+<title>proc~guess_json</title>
+<polygon fill="none" stroke="#000000" points="189,-24 119,-24 119,0 189,0 189,-24"/>
+<text text-anchor="middle" x="154" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">guess_json</text>
+</g>
+<!-- proc~guess_json_c -->
+<g id="proc~~guess_json~~CalledByGraph_node2" class="node">
+<title>proc~guess_json_c</title>
+<g id="a_proc~~guess_json~~CalledByGraph_node2"><a xlink:href="../proc/guess_json_c.html" xlink:title="guess_json_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="83,-24 0,-24 0,0 83,0 83,-24"/>
+<text text-anchor="middle" x="41.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json_c&#45;&gt;proc~guess_json -->
+<g id="proc~~guess_json~~CalledByGraph_edge1" class="edge">
+<title>proc~guess_json_c&#45;&gt;proc~guess_json</title>
+<path fill="none" stroke="#000000" d="M83.0712,-12C91.437,-12 100.2686,-12 108.7526,-12"/>
+<polygon fill="#000000" stroke="#000000" points="108.8743,-15.5001 118.8743,-12 108.8742,-8.5001 108.8743,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">guess_json</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">IW</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">    </span><span class="k">use </span><span class="n">guess</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">get_ab_initio_density</span>
+<span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<span class="w">    </span><span class="k">use </span><span class="n">printing</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">print_module_info</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;guess_json&quot;</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="p">:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis_file</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">err</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<span class="w">  </span><span class="c">! tagarray</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">Smat</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">dmat_a</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_a</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">dmat_b</span><span class="p">(:),</span><span class="w"> </span><span class="n">mo_b</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">OQP_SM</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+
+<span class="w">  </span><span class="c">! Files open</span>
+<span class="w">  </span><span class="c">! 1. XYZ: Read : Geometric data, ATOMS</span>
+<span class="w">  </span><span class="c">! 3. LOG: Read Write: Main output file</span>
+<span class="w">  </span><span class="c">!</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">print_module_info</span><span class="p">(</span><span class="s2">&quot;Loading JSON&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Using stored SCF guess&quot;</span><span class="p">)</span>
+
+<span class="w">  </span><span class="c">! load basis set</span>
+<span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<span class="w">  </span><span class="c">!  Allocate H, S ,T and D matrices</span>
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">    </span><span class="n">nbf2</span><span class="w"> </span><span class="o">=</span><span class="n">nbf</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+
+<span class="w">    </span><span class="c">! load general data</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_SM</span><span class="p">,</span><span class="w"> </span><span class="n">smat</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! load alpha data</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alpha</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_A</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">mo_a</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! allocate beta</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_DM_B_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_E_MO_B_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">TA_TYPE_REAL64</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_VEC_MO_B_comment</span><span class="p">)</span>
+
+<span class="w">   </span><span class="c">! load beta</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_beta</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_DM_B</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_E_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_b</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_VEC_MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">mo_b</span><span class="p">)</span>
+
+
+<span class="w">  </span><span class="c">!  For ROHF/UHF</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">INFOS</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="n">MO_B</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MO_A</span>
+
+<span class="c">! Calculate Density Matrix</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">rank</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="c">! RHF</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="o">=</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">)</span>
+<span class="w">    </span><span class="c">! ROHF/UHF</span>
+<span class="w">      </span><span class="k">else</span>
+<span class="k">        call </span><span class="n">get_ab_initio_density</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">)</span>
+<span class="w">      </span><span class="k">endif</span>
+<span class="k">    endif</span>
+<span class="w">    </span><span class="c">! Broadcast MO and density matrices to all processes</span>
+<span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">MO_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">*</span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">endif</span>
+<span class="w">    </span><span class="c">! Broadcast the density matrices to all processes</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">control</span><span class="p">%</span><span class="n">scftype</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="k">      call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_A</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">bcast</span><span class="p">(</span><span class="n">Dmat_B</span><span class="p">,</span><span class="w"> </span><span class="n">nbf2</span><span class="p">)</span>
+<span class="w">    </span><span class="k">endif</span>
+<span class="k">    call </span><span class="n">pe</span><span class="p">%</span><span class="n">barrier</span><span class="p">()</span>
+<span class="w">    </span><span class="k">write</span><span class="w"> </span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/x,a,/)&#39;</span><span class="p">)</span><span class="w"> </span><span class="s1">&#39;...... End of initial orbital guess ......&#39;</span>
+<span class="w">    </span><span class="k">call </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="o">=</span><span class="n">iw</span><span class="p">)</span>
+<span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">guess_json</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,758 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>symmetrize_matrix &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>symmetrize_matrix
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">10 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mathlib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mathlib.f90.html'>mathlib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mathlib.html'>mathlib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">symmetrize_matrix</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/symmetrize_matrix.html#src">symmetrize_matrix</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine symmetrize_matrix(a, n)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~symmetrize_matrix~~UsesGraph Pages: 1 -->
+<svg id="procsymmetrize_matrixUsesGraph" width="350pt" height="32pt"
+ viewBox="0.00 0.00 350.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~symmetrize_matrix~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~symmetrize_matrix~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 346,-28 346,4 -4,4"/>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~UsesGraph_node1" class="node">
+<title>proc~symmetrize_matrix</title>
+<polygon fill="none" stroke="#000000" points="342,-24 227,-24 227,0 342,0 342,-24"/>
+<text text-anchor="middle" x="284.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">symmetrize_matrix</text>
+</g>
+<!-- module~precision -->
+<g id="proc~~symmetrize_matrix~~UsesGraph_node2" class="node">
+<title>module~precision</title>
+<g id="a_proc~~symmetrize_matrix~~UsesGraph_node2"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="191,-24 130,-24 130,0 191,0 191,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrix&#45;&gt;module~precision -->
+<g id="proc~~symmetrize_matrix~~UsesGraph_edge1" class="edge">
+<title>proc~symmetrize_matrix&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.8562,-12C218.2291,-12 209.4889,-12 201.3083,-12"/>
+<polygon fill="#000000" stroke="#000000" points="201.2961,-8.5001 191.2961,-12 201.296,-15.5001 201.2961,-8.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~symmetrize_matrix~~UsesGraph_node3" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~symmetrize_matrix~~UsesGraph_node3"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~symmetrize_matrix~~UsesGraph_edge2" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.7853,-12C121.9522,-12 113.2743,-12 104.5707,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3906,-8.5001 94.3906,-12 104.3906,-15.5001 104.3906,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Compute <code>A = A + A^T</code> of a square matrix
+@param[inout] a  square NxN matrix
+@param[in]    n  matrix dimension</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~138"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(n,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~217"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~symmetrize_matrix~~CalledByGraph Pages: 1 -->
+<svg id="procsymmetrize_matrixCalledByGraph" width="641pt" height="232pt"
+ viewBox="0.00 0.00 641.00 232.43" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~symmetrize_matrix~~CalledByGraph" class="graph" transform="scale(.7218 .7218) rotate(0) translate(4 318)">
+<title>proc~~symmetrize_matrix~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-318 884,-318 884,4 -4,4"/>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node1" class="node">
+<title>proc~symmetrize_matrix</title>
+<polygon fill="none" stroke="#000000" points="880,-171 765,-171 765,-147 880,-147 880,-171"/>
+<text text-anchor="middle" x="822.5" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">symmetrize_matrix</text>
+</g>
+<!-- proc~get_spin_square -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node2" class="node">
+<title>proc~get_spin_square</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node2"><a xlink:href="../proc/get_spin_square.html" xlink:title="get_spin_square">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="656.5,-272 557.5,-272 557.5,-248 656.5,-248 656.5,-272"/>
+<text text-anchor="middle" x="607" y="-257.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_spin_square</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge1" class="edge">
+<title>proc~get_spin_square&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M656.7838,-254.742C679.595,-251.0066 706.4995,-244.6756 729,-234 758.0208,-220.2308 786.0381,-195.7987 803.711,-178.5685"/>
+<polygon fill="#000000" stroke="#000000" points="806.465,-180.7648 811.0696,-171.2228 801.5195,-175.8107 806.465,-180.7648"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node3" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node3"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="676.5,-192 537.5,-192 537.5,-168 676.5,-168 676.5,-192"/>
+<text text-anchor="middle" x="607" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge2" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M676.6691,-173.2109C701.7437,-170.7674 729.9759,-168.0163 754.8737,-165.59"/>
+<polygon fill="#000000" stroke="#000000" points="755.3445,-169.0608 764.9579,-164.6074 754.6655,-162.0938 755.3445,-169.0608"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node4" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node4"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="669,-314 545,-314 545,-290 669,-290 669,-314"/>
+<text text-anchor="middle" x="607" y="-299.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge3" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M669.0795,-300.2401C689.3221,-297.4107 711.1586,-291.7839 729,-281 769.0697,-256.7805 798.1339,-208.4531 812.4565,-180.4396"/>
+<polygon fill="#000000" stroke="#000000" points="815.769,-181.6362 817.0593,-171.1202 809.4928,-178.5363 815.769,-181.6362"/>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node5" class="node">
+<title>proc~int2_td_data_t_parallel_stop</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node5"><a xlink:href="../proc/int2_td_data_t_parallel_stop.html" xlink:title="int2_td_data_t%int2_td_data_t_parallel_stop">
+<polygon fill="#d9534f" stroke="#d9534f" points="729,-150 485,-150 485,-126 729,-126 729,-150"/>
+<text text-anchor="middle" x="607" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_td_data_t%int2_td_data_t_parallel_stop</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge4" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M729.2319,-149.9112C737.9153,-150.7574 746.4709,-151.5911 754.6676,-152.3899"/>
+<polygon fill="#000000" stroke="#000000" points="754.5483,-155.8948 764.8407,-153.3812 755.2273,-148.9278 754.5483,-155.8948"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node6" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node6"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="661.5,-108 552.5,-108 552.5,-84 661.5,-84 661.5,-108"/>
+<text text-anchor="middle" x="607" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge5" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M661.7371,-102.4217C683.0148,-105.6935 707.4169,-110.4104 729,-117 750.2532,-123.4889 773.0196,-133.6408 790.766,-142.3383"/>
+<polygon fill="#000000" stroke="#000000" points="789.5575,-145.6471 800.0671,-146.9881 792.6876,-139.3859 789.5575,-145.6471"/>
+</g>
+<!-- proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node7" class="node">
+<title>proc~symmetrize_matrices</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node7"><a xlink:href="../proc/symmetrize_matrices.html" xlink:title="symmetrize_matrices">
+<polygon fill="#d9534f" stroke="#d9534f" points="670.5,-66 543.5,-66 543.5,-42 670.5,-42 670.5,-66"/>
+<text text-anchor="middle" x="607" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrices</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrices&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge6" class="edge">
+<title>proc~symmetrize_matrices&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M670.5191,-58.0993C689.9935,-61.13 711.0126,-66.2846 729,-75 760.6166,-90.3192 789.4469,-119.5936 806.4904,-139.2112"/>
+<polygon fill="#000000" stroke="#000000" points="803.9151,-141.5862 813.0469,-146.9586 809.2585,-137.0642 803.9151,-141.5862"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node8" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node8"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="339.5,-211 263.5,-211 263.5,-187 339.5,-187 339.5,-211"/>
+<text text-anchor="middle" x="301.5" y="-196.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge7" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M339.5137,-204.5657C414.8546,-214.4215 588.0288,-231.2081 729,-201 751.6705,-196.142 775.4836,-185.35 793.4041,-175.9224"/>
+<polygon fill="#000000" stroke="#000000" points="795.0764,-178.9971 802.201,-171.1554 791.7413,-172.8426 795.0764,-178.9971"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M339.5741,-196.6321C386.2203,-193.731 466.4893,-188.7388 526.9454,-184.9788"/>
+<polygon fill="#000000" stroke="#000000" points="527.4651,-188.4534 537.2285,-184.3393 527.0305,-181.4669 527.4651,-188.4534"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node9" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node9"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="649,-24 565,-24 565,0 649,0 649,-24"/>
+<text text-anchor="middle" x="607" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge8" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M649.2751,-11.6161C674.1129,-13.1757 705.2016,-18.3623 729,-33 770.0954,-58.2766 799.0821,-108.8904 813.0439,-137.6823"/>
+<polygon fill="#000000" stroke="#000000" points="809.9401,-139.3074 817.351,-146.879 816.2793,-136.3385 809.9401,-139.3074"/>
+</g>
+<!-- proc~int2_rpagrd_data_t_parallel_stop -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node10" class="node">
+<title>proc~int2_rpagrd_data_t_parallel_stop</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node10"><a xlink:href="../proc/int2_rpagrd_data_t_parallel_stop.html" xlink:title="int2_rpagrd_data_t%int2_rpagrd_data_t_parallel_stop">
+<polygon fill="#d9534f" stroke="#d9534f" points="449,-66 154,-66 154,-42 449,-42 449,-66"/>
+<text text-anchor="middle" x="301.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_rpagrd_data_t%int2_rpagrd_data_t_parallel_stop</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_rpagrd_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrices -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge14" class="edge">
+<title>proc~int2_rpagrd_data_t_parallel_stop&#45;&gt;proc~symmetrize_matrices</title>
+<path fill="none" stroke="#000000" d="M449.3281,-54C478.3761,-54 507.6615,-54 532.9769,-54"/>
+<polygon fill="#000000" stroke="#000000" points="533.2035,-57.5001 543.2035,-54 533.2035,-50.5001 533.2035,-57.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node11" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node11"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-211 14.5,-211 14.5,-187 103.5,-187 103.5,-211"/>
+<text text-anchor="middle" x="59" y="-196.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge15" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.7608,-199C146.2041,-199 209.7822,-199 253.3178,-199"/>
+<polygon fill="#000000" stroke="#000000" points="253.3807,-202.5001 263.3807,-199 253.3807,-195.5001 253.3807,-202.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="350,-24 253,-24 253,0 350,0 350,-24"/>
+<text text-anchor="middle" x="301.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge16" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M350.2452,-12C406.0683,-12 497.184,-12 554.5247,-12"/>
+<polygon fill="#000000" stroke="#000000" points="554.8223,-15.5001 564.8223,-12 554.8222,-8.5001 554.8223,-15.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="354.5,-314 248.5,-314 248.5,-290 354.5,-290 354.5,-314"/>
+<text text-anchor="middle" x="301.5" y="-299.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge11" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M354.714,-302C404.6042,-302 479.5858,-302 534.8461,-302"/>
+<polygon fill="#000000" stroke="#000000" points="534.9245,-305.5001 544.9244,-302 534.9244,-298.5001 534.9245,-305.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node14" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node14"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="347,-272 256,-272 256,-248 347,-248 347,-272"/>
+<text text-anchor="middle" x="301.5" y="-257.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge9" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square</title>
+<path fill="none" stroke="#000000" d="M347.2364,-260C400.4681,-260 488.5446,-260 547.1698,-260"/>
+<polygon fill="#000000" stroke="#000000" points="547.3972,-263.5001 557.3972,-260 547.3972,-256.5001 547.3972,-263.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M347.2364,-266.2878C396.778,-273.0988 476.5009,-284.059 534.5747,-292.043"/>
+<polygon fill="#000000" stroke="#000000" points="534.4063,-295.5527 544.7898,-293.4474 535.3598,-288.6179 534.4063,-295.5527"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="349.5,-108 253.5,-108 253.5,-84 349.5,-84 349.5,-108"/>
+<text text-anchor="middle" x="301.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M349.5704,-96C401.4843,-96 484.4803,-96 542.1447,-96"/>
+<polygon fill="#000000" stroke="#000000" points="542.2454,-99.5001 552.2453,-96 542.2453,-92.5001 542.2454,-99.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node16" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node16"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-314 0,-314 0,-290 118,-290 118,-314"/>
+<text text-anchor="middle" x="59" y="-299.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge17" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.0121,-302C154.4062,-302 201.0643,-302 238.2224,-302"/>
+<polygon fill="#000000" stroke="#000000" points="238.4346,-305.5001 248.4346,-302 238.4346,-298.5001 238.4346,-305.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_node17" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~symmetrize_matrix~~CalledByGraph_node17"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-272 7.5,-272 7.5,-248 110.5,-248 110.5,-272"/>
+<text text-anchor="middle" x="59" y="-257.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~symmetrize_matrix~~CalledByGraph_edge18" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.7249,-260C150.4773,-260 205.2887,-260 245.9634,-260"/>
+<polygon fill="#000000" stroke="#000000" points="245.9822,-263.5001 255.9821,-260 245.9821,-256.5001 245.9822,-263.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocsymmetrize_matrixCalledByGraph = svgPanZoom('#procsymmetrize_matrixCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">symmetrize_matrix</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">n</span>
+<span class="w">      </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">n</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">n</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">:</span><span class="n">n</span><span class="p">)</span>
+<span class="w">      </span><span class="n">a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+<span class="k">  end subroutine </span><span class="n">symmetrize_matrix</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,757 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>iatogen &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>iatogen
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">13 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_lib.f90.html'>tdhf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_lib.html'>tdhf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">iatogen</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/iatogen.html#src">iatogen</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine iatogen(pv, av, nocca, noccb)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~iatogen~~UsesGraph Pages: 1 -->
+<svg id="prociatogenUsesGraph" width="289pt" height="32pt"
+ viewBox="0.00 0.00 289.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~iatogen~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~iatogen~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 285,-28 285,4 -4,4"/>
+<!-- proc~iatogen -->
+<g id="proc~~iatogen~~UsesGraph_node1" class="node">
+<title>proc~iatogen</title>
+<polygon fill="none" stroke="#000000" points="281,-24 227,-24 227,0 281,0 281,-24"/>
+<text text-anchor="middle" x="254" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">iatogen</text>
+</g>
+<!-- module~precision -->
+<g id="proc~~iatogen~~UsesGraph_node2" class="node">
+<title>module~precision</title>
+<g id="a_proc~~iatogen~~UsesGraph_node2"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="191,-24 130,-24 130,0 191,0 191,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~iatogen&#45;&gt;module~precision -->
+<g id="proc~~iatogen~~UsesGraph_edge1" class="edge">
+<title>proc~iatogen&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.9559,-12C218.8928,-12 209.8725,-12 201.1413,-12"/>
+<polygon fill="#000000" stroke="#000000" points="201.0993,-8.5001 191.0992,-12 201.0992,-15.5001 201.0993,-8.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~iatogen~~UsesGraph_node3" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~iatogen~~UsesGraph_node3"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~iatogen~~UsesGraph_edge2" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.7853,-12C121.9522,-12 113.2743,-12 104.5707,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3906,-8.5001 94.3906,-12 104.3906,-15.5001 104.3906,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pv~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              contiguous, target
+            </td>
+            <td>::</td>
+            <td><strong>pv</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-av"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>av</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocca~10"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocca</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noccb~9"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noccb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~iatogen~~CalledByGraph Pages: 1 -->
+<svg id="prociatogenCalledByGraph" width="533pt" height="304pt"
+ viewBox="0.00 0.00 533.00 304.28" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~iatogen~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 300.276)">
+<title>proc~~iatogen~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-300.276 529,-300.276 529,4 -4,4"/>
+<!-- proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_node1" class="node">
+<title>proc~iatogen</title>
+<polygon fill="none" stroke="#000000" points="525,-168 471,-168 471,-144 525,-144 525,-168"/>
+<text text-anchor="middle" x="498" y="-153.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">iatogen</text>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~iatogen~~CalledByGraph_node2" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node2"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="435,-268 296,-268 296,-244 435,-244 435,-268"/>
+<text text-anchor="middle" x="365.5" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge1" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M408.0088,-243.9973C417.3561,-240.3189 426.8793,-235.6969 435,-230 455.5116,-215.6105 473.4255,-193.0148 484.8534,-176.5753"/>
+<polygon fill="#000000" stroke="#000000" points="487.8323,-178.4176 490.5103,-168.1667 482.0243,-174.5102 487.8323,-178.4176"/>
+</g>
+<!-- proc~get_transition_density -->
+<g id="proc~~iatogen~~CalledByGraph_node3" class="node">
+<title>proc~get_transition_density</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node3"><a xlink:href="../proc/get_transition_density.html" xlink:title="get_transition_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="430,-188 301,-188 301,-164 430,-164 430,-188"/>
+<text text-anchor="middle" x="365.5" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_density&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge2" class="edge">
+<title>proc~get_transition_density&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M430.1974,-166.2344C440.7143,-164.6469 451.2834,-163.0516 460.8438,-161.6085"/>
+<polygon fill="#000000" stroke="#000000" points="461.4062,-165.0633 470.7717,-160.1099 460.3613,-158.1417 461.4062,-165.0633"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~iatogen~~CalledByGraph_node4" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node4"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="420,-66 311,-66 311,-42 420,-42 420,-66"/>
+<text text-anchor="middle" x="365.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge3" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M418.3483,-66.13C424.2191,-68.5777 429.908,-71.5045 435,-75 457.6382,-90.5407 475.854,-116.7305 486.7662,-135.1127"/>
+<polygon fill="#000000" stroke="#000000" points="483.7943,-136.9665 491.7916,-143.9159 489.8735,-133.4961 483.7943,-136.9665"/>
+</g>
+<!-- proc~sfdmat -->
+<g id="proc~~iatogen~~CalledByGraph_node5" class="node">
+<title>proc~sfdmat</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node5"><a xlink:href="../proc/sfdmat.html" xlink:title="sfdmat">
+<polygon fill="#d9534f" stroke="#d9534f" points="392.5,-108 338.5,-108 338.5,-84 392.5,-84 392.5,-108"/>
+<text text-anchor="middle" x="365.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sfdmat</text>
+</a>
+</g>
+</g>
+<!-- proc~sfdmat&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge4" class="edge">
+<title>proc~sfdmat&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M392.5813,-105.1576C405.5808,-109.7989 421.2771,-115.7655 435,-122 446.2025,-127.0894 458.1623,-133.3272 468.6183,-139.0641"/>
+<polygon fill="#000000" stroke="#000000" points="466.9237,-142.1265 477.363,-143.9352 470.3301,-136.0112 466.9237,-142.1265"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="245,-269 169,-269 169,-245 245,-245 245,-269"/>
+<text text-anchor="middle" x="207" y="-254.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M234.2804,-269.1218C279.5922,-287.2581 371.6441,-315.4421 435,-277 470.5495,-255.4299 486.9699,-206.5338 493.7787,-177.9387"/>
+<polygon fill="#000000" stroke="#000000" points="497.219,-178.5897 495.9375,-168.0727 490.3808,-177.0934 497.219,-178.5897"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole -->
+<g id="proc~~iatogen~~CalledByGraph_edge9" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M245.3684,-256.7579C257.6066,-256.6807 271.6359,-256.5922 285.6888,-256.5035"/>
+<polygon fill="#000000" stroke="#000000" points="285.9226,-260.0022 295.9003,-256.4391 285.8784,-253.0024 285.9226,-260.0022"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~iatogen~~CalledByGraph_node7" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node7"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="407.5,-24 323.5,-24 323.5,0 407.5,0 407.5,-24"/>
+<text text-anchor="middle" x="365.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge6" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M407.5402,-18.8525C417.325,-21.9539 427.1612,-26.4583 435,-33 466.8734,-59.599 484.4414,-106.4333 492.4809,-133.997"/>
+<polygon fill="#000000" stroke="#000000" points="489.1669,-135.1464 495.1899,-143.8626 495.917,-133.2928 489.1669,-135.1464"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_node8" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node8"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="260,-209 154,-209 154,-185 260,-185 260,-209"/>
+<text text-anchor="middle" x="207" y="-194.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge7" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M260.2915,-205.4209C307.2978,-210.8857 377.1296,-214.1727 435,-197 450.1534,-192.5033 465.0708,-183.0833 476.5833,-174.4055"/>
+<polygon fill="#000000" stroke="#000000" points="478.9992,-176.9571 484.6707,-168.0081 474.6564,-171.4671 478.9992,-176.9571"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_density -->
+<g id="proc~~iatogen~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_density</title>
+<path fill="none" stroke="#000000" d="M260.2191,-189.9489C269.9994,-188.6531 280.3747,-187.2784 290.651,-185.9169"/>
+<polygon fill="#000000" stroke="#000000" points="291.4149,-189.3464 300.8686,-184.5632 290.4955,-182.407 291.4149,-189.3464"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_node9" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node9"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="252.5,-148 161.5,-148 161.5,-124 252.5,-124 252.5,-148"/>
+<text text-anchor="middle" x="207" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~iatogen -->
+<g id="proc~~iatogen~~CalledByGraph_edge8" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~iatogen</title>
+<path fill="none" stroke="#000000" d="M252.7889,-139.147C310.2596,-143.0969 407.7207,-149.7952 460.8172,-153.4445"/>
+<polygon fill="#000000" stroke="#000000" points="460.6035,-156.938 470.82,-154.132 461.0836,-149.9544 460.6035,-156.938"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_transition_density -->
+<g id="proc~~iatogen~~CalledByGraph_edge11" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_transition_density</title>
+<path fill="none" stroke="#000000" d="M252.8448,-147.5697C270.0475,-151.911 289.8207,-156.9011 307.9518,-161.4768"/>
+<polygon fill="#000000" stroke="#000000" points="307.2765,-164.916 317.8289,-163.9694 308.9894,-158.1288 307.2765,-164.916"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~sfdmat -->
+<g id="proc~~iatogen~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~sfdmat</title>
+<path fill="none" stroke="#000000" d="M252.8448,-124.4303C276.7889,-118.3877 305.7127,-111.0883 328.2574,-105.3988"/>
+<polygon fill="#000000" stroke="#000000" points="329.2864,-108.7489 338.126,-102.9083 327.5735,-101.9617 329.2864,-108.7489"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~iatogen~~CalledByGraph_node10" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node10"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-269 14.5,-269 14.5,-245 103.5,-245 103.5,-269"/>
+<text text-anchor="middle" x="59" y="-254.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.8065,-257C121.1599,-257 141.0641,-257 158.7327,-257"/>
+<polygon fill="#000000" stroke="#000000" points="158.8413,-260.5001 168.8412,-257 158.8412,-253.5001 158.8413,-260.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~iatogen~~CalledByGraph_node11" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node11"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="255.5,-24 158.5,-24 158.5,0 255.5,0 255.5,-24"/>
+<text text-anchor="middle" x="207" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~iatogen~~CalledByGraph_edge15" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M255.8485,-12C274.0375,-12 294.7448,-12 313.2288,-12"/>
+<polygon fill="#000000" stroke="#000000" points="313.2388,-15.5001 323.2388,-12 313.2388,-8.5001 313.2388,-15.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~iatogen~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-209 0,-209 0,-185 118,-185 118,-209"/>
+<text text-anchor="middle" x="59" y="-194.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_edge16" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.3445,-197C126.6918,-197 135.2982,-197 143.7157,-197"/>
+<polygon fill="#000000" stroke="#000000" points="143.8594,-200.5001 153.8593,-197 143.8593,-193.5001 143.8594,-200.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~iatogen~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-148 7.5,-148 7.5,-124 110.5,-124 110.5,-148"/>
+<text text-anchor="middle" x="59" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~iatogen~~CalledByGraph_edge17" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.7632,-136C123.7865,-136 137.8227,-136 151.0411,-136"/>
+<polygon fill="#000000" stroke="#000000" points="151.4317,-139.5001 161.4317,-136 151.4316,-132.5001 151.4317,-139.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~iatogen~~CalledByGraph_node14" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~iatogen~~CalledByGraph_node14"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="255,-66 159,-66 159,-42 255,-42 255,-66"/>
+<text text-anchor="middle" x="207" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~iatogen~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M255.4165,-54C269.6185,-54 285.3858,-54 300.446,-54"/>
+<polygon fill="#000000" stroke="#000000" points="300.7314,-57.5001 310.7313,-54 300.7313,-50.5001 300.7314,-57.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">iatogen</span><span class="p">(</span><span class="n">pv</span><span class="p">,</span><span class="n">av</span><span class="p">,</span><span class="n">nocca</span><span class="p">,</span><span class="n">noccb</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">target</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pv</span><span class="p">(:)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">av</span><span class="p">(:,:)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ppv</span><span class="p">(:,:)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span>
+
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">av</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ppv</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">pv</span><span class="p">(:)</span>
+
+<span class="w">    </span><span class="n">av</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">    </span><span class="n">av</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ppv</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">iatogen</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

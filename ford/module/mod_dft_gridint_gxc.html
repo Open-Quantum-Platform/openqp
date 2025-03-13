@@ -1,0 +1,1593 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mod_dft_gridint_gxc &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mod_dft_gridint_gxc
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for modules and submodules.">220 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_gridint_gxc.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/dft_gridint_gxc.f90.html'>dft_gridint_gxc.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mod_dft_gridint_gxc</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint_gxc.html#type-xc_consumer_gxc_t">xc_consumer_gxc_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mod_dft_gridint_gxc.html#proc-tddft_gxc">tddft_gxc</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='mod_dft_gridint_fxc.html'>mod_dft_gridint_fxc</a></li>
+                  <li class="list-inline-item"><a href='mod_dft_gridint.html'>mod_dft_gridint</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='oqp_linalg.html'>oqp_linalg</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_gridint_gxc~~UsesGraph Pages: 1 -->
+<svg id="modulemod_dft_gridint_gxcUsesGraph" width="641pt" height="375pt"
+ viewBox="0.00 0.00 641.00 374.57" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph" class="graph" transform="scale(.5849 .5849) rotate(0) translate(4 636.4454)">
+<title>module~~mod_dft_gridint_gxc~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-636.4454 1092,-636.4454 1092,4 -4,4"/>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node1" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<polygon fill="none" stroke="#000000" points="1088,-127 968,-127 968,-103 1088,-103 1088,-127"/>
+<text text-anchor="middle" x="1028" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_gridint_gxc</text>
+</g>
+<!-- module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node2" class="node">
+<title>module~mod_dft_gridint</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node2"><a xlink:href="../module/mod_dft_gridint.html" xlink:title="mod_dft_gridint">
+<polygon fill="#337ab7" stroke="#337ab7" points="779,-205 683,-205 683,-181 779,-181 779,-205"/>
+<text text-anchor="middle" x="731" y="-190.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge1" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M873.5,-155C842.0344,-161.0349 807.2827,-170.2493 779.9753,-178.093"/>
+<polygon fill="#000000" stroke="#000000" points="778.8978,-174.7612 770.2714,-180.9123 780.8508,-181.4833 778.8978,-174.7612"/>
+</g>
+<!-- module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node3" class="node">
+<title>module~mod_dft_gridint_fxc</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node3"><a xlink:href="../module/mod_dft_gridint_fxc.html" xlink:title="mod_dft_gridint_fxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="932,-127 815,-127 815,-103 932,-103 932,-127"/>
+<text text-anchor="middle" x="873.5" y="-112.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_gridint_fxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge2" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~mod_dft_gridint_fxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M967.8239,-115C959.5112,-115 950.9209,-115 942.4645,-115"/>
+<polygon fill="#000000" stroke="#000000" points="942.2438,-111.5001 932.2438,-115 942.2437,-118.5001 942.2438,-111.5001"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node4" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node4"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="629,-125 562,-125 562,-101 629,-101 629,-125"/>
+<text text-anchor="middle" x="595.5" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~oqp_linalg -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge3" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M982.4298,-102.9296C966.587,-99.2955 948.6227,-95.7969 932,-94 827.2976,-82.682 703.4926,-96.6695 639.1972,-105.9747"/>
+<polygon fill="#000000" stroke="#000000" points="638.4058,-102.5536 629.026,-107.4801 639.4307,-109.4782 638.4058,-102.5536"/>
+</g>
+<!-- module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node5" class="node">
+<title>module~precision</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node5"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-385 142,-385 142,-361 203,-361 203,-385"/>
+<text text-anchor="middle" x="172.5" y="-370.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint_gxc&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge4" class="edge">
+<title>module~mod_dft_gridint_gxc&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M987.336,-127.046C956.3656,-135.8491 912.5483,-147.5107 873.5,-155"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M873.5,-155C752.153,-178.2737 716.5195,-128.079 595.5,-153"/>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~oqp_linalg -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge10" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M713.3089,-180.8635C696.5347,-169.5405 670.4782,-152.4249 647,-139 641.4653,-135.8352 635.4988,-132.6367 629.6574,-129.617"/>
+<polygon fill="#000000" stroke="#000000" points="631.1624,-126.4558 620.6613,-125.0493 627.9933,-132.6974 631.1624,-126.4558"/>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge12" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-191C533.7709,-188.5475 518.2776,-191.1481 456.5,-191"/>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node7" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node7"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="491.5,-567 421.5,-567 421.5,-543 491.5,-543 491.5,-567"/>
+<text text-anchor="middle" x="456.5" y="-552.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~basis_tools -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge5" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-597C576.3801,-603.4001 526.8838,-585.4038 492.4375,-571.0003"/>
+<polygon fill="#000000" stroke="#000000" points="493.731,-567.7471 483.1587,-567.0563 490.9927,-574.1893 493.731,-567.7471"/>
+</g>
+<!-- module~functionals -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node9" class="node">
+<title>module~functionals</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node9"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="345.5,-525 274.5,-525 274.5,-501 345.5,-501 345.5,-525"/>
+<text text-anchor="middle" x="310" y="-510.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~functionals -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge6" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-597C536.9171,-616.6097 517.6768,-605.5962 456.5,-597"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.5,-597C432.0218,-593.5605 425.0506,-590.4563 405,-576 385.0575,-561.6216 389.2626,-547.9238 369,-534 364.7408,-531.0732 360.0293,-528.5093 355.1803,-526.2745"/>
+<polygon fill="#000000" stroke="#000000" points="356.3467,-522.9693 345.7686,-522.3734 353.6663,-529.4358 356.3467,-522.9693"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node10" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node10"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-165 133,-165 133,-141 212,-141 212,-165"/>
+<text text-anchor="middle" x="172.5" y="-150.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge7" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M682.9635,-193.704C657.027,-193.7283 624.4733,-193.1859 595.5,-191"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-191C556.2281,-188.0371 547.1232,-181.5205 508,-177 406.8206,-165.3093 287.7732,-158.408 222.1733,-155.1968"/>
+<polygon fill="#000000" stroke="#000000" points="222.2714,-151.6975 212.1148,-154.7129 221.935,-158.6894 222.2714,-151.6975"/>
+</g>
+<!-- module~mod_dft_molgrid -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node12" class="node">
+<title>module~mod_dft_molgrid</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node12"><a xlink:href="../module/mod_dft_molgrid.html" xlink:title="mod_dft_molgrid">
+<polygon fill="#337ab7" stroke="#337ab7" points="508,-365 405,-365 405,-341 508,-341 508,-365"/>
+<text text-anchor="middle" x="456.5" y="-350.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_molgrid</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge8" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_molgrid</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M729.4198,-205.0555C720.6719,-269.3709 675.6496,-570.1711 595.5,-597"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-597C546.8804,-613.2747 484.3226,-438.0962 463.5504,-375.0779"/>
+<polygon fill="#000000" stroke="#000000" points="466.7993,-373.7512 460.3756,-365.3258 460.1431,-375.9181 466.7993,-373.7512"/>
+</g>
+<!-- module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node13" class="node">
+<title>module~mod_dft_xc_libxc</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node13"><a xlink:href="../module/mod_dft_xc_libxc.html" xlink:title="mod_dft_xc_libxc">
+<polygon fill="#337ab7" stroke="#337ab7" points="647,-243 544,-243 544,-219 647,-219 647,-243"/>
+<text text-anchor="middle" x="595.5" y="-228.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_xc_libxc</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge9" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~mod_dft_xc_libxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M688.127,-205.0234C675.5229,-208.5582 661.5848,-212.467 648.4306,-216.156"/>
+<polygon fill="#000000" stroke="#000000" points="647.2426,-212.854 638.5592,-218.9244 649.1329,-219.594 647.2426,-212.854"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node14" class="node">
+<title>module~parallel</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node14"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="337,-609 283,-609 283,-585 337,-585 337,-609"/>
+<text text-anchor="middle" x="310" y="-594.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_gridint&#45;&gt;module~parallel -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge11" class="edge">
+<title>module~mod_dft_gridint&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.5,-597C419.7118,-591.8307 377.2123,-592.5602 347.4945,-594.14"/>
+<polygon fill="#000000" stroke="#000000" points="346.9343,-590.6669 337.1584,-594.7512 347.3476,-597.6547 346.9343,-590.6669"/>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge13" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~mod_dft_gridint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M844.2652,-127.0611C834.7972,-131.2132 824.3346,-136.0657 815,-141 795.1691,-151.4826 773.6775,-164.8259 757.3975,-175.3713"/>
+<polygon fill="#000000" stroke="#000000" points="755.3871,-172.504 748.9329,-180.906 759.2179,-178.3628 755.3871,-172.504"/>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~oqp_linalg -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge14" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M814.858,-113.2602C789.105,-112.9452 758.5245,-113.1798 731,-115"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M731,-115C700.4313,-117.0215 665.9028,-116.4691 639.3517,-115.4382"/>
+<polygon fill="#000000" stroke="#000000" points="639.3678,-111.9358 629.2279,-115.0072 639.07,-118.9294 639.3678,-111.9358"/>
+</g>
+<!-- module~mod_dft_gridint_fxc&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge15" class="edge">
+<title>module~mod_dft_gridint_fxc&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M731,-115C668.5907,-119.1271 656.7602,-140.3849 595.5,-153"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.5,-153C532.7715,-165.9174 520.5446,-191.1536 456.5,-191"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M456.5,-191C391.3891,-190.8439 366.983,-159.4978 310,-191"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node8" class="node">
+<title>module~blas_wrap</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node8"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="489.5,-125 423.5,-125 423.5,-101 489.5,-101 489.5,-125"/>
+<text text-anchor="middle" x="456.5" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge16" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561.852,-113C543.2417,-113 519.9085,-113 499.9344,-113"/>
+<polygon fill="#000000" stroke="#000000" points="499.8382,-109.5001 489.8382,-113 499.8381,-116.5001 499.8382,-109.5001"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node11" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node11"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="496,-83 417,-83 417,-59 496,-59 496,-83"/>
+<text text-anchor="middle" x="456.5" y="-68.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge17" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M561.852,-102.833C545.0297,-97.75 524.3485,-91.501 505.7774,-85.8896"/>
+<polygon fill="#000000" stroke="#000000" points="506.5885,-82.4784 496.0035,-82.9363 504.5637,-89.1792 506.5885,-82.4784"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node6" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-485 0,-485 0,-461 94,-461 94,-485"/>
+<text text-anchor="middle" x="47" y="-470.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge18" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.1112,-385.262C135.3531,-402.5991 95.4321,-434.4087 70.105,-454.5896"/>
+<polygon fill="#000000" stroke="#000000" points="67.7624,-451.981 62.1226,-460.9501 72.1246,-457.4556 67.7624,-451.981"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge24" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.5405,-542.8117C425.9807,-528.8806 397.0692,-506.1801 369,-492 344.4112,-479.5781 335.046,-484.4722 310,-473"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-473C284.954,-461.5278 274.3944,-468.5471 251,-454 225.2755,-438.004 201.9774,-411.7647 187.5658,-393.5015"/>
+<polygon fill="#000000" stroke="#000000" points="190.1002,-391.0553 181.2332,-385.2565 184.5487,-395.3192 190.1002,-391.0553"/>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge19" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-473C244.3459,-442.9273 159.4334,-450.0123 104.1166,-459.8211"/>
+<polygon fill="#000000" stroke="#000000" points="103.3349,-456.4064 94.1435,-461.676 104.6149,-463.2884 103.3349,-456.4064"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge22" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M453.1983,-542.8884C439.6373,-493.4815 388.0409,-308.9011 369,-290 329.8974,-251.1845 296.287,-283.3806 251,-252 221.3414,-231.4487 197.3855,-196.4313 184.0498,-174.0247"/>
+<polygon fill="#000000" stroke="#000000" points="187.0289,-172.1846 178.999,-165.2729 180.9661,-175.6836 187.0289,-172.1846"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge23" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.4096,-565.06C398.8458,-571.5289 369.5797,-579.9191 346.7056,-586.4769"/>
+<polygon fill="#000000" stroke="#000000" points="345.6612,-583.1352 337.013,-589.2556 347.5904,-589.8642 345.6612,-583.1352"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node16" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node16"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="369,-567 251,-567 251,-543 369,-543 369,-567"/>
+<text text-anchor="middle" x="310" y="-552.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge20" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.4096,-555C408.6857,-555 393.8304,-555 379.192,-555"/>
+<polygon fill="#000000" stroke="#000000" points="379.1212,-551.5001 369.1212,-555 379.1212,-558.5001 379.1212,-551.5001"/>
+</g>
+<!-- module~constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node18" class="node">
+<title>module~constants</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node18"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="342,-445 278,-445 278,-421 342,-421 342,-445"/>
+<text text-anchor="middle" x="310" y="-430.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge21" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M448.0899,-542.8846C433.8146,-523.0688 403.0553,-483.4866 369,-459 363.692,-455.1834 357.7349,-451.7549 351.7012,-448.7362"/>
+<polygon fill="#000000" stroke="#000000" points="352.7821,-445.3788 342.239,-444.3328 349.8287,-451.7252 352.7821,-445.3788"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge27" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M433.2885,-125.0698C404.2988,-140.2104 353.2477,-167.0911 310,-191"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M310,-191C285.8906,-204.3285 271.7697,-191.9021 251,-210 207.4092,-247.9833 185.9191,-315.62 177.2847,-350.6263"/>
+<polygon fill="#000000" stroke="#000000" points="173.7826,-350.233 174.9213,-360.7665 180.5999,-351.822 173.7826,-350.233"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node20" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node20"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="353.5,-125 266.5,-125 266.5,-101 353.5,-101 353.5,-125"/>
+<text text-anchor="middle" x="310" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge25" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M423.2569,-113C405.7157,-113 383.7593,-113 363.8601,-113"/>
+<polygon fill="#000000" stroke="#000000" points="363.6759,-109.5001 353.6758,-113 363.6758,-116.5001 363.6759,-109.5001"/>
+</g>
+<!-- module~messages -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node21" class="node">
+<title>module~messages</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node21"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="343,-45 277,-45 277,-21 343,-21 343,-45"/>
+<text text-anchor="middle" x="310" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge26" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.5287,-100.9427C417.9771,-98.2002 411.1937,-95.1576 405,-92 380.7709,-79.6476 354.6136,-63.1482 335.8926,-50.7385"/>
+<polygon fill="#000000" stroke="#000000" points="337.597,-47.6677 327.3406,-45.0111 333.7018,-53.4838 337.597,-47.6677"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge29" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.4656,-501.1267C266.2469,-497.3902 257.8983,-492.7099 251,-487 219.6232,-461.0286 195.3826,-419.4727 182.5836,-394.3551"/>
+<polygon fill="#000000" stroke="#000000" points="185.6733,-392.7072 178.1015,-385.2965 179.3992,-395.8115 185.6733,-392.7072"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node15" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node15"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214.5,-567 130.5,-567 130.5,-543 214.5,-543 214.5,-567"/>
+<text text-anchor="middle" x="172.5" y="-552.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge28" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-523.9254C258.2684,-528.8017 239.1949,-534.6277 221.9,-539.9105"/>
+<polygon fill="#000000" stroke="#000000" points="220.5008,-536.6782 211.9595,-542.9469 222.5458,-543.3729 220.5008,-536.6782"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node25" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="213,-525 132,-525 132,-501 213,-501 213,-525"/>
+<text text-anchor="middle" x="172.5" y="-510.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge30" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M274.2324,-513C258.813,-513 240.4926,-513 223.6759,-513"/>
+<polygon fill="#000000" stroke="#000000" points="223.4389,-509.5001 213.4389,-513 223.4389,-516.5001 223.4389,-509.5001"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge33" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.6802,-62.9773C371.1796,-56.2681 297.0772,-53.1811 251,-92 230.6726,-109.1253 190.9065,-287.0719 177.2429,-350.6087"/>
+<polygon fill="#000000" stroke="#000000" points="173.7416,-350.2456 175.074,-360.7563 180.5869,-351.7088 173.7416,-350.2456"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge31" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.855,-82.3658C399.9097,-87.2238 379.9012,-92.9601 361.8071,-98.1475"/>
+<polygon fill="#000000" stroke="#000000" points="360.6315,-94.8434 351.9833,-100.9638 362.5607,-101.5723 360.6315,-94.8434"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge32" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.855,-60.7167C397.1372,-55.6021 373.2717,-49.4118 353.101,-44.1798"/>
+<polygon fill="#000000" stroke="#000000" points="353.7901,-40.7428 343.2317,-41.6198 352.0326,-47.5185 353.7901,-40.7428"/>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge37" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.0251,-365.0681C400.59,-368.702 384.2038,-372.2011 369,-374 315.5087,-380.3291 253.2528,-378.4707 213.3913,-376.1168"/>
+<polygon fill="#000000" stroke="#000000" points="213.4639,-372.6145 203.2637,-375.4793 213.0241,-379.6007 213.4639,-372.6145"/>
+</g>
+<!-- module~bragg_slater_radii -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node17" class="node">
+<title>module~bragg_slater_radii</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node17"><a xlink:href="../module/bragg_slater_radii.html" xlink:title="bragg_slater_radii">
+<polygon fill="#337ab7" stroke="#337ab7" points="364.5,-365 255.5,-365 255.5,-341 364.5,-341 364.5,-365"/>
+<text text-anchor="middle" x="310" y="-350.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">bragg_slater_radii</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~bragg_slater_radii -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge34" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~bragg_slater_radii</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.8496,-353C395.0876,-353 384.7636,-353 374.6606,-353"/>
+<polygon fill="#000000" stroke="#000000" points="374.6603,-349.5001 364.6602,-353 374.6602,-356.5001 374.6603,-349.5001"/>
+</g>
+<!-- module~lebedev -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node19" class="node">
+<title>module~lebedev</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node19"><a xlink:href="../module/lebedev.html" xlink:title="lebedev">
+<polygon fill="#337ab7" stroke="#337ab7" points="337.5,-323 282.5,-323 282.5,-299 337.5,-299 337.5,-323"/>
+<text text-anchor="middle" x="310" y="-308.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lebedev</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~lebedev -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge35" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~lebedev</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.519,-340.9645C393.3018,-334.8817 367.7757,-327.5637 347.261,-321.6823"/>
+<polygon fill="#000000" stroke="#000000" points="348.2109,-318.3137 337.6335,-318.9222 346.2817,-325.0427 348.2109,-318.3137"/>
+</g>
+<!-- module~mod_grid_storage -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node23" class="node">
+<title>module~mod_grid_storage</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node23"><a xlink:href="../module/mod_grid_storage.html" xlink:title="mod_grid_storage">
+<polygon fill="#337ab7" stroke="#337ab7" points="364.5,-243 255.5,-243 255.5,-219 364.5,-219 364.5,-243"/>
+<text text-anchor="middle" x="310" y="-228.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_grid_storage</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_molgrid&#45;&gt;module~mod_grid_storage -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge36" class="edge">
+<title>module~mod_dft_molgrid&#45;&gt;module~mod_grid_storage</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M448.0899,-340.8846C433.8146,-321.0688 403.0553,-281.4866 369,-257 364.1094,-253.4836 358.6679,-250.2966 353.1232,-247.4561"/>
+<polygon fill="#000000" stroke="#000000" points="354.307,-244.1433 343.7734,-243.0055 351.2984,-250.4638 354.307,-244.1433"/>
+</g>
+<!-- module~mod_dft_xc_libxc&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge39" class="edge">
+<title>module~mod_dft_xc_libxc&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M569.7482,-218.9293C542.3142,-207.1886 497.3057,-191.0979 456.5,-191"/>
+</g>
+<!-- module~mod_dft_xclib -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node22" class="node">
+<title>module~mod_dft_xclib</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node22"><a xlink:href="../module/mod_dft_xclib.html" xlink:title="mod_dft_xclib">
+<polygon fill="#337ab7" stroke="#337ab7" points="499.5,-243 413.5,-243 413.5,-219 499.5,-219 499.5,-243"/>
+<text text-anchor="middle" x="456.5" y="-228.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_dft_xclib</text>
+</a>
+</g>
+</g>
+<!-- module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge38" class="edge">
+<title>module~mod_dft_xc_libxc&#45;&gt;module~mod_dft_xclib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M543.7415,-231C532.6314,-231 520.8731,-231 509.7091,-231"/>
+<polygon fill="#000000" stroke="#000000" points="509.6592,-227.5001 499.6591,-231 509.6591,-234.5001 509.6592,-227.5001"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge42" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.9812,-592.522C271.8891,-589.4836 259.6483,-584.4176 251,-576 244.1286,-569.3119 198.7881,-445.5679 180.3136,-394.6299"/>
+<polygon fill="#000000" stroke="#000000" points="183.5949,-393.4116 176.8991,-385.2008 177.0131,-395.795 183.5949,-393.4116"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge41" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M284.4737,-609.0939C247.6944,-624.6058 178.8556,-646.3278 130,-618 84.0357,-591.3487 61.3544,-528.5994 52.1698,-495.0555"/>
+<polygon fill="#000000" stroke="#000000" points="55.5339,-494.0842 49.6496,-485.2737 48.7552,-495.8307 55.5339,-494.0842"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge40" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-588.7022C265.3352,-583.3569 242.0783,-576.253 221.4297,-569.9458"/>
+<polygon fill="#000000" stroke="#000000" points="222.435,-566.5933 211.8488,-567.0193 220.3901,-573.288 222.435,-566.5933"/>
+</g>
+<!-- mpi -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node24" class="node">
+<title>mpi</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsesGraph_node24"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199.5,-609 145.5,-609 145.5,-585 199.5,-585 199.5,-609"/>
+<text text-anchor="middle" x="172.5" y="-594.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge43" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.8344,-597C261.9303,-597 232.8101,-597 209.7347,-597"/>
+<polygon fill="#000000" stroke="#000000" points="209.6092,-593.5001 199.6091,-597 209.6091,-600.5001 209.6092,-593.5001"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge44" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M250.8896,-555C242.1961,-555 233.2927,-555 224.7506,-555"/>
+<polygon fill="#000000" stroke="#000000" points="224.5485,-551.5001 214.5485,-555 224.5484,-558.5001 224.5485,-551.5001"/>
+</g>
+<!-- module~bragg_slater_radii&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge45" class="edge">
+<title>module~bragg_slater_radii&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M255.2613,-360.962C241.3151,-362.9905 226.5657,-365.1359 213.4421,-367.0448"/>
+<polygon fill="#000000" stroke="#000000" points="212.7042,-363.6152 203.3122,-368.5182 213.7119,-370.5423 212.7042,-363.6152"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge46" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.1748,-420.8581C261.3011,-411.7496 232.5139,-399.1879 209.6698,-389.2196"/>
+<polygon fill="#000000" stroke="#000000" points="210.849,-385.9155 200.2838,-385.1238 208.0494,-392.3312 210.849,-385.9155"/>
+</g>
+<!-- module~lebedev&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge47" class="edge">
+<title>module~lebedev&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M282.3726,-319.9409C272.3705,-323.4107 261.064,-327.6063 251,-332 234.7017,-339.1155 217.1064,-348.1707 202.7132,-355.9604"/>
+<polygon fill="#000000" stroke="#000000" points="200.8516,-352.9894 193.7629,-360.8635 204.2148,-359.1286 200.8516,-352.9894"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge51" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8618,-41.5184C267.33,-45.4326 257.7091,-51.0403 251,-59 231.7892,-81.7916 190.4946,-282.5207 176.9227,-350.5597"/>
+<polygon fill="#000000" stroke="#000000" points="173.4367,-350.1455 174.9224,-360.6356 180.3027,-351.5086 173.4367,-350.1455"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge50" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.9848,-44.3775C268.0884,-48.2667 258.7817,-53.145 251,-59 223.6208,-79.6005 199.6047,-111.5145 185.5672,-132.3348"/>
+<polygon fill="#000000" stroke="#000000" points="182.5855,-130.4989 180.0123,-140.7765 188.4331,-134.3468 182.5855,-130.4989"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node26" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-24 130,-24 130,0 215,0 215,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge48" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-27.9165C261.2346,-25.5522 242.4505,-22.6833 225.1166,-20.036"/>
+<polygon fill="#000000" stroke="#000000" points="225.5279,-16.5583 215.1141,-18.5083 224.471,-23.4781 225.5279,-16.5583"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_node27" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-66 136.5,-66 136.5,-42 208.5,-42 208.5,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge49" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.7151,-38.0835C259.3333,-40.7382 237.7866,-44.029 218.8042,-46.9281"/>
+<polygon fill="#000000" stroke="#000000" points="218.2139,-43.4776 208.857,-48.4473 219.2708,-50.3973 218.2139,-43.4776"/>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge53" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.7062,-218.9609C393.3407,-203.4202 330.5357,-179.6472 310,-191"/>
+</g>
+<!-- module~mod_dft_xclib&#45;&gt;module~functionals -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge52" class="edge">
+<title>module~mod_dft_xclib&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M449.1563,-243.0032C438.1287,-261.4962 417.2792,-298.3478 405,-332 380.7577,-398.4379 414.1247,-432.5442 369,-487 365.1109,-491.6933 360.2069,-495.5663 354.8956,-498.7557"/>
+<polygon fill="#000000" stroke="#000000" points="352.9677,-495.8117 345.68,-503.502 356.1728,-502.0348 352.9677,-495.8117"/>
+</g>
+<!-- module~mod_grid_storage&#45;&gt;module~precision -->
+<g id="module~~mod_dft_gridint_gxc~~UsesGraph_edge54" class="edge">
+<title>module~mod_grid_storage&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M297.6965,-243.1053C285.6914,-254.9634 266.957,-273.5921 251,-290 230.2042,-311.3833 206.7506,-336.2872 190.9387,-353.1956"/>
+<polygon fill="#000000" stroke="#000000" points="188.1019,-351.1054 183.8356,-360.8033 193.2184,-355.8826 188.1019,-351.1054"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulemod_dft_gridint_gxcUsesGraph = svgPanZoom('#modulemod_dft_gridint_gxcUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mod_dft_gridint_gxc~~UsedByGraph Pages: 1 -->
+<svg id="modulemod_dft_gridint_gxcUsedByGraph" width="273pt" height="32pt"
+ viewBox="0.00 0.00 273.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mod_dft_gridint_gxc~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>module~~mod_dft_gridint_gxc~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 269,-28 269,4 -4,4"/>
+<!-- module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsedByGraph_node1" class="node">
+<title>module~mod_dft_gridint_gxc</title>
+<polygon fill="none" stroke="#000000" points="120,-24 0,-24 0,0 120,0 120,-24"/>
+<text text-anchor="middle" x="60" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mod_dft_gridint_gxc</text>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~mod_dft_gridint_gxc~~UsedByGraph_node2" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~mod_dft_gridint_gxc~~UsedByGraph_node2"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="265,-24 156,-24 156,0 265,0 265,-24"/>
+<text text-anchor="middle" x="210.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc -->
+<g id="module~~mod_dft_gridint_gxc~~UsedByGraph_edge1" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mod_dft_gridint_gxc</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M155.7403,-12C147.404,-12 138.7045,-12 130.0954,-12"/>
+<polygon fill="#000000" stroke="#000000" points="130.0577,-8.5001 120.0577,-12 130.0577,-15.5001 130.0577,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+
+
+
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-xc_consumer_gxc_t"></span>
+      <h3>
+        type, public, extends(<a href='../type/xc_consumer_tde_t.html'>xc_consumer_tde_t</a>)&nbsp;::&nbsp;
+        <a href='../type/xc_consumer_gxc_t.html'>xc_consumer_gxc_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_xc~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_xc</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_exch~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_exch</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_corr~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_corr</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n_elec"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>N_elec</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-e_kin"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>E_kin</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-g_total"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>G_total</strong>(3)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-pe~6"></span>
+              type(<a href='../type/par_env_t.html'>par_env_t</a>),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>pe</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nmtx~8"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nMtx</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-da~10"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>da</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-db~4"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>db</strong>(:,:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-focks~5"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>focks</strong>(:,:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo~6"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>mo</strong>(:,:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rrho"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>rRho</strong>(:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-drrho"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>drRho</strong>(:,:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rtau"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>rTau</strong>(:,:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-focks_~2"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>focks_</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tmpmo_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>tmpMO_</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tmpdensity_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>tmpDensity_</strong>(:,:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mog1_"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>moG1_</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tmp_~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>tmp_</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-parallel_start~9'>parallel_start</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-parallel_stop~7'>parallel_stop</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-update~11'>update</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-postupdate~4'>postUpdate</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-clean~21'>clean</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-resetxcpointers~2'>resetXCPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-computerall'>computeRAll</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_tde_t.html#boundprocedure-resetorbpointers~3'>resetOrbPointers</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_gxc_t.html#boundprocedure-rupdate~2'>RUpdate</a></strong> => GxcRUpdate</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/xc_consumer_gxc_t.html#boundprocedure-uupdate~2'>UUpdate</a></strong> => GxcUUpdate</td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-tddft_gxc"></span> <h3>public  subroutine <a href='../proc/tddft_gxc.html'>tddft_gxc</a>(basis, molGrid, isVecs, wf, fx, dx, nMtx, threshold, infos)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute derivative XC contribution to the TD-DFT KS-like matrices
+@param[in]    basis     basis set
+@param[in]    isVecs    .true. if orbitals are provided instead of density matrix
+@param[in]    wf        density matrix/orbitals
+@param[inout] fx        fock-like matrices
+@param[inout] dx        densities
+@param[in]    nMtx      number of density/Fock-like matrices
+@param[in]    threshold tolerance
+@param[in]    infos     OQP metadata
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~96"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-molgrid~18"></span>
+              type(<a href='../type/dft_grid_t.html'>dft_grid_t</a>),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>molGrid</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-isvecs~3"></span>
+              logical,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isVecs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wf~2"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>wf</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fx~4"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>fx</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dx~12"></span>
+              real(kind=fp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>dx</strong>(:,:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nmtx~15"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nMtx</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-threshold~7"></span>
+              real(kind=fp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>threshold</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~51"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

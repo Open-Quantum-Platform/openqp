@@ -1,0 +1,1178 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_spin_square &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_spin_square
+      <small>Function</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">38 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_sf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_sf_lib.f90.html'>tdhf_sf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_sf_lib.html'>tdhf_sf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_spin_square</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/get_spin_square.html#src">get_spin_square</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  function get_spin_square(dmat_a, dmat_b, ta, tb, abxc, smat, nocb) result(s2)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_spin_square~~UsesGraph Pages: 1 -->
+<svg id="procget_spin_squareUsesGraph" width="641pt" height="172pt"
+ viewBox="0.00 0.00 641.00 172.40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_spin_square~~UsesGraph" class="graph" transform="scale(.8124 .8124) rotate(0) translate(4 208.2093)">
+<title>proc~~get_spin_square~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-208.2093 785,-208.2093 785,4 -4,4"/>
+<!-- proc~get_spin_square -->
+<g id="proc~~get_spin_square~~UsesGraph_node1" class="node">
+<title>proc~get_spin_square</title>
+<polygon fill="none" stroke="#000000" points="781,-167 682,-167 682,-143 781,-143 781,-167"/>
+<text text-anchor="middle" x="731.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_spin_square</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~get_spin_square~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-167 592,-167 592,-143 646,-143 646,-167"/>
+<text text-anchor="middle" x="619" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;module~mathlib -->
+<g id="proc~~get_spin_square~~UsesGraph_edge1" class="edge">
+<title>proc~get_spin_square&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.8284,-155C673.2199,-155 664.4029,-155 656.1991,-155"/>
+<polygon fill="#000000" stroke="#000000" points="656.1973,-151.5001 646.1972,-155 656.1972,-158.5001 656.1973,-151.5001"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~get_spin_square~~UsesGraph_node3" class="node">
+<title>module~messages</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node3"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-87 261.5,-87 261.5,-63 327.5,-63 327.5,-87"/>
+<text text-anchor="middle" x="294.5" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;module~messages -->
+<g id="proc~~get_spin_square~~UsesGraph_edge2" class="edge">
+<title>proc~get_spin_square&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M683.1715,-142.8924C671.0501,-139.9211 658.0616,-136.7931 646,-134 560.4778,-114.1954 539.6562,-106.0345 453,-92 414.3422,-85.7392 369.9938,-81.2056 338.0568,-78.4028"/>
+<polygon fill="#000000" stroke="#000000" points="337.9901,-74.8843 327.728,-77.5186 337.393,-81.8588 337.9901,-74.8843"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-150 142,-150 142,-126 203,-126 203,-150"/>
+<text text-anchor="middle" x="172.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_edge3" class="edge">
+<title>proc~get_spin_square&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M685.5187,-167.0831C672.7705,-170.2173 658.8914,-173.4304 646,-176 591.5367,-186.856 577.535,-187.567 522.5,-195"/>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_edge5" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M599.5748,-167.0164C580.7023,-177.7091 550.8246,-192.0957 522.5,-195"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522.5,-195C421.6952,-205.3363 394.9075,-208.6668 294.5,-195"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~get_spin_square~~UsesGraph_node9" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node9"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-167 489,-167 489,-143 556,-143 556,-167"/>
+<text text-anchor="middle" x="522.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~get_spin_square~~UsesGraph_edge4" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-155C583.9291,-155 575.0471,-155 566.3567,-155"/>
+<polygon fill="#000000" stroke="#000000" points="566.3114,-151.5001 556.3114,-155 566.3113,-158.5001 566.3114,-151.5001"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_edge9" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-87.1119C256.0979,-95.5918 234.3205,-107.1255 215,-117 212.2312,-118.4151 209.354,-119.8699 206.4607,-121.3219"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-118.3053 197.2773,-125.8978 207.7887,-124.5706 204.6667,-118.3053"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~get_spin_square~~UsesGraph_node5" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-24 130,-24 130,0 215,0 215,-24"/>
+<text text-anchor="middle" x="172.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~get_spin_square~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-62.8881C256.0979,-54.4082 234.3205,-42.8745 215,-33 212.2312,-31.5849 209.354,-30.1301 206.4607,-28.6781"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-25.4294 197.2773,-24.1022 204.6667,-31.6947 207.7887,-25.4294"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~get_spin_square~~UsesGraph_node6" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-108 136.5,-108 136.5,-84 208.5,-84 208.5,-108"/>
+<text text-anchor="middle" x="172.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~get_spin_square~~UsesGraph_edge7" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-80.6829C248.3109,-82.9506 232.9133,-85.601 218.6653,-88.0535"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-84.6503 208.5419,-89.7961 218.9907,-91.5489 217.8032,-84.6503"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~get_spin_square~~UsesGraph_node8" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node8"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-66 133,-66 133,-42 212,-42 212,-66"/>
+<text text-anchor="middle" x="172.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~get_spin_square~~UsesGraph_edge8" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-69.3171C249.3385,-67.2263 235.302,-64.8102 222.0189,-62.5237"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-59.0553 212.052,-60.8081 221.3133,-65.9538 222.5008,-59.0553"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~get_spin_square~~UsesGraph_node7" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node7"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-150 0,-150 0,-126 94,-126 94,-150"/>
+<text text-anchor="middle" x="47" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_spin_square~~UsesGraph_edge10" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-138C130.4618,-138 117.2165,-138 104.2832,-138"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-134.5001 94.0202,-138 104.0202,-141.5001 104.0203,-134.5001"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~get_spin_square~~UsesGraph_node10" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node10"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-167 380.5,-167 380.5,-143 446.5,-143 446.5,-167"/>
+<text text-anchor="middle" x="413.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~get_spin_square~~UsesGraph_edge11" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-155C478.7628,-155 467.4795,-155 456.7965,-155"/>
+<polygon fill="#000000" stroke="#000000" points="456.7947,-151.5001 446.7947,-155 456.7947,-158.5001 456.7947,-151.5001"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~get_spin_square~~UsesGraph_node11" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node11"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-125 374,-125 374,-101 453,-101 453,-125"/>
+<text text-anchor="middle" x="413.5" y="-110.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~get_spin_square~~UsesGraph_edge12" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-142.9645C479.7487,-138.527 466.5263,-133.4322 454.29,-128.7173"/>
+<polygon fill="#000000" stroke="#000000" points="455.3293,-125.3669 444.7396,-125.0373 452.8124,-131.8988 455.3293,-125.3669"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_spin_square~~UsesGraph_edge14" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-142.9049C384.2087,-140.12 378.8585,-137.0701 374,-134 354.1394,-121.4501 332.823,-105.4817 317.2673,-93.3232"/>
+<polygon fill="#000000" stroke="#000000" points="319.2818,-90.4544 309.2638,-87.0063 314.945,-95.9491 319.2818,-90.4544"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_edge15" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-167.2014C371.6437,-180.7184 331.214,-199.9973 294.5,-195"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-195C258.7595,-190.1352 221.785,-170.4298 198.0463,-155.5395"/>
+<polygon fill="#000000" stroke="#000000" points="199.9273,-152.5879 189.6264,-150.1094 196.1334,-158.4707 199.9273,-152.5879"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~get_spin_square~~UsesGraph_node12" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~get_spin_square~~UsesGraph_node12"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-167 251,-167 251,-143 338,-143 338,-167"/>
+<text text-anchor="middle" x="294.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_spin_square~~UsesGraph_edge13" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-155C370.4498,-155 359.3275,-155 348.4544,-155"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-151.5001 338.1539,-155 348.1539,-158.5001 348.154,-151.5001"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_spin_square~~UsesGraph_edge17" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-100.9766C363.7049,-97.099 350.1523,-92.7713 337.6451,-88.7774"/>
+<polygon fill="#000000" stroke="#000000" points="338.4764,-85.3688 327.8856,-85.6609 336.347,-92.0371 338.4764,-85.3688"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_spin_square~~UsesGraph_edge18" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-117.1002C329.6221,-121.701 258.0316,-129.1274 213.2045,-133.7775"/>
+<polygon fill="#000000" stroke="#000000" points="212.8272,-130.2978 203.2418,-134.811 213.5495,-137.2604 212.8272,-130.2978"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_spin_square~~UsesGraph_edge16" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-125.0355C366.5776,-129.5608 351.8187,-134.7699 338.2399,-139.5624"/>
+<polygon fill="#000000" stroke="#000000" points="336.8706,-136.334 328.6056,-142.9627 339.2004,-142.9349 336.8706,-136.334"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_spin_squareUsesGraph = svgPanZoom('#procget_spin_squareUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dmat_a~12"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>dmat_a</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dmat_b~10"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>dmat_b</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ta~6"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>ta</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tb~6"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>tb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-abxc~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>abxc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-smat~6"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>smat</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~25"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+      <h3>Return Value
+        <small>
+          <span class="anchor" id="variable-s2"></span>
+          real(kind=dp)
+        </small>
+      </h3>
+      
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_spin_square~~CallsGraph Pages: 1 -->
+<svg id="procget_spin_squareCallsGraph" width="641pt" height="273pt"
+ viewBox="0.00 0.00 641.00 273.02" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_spin_square~~CallsGraph" class="graph" transform="scale(.9892 .9892) rotate(0) translate(4 272)">
+<title>proc~~get_spin_square~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-272 644,-272 644,4 -4,4"/>
+<!-- proc~get_spin_square -->
+<g id="proc~~get_spin_square~~CallsGraph_node1" class="node">
+<title>proc~get_spin_square</title>
+<polygon fill="none" stroke="#000000" points="99,-128 0,-128 0,-104 99,-104 99,-128"/>
+<text text-anchor="middle" x="49.5" y="-113.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_spin_square</text>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_node2" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node2"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="242,-249 164,-249 164,-225 242,-225 242,-249"/>
+<text text-anchor="middle" x="203" y="-234.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;interface~pack_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_edge1" class="edge">
+<title>proc~get_spin_square&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M60.6392,-128.1636C76.2785,-144.8486 106.0804,-175.2402 135,-197 146.054,-205.3173 158.9702,-213.2979 170.5586,-219.9129"/>
+<polygon fill="#000000" stroke="#000000" points="169.0687,-223.0895 179.5067,-224.9055 172.4794,-216.9766 169.0687,-223.0895"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="640,-167 547,-167 547,-143 640,-143 640,-167"/>
+<text text-anchor="middle" x="593.5" y="-152.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge2" class="edge">
+<title>proc~get_spin_square&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M99.2185,-119.5644C200.3728,-126.8163 429.5797,-143.2484 536.5395,-150.9164"/>
+<polygon fill="#000000" stroke="#000000" points="536.584,-154.4285 546.8087,-151.6526 537.0846,-147.4464 536.584,-154.4285"/>
+</g>
+<!-- interface~unpack_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_node4" class="node">
+<title>interface~unpack_matrix</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node4"><a xlink:href="../interface/unpack_matrix.html" xlink:title="unpack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="248.5,-108 157.5,-108 157.5,-84 248.5,-84 248.5,-108"/>
+<text text-anchor="middle" x="203" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">unpack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_edge3" class="edge">
+<title>proc~get_spin_square&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M99.3371,-109.5066C114.6328,-107.5136 131.5614,-105.308 147.2271,-103.2668"/>
+<polygon fill="#000000" stroke="#000000" points="147.8455,-106.7159 157.3095,-101.9532 146.941,-99.7746 147.8455,-106.7159"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_node5" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node5"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="253.5,-188 152.5,-188 152.5,-164 253.5,-164 253.5,-188"/>
+<text text-anchor="middle" x="203" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_edge4" class="edge">
+<title>proc~get_spin_square&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M79.5338,-128.0562C95.9089,-134.601 116.5455,-142.803 135,-150 143.6475,-153.3724 152.9295,-156.9495 161.7703,-160.3364"/>
+<polygon fill="#000000" stroke="#000000" points="160.549,-163.6165 171.1396,-163.9182 163.0487,-157.078 160.549,-163.6165"/>
+</g>
+<!-- proc~symmetrize_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_node6" class="node">
+<title>proc~symmetrize_matrix</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node6"><a xlink:href="../proc/symmetrize_matrix.html" xlink:title="symmetrize_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="260.5,-66 145.5,-66 145.5,-42 260.5,-42 260.5,-66"/>
+<text text-anchor="middle" x="203" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;proc~symmetrize_matrix -->
+<g id="proc~~get_spin_square~~CallsGraph_edge5" class="edge">
+<title>proc~get_spin_square&#45;&gt;proc~symmetrize_matrix</title>
+<path fill="none" stroke="#000000" d="M72.3155,-103.922C89.3081,-95.2082 113.2339,-83.5259 135,-75 140.1052,-73.0003 145.4836,-71.0628 150.8873,-69.2262"/>
+<polygon fill="#000000" stroke="#000000" points="152.1807,-72.4853 160.5875,-66.0373 149.9945,-65.8354 152.1807,-72.4853"/>
+</g>
+<!-- proc~traceprod_sym_packed -->
+<g id="proc~~get_spin_square~~CallsGraph_node7" class="node">
+<title>proc~traceprod_sym_packed</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node7"><a xlink:href="../proc/traceprod_sym_packed.html" xlink:title="traceprod_sym_packed">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="271,-24 135,-24 135,0 271,0 271,-24"/>
+<text text-anchor="middle" x="203" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">traceprod_sym_packed</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;proc~traceprod_sym_packed -->
+<g id="proc~~get_spin_square~~CallsGraph_edge6" class="edge">
+<title>proc~get_spin_square&#45;&gt;proc~traceprod_sym_packed</title>
+<path fill="none" stroke="#000000" d="M58.9215,-103.7185C73.3852,-85.678 102.7885,-52.0923 135,-33 138.0143,-31.2134 141.1952,-29.5649 144.4689,-28.0458"/>
+<polygon fill="#000000" stroke="#000000" points="146.0102,-31.1949 153.879,-24.1004 143.3035,-24.7394 146.0102,-31.1949"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~get_spin_square~~CallsGraph_node9" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node9"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="378.5,-268 314.5,-268 314.5,-244 378.5,-244 378.5,-268"/>
+<text text-anchor="middle" x="346.5" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~get_spin_square~~CallsGraph_edge7" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M242.212,-242.1918C261.345,-244.7251 284.3942,-247.7769 303.9527,-250.3666"/>
+<polygon fill="#000000" stroke="#000000" points="303.744,-253.8694 314.1169,-251.7123 304.6628,-246.9299 303.744,-253.8694"/>
+</g>
+<!-- proc~unpack_f90 -->
+<g id="proc~~get_spin_square~~CallsGraph_node10" class="node">
+<title>proc~unpack_f90</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node10"><a xlink:href="../proc/unpack_f90.html" xlink:title="UNPACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="386,-108 307,-108 307,-84 386,-84 386,-108"/>
+<text text-anchor="middle" x="346.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">UNPACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~unpack_matrix&#45;&gt;proc~unpack_f90 -->
+<g id="proc~~get_spin_square~~CallsGraph_edge8" class="edge">
+<title>interface~unpack_matrix&#45;&gt;proc~unpack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M248.7988,-96C264.1399,-96 281.3102,-96 296.9263,-96"/>
+<polygon fill="#000000" stroke="#000000" points="296.929,-99.5001 306.9289,-96 296.9289,-92.5001 296.929,-99.5001"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge10" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M253.6507,-173.2761C326.4778,-169.3597 460.3668,-162.1595 536.5439,-158.0629"/>
+<polygon fill="#000000" stroke="#000000" points="537.0999,-161.5382 546.8975,-157.5062 536.7239,-154.5483 537.0999,-161.5382"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~get_spin_square~~CallsGraph_node8" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="373.5,-226 319.5,-226 319.5,-202 373.5,-202 373.5,-226"/>
+<text text-anchor="middle" x="346.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~get_spin_square~~CallsGraph_edge9" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M248.4043,-188.0234C268.0802,-193.2338 290.8257,-199.257 309.4577,-204.1909"/>
+<polygon fill="#000000" stroke="#000000" points="308.7773,-207.6313 319.34,-206.8078 310.5692,-200.8645 308.7773,-207.6313"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge11" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M376.294,-243.817C420.9216,-225.5685 505.1519,-191.1261 554.5844,-170.9129"/>
+<polygon fill="#000000" stroke="#000000" points="556.0535,-174.0935 563.9848,-167.0689 553.404,-167.6143 556.0535,-174.0935"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_node12" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node12"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="511,-267 422,-267 422,-243 511,-243 511,-267"/>
+<text text-anchor="middle" x="466.5" y="-252.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_edge12" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M378.6578,-255.732C388.7569,-255.6479 400.2083,-255.5524 411.4282,-255.4589"/>
+<polygon fill="#000000" stroke="#000000" points="411.6513,-258.9573 421.6218,-255.374 411.5929,-251.9575 411.6513,-258.9573"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge13" class="edge">
+<title>proc~unpack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M386.2465,-99.7608C419.8955,-103.541 469.1852,-110.489 511,-122 526.8304,-126.3579 543.7586,-132.7966 558.1352,-138.8325"/>
+<polygon fill="#000000" stroke="#000000" points="557.0663,-142.1826 567.6357,-142.9163 559.8307,-135.7516 557.0663,-142.1826"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_node11" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~get_spin_square~~CallsGraph_node11"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="511,-70 422,-70 422,-46 511,-46 511,-70"/>
+<text text-anchor="middle" x="466.5" y="-55.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~get_spin_square~~CallsGraph_edge14" class="edge">
+<title>proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M384.4688,-83.9766C395.3027,-80.5458 407.2496,-76.7626 418.5946,-73.1701"/>
+<polygon fill="#000000" stroke="#000000" points="419.8896,-76.4313 428.3664,-70.0756 417.7763,-69.7579 419.8896,-76.4313"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge16" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M489.1812,-70.1893C496.3346,-74.312 504.1531,-79.1151 511,-84 533.4002,-99.9815 557.0103,-120.7541 573.2062,-135.6965"/>
+<polygon fill="#000000" stroke="#000000" points="571.2539,-138.6617 580.9541,-142.9227 576.0283,-133.5425 571.2539,-138.6617"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~get_spin_square~~CallsGraph_node13" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="620.5,-70 566.5,-70 566.5,-46 620.5,-46 620.5,-70"/>
+<text text-anchor="middle" x="593.5" y="-55.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~get_spin_square~~CallsGraph_edge15" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M511.2754,-58C525.9578,-58 542.1068,-58 556.1772,-58"/>
+<polygon fill="#000000" stroke="#000000" points="556.4731,-61.5001 566.4731,-58 556.473,-54.5001 556.4731,-61.5001"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~get_spin_square~~CallsGraph_edge18" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M488.2809,-242.8428C495.6773,-238.4398 503.8698,-233.2521 511,-228 533.7609,-211.2343 557.7419,-189.4925 573.9459,-174.1103"/>
+<polygon fill="#000000" stroke="#000000" points="576.4409,-176.567 581.2365,-167.1196 571.5961,-171.5144 576.4409,-176.567"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~get_spin_square~~CallsGraph_node14" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="620.5,-267 566.5,-267 566.5,-243 620.5,-243 620.5,-267"/>
+<text text-anchor="middle" x="593.5" y="-252.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~get_spin_square~~CallsGraph_edge17" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M511.2754,-255C525.9578,-255 542.1068,-255 556.1772,-255"/>
+<polygon fill="#000000" stroke="#000000" points="556.4731,-258.5001 566.4731,-255 556.473,-251.5001 556.4731,-258.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_spin_squareCallsGraph = svgPanZoom('#procget_spin_squareCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_spin_square~~CalledByGraph Pages: 1 -->
+<svg id="procget_spin_squareCalledByGraph" width="373pt" height="32pt"
+ viewBox="0.00 0.00 373.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_spin_square~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~get_spin_square~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 369,-28 369,4 -4,4"/>
+<!-- proc~get_spin_square -->
+<g id="proc~~get_spin_square~~CalledByGraph_node1" class="node">
+<title>proc~get_spin_square</title>
+<polygon fill="none" stroke="#000000" points="365,-24 266,-24 266,0 365,0 365,-24"/>
+<text text-anchor="middle" x="315.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_spin_square</text>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~get_spin_square~~CalledByGraph_node2" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~get_spin_square~~CalledByGraph_node2"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="230,-24 139,-24 139,0 230,0 230,-24"/>
+<text text-anchor="middle" x="184.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square -->
+<g id="proc~~get_spin_square~~CalledByGraph_edge1" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_spin_square</title>
+<path fill="none" stroke="#000000" d="M230.3174,-12C238.5004,-12 247.1351,-12 255.642,-12"/>
+<polygon fill="#000000" stroke="#000000" points="255.9162,-15.5001 265.9162,-12 255.9161,-8.5001 255.9162,-15.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~get_spin_square~~CalledByGraph_node3" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~get_spin_square~~CalledByGraph_node3"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103,-24 0,-24 0,0 103,0 103,-24"/>
+<text text-anchor="middle" x="51.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~get_spin_square~~CalledByGraph_edge2" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M103.3021,-12C111.5988,-12 120.2168,-12 128.6038,-12"/>
+<polygon fill="#000000" stroke="#000000" points="128.6824,-15.5001 138.6824,-12 128.6824,-8.5001 128.6824,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">function </span><span class="n">get_spin_square</span><span class="p">(</span><span class="n">dmat_a</span><span class="p">,</span><span class="n">dmat_b</span><span class="p">,</span><span class="n">ta</span><span class="p">,</span><span class="n">tb</span><span class="p">,</span><span class="n">abxc</span><span class="p">,</span><span class="n">Smat</span><span class="p">,</span><span class="n">nocb</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">s2</span><span class="p">)</span>
+<span class="w">  </span><span class="c">! dmat_a / dmat_b -- alpha/beta density of the excited state</span>
+<span class="w">  </span><span class="c">! ta / tb -- alpha/beta difference density matrix</span>
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">symmetrize_matrix</span><span class="p">,</span><span class="w"> </span><span class="n">traceprod_sym_packed</span>
+<span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">pack_matrix</span><span class="p">,</span><span class="w"> </span><span class="n">unpack_matrix</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="n">dmat_b</span><span class="p">,</span><span class="w"> </span><span class="n">ta</span><span class="p">,</span><span class="w"> </span><span class="n">tb</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">abxc</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">smat</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">s2</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">scr1</span><span class="p">(:),</span><span class="w"> </span><span class="n">dmat_t</span><span class="p">(:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="n">dmat_t_sq</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">smat_sq</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">tmp1</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">tmp2</span><span class="p">(:,:)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf_tri</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dum1</span><span class="p">,</span><span class="w"> </span><span class="n">dum2</span><span class="p">,</span><span class="w"> </span><span class="n">dum3</span><span class="p">,</span><span class="w"> </span><span class="n">dum4</span>
+
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">abxc</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="n">nbf_tri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">dmat_a</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">scr1</span><span class="p">(</span><span class="n">nbf_tri</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">dmat_t</span><span class="p">(</span><span class="n">nbf_tri</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">dmat_t_sq</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">smat_sq</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">tmp1</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">tmp2</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Cannot allocate memory in qet_spin_square&#39;</span><span class="p">,</span><span class="n">with_abort</span><span class="p">)</span>
+
+<span class="w">   </span><span class="c">! Calculate spin expectation values</span>
+<span class="w">     </span><span class="n">dum1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span>
+
+<span class="w">   </span><span class="c">! Symmetric matrix scr1 = Smat*Dmat_a*Smat</span>
+<span class="w">     </span><span class="n">dmat_t</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dmat_a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ta</span>
+<span class="w">     </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">dmat_t</span><span class="p">,</span><span class="n">dmat_t_sq</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">smat</span><span class="p">,</span><span class="n">smat_sq</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">smat_sq</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="n">dmat_t_sq</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="n">smat_sq</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp2</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">tmp2</span><span class="p">,</span><span class="n">scr1</span><span class="p">)</span>
+<span class="w">   </span><span class="c">! -tr[ Dmat_b*Smat*Dmat_a*Smat ]</span>
+<span class="w">     </span><span class="n">dmat_t</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dmat_b</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">tb</span>
+<span class="w">     </span><span class="n">dum2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">dmat_t</span><span class="p">,</span><span class="n">scr1</span><span class="p">,</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">   </span><span class="c">! Symmetric matrix scr1 = Smat*Ta*Smat</span>
+<span class="w">     </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">Ta</span><span class="p">,</span><span class="n">tmp1</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">smat_sq</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp2</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp2</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="n">smat_sq</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">tmp1</span><span class="p">,</span><span class="n">scr1</span><span class="p">)</span>
+<span class="w">   </span><span class="c">! -tr[ Tb*Smat*Ta*Smat ])</span>
+<span class="w">     </span><span class="n">dum3</span><span class="w"> </span><span class="o">=-</span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">tb</span><span class="p">,</span><span class="n">scr1</span><span class="p">,</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">   </span><span class="c">! +tr[ abxc*Smat ]</span>
+<span class="w">     </span><span class="n">tmp1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">abxc</span>
+<span class="w">     </span><span class="k">call </span><span class="n">symmetrize_matrix</span><span class="p">(</span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">     </span><span class="k">call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">tmp1</span><span class="p">,</span><span class="w"> </span><span class="n">scr1</span><span class="p">)</span>
+<span class="w">     </span><span class="n">dum4</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">traceprod_sym_packed</span><span class="p">(</span><span class="n">scr1</span><span class="p">,</span><span class="w"> </span><span class="n">smat</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span><span class="o">/</span><span class="mf">2.0_dp</span>
+
+<span class="w">     </span><span class="n">s2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dum1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">dum2</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">dum3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">dum4</span><span class="o">**</span><span class="mi">2</span>
+
+<span class="w"> </span><span class="k">end function </span><span class="n">get_spin_square</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

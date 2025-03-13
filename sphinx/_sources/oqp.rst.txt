@@ -1,0 +1,33 @@
+oqp package
+===========
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   oqp.library
+   oqp.molden
+   oqp.molecule
+   oqp.periodic_table
+   oqp.utils
+
+Submodules
+----------
+
+oqp.pyoqp module
+----------------
+
+.. automodule:: oqp.pyoqp
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: oqp
+   :members:
+   :undoc-members:
+   :show-inheritance:

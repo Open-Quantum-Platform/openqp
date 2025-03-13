@@ -1,0 +1,808 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>xc_options_t &ndash; OPENQP </title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>xc_options_t
+      <small>Derived Type</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title="<p> 2.5% of total for derived types.</p>Including implementation: 24 statements,  0.3% of total for derived types.">24 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/dft_gridint.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/dft_gridint.f90.html'>dft_gridint.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mod_dft_gridint.html'>mod_dft_gridint</a></li>
+            <li class="breadcrumb-item active" aria-current="page">xc_options_t</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-isgga">isGGA</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-needtau">needTau</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-hasbeta">hasBeta</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-iswfvecs">isWFVecs</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numaos">numAOs</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-maxpts~5">maxPts</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-limpts">limPts</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numatoms">numAtoms</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-maxangmom">maxAngMom</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-nder~4">nDer</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-nxcder">nXCDer</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numaovecs">numAOVecs</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numtmpvec">numTmpVec</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numoccalpha">numOccAlpha</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-numoccbeta">numOccBeta</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-dft_threshold~3">dft_threshold</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-ao_threshold">ao_threshold</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-ao_sparsity_ratio">ao_sparsity_ratio</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-wfalpha">wfAlpha</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-wfbeta">wfBeta</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-molgrid~12">molGrid</a>
+            <a class="list-group-item" href="../type/xc_options_t.html#variable-functional~3">functional</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+      <h2 id="type-def-statement">
+        type, public :: xc_options_t</h2>
+    <p>@brief Interface structure to set up XC engine options</p>
+<br>      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inherits</h3>
+        </div>
+        <div class="card-body">
+          <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: type~~xc_options_t~~InheritsGraph Pages: 1 -->
+<svg id="typexc_options_tInheritsGraph" width="641pt" height="90pt"
+ viewBox="0.00 0.00 641.00 90.35" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="type~~xc_options_t~~InheritsGraph" class="graph" transform="scale(.7789 .7789) rotate(0) translate(4 112)">
+<title>type~~xc_options_t~~InheritsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-112 819,-112 819,4 -4,4"/>
+<!-- type~xc_options_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node1" class="node">
+<title>type~xc_options_t</title>
+<polygon fill="none" stroke="#000000" points="815,-86 737,-86 737,-62 815,-62 815,-86"/>
+<text text-anchor="middle" x="776" y="-71.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">xc_options_t</text>
+</g>
+<!-- type~dft_grid_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node2" class="node">
+<title>type~dft_grid_t</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node2"><a xlink:href="../type/dft_grid_t.html" xlink:title="dft_grid_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="645.5,-108 583.5,-108 583.5,-84 645.5,-84 645.5,-108"/>
+<text text-anchor="middle" x="614.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_grid_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_options_t&#45;&gt;type~dft_grid_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge1" class="edge">
+<title>type~xc_options_t&#45;&gt;type~dft_grid_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M736.9054,-79.3256C712.4004,-82.6637 680.8475,-86.9619 655.9149,-90.3583"/>
+<polygon fill="#000000" stroke="#000000" points="655.1107,-86.9355 645.6747,-91.7533 656.0556,-93.8714 655.1107,-86.9355"/>
+<text text-anchor="middle" x="694.5" y="-91.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">molGrid</text>
+</g>
+<!-- type~functional_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node3" class="node">
+<title>type~functional_t</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node3"><a xlink:href="../type/functional_t.html" xlink:title="functional_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="652,-66 577,-66 577,-42 652,-42 652,-66"/>
+<text text-anchor="middle" x="614.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functional_t</text>
+</a>
+</g>
+</g>
+<!-- type~xc_options_t&#45;&gt;type~functional_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge2" class="edge">
+<title>type~xc_options_t&#45;&gt;type~functional_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M736.9049,-64.2319C730.9359,-62.9882 724.8247,-61.8539 719,-61 700.6523,-58.3103 680.3386,-56.6527 662.5372,-55.6317"/>
+<polygon fill="#000000" stroke="#000000" points="662.5492,-52.1277 652.3802,-55.1012 662.184,-59.1181 662.5492,-52.1277"/>
+<text text-anchor="middle" x="694.5" y="-63.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">functional</text>
+</g>
+<!-- type~sorted_grid_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node4" class="node">
+<title>type~sorted_grid_t</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node4"><a xlink:href="../type/sorted_grid_t.html" xlink:title="sorted_grid_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="448,-108 366,-108 366,-84 448,-84 448,-108"/>
+<text text-anchor="middle" x="407" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sorted_grid_t</text>
+</a>
+</g>
+</g>
+<!-- type~dft_grid_t&#45;&gt;type~sorted_grid_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge3" class="edge">
+<title>type~dft_grid_t&#45;&gt;type~sorted_grid_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M583.4352,-96C550.432,-96 497.7091,-96 458.4809,-96"/>
+<polygon fill="#000000" stroke="#000000" points="458.3114,-92.5001 448.3113,-96 458.3113,-99.5001 458.3114,-92.5001"/>
+<text text-anchor="middle" x="519.5" y="-98.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">spherical_grids</text>
+</g>
+<!-- xc_f03_func_info_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node5" class="node">
+<title>xc_f03_func_info_t</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="462,-66 352,-66 352,-42 462,-42 462,-66"/>
+<text text-anchor="middle" x="407" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_func_info_t</text>
+</g>
+<!-- type~functional_t&#45;&gt;xc_f03_func_info_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge5" class="edge">
+<title>type~functional_t&#45;&gt;xc_f03_func_info_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M576.9233,-54C547.9232,-54 507.0846,-54 472.7116,-54"/>
+<polygon fill="#000000" stroke="#000000" points="472.2719,-50.5001 462.2719,-54 472.2719,-57.5001 472.2719,-50.5001"/>
+<text text-anchor="middle" x="519.5" y="-56.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">functionals_info</text>
+</g>
+<!-- xc_f03_func_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node6" class="node">
+<title>xc_f03_func_t</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="449.5,-24 364.5,-24 364.5,0 449.5,0 449.5,-24"/>
+<text text-anchor="middle" x="407" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_func_t</text>
+</g>
+<!-- type~functional_t&#45;&gt;xc_f03_func_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge4" class="edge">
+<title>type~functional_t&#45;&gt;xc_f03_func_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M576.9615,-44.1798C570.9691,-42.7136 564.8255,-41.2699 559,-40 526.1671,-32.8427 489.082,-25.9873 459.7624,-20.8512"/>
+<polygon fill="#000000" stroke="#000000" points="460.187,-17.3726 449.7353,-19.1086 458.9883,-24.2693 460.187,-17.3726"/>
+<text text-anchor="middle" x="519.5" y="-42.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">functionals_list</text>
+</g>
+<!-- type~list_grid_3d_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node7" class="node">
+<title>type~list_grid_3d_t</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node7"><a xlink:href="../type/list_grid_3d_t.html" xlink:title="list_grid_3d_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="315,-108 233,-108 233,-84 315,-84 315,-108"/>
+<text text-anchor="middle" x="274" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">list_grid_3d_t</text>
+</a>
+</g>
+</g>
+<!-- type~sorted_grid_t&#45;&gt;type~list_grid_3d_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge6" class="edge">
+<title>type~sorted_grid_t&#45;&gt;type~list_grid_3d_t</title>
+<path fill="none" stroke="#000000" d="M365.647,-96C352.8863,-96 338.6767,-96 325.3286,-96"/>
+<polygon fill="#000000" stroke="#000000" points="325.3274,-92.5001 315.3274,-96 325.3274,-99.5001 325.3274,-92.5001"/>
+</g>
+<!-- type~grid_3d_pt -->
+<g id="type~~xc_options_t~~InheritsGraph_node8" class="node">
+<title>type~grid_3d_pt</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node8"><a xlink:href="../type/grid_3d_pt.html" xlink:title="grid_3d_pt">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="172,-108 104,-108 104,-84 172,-84 172,-108"/>
+<text text-anchor="middle" x="138" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grid_3d_pt</text>
+</a>
+</g>
+</g>
+<!-- type~list_grid_3d_t&#45;&gt;type~grid_3d_pt -->
+<g id="type~~xc_options_t~~InheritsGraph_edge7" class="edge">
+<title>type~list_grid_3d_t&#45;&gt;type~grid_3d_pt</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M232.8264,-96C216.9216,-96 198.685,-96 182.4806,-96"/>
+<polygon fill="#000000" stroke="#000000" points="182.1704,-92.5001 172.1704,-96 182.1704,-99.5001 182.1704,-92.5001"/>
+<text text-anchor="middle" x="202.5" y="-98.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">elem</text>
+</g>
+<!-- type~grid_3d_t -->
+<g id="type~~xc_options_t~~InheritsGraph_node9" class="node">
+<title>type~grid_3d_t</title>
+<g id="a_type~~xc_options_t~~InheritsGraph_node9"><a xlink:href="../type/grid_3d_t.html" xlink:title="grid_3d_t">
+<polygon fill="#5cb85c" stroke="#5cb85c" points="61,-108 0,-108 0,-84 61,-84 61,-108"/>
+<text text-anchor="middle" x="30.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grid_3d_t</text>
+</a>
+</g>
+</g>
+<!-- type~grid_3d_pt&#45;&gt;type~grid_3d_t -->
+<g id="type~~xc_options_t~~InheritsGraph_edge8" class="edge">
+<title>type~grid_3d_pt&#45;&gt;type~grid_3d_t</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M103.9863,-96C93.5447,-96 81.9491,-96 71.1124,-96"/>
+<polygon fill="#000000" stroke="#000000" points="71.0177,-92.5001 61.0176,-96 71.0176,-99.5001 71.0177,-92.5001"/>
+<text text-anchor="middle" x="82.5" y="-98.4" font-family="Helvetica,sans-Serif" font-size="9.50" fill="#000000">p</text>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pantypexc_options_tInheritsGraph = svgPanZoom('#typexc_options_tInheritsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#InheritsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="InheritsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="184pt" height="32pt"
+ viewBox="0.00 0.00 184.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 180,-28 180,4 -4,4"/>
+<!-- Type -->
+<g id="node1" class="node">
+<title>Type</title>
+<polygon fill="#5cb85c" stroke="#5cb85c" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="176,-24 72,-24 72,0 176,0 176,-24"/>
+<text text-anchor="middle" x="124" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a derived type to the parent type which it
+extends. Dashed arrows point from a derived type to the other
+types it contains as a components, with a label listing the name(s) of
+said component(s).
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    <br>
+
+    <section>
+    <h2>Components</h2>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-isgga"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isGGA</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-needtau"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>needTau</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hasbeta"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hasBeta</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-iswfvecs"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>isWFVecs</strong></td>
+<td> =</td>
+                <td>.true.</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaos"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxpts~5"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-limpts"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>limPts</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numatoms"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAtoms</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-maxangmom"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>maxAngMom</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nder~4"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nxcder"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nXCDer</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numaovecs"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numAOVecs</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numtmpvec"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numTmpVec</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccalpha"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccAlpha</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-numoccbeta"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>numOccBeta</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-dft_threshold~3"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>dft_threshold</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_threshold"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_threshold</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ao_sparsity_ratio"></span>
+              real(kind=fp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ao_sparsity_ratio</strong></td>
+<td> =</td>
+                <td>0.0d0</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfalpha"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfAlpha</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wfbeta"></span>
+              real(kind=fp),
+            </td>
+              <td>public,</td>
+            <td>
+              contiguous, pointer
+            </td>
+            <td>::</td>
+            <td><strong>wfBeta</strong>(:,:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-molgrid~12"></span>
+              type(<a href='dft_grid_t.html'>dft_grid_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>molGrid</strong></td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-functional~3"></span>
+              type(<a href='functional_t.html'>functional_t</a>),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>functional</strong></td>
+                <td></td>
+                <td></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    </section>
+    <br>
+    
+
+
+
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,625 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>update_triang_matrix &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>update_triang_matrix
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">21 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mod_1e_primitives.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mod_1e_primitives.f90.html'>mod_1e_primitives.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/mod_1e_primitives.html'>mod_1e_primitives</a></li>
+            <li class="breadcrumb-item active" aria-current="page">update_triang_matrix</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine update_triang_matrix(shi, shj, mblk, m)  
+</h2>
+    
+
+    <p>@brief Add contribution of the 1e-integral block to the triangular matrix
+@param[in]       shi     first shell data
+@param[in]       shj     second shell data
+@param[in]       mblk    square block of 1e integrals passed as 1D array
+@param[inout]    m       packed triangular matrix of 1e integral contribution
+@author   Vladimir Mironov
+@date <em>Sep, 2018</em> Initial release</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shi"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shi</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shj"></span>
+              type(<a href='../type/shell_t.html'>shell_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shj</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mblk"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>mblk</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~43"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>m</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~update_triang_matrix~~CalledByGraph Pages: 1 -->
+<svg id="procupdate_triang_matrixCalledByGraph" width="641pt" height="169pt"
+ viewBox="0.00 0.00 641.00 169.35" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~update_triang_matrix~~CalledByGraph" class="graph" transform="scale(.8468 .8468) rotate(0) translate(4 196)">
+<title>proc~~update_triang_matrix~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-196 753,-196 753,4 -4,4"/>
+<!-- proc~update_triang_matrix -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node1" class="node">
+<title>proc~update_triang_matrix</title>
+<polygon fill="none" stroke="#000000" points="749,-66 622,-66 622,-42 749,-42 749,-66"/>
+<text text-anchor="middle" x="685.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">update_triang_matrix</text>
+</g>
+<!-- proc~multipole_integrals -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node2" class="node">
+<title>proc~multipole_integrals</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node2"><a xlink:href="../proc/multipole_integrals.html" xlink:title="multipole_integrals">
+<polygon fill="#d9534f" stroke="#d9534f" points="586,-129 471,-129 471,-105 586,-105 586,-129"/>
+<text text-anchor="middle" x="528.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">multipole_integrals</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge1" class="edge">
+<title>proc~multipole_integrals&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M558.7712,-104.853C583.6109,-94.8854 618.9696,-80.6969 646.0293,-69.8385"/>
+<polygon fill="#000000" stroke="#000000" points="647.6111,-72.9752 655.5884,-66.0028 645.0042,-66.4787 647.6111,-72.9752"/>
+</g>
+<!-- proc~omp_hst -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node3" class="node">
+<title>proc~omp_hst</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node3"><a xlink:href="../proc/omp_hst.html" xlink:title="omp_hst">
+<polygon fill="#d9534f" stroke="#d9534f" points="557.5,-66 499.5,-66 499.5,-42 557.5,-42 557.5,-66"/>
+<text text-anchor="middle" x="528.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">omp_hst</text>
+</a>
+</g>
+</g>
+<!-- proc~omp_hst&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge2" class="edge">
+<title>proc~omp_hst&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M557.6626,-54C572.9218,-54 592.3637,-54 611.4533,-54"/>
+<polygon fill="#000000" stroke="#000000" points="611.6855,-57.5001 621.6854,-54 611.6854,-50.5001 611.6855,-57.5001"/>
+</g>
+<!-- proc~overlap -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node4" class="node">
+<title>proc~overlap</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node4"><a xlink:href="../proc/overlap.html" xlink:title="overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="555.5,-24 501.5,-24 501.5,0 555.5,0 555.5,-24"/>
+<text text-anchor="middle" x="528.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~overlap&#45;&gt;proc~update_triang_matrix -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge3" class="edge">
+<title>proc~overlap&#45;&gt;proc~update_triang_matrix</title>
+<path fill="none" stroke="#000000" d="M555.8473,-19.3158C576.4005,-24.8141 605.24,-32.5292 630.5024,-39.2873"/>
+<polygon fill="#000000" stroke="#000000" points="629.7809,-42.7173 640.3458,-41.9205 631.59,-35.9551 629.7809,-42.7173"/>
+</g>
+<!-- proc~electric_moments -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node5" class="node">
+<title>proc~electric_moments</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node5"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="419.5,-192 311.5,-192 311.5,-168 419.5,-168 419.5,-192"/>
+<text text-anchor="middle" x="365.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~multipole_integrals -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge4" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M408.4254,-167.975C417.2828,-165.2301 426.4994,-162.1784 435,-159 455.1111,-151.4803 477.0347,-141.7192 494.5949,-133.4998"/>
+<polygon fill="#000000" stroke="#000000" points="496.3192,-136.556 503.8624,-129.1162 493.3261,-130.2282 496.3192,-136.556"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node6" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node6"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="435,-150 296,-150 296,-126 435,-126 435,-150"/>
+<text text-anchor="middle" x="365.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge5" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M435.0995,-129.0332C443.5888,-127.9395 452.2542,-126.8231 460.7164,-125.7329"/>
+<polygon fill="#000000" stroke="#000000" points="461.4415,-129.1685 470.9123,-124.4193 460.547,-122.2258 461.4415,-129.1685"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node7" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node7"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="427.5,-108 303.5,-108 303.5,-84 427.5,-84 427.5,-108"/>
+<text text-anchor="middle" x="365.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;proc~multipole_integrals -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge6" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M427.5883,-103.9991C438.4716,-105.4013 449.8453,-106.8666 460.8702,-108.287"/>
+<polygon fill="#000000" stroke="#000000" points="460.5075,-111.7691 470.8728,-109.5756 461.402,-104.8265 460.5075,-111.7691"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node8" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node8"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="407.5,-24 323.5,-24 323.5,0 407.5,0 407.5,-24"/>
+<text text-anchor="middle" x="365.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~overlap -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge8" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~overlap</title>
+<path fill="none" stroke="#000000" d="M407.9008,-12C433.6525,-12 466.2294,-12 491.0318,-12"/>
+<polygon fill="#000000" stroke="#000000" points="491.1429,-15.5001 501.1428,-12 491.1428,-8.5001 491.1429,-15.5001"/>
+</g>
+<!-- proc~int1e -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node9" class="node">
+<title>proc~int1e</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node9"><a xlink:href="../proc/int1e.html" xlink:title="int1e">
+<polygon fill="#d9534f" stroke="#d9534f" points="392.5,-66 338.5,-66 338.5,-42 392.5,-42 392.5,-66"/>
+<text text-anchor="middle" x="365.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e</text>
+</a>
+</g>
+</g>
+<!-- proc~int1e&#45;&gt;proc~omp_hst -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge7" class="edge">
+<title>proc~int1e&#45;&gt;proc~omp_hst</title>
+<path fill="none" stroke="#000000" d="M392.7825,-54C419.2115,-54 459.5618,-54 489.4015,-54"/>
+<polygon fill="#000000" stroke="#000000" points="489.4778,-57.5001 499.4778,-54 489.4777,-50.5001 489.4778,-57.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node10" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node10"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="249,-24 165,-24 165,0 249,0 249,-24"/>
+<text text-anchor="middle" x="207" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge12" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M249.059,-12C268.6731,-12 292.218,-12 312.9875,-12"/>
+<polygon fill="#000000" stroke="#000000" points="313.2445,-15.5001 323.2445,-12 313.2445,-8.5001 313.2445,-15.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node11" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node11"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="245,-150 169,-150 169,-126 245,-126 245,-150"/>
+<text text-anchor="middle" x="207" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge9" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M245.3684,-138C257.6066,-138 271.6359,-138 285.6888,-138"/>
+<polygon fill="#000000" stroke="#000000" points="285.9003,-141.5001 295.9003,-138 285.9003,-134.5001 285.9003,-141.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="260,-108 154,-108 154,-84 260,-84 260,-108"/>
+<text text-anchor="middle" x="207" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M260.2191,-96C270.8228,-96 282.126,-96 293.2441,-96"/>
+<polygon fill="#000000" stroke="#000000" points="293.3773,-99.5001 303.3772,-96 293.3772,-92.5001 293.3773,-99.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="252.5,-66 161.5,-66 161.5,-42 252.5,-42 252.5,-66"/>
+<text text-anchor="middle" x="207" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge11" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M252.4197,-66.0355C270.4922,-70.8244 291.4543,-76.3791 310.3852,-81.3955"/>
+<polygon fill="#000000" stroke="#000000" points="309.5107,-84.7845 320.0736,-83.9627 311.3038,-78.018 309.5107,-84.7845"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node14" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node14"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="107.5,-24 10.5,-24 10.5,0 107.5,0 107.5,-24"/>
+<text text-anchor="middle" x="59" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge13" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M107.8709,-12C122.7844,-12 139.243,-12 154.3929,-12"/>
+<polygon fill="#000000" stroke="#000000" points="154.6372,-15.5001 164.6371,-12 154.6371,-8.5001 154.6372,-15.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-150 14.5,-150 14.5,-126 103.5,-126 103.5,-150"/>
+<text text-anchor="middle" x="59" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.8065,-138C121.1599,-138 141.0641,-138 158.7327,-138"/>
+<polygon fill="#000000" stroke="#000000" points="158.8413,-141.5001 168.8412,-138 158.8412,-134.5001 158.8413,-141.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node16" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node16"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-108 0,-108 0,-84 118,-84 118,-108"/>
+<text text-anchor="middle" x="59" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge15" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.3445,-96C126.6918,-96 135.2982,-96 143.7157,-96"/>
+<polygon fill="#000000" stroke="#000000" points="143.8594,-99.5001 153.8593,-96 143.8593,-92.5001 143.8594,-99.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_node17" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~update_triang_matrix~~CalledByGraph_node17"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-66 7.5,-66 7.5,-42 110.5,-42 110.5,-66"/>
+<text text-anchor="middle" x="59" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~update_triang_matrix~~CalledByGraph_edge16" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.7632,-54C123.7865,-54 137.8227,-54 151.0411,-54"/>
+<polygon fill="#000000" stroke="#000000" points="151.4317,-57.5001 161.4317,-54 151.4316,-50.5001 151.4317,-57.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocupdate_triang_matrixCalledByGraph = svgPanZoom('#procupdate_triang_matrixCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

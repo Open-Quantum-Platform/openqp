@@ -1,0 +1,856 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>oqp_dsyr2k_i64 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>oqp_dsyr2k_i64
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">31 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/blas_wrap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/blas_wrap.f90.html'>blas_wrap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/blas_wrap.html'>blas_wrap</a></li>
+            <li class="breadcrumb-item active" aria-current="page">oqp_dsyr2k_i64</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/oqp_dsyr2k_i64.html#src">oqp_dsyr2k_i64</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine oqp_dsyr2k_i64(uplo, trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc)  
+</h2>
+    
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~30"></span>
+              character(len=1)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans~16"></span>
+              character(len=1)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~114"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-k~18"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>k</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-alpha~35"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>alpha</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~86"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~31"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~62"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(ldb,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~10"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta~22"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~15"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(ldc,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldc~10"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dsyr2k_i64~~CallsGraph Pages: 1 -->
+<svg id="procoqp_dsyr2k_i64CallsGraph" width="232pt" height="74pt"
+ viewBox="0.00 0.00 232.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~oqp_dsyr2k_i64~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 228,-70 228,4 -4,4"/>
+<!-- proc~oqp_dsyr2k_i64 -->
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph_node1" class="node">
+<title>proc~oqp_dsyr2k_i64</title>
+<polygon fill="none" stroke="#000000" points="95,-45 0,-45 0,-21 95,-21 95,-45"/>
+<text text-anchor="middle" x="47.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dsyr2k_i64</text>
+</g>
+<!-- dsyr2k -->
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph_node2" class="node">
+<title>dsyr2k</title>
+<polygon fill="#777777" stroke="#777777" points="204.5,-66 150.5,-66 150.5,-42 204.5,-42 204.5,-66"/>
+<text text-anchor="middle" x="177.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyr2k</text>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k -->
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph_edge1" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;dsyr2k</title>
+<path fill="none" stroke="#000000" d="M95.169,-40.7004C109.9518,-43.0884 126.0248,-45.6848 140.0131,-47.9444"/>
+<polygon fill="#000000" stroke="#000000" points="139.8175,-51.4581 150.2477,-49.5977 140.9339,-44.5477 139.8175,-51.4581"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="224,-24 131,-24 131,0 224,0 224,-24"/>
+<text text-anchor="middle" x="177.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message -->
+<g id="proc~~oqp_dsyr2k_i64~~CallsGraph_edge2" class="edge">
+<title>proc~oqp_dsyr2k_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M95.169,-25.2996C103.5025,-23.9534 112.2459,-22.541 120.7948,-21.1601"/>
+<polygon fill="#000000" stroke="#000000" points="121.3909,-24.6092 130.7048,-19.5592 120.2746,-17.6988 121.3909,-24.6092"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dsyr2k_i64~~CalledByGraph Pages: 1 -->
+<svg id="procoqp_dsyr2k_i64CalledByGraph" width="641pt" height="153pt"
+ viewBox="0.00 0.00 641.00 153.22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph" class="graph" transform="scale(.9697 .9697) rotate(0) translate(4 154)">
+<title>proc~~oqp_dsyr2k_i64~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-154 657,-154 657,4 -4,4"/>
+<!-- proc~oqp_dsyr2k_i64 -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node1" class="node">
+<title>proc~oqp_dsyr2k_i64</title>
+<polygon fill="none" stroke="#000000" points="653,-108 558,-108 558,-84 653,-84 653,-108"/>
+<text text-anchor="middle" x="605.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dsyr2k_i64</text>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node2" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node2"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="522,-129 413,-129 413,-105 522,-105 522,-129"/>
+<text text-anchor="middle" x="467.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~oqp_dsyr2k_i64 -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge1" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~oqp_dsyr2k_i64</title>
+<path fill="none" stroke="#000000" d="M522.0413,-108.7002C530.3968,-107.4288 539.0485,-106.1122 547.476,-104.8297"/>
+<polygon fill="#000000" stroke="#000000" points="548.2499,-108.2524 557.6095,-103.2877 547.1967,-101.332 548.2499,-108.2524"/>
+</g>
+<!-- proc~orb_to_dens -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node3" class="node">
+<title>proc~orb_to_dens</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node3"><a xlink:href="../proc/orb_to_dens.html" xlink:title="orb_to_dens">
+<polygon fill="#d9534f" stroke="#d9534f" points="506,-87 429,-87 429,-63 506,-63 506,-87"/>
+<text text-anchor="middle" x="467.5" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orb_to_dens</text>
+</a>
+</g>
+</g>
+<!-- proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64 -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge2" class="edge">
+<title>proc~orb_to_dens&#45;&gt;proc~oqp_dsyr2k_i64</title>
+<path fill="none" stroke="#000000" d="M506.3079,-80.9056C519.2021,-82.8677 533.8485,-85.0965 547.8533,-87.2277"/>
+<polygon fill="#000000" stroke="#000000" points="547.4906,-90.7127 557.9033,-88.757 548.5437,-83.7924 547.4906,-90.7127"/>
+</g>
+<!-- proc~get_ab_initio_density -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node4" class="node">
+<title>proc~get_ab_initio_density</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node4"><a xlink:href="../proc/get_ab_initio_density.html" xlink:title="get_ab_initio_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="377,-87 253,-87 253,-63 377,-63 377,-87"/>
+<text text-anchor="middle" x="315" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge4" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;proc~orb_to_dens</title>
+<path fill="none" stroke="#000000" d="M377.0276,-75C390.8219,-75 405.2601,-75 418.4489,-75"/>
+<polygon fill="#000000" stroke="#000000" points="418.722,-78.5001 428.722,-75 418.722,-71.5001 418.722,-78.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node5" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node5"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="363,-129 267,-129 267,-105 363,-105 363,-129"/>
+<text text-anchor="middle" x="315" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge3" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M363.252,-117C375.838,-117 389.6059,-117 402.891,-117"/>
+<polygon fill="#000000" stroke="#000000" points="402.9286,-120.5001 412.9285,-117 402.9285,-113.5001 402.9286,-120.5001"/>
+</g>
+<!-- proc~guess_hcore -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node6" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node6"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="214.5,-150 135.5,-150 135.5,-126 214.5,-126 214.5,-150"/>
+<text text-anchor="middle" x="175" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge5" class="edge">
+<title>proc~guess_hcore&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M200.0104,-125.8257C205.6349,-122.9963 211.5505,-119.9479 217,-117 233.2923,-108.1868 236.1424,-103.6768 253,-96 257.1257,-94.1212 261.4711,-92.318 265.8675,-90.6125"/>
+<polygon fill="#000000" stroke="#000000" points="267.3452,-93.7976 275.508,-87.0434 264.9149,-87.2331 267.3452,-93.7976"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node7" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node7"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-108 133,-108 133,-84 217,-84 217,-108"/>
+<text text-anchor="middle" x="175" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge6" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M217.0046,-89.6993C225.1973,-88.4704 234.0026,-87.1496 242.8536,-85.822"/>
+<polygon fill="#000000" stroke="#000000" points="243.4659,-89.2694 252.836,-84.3246 242.4274,-82.3468 243.4659,-89.2694"/>
+</g>
+<!-- proc~guess_json -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node8" class="node">
+<title>proc~guess_json</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node8"><a xlink:href="../proc/guess_json.html" xlink:title="guess_json">
+<polygon fill="#d9534f" stroke="#d9534f" points="210,-66 140,-66 140,-42 210,-42 210,-66"/>
+<text text-anchor="middle" x="175" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge7" class="edge">
+<title>proc~guess_json&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M210.3279,-59.2992C220.3521,-60.8028 231.6454,-62.4968 243.0087,-64.2013"/>
+<polygon fill="#000000" stroke="#000000" points="242.574,-67.6752 252.9826,-65.6974 243.6124,-60.7526 242.574,-67.6752"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node9" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node9"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="207,-24 143,-24 143,0 207,0 207,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~get_ab_initio_density -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge8" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~get_ab_initio_density</title>
+<path fill="none" stroke="#000000" d="M201.9934,-24.147C223.8791,-33.9956 254.922,-47.9649 278.9359,-58.7711"/>
+<polygon fill="#000000" stroke="#000000" points="277.5339,-61.9783 288.0895,-62.8903 280.4065,-55.5948 277.5339,-61.9783"/>
+</g>
+<!-- proc~guess_hcore_c -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node10" class="node">
+<title>proc~guess_hcore_c</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node10"><a xlink:href="../proc/guess_hcore_c.html" xlink:title="guess_hcore_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="94.5,-150 2.5,-150 2.5,-126 94.5,-126 94.5,-150"/>
+<text text-anchor="middle" x="48.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore_c&#45;&gt;proc~guess_hcore -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge9" class="edge">
+<title>proc~guess_hcore_c&#45;&gt;proc~guess_hcore</title>
+<path fill="none" stroke="#000000" d="M94.5272,-138C104.4891,-138 115.0679,-138 125.1682,-138"/>
+<polygon fill="#000000" stroke="#000000" points="125.4747,-141.5001 135.4747,-138 125.4746,-134.5001 125.4747,-141.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node11" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node11"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-108 0,-108 0,-84 97,-84 97,-108"/>
+<text text-anchor="middle" x="48.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge10" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-96C105.4673,-96 114.2563,-96 122.7704,-96"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-99.5001 132.9762,-96 122.9762,-92.5001 122.9762,-99.5001"/>
+</g>
+<!-- proc~guess_json_c -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node12" class="node">
+<title>proc~guess_json_c</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node12"><a xlink:href="../proc/guess_json_c.html" xlink:title="guess_json_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="90,-66 7,-66 7,-42 90,-42 90,-66"/>
+<text text-anchor="middle" x="48.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json_c&#45;&gt;proc~guess_json -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge11" class="edge">
+<title>proc~guess_json_c&#45;&gt;proc~guess_json</title>
+<path fill="none" stroke="#000000" d="M90.2714,-54C102.8779,-54 116.776,-54 129.6064,-54"/>
+<polygon fill="#000000" stroke="#000000" points="129.6221,-57.5001 139.6221,-54 129.6221,-50.5001 129.6221,-57.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_node13" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~oqp_dsyr2k_i64~~CalledByGraph_node13"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="81.5,-24 15.5,-24 15.5,0 81.5,0 81.5,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~oqp_dsyr2k_i64~~CalledByGraph_edge12" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M81.7364,-12C97.3766,-12 116.2042,-12 132.8355,-12"/>
+<polygon fill="#000000" stroke="#000000" points="132.8589,-15.5001 142.8589,-12 132.8589,-8.5001 132.8589,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocoqp_dsyr2k_i64CalledByGraph = svgPanZoom('#procoqp_dsyr2k_i64CalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">oqp_dsyr2k_i64</span><span class="p">(</span><span class="n">uplo</span><span class="p">,</span><span class="w"> </span><span class="n">trans</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">lda</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ldb</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">ldc</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">alpha</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">beta</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">k</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">lda</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ldb</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ldc</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<span class="w">    </span><span class="kt">character</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">trans</span>
+<span class="w">    </span><span class="kt">character</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">uplo</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">lda</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="n">ldb</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c</span><span class="p">(</span><span class="n">ldc</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="n">blas_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n_</span><span class="p">,</span><span class="w"> </span><span class="n">k_</span><span class="p">,</span><span class="w"> </span><span class="n">lda_</span><span class="p">,</span><span class="w"> </span><span class="n">ldb_</span><span class="p">,</span><span class="w"> </span><span class="n">ldc_</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ARG_CHECK</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">n</span><span class="w">   </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">k</span><span class="w">   </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">lda</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">ldb</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">ldc</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="n">ok</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="n">ERRMSG</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end if</span>
+
+<span class="k">    </span><span class="n">n_</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="w">   </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">k_</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="w">   </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">lda_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">lda</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ldb_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">ldb</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ldc_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">ldc</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">dsyr2k</span><span class="p">(</span><span class="n">uplo</span><span class="p">,</span><span class="w"> </span><span class="n">trans</span><span class="p">,</span><span class="w"> </span><span class="n">n_</span><span class="p">,</span><span class="w"> </span><span class="n">k_</span><span class="p">,</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">lda_</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ldb_</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">ldc_</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">oqp_dsyr2k_i64</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

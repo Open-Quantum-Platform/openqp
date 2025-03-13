@@ -1,0 +1,1243 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>oqp_dsymm_i64 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>oqp_dsymm_i64
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">31 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/blas_wrap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/blas_wrap.f90.html'>blas_wrap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/blas_wrap.html'>blas_wrap</a></li>
+            <li class="breadcrumb-item active" aria-current="page">oqp_dsymm_i64</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/oqp_dsymm_i64.html#src">oqp_dsymm_i64</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine oqp_dsymm_i64(side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc)  
+</h2>
+    
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-side~5"></span>
+              character(len=1)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>side</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~26"></span>
+              character(len=1)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~16"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~110"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-alpha~31"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>alpha</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~82"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(lda,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~27"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~61"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(ldb,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~9"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-beta~20"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>beta</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-c~14"></span>
+              double precision
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>c</strong>(ldc,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldc~9"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dsymm_i64~~CallsGraph Pages: 1 -->
+<svg id="procoqp_dsymm_i64CallsGraph" width="236pt" height="74pt"
+ viewBox="0.00 0.00 236.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dsymm_i64~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~oqp_dsymm_i64~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 232,-70 232,4 -4,4"/>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CallsGraph_node1" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<polygon fill="none" stroke="#000000" points="99,-45 0,-45 0,-21 99,-21 99,-45"/>
+<text text-anchor="middle" x="49.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dsymm_i64</text>
+</g>
+<!-- dsymm -->
+<g id="proc~~oqp_dsymm_i64~~CallsGraph_node2" class="node">
+<title>dsymm</title>
+<polygon fill="#777777" stroke="#777777" points="208.5,-66 154.5,-66 154.5,-42 208.5,-42 208.5,-66"/>
+<text text-anchor="middle" x="181.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsymm</text>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;dsymm -->
+<g id="proc~~oqp_dsymm_i64~~CallsGraph_edge1" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M99.0275,-40.8794C113.9512,-43.2536 130.0753,-45.8188 144.074,-48.0459"/>
+<polygon fill="#000000" stroke="#000000" points="143.8838,-51.5595 154.3096,-49.6742 144.9837,-44.6465 143.8838,-51.5595"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~oqp_dsymm_i64~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~oqp_dsymm_i64~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="228,-24 135,-24 135,0 228,0 228,-24"/>
+<text text-anchor="middle" x="181.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~oqp_dsymm_i64~~CallsGraph_edge2" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M99.0275,-25.1206C107.4403,-23.7822 116.2347,-22.3831 124.8147,-21.0181"/>
+<polygon fill="#000000" stroke="#000000" points="125.4269,-24.4648 134.7527,-19.4371 124.327,-17.5518 125.4269,-24.4648"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~oqp_dsymm_i64~~CalledByGraph Pages: 1 -->
+<svg id="procoqp_dsymm_i64CalledByGraph" width="641pt" height="303pt"
+ viewBox="0.00 0.00 641.00 303.29" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph" class="graph" transform="scale(.4988 .4988) rotate(0) translate(4 604)">
+<title>proc~~oqp_dsymm_i64~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-604 1281,-604 1281,4 -4,4"/>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node1" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<polygon fill="none" stroke="#000000" points="1277,-449 1178,-449 1178,-425 1277,-425 1277,-449"/>
+<text text-anchor="middle" x="1227.5" y="-434.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_dsymm_i64</text>
+</g>
+<!-- none~add_data -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node2" class="node">
+<title>none~add_data</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node2"><a xlink:href="../type/scf_conv.html#boundprocedure-add_data" xlink:title="scf_conv%add_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="996,-600 878,-600 878,-576 996,-576 996,-600"/>
+<text text-anchor="middle" x="937" y="-585.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_conv%add_data</text>
+</a>
+</g>
+</g>
+<!-- none~add_data&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge1" class="edge">
+<title>none~add_data&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M969.3396,-575.9483C980.9208,-571.5969 994.061,-566.6192 1006,-562 1066.6534,-538.5331 1086.0688,-541.1848 1142,-508 1166.67,-493.3629 1191.5224,-471.7806 1208.0249,-456.2566"/>
+<polygon fill="#000000" stroke="#000000" points="1210.6146,-458.6228 1215.418,-449.1794 1205.774,-453.5662 1210.6146,-458.6228"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node3" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node3"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="629,-449 545,-449 545,-425 629,-425 629,-449"/>
+<text text-anchor="middle" x="587" y="-434.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge2" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M629.025,-437C739.7164,-437 1039.5786,-437 1167.9147,-437"/>
+<polygon fill="#000000" stroke="#000000" points="1167.9567,-440.5001 1177.9567,-437 1167.9566,-433.5001 1167.9567,-440.5001"/>
+</g>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node6" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node6"><a xlink:href="../proc/orthogonal_transform_sym.html" xlink:title="orthogonal_transform_sym">
+<polygon fill="#d9534f" stroke="#d9534f" points="832,-179 676,-179 676,-155 832,-155 832,-179"/>
+<text text-anchor="middle" x="754" y="-164.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform_sym</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge12" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M615.4551,-424.9386C624.2531,-420.098 633.365,-413.7909 640,-406 668.7371,-372.2565 657.5234,-353.2872 676,-313 696.8971,-267.4351 725.5303,-216.1794 741.655,-188.143"/>
+<polygon fill="#000000" stroke="#000000" points="744.8263,-189.6506 746.8037,-179.2419 738.7669,-186.1457 744.8263,-189.6506"/>
+</g>
+<!-- proc~mo_to_ao -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node4" class="node">
+<title>proc~mo_to_ao</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node4"><a xlink:href="../proc/mo_to_ao.html" xlink:title="mo_to_ao">
+<polygon fill="#d9534f" stroke="#d9534f" points="1124,-499 1060,-499 1060,-475 1124,-475 1124,-499"/>
+<text text-anchor="middle" x="1092" y="-484.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_to_ao</text>
+</a>
+</g>
+</g>
+<!-- proc~mo_to_ao&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge3" class="edge">
+<title>proc~mo_to_ao&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M1124.1116,-475.1507C1142.4049,-468.4004 1165.5443,-459.8619 1185.2919,-452.575"/>
+<polygon fill="#000000" stroke="#000000" points="1186.5076,-455.8571 1194.6776,-449.1116 1184.0843,-449.2899 1186.5076,-455.8571"/>
+</g>
+<!-- proc~mo_tran_symm_ -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node5" class="node">
+<title>proc~mo_tran_symm_</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node5"><a xlink:href="../proc/mo_tran_symm_.html" xlink:title="mo_tran_symm_">
+<polygon fill="#d9534f" stroke="#d9534f" points="1142,-387 1042,-387 1042,-363 1142,-363 1142,-387"/>
+<text text-anchor="middle" x="1092" y="-372.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_tran_symm_</text>
+</a>
+</g>
+</g>
+<!-- proc~mo_tran_symm_&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge4" class="edge">
+<title>proc~mo_tran_symm_&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M1118.4474,-387.1014C1139.4317,-396.7031 1168.9643,-410.2162 1192.0049,-420.7587"/>
+<polygon fill="#000000" stroke="#000000" points="1190.5697,-423.9509 1201.1193,-424.9291 1193.4823,-417.5856 1190.5697,-423.9509"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge5" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M787.8831,-179.0697C857.8271,-204.8709 1021.704,-269.9521 1142,-354 1168.3241,-372.392 1194.1601,-398.9961 1210.4215,-417.0913"/>
+<polygon fill="#000000" stroke="#000000" points="1207.9419,-419.5709 1217.1866,-424.7465 1213.1872,-414.9355 1207.9419,-419.5709"/>
+</g>
+<!-- none~compmos -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node7" class="node">
+<title>none~compmos</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node7"><a xlink:href="../type/xc_engine_t.html#boundprocedure-compmos" xlink:title="xc_engine_t%compMOs">
+<polygon fill="#a7506f" stroke="#a7506f" points="1006,-387 868,-387 868,-363 1006,-363 1006,-387"/>
+<text text-anchor="middle" x="937" y="-372.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_engine_t%compMOs</text>
+</a>
+</g>
+</g>
+<!-- none~compmos&#45;&gt;proc~mo_tran_symm_ -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge9" class="edge">
+<title>none~compmos&#45;&gt;proc~mo_tran_symm_</title>
+<path fill="none" stroke="#000000" d="M1006.3396,-375C1014.7276,-375 1023.2444,-375 1031.4913,-375"/>
+<polygon fill="#000000" stroke="#000000" points="1031.763,-378.5001 1041.7629,-375 1031.7629,-371.5001 1031.763,-378.5001"/>
+</g>
+<!-- proc~eijden -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node8" class="node">
+<title>proc~eijden</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node8"><a xlink:href="../proc/eijden.html" xlink:title="eijden">
+<polygon fill="#d9534f" stroke="#d9534f" points="614,-148 560,-148 560,-124 614,-124 614,-148"/>
+<text text-anchor="middle" x="587" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eijden</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge10" class="edge">
+<title>proc~eijden&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M614.2031,-141.0497C631.9949,-144.3523 656.1695,-148.8398 679.4124,-153.1544"/>
+<polygon fill="#000000" stroke="#000000" points="678.8244,-156.605 689.2953,-154.9889 680.102,-149.7225 678.8244,-156.605"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node9" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node9"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="633.5,-397 540.5,-397 540.5,-373 633.5,-373 633.5,-397"/>
+<text text-anchor="middle" x="587" y="-382.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge11" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M605.9508,-372.7299C616.6844,-365.2233 629.9344,-354.9733 640,-344 685.875,-293.9882 725.1732,-223.4139 743.3029,-188.4121"/>
+<polygon fill="#000000" stroke="#000000" points="746.6067,-189.6382 748.0389,-179.1406 740.3729,-186.4538 746.6067,-189.6382"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node10" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node10"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="481,-520 397,-520 397,-496 481,-496 481,-520"/>
+<text text-anchor="middle" x="439" y="-505.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge7" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M467.3481,-495.871C477.1121,-491.5973 488.0827,-486.6883 498,-482 516.8425,-473.0924 537.6431,-462.6122 554.3941,-454.0077"/>
+<polygon fill="#000000" stroke="#000000" points="556.4611,-456.8797 563.7435,-449.1844 553.2518,-450.6588 556.4611,-456.8797"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node11" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node11"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="182.5,-520 118.5,-520 118.5,-496 182.5,-496 182.5,-520"/>
+<text text-anchor="middle" x="150.5" y="-505.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~add_data -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge6" class="edge">
+<title>proc~scf_driver&#45;&gt;none~add_data</title>
+<path fill="none" stroke="#000000" d="M164.9861,-520.1654C181.0105,-532.8923 208.133,-552.3359 235,-562 320.9535,-592.9176 347.655,-587 439,-587 439,-587 439,-587 587,-587 684.4434,-587 797.1463,-587.3924 867.7541,-587.6856"/>
+<polygon fill="#000000" stroke="#000000" points="867.8447,-591.1859 877.8594,-587.7281 867.8742,-584.186 867.8447,-591.1859"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~mo_to_ao -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge8" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~mo_to_ao</title>
+<path fill="none" stroke="#000000" d="M182.7613,-517.2311C198.4149,-521.3978 217.5635,-526.0387 235,-529 324.7736,-544.2465 347.9409,-548 439,-548 439,-548 439,-548 754,-548 862.107,-548 986.6158,-517.4051 1050.073,-499.5503"/>
+<polygon fill="#000000" stroke="#000000" points="1051.0636,-502.9074 1059.7215,-496.8007 1049.1451,-496.1754 1051.0636,-502.9074"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~form_rohf_fock -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge18" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~form_rohf_fock</title>
+<path fill="none" stroke="#000000" d="M182.8325,-499.1584C198.5024,-495.0804 217.644,-490.4016 235,-487 350.8977,-464.2849 391.2836,-499.5951 498,-449 517.6125,-439.7016 516.5335,-428.8854 534,-416 540.5743,-411.15 547.9625,-406.4255 555.0879,-402.1861"/>
+<polygon fill="#000000" stroke="#000000" points="556.982,-405.134 563.8919,-397.1026 553.4817,-399.072 556.982,-405.134"/>
+</g>
+<!-- proc~dftexcor -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node32" class="node">
+<title>proc~dftexcor</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node32"><a xlink:href="../proc/dftexcor.html" xlink:title="dftexcor">
+<polygon fill="#d9534f" stroke="#d9534f" points="318,-440 261,-440 261,-416 318,-416 318,-440"/>
+<text text-anchor="middle" x="289.5" y="-425.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftexcor</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~dftexcor -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge40" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~dftexcor</title>
+<path fill="none" stroke="#000000" d="M167.916,-495.9721C184.7359,-484.5731 211.1034,-467.2692 235,-454 240.7741,-450.7938 247.0069,-447.591 253.1229,-444.5842"/>
+<polygon fill="#000000" stroke="#000000" points="255.0599,-447.5364 262.555,-440.0481 252.026,-441.228 255.0599,-447.5364"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="640,-34 534,-34 534,-10 640,-10 640,-34"/>
+<text text-anchor="middle" x="587" y="-19.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M603.5078,-34.2256C614.1052,-42.2063 628.0671,-52.9696 640,-63 673.9377,-91.5269 711.6368,-126.6319 734.0522,-147.8893"/>
+<polygon fill="#000000" stroke="#000000" points="731.6551,-150.4396 741.3123,-154.7974 736.4804,-145.3685 731.6551,-150.4396"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="632.5,-96 541.5,-96 541.5,-72 632.5,-72 632.5,-96"/>
+<text text-anchor="middle" x="587" y="-81.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M611.2832,-96.0689C640.1006,-110.3913 688.3053,-134.3493 720.6172,-150.4086"/>
+<polygon fill="#000000" stroke="#000000" points="719.1747,-153.6 729.6875,-154.9165 722.2902,-147.3315 719.1747,-153.6"/>
+</g>
+<!-- none~compxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node14" class="node">
+<title>none~compxc</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node14"><a xlink:href="../type/xc_engine_t.html#boundprocedure-compxc" xlink:title="xc_engine_t%compXC">
+<polygon fill="#a7506f" stroke="#a7506f" points="819,-346 689,-346 689,-322 819,-322 819,-346"/>
+<text text-anchor="middle" x="754" y="-331.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_engine_t%compXC</text>
+</a>
+</g>
+</g>
+<!-- none~compxc&#45;&gt;none~compmos -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge15" class="edge">
+<title>none~compxc&#45;&gt;none~compmos</title>
+<path fill="none" stroke="#000000" d="M807.9163,-346.0796C828.3949,-350.6677 851.9136,-355.9369 873.2184,-360.7101"/>
+<polygon fill="#000000" stroke="#000000" points="872.6299,-364.165 883.1532,-362.936 874.1603,-357.3343 872.6299,-364.165"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node15" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node15"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="338,-520 241,-520 241,-496 338,-496 338,-520"/>
+<text text-anchor="middle" x="289.5" y="-505.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge19" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M338.0384,-508C353.565,-508 370.8192,-508 386.6077,-508"/>
+<polygon fill="#000000" stroke="#000000" points="386.7385,-511.5001 396.7385,-508 386.7385,-504.5001 386.7385,-511.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node16" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node16"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="66,-520 0,-520 0,-496 66,-496 66,-520"/>
+<text text-anchor="middle" x="33" y="-505.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge20" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M66.043,-508C79.0247,-508 94.0923,-508 107.8762,-508"/>
+<polygon fill="#000000" stroke="#000000" points="108.1108,-511.5001 118.1108,-508 108.1107,-504.5001 108.1108,-511.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node17" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node17"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="187,-211 114,-211 114,-187 187,-187 187,-211"/>
+<text text-anchor="middle" x="150.5" y="-196.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~eijden -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge16" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M187.2802,-190.7953C232.4503,-180.9866 311.5105,-164.685 380,-155 439.0046,-146.6563 508.0139,-141.1713 549.5722,-138.3286"/>
+<polygon fill="#000000" stroke="#000000" points="550.0322,-141.8057 559.7763,-137.6462 549.565,-134.8214 550.0322,-141.8057"/>
+</g>
+<!-- proc~dftder -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node31" class="node">
+<title>proc~dftder</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node31"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="316.5,-230 262.5,-230 262.5,-206 316.5,-206 316.5,-230"/>
+<text text-anchor="middle" x="289.5" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~dftder -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge39" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~dftder</title>
+<path fill="none" stroke="#000000" d="M187.0206,-203.992C207.1586,-206.7447 232.1056,-210.1547 252.3434,-212.921"/>
+<polygon fill="#000000" stroke="#000000" points="252.065,-216.4154 262.4469,-214.3021 253.0131,-209.4799 252.065,-216.4154"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node18" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node18"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="480,-108 398,-108 398,-84 480,-84 480,-108"/>
+<text text-anchor="middle" x="439" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~eijden -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge17" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~eijden</title>
+<path fill="none" stroke="#000000" d="M480.2263,-107.1422C502.1303,-113.0622 528.8352,-120.2798 550.0584,-126.0158"/>
+<polygon fill="#000000" stroke="#000000" points="549.4248,-129.4701 559.9917,-128.7005 551.2513,-122.7125 549.4248,-129.4701"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node19" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node19"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="498,-24 380,-24 380,0 498,0 498,-24"/>
+<text text-anchor="middle" x="439" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge21" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M498.3445,-16.0098C506.6918,-16.5738 515.2982,-17.1553 523.7157,-17.724"/>
+<polygon fill="#000000" stroke="#000000" points="523.6461,-21.2272 533.8593,-18.4094 524.1181,-14.2431 523.6461,-21.2272"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node20" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node20"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="490.5,-66 387.5,-66 387.5,-42 490.5,-42 490.5,-66"/>
+<text text-anchor="middle" x="439" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge22" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M490.7632,-64.4925C503.9154,-67.1585 518.1008,-70.0339 531.4335,-72.7365"/>
+<polygon fill="#000000" stroke="#000000" points="530.9356,-76.2067 541.4317,-74.7632 532.3263,-69.3462 530.9356,-76.2067"/>
+</g>
+<!-- proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node21" class="node">
+<title>proc~run_xc</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node21"><a xlink:href="../proc/run_xc.html" xlink:title="run_xc">
+<polygon fill="#d9534f" stroke="#d9534f" points="614,-335 560,-335 560,-311 614,-311 614,-335"/>
+<text text-anchor="middle" x="587" y="-320.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">run_xc</text>
+</a>
+</g>
+</g>
+<!-- proc~run_xc&#45;&gt;none~compxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge23" class="edge">
+<title>proc~run_xc&#45;&gt;none~compxc</title>
+<path fill="none" stroke="#000000" d="M614.2031,-324.7918C631.8349,-325.9532 655.7354,-327.5275 678.7854,-329.0457"/>
+<polygon fill="#000000" stroke="#000000" points="678.7309,-332.5497 688.9394,-329.7146 679.1911,-325.5648 678.7309,-332.5497"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node22" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node22"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="331.5,-108 247.5,-108 247.5,-84 331.5,-84 331.5,-108"/>
+<text text-anchor="middle" x="289.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge24" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M331.5419,-96C348.9497,-96 369.3054,-96 387.5901,-96"/>
+<polygon fill="#000000" stroke="#000000" points="387.7899,-99.5001 397.7899,-96 387.7898,-92.5001 387.7899,-99.5001"/>
+</g>
+<!-- proc~tddft_xc_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node27" class="node">
+<title>proc~tddft_xc_gradient</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node27"><a xlink:href="../proc/tddft_xc_gradient.html" xlink:title="tddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="491.5,-188 386.5,-188 386.5,-164 491.5,-164 491.5,-188"/>
+<text text-anchor="middle" x="439" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tddft_xc_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge38" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tddft_xc_gradient</title>
+<path fill="none" stroke="#000000" d="M312.2058,-108.1503C337.598,-121.7381 378.8965,-143.8376 407.426,-159.1042"/>
+<polygon fill="#000000" stroke="#000000" points="406.102,-162.3653 416.5703,-163.9975 409.4047,-156.1934 406.102,-162.3653"/>
+</g>
+<!-- proc~derexc_blk -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node23" class="node">
+<title>proc~derexc_blk</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node23"><a xlink:href="../proc/derexc_blk.html" xlink:title="derexc_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="474,-272 404,-272 404,-248 474,-248 474,-272"/>
+<text text-anchor="middle" x="439" y="-257.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">derexc_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~derexc_blk&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge25" class="edge">
+<title>proc~derexc_blk&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M474.1591,-271.8708C482.0589,-274.7159 490.3619,-277.8475 498,-281 516.747,-288.7376 537.2439,-298.3297 553.8372,-306.3929"/>
+<polygon fill="#000000" stroke="#000000" points="552.5933,-309.6809 563.1133,-310.9381 555.6734,-303.395 552.5933,-309.6809"/>
+</g>
+<!-- proc~dmatd_blk -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node24" class="node">
+<title>proc~dmatd_blk</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node24"><a xlink:href="../proc/dmatd_blk.html" xlink:title="dmatd_blk">
+<polygon fill="#d9534f" stroke="#d9534f" points="473,-440 405,-440 405,-416 473,-416 473,-440"/>
+<text text-anchor="middle" x="439" y="-425.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dmatd_blk</text>
+</a>
+</g>
+</g>
+<!-- proc~dmatd_blk&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge26" class="edge">
+<title>proc~dmatd_blk&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M473.2669,-419.252C481.7861,-416.1732 490.5923,-412.1539 498,-407 518.4599,-392.7652 516.0389,-381.281 534,-364 542.3858,-355.9318 552.3103,-347.9088 561.2907,-341.1276"/>
+<polygon fill="#000000" stroke="#000000" points="563.5634,-343.8003 569.5305,-335.0456 559.4063,-338.1684 563.5634,-343.8003"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node25" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node25"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="468,-398 410,-398 410,-374 468,-374 468,-398"/>
+<text text-anchor="middle" x="439" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge27" class="edge">
+<title>proc~tddft_fxc&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M468.0256,-376.3111C477.6429,-372.9308 488.3518,-368.9821 498,-365 516.747,-357.2624 537.2439,-347.6703 553.8372,-339.6071"/>
+<polygon fill="#000000" stroke="#000000" points="555.6734,-342.605 563.1133,-335.0619 552.5933,-336.3191 555.6734,-342.605"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node26" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node26"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="469.5,-314 408.5,-314 408.5,-290 469.5,-290 469.5,-314"/>
+<text text-anchor="middle" x="439" y="-299.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge28" class="edge">
+<title>proc~tddft_gxc&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M469.6657,-306.3512C492.9283,-309.652 525.0123,-314.2045 549.7515,-317.7147"/>
+<polygon fill="#000000" stroke="#000000" points="549.4647,-321.209 559.8572,-319.1487 550.4481,-314.2784 549.4647,-321.209"/>
+</g>
+<!-- proc~tddft_xc_gradient&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge29" class="edge">
+<title>proc~tddft_xc_gradient&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M482.7996,-188.1035C488.1897,-190.5773 493.4087,-193.5178 498,-197 535.2491,-225.2515 563.0811,-273.5603 577.0191,-301.4368"/>
+<polygon fill="#000000" stroke="#000000" points="574.003,-303.2386 581.5172,-310.7077 580.3009,-300.1829 574.003,-303.2386"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node28" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node28"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="199,-108 102,-108 102,-84 199,-84 199,-108"/>
+<text text-anchor="middle" x="150.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge32" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M199.1155,-96C211.348,-96 224.5321,-96 236.9477,-96"/>
+<polygon fill="#000000" stroke="#000000" points="237.1584,-99.5001 247.1584,-96 237.1583,-92.5001 237.1584,-99.5001"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node29" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node29"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="471.5,-356 406.5,-356 406.5,-332 471.5,-332 471.5,-356"/>
+<text text-anchor="middle" x="439" y="-341.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge30" class="edge">
+<title>proc~utddft_fxc&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M471.846,-339.3394C494.8426,-336.0764 525.614,-331.7102 549.5621,-328.3121"/>
+<polygon fill="#000000" stroke="#000000" points="550.2891,-331.7441 559.6982,-326.8739 549.3057,-324.8135 550.2891,-331.7441"/>
+</g>
+<!-- proc~utddft_xc_gradient -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node30" class="node">
+<title>proc~utddft_xc_gradient</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node30"><a xlink:href="../proc/utddft_xc_gradient.html" xlink:title="utddft_xc_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="495,-230 383,-230 383,-206 495,-206 495,-230"/>
+<text text-anchor="middle" x="439" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_xc_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_xc_gradient&#45;&gt;proc~run_xc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge31" class="edge">
+<title>proc~utddft_xc_gradient&#45;&gt;proc~run_xc</title>
+<path fill="none" stroke="#000000" d="M480.0116,-230.0914C486.239,-232.6318 492.4359,-235.5945 498,-239 526.5723,-256.4875 553.7094,-284.2972 570.341,-303.081"/>
+<polygon fill="#000000" stroke="#000000" points="567.8088,-305.5032 577.005,-310.7644 573.0969,-300.9167 567.8088,-305.5032"/>
+</g>
+<!-- proc~dftder&#45;&gt;proc~derexc_blk -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge33" class="edge">
+<title>proc~dftder&#45;&gt;proc~derexc_blk</title>
+<path fill="none" stroke="#000000" d="M316.5733,-225.6059C338.1898,-231.6787 368.9358,-240.3164 394.2077,-247.4162"/>
+<polygon fill="#000000" stroke="#000000" points="393.3742,-250.8175 403.9482,-250.1527 395.2675,-244.0784 393.3742,-250.8175"/>
+</g>
+<!-- proc~dftexcor&#45;&gt;proc~dmatd_blk -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge34" class="edge">
+<title>proc~dftexcor&#45;&gt;proc~dmatd_blk</title>
+<path fill="none" stroke="#000000" d="M318.3251,-428C339.9299,-428 369.8915,-428 394.5546,-428"/>
+<polygon fill="#000000" stroke="#000000" points="394.7603,-431.5001 404.7603,-428 394.7602,-424.5001 394.7603,-431.5001"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node33" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node33"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="344,-335 235,-335 235,-311 344,-311 344,-335"/>
+<text text-anchor="middle" x="289.5" y="-320.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_fxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge35" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_fxc</title>
+<path fill="none" stroke="#000000" d="M313.8121,-335.0293C331.8793,-343.785 357.2341,-355.6891 380,-365 386.4909,-367.6547 393.4563,-370.3048 400.2452,-372.784"/>
+<polygon fill="#000000" stroke="#000000" points="399.3948,-376.1971 409.9893,-376.2748 401.7556,-369.6072 399.3948,-376.1971"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_gxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge37" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~tddft_gxc</title>
+<path fill="none" stroke="#000000" d="M344.3194,-315.2996C362.1243,-312.7986 381.5567,-310.069 398.1579,-307.737"/>
+<polygon fill="#000000" stroke="#000000" points="398.6728,-311.1991 408.0887,-306.3421 397.699,-304.2672 398.6728,-311.1991"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node34" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node34"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="327.5,-398 251.5,-398 251.5,-374 327.5,-374 327.5,-398"/>
+<text text-anchor="middle" x="289.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~tddft_fxc -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge36" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~tddft_fxc</title>
+<path fill="none" stroke="#000000" d="M327.612,-386C349.718,-386 377.5036,-386 399.7933,-386"/>
+<polygon fill="#000000" stroke="#000000" points="399.9255,-389.5001 409.9255,-386 399.9255,-382.5001 399.9255,-389.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node35" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node35"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="195,-398 106,-398 106,-374 195,-374 195,-398"/>
+<text text-anchor="middle" x="150.5" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge42" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M195.2456,-386C209.9477,-386 226.3498,-386 241.2971,-386"/>
+<polygon fill="#000000" stroke="#000000" points="241.3741,-389.5001 251.374,-386 241.374,-382.5001 241.3741,-389.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_node36" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~oqp_dsymm_i64~~CalledByGraph_node36"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="198.5,-335 102.5,-335 102.5,-311 198.5,-311 198.5,-335"/>
+<text text-anchor="middle" x="150.5" y="-320.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~oqp_dsymm_i64~~CalledByGraph_edge41" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M198.7254,-323C207.0663,-323 215.8598,-323 224.5576,-323"/>
+<polygon fill="#000000" stroke="#000000" points="224.6914,-326.5001 234.6914,-323 224.6913,-319.5001 224.6914,-326.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocoqp_dsymm_i64CalledByGraph = svgPanZoom('#procoqp_dsymm_i64CalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">oqp_dsymm_i64</span><span class="p">(</span><span class="n">side</span><span class="p">,</span><span class="w"> </span><span class="n">uplo</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">lda</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ldb</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">ldc</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">alpha</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">beta</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">lda</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ldb</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ldc</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">m</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<span class="w">    </span><span class="kt">character</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">side</span>
+<span class="w">    </span><span class="kt">character</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">uplo</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="n">lda</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="n">ldb</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">double precision</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c</span><span class="p">(</span><span class="n">ldc</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="n">blas_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">m_</span><span class="p">,</span><span class="w"> </span><span class="n">n_</span><span class="p">,</span><span class="w"> </span><span class="n">lda_</span><span class="p">,</span><span class="w"> </span><span class="n">ldb_</span><span class="p">,</span><span class="w"> </span><span class="n">ldc_</span>
+<span class="w">    </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ARG_CHECK</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">m</span><span class="w">   </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">n</span><span class="w">   </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">lda</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">ldb</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ok</span><span class="w"> </span><span class="p">.</span><span class="nb">and</span><span class="p">.</span><span class="w"> </span><span class="nb">abs</span><span class="p">(</span><span class="n">ldc</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">HUGE_BLAS_INT</span><span class="o">-</span><span class="mi">1</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="n">ok</span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="n">ERRMSG</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end if</span>
+
+<span class="k">    </span><span class="n">m_</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="w">   </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">n_</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="w">   </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">lda_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">lda</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ldb_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">ldb</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+<span class="w">    </span><span class="n">ldc_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">ldc</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="n">blas_int</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">dsymm</span><span class="p">(</span><span class="n">side</span><span class="p">,</span><span class="w"> </span><span class="n">uplo</span><span class="p">,</span><span class="w"> </span><span class="n">m_</span><span class="p">,</span><span class="w"> </span><span class="n">n_</span><span class="p">,</span><span class="w"> </span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">lda_</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ldb_</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">ldc_</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">oqp_dsymm_i64</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

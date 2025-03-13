@@ -1,0 +1,662 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>basis_overlap &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>basis_overlap
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">24 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/int1.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/int1.f90.html'>int1.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/int1.html'>int1</a></li>
+            <li class="breadcrumb-item active" aria-current="page">basis_overlap</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine basis_overlap(s, basis1, basis2, tol)  
+</h2>
+    
+
+    <p>@brief Compute overlap matrix between two basis sets
+@details Overlap integrals are computed using Gauss-Hermite quadrature formula
+@author   Igor S. Gerasimov
+@date <em>Oct, 2022</em> Initial release</p>
+<p>@param[in,out]   s       unpacked matrix of overlap integrals
+@param[in]       basis1  basis w/ SP-shells separated
+@param[in]       basis2  basis w/ SP-shells separated
+@param[in]       tol     1-e exponential prefactor tolerance (should be ~tol_int*log(10.0_dp))</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s~12"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              CONTIGUOUS
+            </td>
+            <td>::</td>
+            <td><strong>s</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis1"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis1</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis2"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis2</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tol~12"></span>
+              real(kind=REAL64),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tol</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~basis_overlap~~CallsGraph Pages: 1 -->
+<svg id="procbasis_overlapCallsGraph" width="542pt" height="200pt"
+ viewBox="0.00 0.00 542.00 200.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~basis_overlap~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 196)">
+<title>proc~~basis_overlap~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-196 538,-196 538,4 -4,4"/>
+<!-- proc~basis_overlap -->
+<g id="proc~~basis_overlap~~CallsGraph_node1" class="node">
+<title>proc~basis_overlap</title>
+<polygon fill="none" stroke="#000000" points="85,-108 0,-108 0,-84 85,-84 85,-108"/>
+<text text-anchor="middle" x="42.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">basis_overlap</text>
+</g>
+<!-- none~alloc2 -->
+<g id="proc~~basis_overlap~~CallsGraph_node2" class="node">
+<title>none~alloc2</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node2"><a xlink:href="../type/shpair_t.html#boundprocedure-alloc2" xlink:title="shpair_t%alloc2">
+<polygon fill="#a7506f" stroke="#a7506f" points="248,-192 151,-192 151,-168 248,-168 248,-192"/>
+<text text-anchor="middle" x="199.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%alloc2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~alloc2 -->
+<g id="proc~~basis_overlap~~CallsGraph_edge1" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~alloc2</title>
+<path fill="none" stroke="#000000" d="M54.1526,-108.0079C68.5776,-122.1996 94.4987,-145.5768 121,-159 127.1727,-162.1266 133.8617,-164.8259 140.6424,-167.147"/>
+<polygon fill="#000000" stroke="#000000" points="140.0037,-170.6153 150.5933,-170.2827 142.1076,-163.939 140.0037,-170.6153"/>
+</g>
+<!-- none~fetch_by_id -->
+<g id="proc~~basis_overlap~~CallsGraph_node3" class="node">
+<title>none~fetch_by_id</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node3"><a xlink:href="../type/shell_t.html#boundprocedure-fetch_by_id" xlink:title="shell_t%fetch_by_id">
+<polygon fill="#a7506f" stroke="#a7506f" points="257.5,-150 141.5,-150 141.5,-126 257.5,-126 257.5,-150"/>
+<text text-anchor="middle" x="199.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shell_t%fetch_by_id</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~fetch_by_id -->
+<g id="proc~~basis_overlap~~CallsGraph_edge2" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~fetch_by_id</title>
+<path fill="none" stroke="#000000" d="M85.4009,-107.4767C103.647,-112.3578 125.1485,-118.1098 144.5386,-123.297"/>
+<polygon fill="#000000" stroke="#000000" points="143.8927,-126.7472 154.4575,-125.9504 145.7018,-119.985 143.8927,-126.7472"/>
+</g>
+<!-- none~shell_pair2 -->
+<g id="proc~~basis_overlap~~CallsGraph_node4" class="node">
+<title>none~shell_pair2</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node4"><a xlink:href="../type/shpair_t.html#boundprocedure-shell_pair2" xlink:title="shpair_t%shell_pair2">
+<polygon fill="#a7506f" stroke="#a7506f" points="260.5,-108 138.5,-108 138.5,-84 260.5,-84 260.5,-108"/>
+<text text-anchor="middle" x="199.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">shpair_t%shell_pair2</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;none~shell_pair2 -->
+<g id="proc~~basis_overlap~~CallsGraph_edge3" class="edge">
+<title>proc~basis_overlap&#45;&gt;none~shell_pair2</title>
+<path fill="none" stroke="#000000" d="M85.4009,-96C98.6791,-96 113.6812,-96 128.3391,-96"/>
+<polygon fill="#000000" stroke="#000000" points="128.4064,-99.5001 138.4064,-96 128.4063,-92.5001 128.4064,-99.5001"/>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~basis_overlap~~CallsGraph_node5" class="node">
+<title>proc~comp_kin_ovl_int1_prim</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node5"><a xlink:href="../proc/comp_kin_ovl_int1_prim.html" xlink:title="comp_kin_ovl_int1_prim">
+<polygon fill="#d9534f" stroke="#d9534f" points="269.5,-66 129.5,-66 129.5,-42 269.5,-42 269.5,-66"/>
+<text text-anchor="middle" x="199.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_kin_ovl_int1_prim</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim -->
+<g id="proc~~basis_overlap~~CallsGraph_edge4" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~comp_kin_ovl_int1_prim</title>
+<path fill="none" stroke="#000000" d="M85.4009,-84.5233C103.647,-79.6422 125.1485,-73.8902 144.5386,-68.703"/>
+<polygon fill="#000000" stroke="#000000" points="145.7018,-72.015 154.4575,-66.0496 143.8927,-65.2528 145.7018,-72.015"/>
+</g>
+<!-- proc~update_rectangular_matrix -->
+<g id="proc~~basis_overlap~~CallsGraph_node6" class="node">
+<title>proc~update_rectangular_matrix</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node6"><a xlink:href="../proc/update_rectangular_matrix.html" xlink:title="update_rectangular_matrix">
+<polygon fill="#d9534f" stroke="#d9534f" points="278,-24 121,-24 121,0 278,0 278,-24"/>
+<text text-anchor="middle" x="199.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">update_rectangular_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix -->
+<g id="proc~~basis_overlap~~CallsGraph_edge5" class="edge">
+<title>proc~basis_overlap&#45;&gt;proc~update_rectangular_matrix</title>
+<path fill="none" stroke="#000000" d="M54.1526,-83.9921C68.5776,-69.8004 94.4987,-46.4232 121,-33 125.0018,-30.9731 129.2205,-29.1257 133.5405,-27.4445"/>
+<polygon fill="#000000" stroke="#000000" points="134.875,-30.6845 143.1148,-24.0244 132.5202,-24.0924 134.875,-30.6845"/>
+</g>
+<!-- proc~doquadgausshermite -->
+<g id="proc~~basis_overlap~~CallsGraph_node7" class="node">
+<title>proc~doquadgausshermite</title>
+<g id="a_proc~~basis_overlap~~CallsGraph_node7"><a xlink:href="../proc/doquadgausshermite.html" xlink:title="doQuadGaussHermite">
+<polygon fill="#d9534f" stroke="#d9534f" points="444,-66 314,-66 314,-42 444,-42 444,-66"/>
+<text text-anchor="middle" x="379" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">doQuadGaussHermite</text>
+</a>
+</g>
+</g>
+<!-- proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite -->
+<g id="proc~~basis_overlap~~CallsGraph_edge6" class="edge">
+<title>proc~comp_kin_ovl_int1_prim&#45;&gt;proc~doquadgausshermite</title>
+<path fill="none" stroke="#000000" d="M269.6706,-54C280.8125,-54 292.3776,-54 303.6329,-54"/>
+<polygon fill="#000000" stroke="#000000" points="303.8613,-57.5001 313.8613,-54 303.8612,-50.5001 303.8613,-57.5001"/>
+</g>
+<!-- abrt -->
+<g id="proc~~basis_overlap~~CallsGraph_node8" class="node">
+<title>abrt</title>
+<polygon fill="#777777" stroke="#777777" points="534,-66 480,-66 480,-42 534,-42 534,-66"/>
+<text text-anchor="middle" x="507" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">abrt</text>
+</g>
+<!-- proc~doquadgausshermite&#45;&gt;abrt -->
+<g id="proc~~basis_overlap~~CallsGraph_edge7" class="edge">
+<title>proc~doquadgausshermite&#45;&gt;abrt</title>
+<path fill="none" stroke="#000000" d="M444.1249,-54C452.8851,-54 461.6171,-54 469.6643,-54"/>
+<polygon fill="#000000" stroke="#000000" points="469.7933,-57.5001 479.7933,-54 469.7933,-50.5001 469.7933,-57.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~basis_overlap~~CalledByGraph Pages: 1 -->
+<svg id="procbasis_overlapCalledByGraph" width="617pt" height="74pt"
+ viewBox="0.00 0.00 617.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~basis_overlap~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~basis_overlap~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 613,-70 613,4 -4,4"/>
+<!-- proc~basis_overlap -->
+<g id="proc~~basis_overlap~~CalledByGraph_node1" class="node">
+<title>proc~basis_overlap</title>
+<polygon fill="none" stroke="#000000" points="609,-45 524,-45 524,-21 609,-21 609,-45"/>
+<text text-anchor="middle" x="566.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">basis_overlap</text>
+</g>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~basis_overlap~~CalledByGraph_node2" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<g id="a_proc~~basis_overlap~~CalledByGraph_node2"><a xlink:href="../proc/get_structures_ao_overlap.html" xlink:title="get_structures_ao_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="488,-66 335,-66 335,-42 488,-42 488,-66"/>
+<text text-anchor="middle" x="411.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~basis_overlap -->
+<g id="proc~~basis_overlap~~CalledByGraph_edge1" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~basis_overlap</title>
+<path fill="none" stroke="#000000" d="M488.0918,-43.623C496.876,-42.4329 505.6757,-41.2407 514.0396,-40.1075"/>
+<polygon fill="#000000" stroke="#000000" points="514.5555,-43.5697 523.995,-38.7587 513.6156,-36.6331 514.5555,-43.5697"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~basis_overlap~~CalledByGraph_node3" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~basis_overlap~~CalledByGraph_node3"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="453.5,-24 369.5,-24 369.5,0 453.5,0 453.5,-24"/>
+<text text-anchor="middle" x="411.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~basis_overlap -->
+<g id="proc~~basis_overlap~~CalledByGraph_edge2" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~basis_overlap</title>
+<path fill="none" stroke="#000000" d="M453.8544,-17.7383C472.4024,-20.2513 494.3578,-23.2259 513.9365,-25.8785"/>
+<polygon fill="#000000" stroke="#000000" points="513.5483,-29.3578 523.9277,-27.2321 514.4882,-22.4212 513.5483,-29.3578"/>
+</g>
+<!-- proc~get_structures_ao_overlap_c -->
+<g id="proc~~basis_overlap~~CalledByGraph_node4" class="node">
+<title>proc~get_structures_ao_overlap_c</title>
+<g id="a_proc~~basis_overlap~~CalledByGraph_node4"><a xlink:href="../proc/get_structures_ao_overlap_c.html" xlink:title="get_structures_ao_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="299,-66 133,-66 133,-42 299,-42 299,-66"/>
+<text text-anchor="middle" x="216" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap -->
+<g id="proc~~basis_overlap~~CalledByGraph_edge3" class="edge">
+<title>proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap</title>
+<path fill="none" stroke="#000000" d="M299.1931,-54C307.616,-54 316.1864,-54 324.6465,-54"/>
+<polygon fill="#000000" stroke="#000000" points="324.894,-57.5001 334.894,-54 324.894,-50.5001 324.894,-57.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~basis_overlap~~CalledByGraph_node5" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~basis_overlap~~CalledByGraph_node5"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="258,-24 174,-24 174,0 258,0 258,-24"/>
+<text text-anchor="middle" x="216" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~basis_overlap~~CalledByGraph_edge4" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M258.4206,-12C287.983,-12 327.6124,-12 359.1424,-12"/>
+<polygon fill="#000000" stroke="#000000" points="359.4985,-15.5001 369.4985,-12 359.4984,-8.5001 359.4985,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~basis_overlap~~CalledByGraph_node6" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~basis_overlap~~CalledByGraph_node6"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~basis_overlap~~CalledByGraph_edge5" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.3982,-12C118.227,-12 142.5563,-12 163.7396,-12"/>
+<polygon fill="#000000" stroke="#000000" points="163.8569,-15.5001 173.8569,-12 163.8568,-8.5001 163.8569,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

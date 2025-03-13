@@ -1,0 +1,662 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mrsfrowcal &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mrsfrowcal
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.6% of total for procedures.">94 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/tdhf_mrsf_lib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/tdhf_mrsf_lib.f90.html'>tdhf_mrsf_lib.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/tdhf_mrsf_lib.html'>tdhf_mrsf_lib</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mrsfrowcal</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/mrsfrowcal.html#src">mrsfrowcal</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, xhxa, xhxb, hppija, hppijb, noca, nocb)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~mrsfrowcal~~UsesGraph Pages: 1 -->
+<svg id="procmrsfrowcalUsesGraph" width="307pt" height="32pt"
+ viewBox="0.00 0.00 307.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~mrsfrowcal~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~mrsfrowcal~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 303,-28 303,4 -4,4"/>
+<!-- proc~mrsfrowcal -->
+<g id="proc~~mrsfrowcal~~UsesGraph_node1" class="node">
+<title>proc~mrsfrowcal</title>
+<polygon fill="none" stroke="#000000" points="299,-24 227,-24 227,0 299,0 299,-24"/>
+<text text-anchor="middle" x="263" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mrsfrowcal</text>
+</g>
+<!-- module~precision -->
+<g id="proc~~mrsfrowcal~~UsesGraph_node2" class="node">
+<title>module~precision</title>
+<g id="a_proc~~mrsfrowcal~~UsesGraph_node2"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="191,-24 130,-24 130,0 191,0 191,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~mrsfrowcal&#45;&gt;module~precision -->
+<g id="proc~~mrsfrowcal~~UsesGraph_edge1" class="edge">
+<title>proc~mrsfrowcal&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.8623,-12C218.5851,-12 209.7302,-12 201.273,-12"/>
+<polygon fill="#000000" stroke="#000000" points="201.2198,-8.5001 191.2197,-12 201.2197,-15.5001 201.2198,-8.5001"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~mrsfrowcal~~UsesGraph_node3" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~mrsfrowcal~~UsesGraph_node3"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~mrsfrowcal~~UsesGraph_edge2" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.7853,-12C121.9522,-12 113.2743,-12 104.5707,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3906,-8.5001 94.3906,-12 104.3906,-15.5001 104.3906,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wmo"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>wmo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mo_energy_a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>mo_energy_a</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fa~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fa</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>fb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xk"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>xk</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxa~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxa</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-xhxb~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>xhxb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppija"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppija</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hppijb"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>hppijb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noca~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noca</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocb~6"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">mrsfrowcal</span><span class="p">(</span><span class="n">wmo</span><span class="p">,</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">,</span><span class="w"> </span><span class="n">fa</span><span class="p">,</span><span class="w"> </span><span class="n">fb</span><span class="p">,</span><span class="w"> </span><span class="n">xk</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="n">xhxa</span><span class="p">,</span><span class="w"> </span><span class="n">xhxb</span><span class="p">,</span><span class="w"> </span><span class="n">hppija</span><span class="p">,</span><span class="w"> </span><span class="n">hppijb</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">wmo</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mo_energy_a</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fa</span><span class="p">,</span><span class="w"> </span><span class="n">fb</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xk</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xhxa</span><span class="p">,</span><span class="w"> </span><span class="n">xhxb</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">hppija</span><span class="p">,</span><span class="w"> </span><span class="n">hppijb</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">wrk</span><span class="p">,</span><span class="w"> </span><span class="n">scr</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ij</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">lr1</span><span class="p">,</span><span class="w"> </span><span class="n">lr2</span>
+
+
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">fa</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="n">lr1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">    </span><span class="n">lr2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span>
+
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">wrk</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">scr</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">)</span>
+
+<span class="w">  </span><span class="c">! Unpack  xk</span>
+<span class="w">    </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">lr1</span><span class="p">,</span><span class="w"> </span><span class="n">lr2</span>
+<span class="w">      </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">        </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ij</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">        </span><span class="n">scr</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xk</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">        </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ij</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">        </span><span class="n">scr</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xk</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    do </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">lr1</span><span class="p">,</span><span class="w"> </span><span class="n">lr2</span>
+<span class="w">        </span><span class="n">ij</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ij</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">        </span><span class="n">scr</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">k</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xk</span><span class="p">(</span><span class="n">ij</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="w">  </span><span class="c">! W_ix</span>
+<span class="w">    </span><span class="k">do </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">      </span><span class="k">do </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">        </span><span class="n">wrk</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">)</span><span class="o">-</span><span class="n">fa</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">x</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+<span class="k">    do </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">      </span><span class="k">do </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span>
+<span class="w">        </span><span class="n">wrk</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">)</span><span class="o">+</span><span class="n">scr</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">k</span><span class="p">)</span><span class="o">*</span><span class="n">fa</span><span class="p">(</span><span class="n">noca</span><span class="o">+</span><span class="n">k</span><span class="p">,</span><span class="n">x</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="mf">0.5_dp</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="o">+</span><span class="w"> </span><span class="n">xhxa</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="o">+</span><span class="w"> </span><span class="n">xhxb</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                        </span><span class="o">+</span><span class="w"> </span><span class="n">hppija</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span>
+<span class="w">    </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                    </span><span class="o">+</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span>
+<span class="w">    </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                    </span><span class="o">+</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span>
+
+<span class="c">!   ----- W_IA -----</span>
+<span class="w">    </span><span class="n">wrk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">      </span><span class="k">do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span>
+<span class="w">        </span><span class="n">wrk</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="o">+</span><span class="n">fa</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                           </span><span class="o">+</span><span class="n">fa</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span><span class="p">)</span><span class="o">*</span><span class="mf">0.5_dp</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                          </span><span class="o">+</span><span class="w"> </span><span class="n">xhxb</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span>
+<span class="w">      </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wmo</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="o">+</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nocb</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="c">!   ----- W_XA -----</span>
+<span class="w">    </span><span class="n">wrk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0_dp</span>
+<span class="w">    </span><span class="k">do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span>
+<span class="w">      </span><span class="k">do </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">        </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="o">+</span><span class="n">fa</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">        </span><span class="n">wrk</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="o">+</span><span class="n">fa</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="k">    do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span>
+<span class="w">      </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="o">-</span><span class="n">fb</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="o">-</span><span class="n">fb</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">lr1</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">      </span><span class="n">wrk</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="o">-</span><span class="n">fb</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr1</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                         </span><span class="o">-</span><span class="n">fb</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">lr2</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="n">a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    </span><span class="n">wmo</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wrk</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="o">-</span><span class="n">noca</span><span class="p">)</span><span class="o">*</span><span class="mf">0.5_dp</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                           </span><span class="o">+</span><span class="w"> </span><span class="n">xhxb</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="n">wmo</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wmo</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                     </span><span class="o">+</span><span class="w"> </span><span class="n">mo_energy_a</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">)</span><span class="o">*</span><span class="n">scr</span><span class="p">(</span><span class="n">lr1</span><span class="p">:</span><span class="n">lr2</span><span class="p">,</span><span class="n">a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="w">  </span><span class="c">!  W_ij</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span>
+<span class="w">      </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<span class="w">        </span><span class="n">wmo</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hppija</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span><span class="o">+</span><span class="n">hppijb</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span><span class="o">+</span><span class="n">xhxa</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="w">  </span><span class="c">! W_xy</span>
+<span class="w">    </span><span class="k">do </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">noca</span>
+<span class="w">      </span><span class="k">do </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nocb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">x</span>
+<span class="w">        </span><span class="n">wmo</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xhxa</span><span class="p">(</span><span class="n">y</span><span class="p">,</span><span class="n">x</span><span class="p">)</span><span class="o">+</span><span class="n">xhxb</span><span class="p">(</span><span class="n">y</span><span class="p">,</span><span class="n">x</span><span class="p">)</span><span class="o">+</span><span class="n">hppija</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="w">  </span><span class="c">! W_ab</span>
+<span class="w">    </span><span class="k">do </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="k">do </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">noca</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">a</span>
+<span class="w">        </span><span class="n">wmo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">xhxb</span><span class="p">(</span><span class="n">b</span><span class="p">,</span><span class="n">a</span><span class="p">)</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end do</span>
+
+<span class="w">  </span><span class="c">! Scale diagonal elements</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">      </span><span class="n">wmo</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">wmo</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="mf">0.5_dp</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    </span><span class="n">wmo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">wmo</span>
+
+<span class="w">    </span><span class="k">return</span>
+
+<span class="k">  end subroutine </span><span class="n">mrsfrowcal</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

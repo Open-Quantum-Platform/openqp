@@ -1,0 +1,876 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>measure_time &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>measure_time
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">29 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/util.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/util.f90.html'>util.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/util.html'>util</a></li>
+            <li class="breadcrumb-item active" aria-current="page">measure_time</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/measure_time.html#src">measure_time</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine measure_time(print_total, log_unit)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_fortran_env'>iso_fortran_env</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~measure_time~~UsesGraph Pages: 1 -->
+<svg id="procmeasure_timeUsesGraph" width="227pt" height="32pt"
+ viewBox="0.00 0.00 227.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~measure_time~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~measure_time~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 223,-28 223,4 -4,4"/>
+<!-- proc~measure_time -->
+<g id="proc~~measure_time~~UsesGraph_node1" class="node">
+<title>proc~measure_time</title>
+<polygon fill="none" stroke="#000000" points="219,-24 130,-24 130,0 219,0 219,-24"/>
+<text text-anchor="middle" x="174.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">measure_time</text>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~measure_time~~UsesGraph_node2" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~measure_time~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-24 0,-24 0,0 94,0 94,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- proc~measure_time&#45;&gt;iso_fortran_env -->
+<g id="proc~~measure_time~~UsesGraph_edge1" class="edge">
+<title>proc~measure_time&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.9067,-12C121.7382,-12 113.1071,-12 104.6221,-12"/>
+<polygon fill="#000000" stroke="#000000" points="104.3857,-8.5001 94.3857,-12 104.3857,-15.5001 104.3857,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-print_total"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>print_total</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-log_unit"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>log_unit</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~measure_time~~CalledByGraph Pages: 1 -->
+<svg id="procmeasure_timeCalledByGraph" width="488pt" height="536pt"
+ viewBox="0.00 0.00 488.00 536.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~measure_time~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 532)">
+<title>proc~~measure_time~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-532 484,-532 484,4 -4,4"/>
+<!-- proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_node1" class="node">
+<title>proc~measure_time</title>
+<polygon fill="none" stroke="#000000" points="480,-276 391,-276 391,-252 480,-252 480,-276"/>
+<text text-anchor="middle" x="435.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">measure_time</text>
+</g>
+<!-- proc~fock_jk -->
+<g id="proc~~measure_time~~CalledByGraph_node2" class="node">
+<title>proc~fock_jk</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node2"><a xlink:href="../proc/fock_jk.html" xlink:title="fock_jk">
+<polygon fill="#d9534f" stroke="#d9534f" points="305.5,-528 251.5,-528 251.5,-504 305.5,-504 305.5,-528"/>
+<text text-anchor="middle" x="278.5" y="-513.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">fock_jk</text>
+</a>
+</g>
+</g>
+<!-- proc~fock_jk&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge1" class="edge">
+<title>proc~fock_jk&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M305.6097,-514.7301C321.7951,-512.6098 341.719,-507.4145 355,-495 416.0506,-437.9324 430.8093,-332.1138 434.3706,-286.2067"/>
+<polygon fill="#000000" stroke="#000000" points="437.8691,-286.3449 435.0428,-276.134 430.8846,-285.8788 437.8691,-286.3449"/>
+</g>
+<!-- proc~get_states_overlap -->
+<g id="proc~~measure_time~~CalledByGraph_node3" class="node">
+<title>proc~get_states_overlap</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node3"><a xlink:href="../proc/get_states_overlap.html" xlink:title="get_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="334.5,-486 222.5,-486 222.5,-462 334.5,-462 334.5,-486"/>
+<text text-anchor="middle" x="278.5" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge2" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M334.5937,-465.0223C342.0159,-462.0707 349.0878,-458.1648 355,-453 406.0664,-408.3893 425.6824,-325.795 432.3964,-286.2418"/>
+<polygon fill="#000000" stroke="#000000" points="435.8645,-286.7174 433.9633,-276.2945 428.9498,-285.628 435.8645,-286.7174"/>
+</g>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~measure_time~~CalledByGraph_node4" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node4"><a xlink:href="../proc/get_structures_ao_overlap.html" xlink:title="get_structures_ao_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="355,-444 202,-444 202,-420 355,-420 355,-444"/>
+<text text-anchor="middle" x="278.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge3" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M340.3677,-419.8525C345.5966,-417.42 350.5699,-414.5014 355,-411 396.2235,-378.4178 419.3453,-318.655 429.3905,-286.2719"/>
+<polygon fill="#000000" stroke="#000000" points="432.8249,-287.0003 432.3031,-276.4183 426.112,-285.016 432.8249,-287.0003"/>
+</g>
+<!-- proc~guess_hcore -->
+<g id="proc~~measure_time~~CalledByGraph_node5" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node5"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="318,-402 239,-402 239,-378 318,-378 318,-402"/>
+<text text-anchor="middle" x="278.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge4" class="edge">
+<title>proc~guess_hcore&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M318.3339,-384.1967C330.8114,-381.0796 344.1449,-376.3045 355,-369 386.9914,-347.4727 411.6416,-309.0279 424.8221,-285.1097"/>
+<polygon fill="#000000" stroke="#000000" points="427.9917,-286.6041 429.6061,-276.1329 421.8141,-283.3118 427.9917,-286.6041"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~measure_time~~CalledByGraph_node6" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node6"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="320.5,-360 236.5,-360 236.5,-336 320.5,-336 320.5,-360"/>
+<text text-anchor="middle" x="278.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge5" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M320.504,-339.6662C332.0313,-336.5333 344.2954,-332.3835 355,-327 377.8171,-315.5249 400.4206,-297.0418 415.8398,-283.0564"/>
+<polygon fill="#000000" stroke="#000000" points="418.2632,-285.5823 423.2112,-276.2139 413.5009,-280.4519 418.2632,-285.5823"/>
+</g>
+<!-- proc~guess_json -->
+<g id="proc~~measure_time~~CalledByGraph_node7" class="node">
+<title>proc~guess_json</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node7"><a xlink:href="../proc/guess_json.html" xlink:title="guess_json">
+<polygon fill="#d9534f" stroke="#d9534f" points="313.5,-318 243.5,-318 243.5,-294 313.5,-294 313.5,-318"/>
+<text text-anchor="middle" x="278.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge6" class="edge">
+<title>proc~guess_json&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M313.7339,-296.5744C333.5798,-291.2653 358.7911,-284.5208 381.1191,-278.5478"/>
+<polygon fill="#000000" stroke="#000000" points="382.0595,-281.9193 390.8153,-275.9539 380.2505,-275.1571 382.0595,-281.9193"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~measure_time~~CalledByGraph_node8" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node8"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="315,-276 242,-276 242,-252 315,-252 315,-276"/>
+<text text-anchor="middle" x="278.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge7" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M315.3095,-264C334.7919,-264 359.1006,-264 380.7491,-264"/>
+<polygon fill="#000000" stroke="#000000" points="380.8047,-267.5001 390.8047,-264 380.8046,-260.5001 380.8047,-267.5001"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~measure_time~~CalledByGraph_node9" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node9"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="333,-234 224,-234 224,-210 333,-210 333,-234"/>
+<text text-anchor="middle" x="278.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge8" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M323.4899,-234.0355C341.3861,-238.823 362.1428,-244.3758 380.8901,-249.391"/>
+<polygon fill="#000000" stroke="#000000" points="380.2103,-252.8321 390.7752,-252.0354 382.0194,-246.0699 380.2103,-252.8321"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~measure_time~~CalledByGraph_node10" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node10"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="310.5,-192 246.5,-192 246.5,-168 310.5,-168 310.5,-192"/>
+<text text-anchor="middle" x="278.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge9" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M310.8036,-185.8799C324.8542,-189.1836 341.2193,-194.0695 355,-201 377.8171,-212.4751 400.4206,-230.9582 415.8398,-244.9436"/>
+<polygon fill="#000000" stroke="#000000" points="413.5009,-247.5481 423.2112,-251.7861 418.2632,-242.4177 413.5009,-247.5481"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_node11" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node11"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="316.5,-150 240.5,-150 240.5,-126 316.5,-126 316.5,-150"/>
+<text text-anchor="middle" x="278.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M316.7626,-143.4183C329.6842,-146.5227 343.6878,-151.3879 355,-159 386.9914,-180.5273 411.6416,-218.9721 424.8221,-242.8903"/>
+<polygon fill="#000000" stroke="#000000" points="421.8141,-244.6882 429.6061,-251.8671 427.9917,-241.3959 421.8141,-244.6882"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~measure_time~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="320.5,-108 236.5,-108 236.5,-84 320.5,-84 320.5,-108"/>
+<text text-anchor="middle" x="278.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge11" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M320.619,-101.2406C332.6587,-104.3285 345.1674,-109.2285 355,-117 396.2235,-149.5822 419.3453,-209.345 429.3905,-241.7281"/>
+<polygon fill="#000000" stroke="#000000" points="426.112,-242.984 432.3031,-251.5817 432.8249,-240.9997 426.112,-242.984"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="331.5,-66 225.5,-66 225.5,-42 331.5,-42 331.5,-66"/>
+<text text-anchor="middle" x="278.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M331.8449,-61.9329C340.2614,-64.989 348.3618,-69.201 355,-75 406.0664,-119.6107 425.6824,-202.205 432.3964,-241.7582"/>
+<polygon fill="#000000" stroke="#000000" points="428.9498,-242.372 433.9633,-251.7055 435.8645,-241.2826 428.9498,-242.372"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_node14" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node14"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="324,-24 233,-24 233,0 324,0 324,-24"/>
+<text text-anchor="middle" x="278.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~measure_time -->
+<g id="proc~~measure_time~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M324.2504,-17.002C335.4068,-20.1232 346.5485,-25.0998 355,-33 416.0506,-90.0676 430.8093,-195.8862 434.3706,-241.7933"/>
+<polygon fill="#000000" stroke="#000000" points="430.8846,-242.1212 435.0428,-251.866 437.8691,-241.6551 430.8846,-242.1212"/>
+</g>
+<!-- proc~get_state_overlap_c -->
+<g id="proc~~measure_time~~CalledByGraph_node15" class="node">
+<title>proc~get_state_overlap_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node15"><a xlink:href="../proc/get_state_overlap_c.html" xlink:title="get_state_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="143,-486 23,-486 23,-462 143,-462 143,-486"/>
+<text text-anchor="middle" x="83" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_state_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap -->
+<g id="proc~~measure_time~~CalledByGraph_edge14" class="edge">
+<title>proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap</title>
+<path fill="none" stroke="#000000" d="M143.2517,-474C165.1423,-474 189.9903,-474 212.3625,-474"/>
+<polygon fill="#000000" stroke="#000000" points="212.4479,-477.5001 222.4479,-474 212.4479,-470.5001 212.4479,-477.5001"/>
+</g>
+<!-- proc~get_structures_ao_overlap_c -->
+<g id="proc~~measure_time~~CalledByGraph_node16" class="node">
+<title>proc~get_structures_ao_overlap_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node16"><a xlink:href="../proc/get_structures_ao_overlap_c.html" xlink:title="get_structures_ao_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="166,-444 0,-444 0,-420 166,-420 166,-444"/>
+<text text-anchor="middle" x="83" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap -->
+<g id="proc~~measure_time~~CalledByGraph_edge15" class="edge">
+<title>proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap</title>
+<path fill="none" stroke="#000000" d="M166.1931,-432C174.616,-432 183.1864,-432 191.6465,-432"/>
+<polygon fill="#000000" stroke="#000000" points="191.894,-435.5001 201.894,-432 191.894,-428.5001 191.894,-435.5001"/>
+</g>
+<!-- proc~guess_hcore_c -->
+<g id="proc~~measure_time~~CalledByGraph_node17" class="node">
+<title>proc~guess_hcore_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node17"><a xlink:href="../proc/guess_hcore_c.html" xlink:title="guess_hcore_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="129,-402 37,-402 37,-378 129,-378 129,-402"/>
+<text text-anchor="middle" x="83" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore_c&#45;&gt;proc~guess_hcore -->
+<g id="proc~~measure_time~~CalledByGraph_edge16" class="edge">
+<title>proc~guess_hcore_c&#45;&gt;proc~guess_hcore</title>
+<path fill="none" stroke="#000000" d="M129.3308,-390C159.2574,-390 198.173,-390 228.7519,-390"/>
+<polygon fill="#000000" stroke="#000000" points="228.7776,-393.5001 238.7775,-390 228.7775,-386.5001 228.7776,-393.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~measure_time~~CalledByGraph_node18" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node18"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="131.5,-360 34.5,-360 34.5,-336 131.5,-336 131.5,-360"/>
+<text text-anchor="middle" x="83" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~measure_time~~CalledByGraph_edge17" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M131.577,-348C160.4072,-348 196.954,-348 226.3847,-348"/>
+<polygon fill="#000000" stroke="#000000" points="226.4736,-351.5001 236.4736,-348 226.4736,-344.5001 226.4736,-351.5001"/>
+</g>
+<!-- proc~guess_json_c -->
+<g id="proc~~measure_time~~CalledByGraph_node19" class="node">
+<title>proc~guess_json_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node19"><a xlink:href="../proc/guess_json_c.html" xlink:title="guess_json_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="124.5,-318 41.5,-318 41.5,-294 124.5,-294 124.5,-318"/>
+<text text-anchor="middle" x="83" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_json_c&#45;&gt;proc~guess_json -->
+<g id="proc~~measure_time~~CalledByGraph_edge18" class="edge">
+<title>proc~guess_json_c&#45;&gt;proc~guess_json</title>
+<path fill="none" stroke="#000000" d="M124.9397,-306C156.83,-306 200.6388,-306 233.3045,-306"/>
+<polygon fill="#000000" stroke="#000000" points="233.4895,-309.5001 243.4895,-306 233.4894,-302.5001 233.4895,-309.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_node20" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node20"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="116,-192 50,-192 50,-168 116,-168 116,-192"/>
+<text text-anchor="middle" x="83" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~measure_time~~CalledByGraph_edge20" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M116.1639,-180C149.2807,-180 200.2992,-180 236.2873,-180"/>
+<polygon fill="#000000" stroke="#000000" points="236.4737,-183.5001 246.4736,-180 236.4736,-176.5001 236.4737,-183.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~measure_time~~CalledByGraph_node21" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node21"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="127.5,-150 38.5,-150 38.5,-126 127.5,-126 127.5,-150"/>
+<text text-anchor="middle" x="83" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_edge21" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M127.8516,-138C158.4387,-138 198.9145,-138 230.2083,-138"/>
+<polygon fill="#000000" stroke="#000000" points="230.4414,-141.5001 240.4414,-138 230.4414,-134.5001 230.4414,-141.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~measure_time~~CalledByGraph_node22" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node22"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="131.5,-108 34.5,-108 34.5,-84 131.5,-84 131.5,-108"/>
+<text text-anchor="middle" x="83" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~measure_time~~CalledByGraph_edge22" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M131.577,-96C160.4072,-96 196.954,-96 226.3847,-96"/>
+<polygon fill="#000000" stroke="#000000" points="226.4736,-99.5001 236.4736,-96 226.4736,-92.5001 226.4736,-99.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~measure_time~~CalledByGraph_node23" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node23"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="142,-66 24,-66 24,-42 142,-42 142,-66"/>
+<text text-anchor="middle" x="83" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_edge23" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M142.187,-54C165.2907,-54 191.8174,-54 215.2935,-54"/>
+<polygon fill="#000000" stroke="#000000" points="215.4942,-57.5001 225.4942,-54 215.4942,-50.5001 215.4942,-57.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~measure_time~~CalledByGraph_node24" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node24"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="134.5,-24 31.5,-24 31.5,0 134.5,0 134.5,-24"/>
+<text text-anchor="middle" x="83" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~measure_time~~CalledByGraph_edge24" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M134.6211,-12C161.7052,-12 194.9198,-12 222.6095,-12"/>
+<polygon fill="#000000" stroke="#000000" points="222.9271,-15.5001 232.927,-12 222.927,-8.5001 222.9271,-15.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~measure_time~~CalledByGraph_node25" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~measure_time~~CalledByGraph_node25"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="131,-234 35,-234 35,-210 131,-210 131,-234"/>
+<text text-anchor="middle" x="83" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~measure_time~~CalledByGraph_edge19" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M131.0751,-222C155.9372,-222 186.6387,-222 213.5769,-222"/>
+<polygon fill="#000000" stroke="#000000" points="213.6971,-225.5001 223.697,-222 213.697,-218.5001 213.6971,-225.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="n">iso_fortran_env</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">int64</span><span class="p">,</span><span class="w"> </span><span class="n">real64</span>
+<span class="w">    </span><span class="k">implicit none</span>
+<span class="k">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">print_total</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="n">int64</span><span class="p">),</span><span class="w"> </span><span class="k">save</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">start_clock</span><span class="p">,</span><span class="w"> </span><span class="n">previous_clock</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="n">int64</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">clock_rate</span><span class="p">,</span><span class="w"> </span><span class="n">current_clock</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">),</span><span class="w"> </span><span class="k">save</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">start_cpu_time</span><span class="p">,</span><span class="w"> </span><span class="n">previous_cpu_time</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="n">real64</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">current_cpu_time</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_cpu_time</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_wall_time</span>
+<span class="w">    </span><span class="kt">logical</span><span class="p">,</span><span class="w"> </span><span class="k">save</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">first_call</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">first_call</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      call </span><span class="nb">system_clock</span><span class="p">(</span><span class="n">start_clock</span><span class="p">,</span><span class="w"> </span><span class="n">clock_rate</span><span class="p">)</span>
+<span class="w">      </span><span class="k">call </span><span class="nb">cpu_time</span><span class="p">(</span><span class="n">start_cpu_time</span><span class="p">)</span>
+<span class="w">      </span><span class="n">previous_clock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">start_clock</span>
+<span class="w">      </span><span class="n">previous_cpu_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">start_cpu_time</span>
+<span class="w">      </span><span class="n">first_call</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">    </span><span class="k">end if</span>
+
+<span class="k">    call </span><span class="nb">system_clock</span><span class="p">(</span><span class="n">current_clock</span><span class="p">,</span><span class="w"> </span><span class="n">clock_rate</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="nb">cpu_time</span><span class="p">(</span><span class="n">current_cpu_time</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">elapsed_wall_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">current_clock</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">previous_clock</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                             </span><span class="n">real64</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">clock_rate</span><span class="p">,</span><span class="w"> </span><span class="n">real64</span><span class="p">)</span>
+<span class="w">    </span><span class="n">elapsed_cpu_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">current_cpu_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">previous_cpu_time</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">log_unit</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;(3X, A, F10.3, 3X, A, F10.3)&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="s2">&quot;Step  CPU time (seconds): &quot;</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_cpu_time</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">            </span><span class="s2">&quot;Wall time (seconds): &quot;</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_wall_time</span>
+
+<span class="w">    </span><span class="n">previous_clock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">current_clock</span>
+<span class="w">    </span><span class="n">previous_cpu_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">current_cpu_time</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">print_total</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">      </span><span class="n">elapsed_wall_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">current_clock</span><span class="o">-</span><span class="n">start_clock</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                               </span><span class="n">real64</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="kt">real</span><span class="p">(</span><span class="n">clock_rate</span><span class="p">,</span><span class="w"> </span><span class="n">real64</span><span class="p">)</span>
+<span class="w">      </span><span class="n">elapsed_cpu_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">current_cpu_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start_cpu_time</span>
+
+<span class="w">      </span><span class="k">write</span><span class="p">(</span><span class="n">log_unit</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;(3X, A, F10.3, 3X, A, F10.3)&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">              </span><span class="s2">&quot;Total CPU time (seconds): &quot;</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_cpu_time</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">              </span><span class="s2">&quot;Wall time (seconds): &quot;</span><span class="p">,</span><span class="w"> </span><span class="n">elapsed_wall_time</span>
+<span class="w">    </span><span class="k">end if</span>
+<span class="k">  end subroutine </span><span class="n">measure_time</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,1311 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>form_rohf_fock &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>form_rohf_fock
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">52 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/scf.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/scf.f90.html'>scf.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/scf.html'>scf</a></li>
+            <li class="breadcrumb-item active" aria-current="page">form_rohf_fock</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/form_rohf_fock.html#src">form_rohf_fock</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine form_rohf_fock(fock_a_ao, fock_b_ao, fock_mo, MOs, overlap_tri, work, nocca, noccb, nbf, vshift)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/mathlib.html'>mathlib</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~form_rohf_fock~~UsesGraph Pages: 1 -->
+<svg id="procform_rohf_fockUsesGraph" width="641pt" height="171pt"
+ viewBox="0.00 0.00 641.00 170.69" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~form_rohf_fock~~UsesGraph" class="graph" transform="scale(.8186 .8186) rotate(0) translate(4 204.4982)">
+<title>proc~~form_rohf_fock~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-204.4982 779,-204.4982 779,4 -4,4"/>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node1" class="node">
+<title>proc~form_rohf_fock</title>
+<polygon fill="none" stroke="#000000" points="775,-37.4982 682,-37.4982 682,-13.4982 775,-13.4982 775,-37.4982"/>
+<text text-anchor="middle" x="728.5" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">form_rohf_fock</text>
+</g>
+<!-- module~mathlib -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node2" class="node">
+<title>module~mathlib</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node2"><a xlink:href="../module/mathlib.html" xlink:title="mathlib">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-37.4982 592,-37.4982 592,-13.4982 646,-13.4982 646,-37.4982"/>
+<text text-anchor="middle" x="619" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;module~mathlib -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge1" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.7445,-25.4982C673.3377,-25.4982 664.6739,-25.4982 656.569,-25.4982"/>
+<polygon fill="#000000" stroke="#000000" points="656.305,-21.9983 646.305,-25.4982 656.3049,-28.9983 656.305,-21.9983"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node3" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node3"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-57.4982 489,-57.4982 489,-33.4982 556,-33.4982 556,-57.4982"/>
+<text text-anchor="middle" x="522.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge2" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-31.1225C583.9291,-32.7668 575.0471,-34.6076 566.3567,-36.4087"/>
+<polygon fill="#000000" stroke="#000000" points="565.393,-33.034 556.3114,-38.4907 566.8136,-39.8883 565.393,-33.034"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-74.4982 142,-74.4982 142,-50.4982 203,-50.4982 203,-74.4982"/>
+<text text-anchor="middle" x="172.5" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge3" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9443,-20.2584C536.0998,-10.2278 404.1189,9.4224 294.5,-5.4982"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-5.4982C258.8005,-10.6557 221.8177,-30.3009 198.0658,-45.0973"/>
+<polygon fill="#000000" stroke="#000000" points="196.176,-42.1512 189.6407,-50.4904 199.9499,-48.0468 196.176,-42.1512"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node6" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node6"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-57.4982 380.5,-57.4982 380.5,-33.4982 446.5,-33.4982 446.5,-57.4982"/>
+<text text-anchor="middle" x="413.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge4" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-45.4982C478.7628,-45.4982 467.4795,-45.4982 456.7965,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="456.7947,-41.9983 446.7947,-45.4982 456.7947,-48.9983 456.7947,-41.9983"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node7" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node7"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-99.4982 374,-99.4982 374,-75.4982 453,-75.4982 453,-99.4982"/>
+<text text-anchor="middle" x="413.5" y="-85.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge5" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-57.5337C479.7487,-61.9712 466.5263,-67.066 454.29,-71.7809"/>
+<polygon fill="#000000" stroke="#000000" points="452.8124,-68.5994 444.7396,-75.4609 455.3293,-75.1313 452.8124,-68.5994"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-74.4982 0,-74.4982 0,-50.4982 94,-50.4982 94,-74.4982"/>
+<text text-anchor="middle" x="47" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge6" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-62.4982C130.4618,-62.4982 117.2165,-62.4982 104.2832,-62.4982"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-58.9983 94.0202,-62.4982 104.0202,-65.9983 104.0203,-58.9983"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge9" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-33.2968C371.6437,-19.7798 331.214,-.5009 294.5,-5.4982"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node8" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node8"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-57.4982 251,-57.4982 251,-33.4982 338,-33.4982 338,-57.4982"/>
+<text text-anchor="middle" x="294.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge7" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-45.4982C370.4498,-45.4982 359.3275,-45.4982 348.4544,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-41.9983 338.1539,-45.4982 348.1539,-48.9983 348.154,-41.9983"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node9" class="node">
+<title>module~messages</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node9"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-137.4982 261.5,-137.4982 261.5,-113.4982 327.5,-113.4982 327.5,-137.4982"/>
+<text text-anchor="middle" x="294.5" y="-123.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge8" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-57.5933C384.2087,-60.3782 378.8585,-63.4281 374,-66.4982 354.1394,-79.0481 332.823,-95.0165 317.2673,-107.175"/>
+<polygon fill="#000000" stroke="#000000" points="314.945,-104.5491 309.2638,-113.4919 319.2818,-110.0438 314.945,-104.5491"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge12" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-83.3979C329.6221,-78.7972 258.0316,-71.3708 213.2045,-66.7206"/>
+<polygon fill="#000000" stroke="#000000" points="213.5495,-63.2377 203.2418,-65.6872 212.8272,-70.2004 213.5495,-63.2377"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge10" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-75.4627C366.5776,-70.9374 351.8187,-65.7283 338.2399,-60.9358"/>
+<polygon fill="#000000" stroke="#000000" points="339.2004,-57.5633 328.6056,-57.5355 336.8706,-64.1642 339.2004,-57.5633"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge11" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-99.5216C363.7049,-103.3992 350.1523,-107.7269 337.6451,-111.7208"/>
+<polygon fill="#000000" stroke="#000000" points="336.347,-108.4611 327.8856,-114.8373 338.4764,-115.1294 336.347,-108.4611"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge16" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-113.3863C256.0979,-104.9064 234.3205,-93.3727 215,-83.4982 212.2312,-82.0831 209.354,-80.6283 206.4607,-79.1763"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-75.9276 197.2773,-74.6004 204.6667,-82.1929 207.7887,-75.9276"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node10" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-200.4982 130,-200.4982 130,-176.4982 215,-176.4982 215,-200.4982"/>
+<text text-anchor="middle" x="172.5" y="-186.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-137.6101C256.0979,-146.09 234.3205,-157.6237 215,-167.4982 212.2312,-168.9133 209.354,-170.3681 206.4607,-171.82"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-168.8035 197.2773,-176.396 207.7887,-175.0687 204.6667,-168.8035"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node11" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-158.4982 136.5,-158.4982 136.5,-134.4982 208.5,-134.4982 208.5,-158.4982"/>
+<text text-anchor="middle" x="172.5" y="-144.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-131.1811C248.3109,-133.4488 232.9133,-136.0992 218.6653,-138.5517"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-135.1485 208.5419,-140.2943 218.9907,-142.0471 217.8032,-135.1485"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~form_rohf_fock~~UsesGraph_node12" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~form_rohf_fock~~UsesGraph_node12"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-116.4982 133,-116.4982 133,-92.4982 212,-92.4982 212,-116.4982"/>
+<text text-anchor="middle" x="172.5" y="-102.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~form_rohf_fock~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-119.8153C249.3385,-117.7245 235.302,-115.3084 222.0189,-113.0219"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-109.5535 212.052,-111.3063 221.3133,-116.452 222.5008,-109.5535"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocform_rohf_fockUsesGraph = svgPanZoom('#procform_rohf_fockUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Form the ROHF Fock matrix in MO basis.</p>
+<p>This implementation is based on the work of M. F. Guest and V. Saunders,
+as described in Mol. Phys. 28, 819 (1974).</p>
+<p>@brief Form the ROHF Fock matrix in the MO basis using the Guest-Saunders method.</p>
+<p>@detail
+This subroutine transforms the alpha and beta Fock matrices from the AO to the MO basis,
+constructs the ROHF Fock matrix using the Guest-Saunders method, and optionally applies
+a level shift to the diagonal elements of the virtual-virtual block.</p>
+<p>@author Konstantin Komarov, 2023</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fock_a_ao"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>fock_a_ao</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fock_b_ao"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>fock_b_ao</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-fock_mo"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>fock_mo</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mos"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:,:)
+            </td>
+            <td>::</td>
+            <td><strong>MOs</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-overlap_tri"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>overlap_tri</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-work~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td></td>            <td>
+              dimension(:)
+            </td>
+            <td>::</td>
+            <td><strong>work</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nocca"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nocca</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-noccb"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>noccb</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~4"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vshift~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vshift</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~form_rohf_fock~~CallsGraph Pages: 1 -->
+<svg id="procform_rohf_fockCallsGraph" width="641pt" height="329pt"
+ viewBox="0.00 0.00 641.00 328.93" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~form_rohf_fock~~CallsGraph" class="graph" transform="scale(.9183 .9183) rotate(0) translate(4 354.1781)">
+<title>proc~~form_rohf_fock~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-354.1781 694,-354.1781 694,4 -4,4"/>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node1" class="node">
+<title>proc~form_rohf_fock</title>
+<polygon fill="none" stroke="#000000" points="93,-192.1781 0,-192.1781 0,-168.1781 93,-168.1781 93,-192.1781"/>
+<text text-anchor="middle" x="46.5" y="-177.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">form_rohf_fock</text>
+</g>
+<!-- dsymm -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node2" class="node">
+<title>dsymm</title>
+<polygon fill="#777777" stroke="#777777" points="670.5,-350.1781 616.5,-350.1781 616.5,-326.1781 670.5,-326.1781 670.5,-350.1781"/>
+<text text-anchor="middle" x="643.5" y="-335.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsymm</text>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;dsymm -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge1" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M65.2917,-192.2664C81.6703,-202.4619 106.2932,-216.9818 129,-227.1781 270.6763,-290.7968 306.7575,-313.9543 460,-339.1781 509.926,-347.396 568.5322,-345.0322 605.8319,-342.0535"/>
+<polygon fill="#000000" stroke="#000000" points="606.5614,-345.5039 616.2261,-341.163 605.9638,-338.5295 606.5614,-345.5039"/>
+</g>
+<!-- interface~pack_matrix -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node3" class="node">
+<title>interface~pack_matrix</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node3"><a xlink:href="../interface/pack_matrix.html" xlink:title="pack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="219.5,-130.1781 141.5,-130.1781 141.5,-106.1781 219.5,-106.1781 219.5,-130.1781"/>
+<text text-anchor="middle" x="180.5" y="-115.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;interface~pack_matrix -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge2" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;interface~pack_matrix</title>
+<path fill="none" stroke="#000000" d="M69.7493,-168.0482C86.1576,-159.6297 108.7386,-148.3286 129,-139.1781 132.6575,-137.5263 136.4848,-135.8574 140.3304,-134.2203"/>
+<polygon fill="#000000" stroke="#000000" points="141.9645,-137.3308 149.8411,-130.2448 139.2648,-130.8723 141.9645,-137.3308"/>
+</g>
+<!-- interface~unpack_matrix -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node4" class="node">
+<title>interface~unpack_matrix</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node4"><a xlink:href="../interface/unpack_matrix.html" xlink:title="unpack_matrix">
+<polygon fill="#a7506f" stroke="#a7506f" points="226,-70.1781 135,-70.1781 135,-46.1781 226,-46.1781 226,-70.1781"/>
+<text text-anchor="middle" x="180.5" y="-55.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">unpack_matrix</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;interface~unpack_matrix -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge3" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;interface~unpack_matrix</title>
+<path fill="none" stroke="#000000" d="M57.485,-168.1053C72.8501,-151.462 101.9234,-120.844 129,-97.1781 137.2334,-89.9819 146.6655,-82.6101 155.189,-76.2402"/>
+<polygon fill="#000000" stroke="#000000" points="157.3519,-78.9941 163.3316,-70.248 153.2029,-73.3562 157.3519,-78.9941"/>
+</g>
+<!-- proc~orthogonal_transform2 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node5" class="node">
+<title>proc~orthogonal_transform2</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node5"><a xlink:href="../proc/orthogonal_transform2.html" xlink:title="orthogonal_transform2">
+<polygon fill="#d9534f" stroke="#d9534f" points="414,-254.1781 278,-254.1781 278,-230.1781 414,-230.1781 414,-254.1781"/>
+<text text-anchor="middle" x="346" y="-239.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform2</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform2 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge4" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform2</title>
+<path fill="none" stroke="#000000" d="M87.0096,-192.2897C100.3187,-196.0493 115.2299,-200.0286 129,-203.1781 174.6746,-213.6249 226.2831,-222.998 267.7083,-229.9357"/>
+<polygon fill="#000000" stroke="#000000" points="267.3001,-233.4157 277.7384,-231.6013 268.4469,-226.5103 267.3001,-233.4157"/>
+</g>
+<!-- proc~orthogonal_transform_sym -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node6" class="node">
+<title>proc~orthogonal_transform_sym</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node6"><a xlink:href="../proc/orthogonal_transform_sym.html" xlink:title="orthogonal_transform_sym">
+<polygon fill="#d9534f" stroke="#d9534f" points="424,-212.1781 268,-212.1781 268,-188.1781 424,-188.1781 424,-212.1781"/>
+<text text-anchor="middle" x="346" y="-197.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">orthogonal_transform_sym</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge5" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~orthogonal_transform_sym</title>
+<path fill="none" stroke="#000000" d="M93.2969,-183.3031C137.1144,-186.2292 203.7251,-190.6773 257.5589,-194.2722"/>
+<polygon fill="#000000" stroke="#000000" points="257.5878,-197.7819 267.7988,-194.956 258.0543,-190.7974 257.5878,-197.7819"/>
+</g>
+<!-- proc~triangular_to_full -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node7" class="node">
+<title>proc~triangular_to_full</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node7"><a xlink:href="../proc/triangular_to_full.html" xlink:title="triangular_to_full">
+<polygon fill="#d9534f" stroke="#d9534f" points="232,-172.1781 129,-172.1781 129,-148.1781 232,-148.1781 232,-172.1781"/>
+<text text-anchor="middle" x="180.5" y="-157.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">triangular_to_full</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;proc~triangular_to_full -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge6" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;proc~triangular_to_full</title>
+<path fill="none" stroke="#000000" d="M93.3667,-173.1831C101.612,-171.9525 110.3058,-170.6549 118.8813,-169.375"/>
+<polygon fill="#000000" stroke="#000000" points="119.4861,-172.8235 128.8598,-167.8856 118.4527,-165.9002 119.4861,-172.8235"/>
+</g>
+<!-- proc~pack_f90 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node13" class="node">
+<title>proc~pack_f90</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node13"><a xlink:href="../proc/pack_f90.html" xlink:title="PACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="378,-130.1781 314,-130.1781 314,-106.1781 378,-106.1781 378,-130.1781"/>
+<text text-anchor="middle" x="346" y="-115.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">PACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~pack_matrix&#45;&gt;proc~pack_f90 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge7" class="edge">
+<title>interface~pack_matrix&#45;&gt;proc~pack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M219.7212,-118.1781C245.0088,-118.1781 277.8781,-118.1781 303.7428,-118.1781"/>
+<polygon fill="#000000" stroke="#000000" points="303.9965,-121.6782 313.9965,-118.1781 303.9964,-114.6782 303.9965,-121.6782"/>
+</g>
+<!-- proc~unpack_f90 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node14" class="node">
+<title>proc~unpack_f90</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node14"><a xlink:href="../proc/unpack_f90.html" xlink:title="UNPACK_F90">
+<polygon fill="#d9534f" stroke="#d9534f" points="385.5,-52.1781 306.5,-52.1781 306.5,-28.1781 385.5,-28.1781 385.5,-52.1781"/>
+<text text-anchor="middle" x="346" y="-37.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">UNPACK_F90</text>
+</a>
+</g>
+</g>
+<!-- interface~unpack_matrix&#45;&gt;proc~unpack_f90 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge8" class="edge">
+<title>interface~unpack_matrix&#45;&gt;proc~unpack_f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M226.1617,-53.2119C247.983,-50.8386 274.1426,-47.9934 296.4458,-45.5677"/>
+<polygon fill="#000000" stroke="#000000" points="296.8294,-49.0467 306.3923,-44.4859 296.0725,-42.0878 296.8294,-49.0467"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node8" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node8"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="690,-172.1781 597,-172.1781 597,-148.1781 690,-148.1781 690,-172.1781"/>
+<text text-anchor="middle" x="643.5" y="-157.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform2&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge9" class="edge">
+<title>proc~orthogonal_transform2&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M378.0104,-254.1882C421.6298,-268.5072 501.1526,-287.2092 561,-259.1781 563.2935,-258.1039 603.6381,-208.994 627.0431,-180.3571"/>
+<polygon fill="#000000" stroke="#000000" points="629.8117,-182.5003 633.4261,-172.541 624.3899,-178.0726 629.8117,-182.5003"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node9" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node9"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="561,-250.1781 460,-250.1781 460,-226.1781 561,-226.1781 561,-250.1781"/>
+<text text-anchor="middle" x="510.5" y="-235.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform2&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge10" class="edge">
+<title>proc~orthogonal_transform2&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M414.3337,-240.5165C425.9583,-240.2339 437.9648,-239.9419 449.3878,-239.6641"/>
+<polygon fill="#000000" stroke="#000000" points="449.7746,-243.1559 459.6865,-239.4137 449.6044,-236.1579 449.7746,-243.1559"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge11" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M424.2447,-191.6257C465.067,-186.9336 515.7923,-180.7436 561,-174.1781 569.37,-172.9626 578.1999,-171.5758 586.8475,-170.1586"/>
+<polygon fill="#000000" stroke="#000000" points="587.5872,-173.5837 596.8768,-168.4894 586.4379,-166.6787 587.5872,-173.5837"/>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge12" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M398.0488,-212.2016C414.5726,-216.0186 432.9849,-220.2719 450.0482,-224.2136"/>
+<polygon fill="#000000" stroke="#000000" points="449.3833,-227.6521 459.9145,-226.4927 450.9589,-220.8317 449.3833,-227.6521"/>
+</g>
+<!-- proc~oqp_dsymm_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node10" class="node">
+<title>proc~oqp_dsymm_i64</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node10"><a xlink:href="../proc/oqp_dsymm_i64.html" xlink:title="oqp_dsymm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="560,-330.1781 461,-330.1781 461,-306.1781 560,-306.1781 560,-330.1781"/>
+<text text-anchor="middle" x="510.5" y="-315.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsymm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge13" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dsymm_i64</title>
+<path fill="none" stroke="#000000" d="M405.4558,-212.2405C411.9483,-214.6965 418.2711,-217.6438 424,-221.1781 428.3072,-223.8354 469.0738,-270.4236 493.0728,-298.0525"/>
+<polygon fill="#000000" stroke="#000000" points="490.7265,-300.6889 499.9235,-305.9486 496.0138,-296.1015 490.7265,-300.6889"/>
+</g>
+<!-- proc~oqp_dtpttr_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node11" class="node">
+<title>proc~oqp_dtpttr_i64</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node11"><a xlink:href="../proc/oqp_dtpttr_i64.html" xlink:title="oqp_dtpttr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="555,-52.1781 466,-52.1781 466,-28.1781 555,-28.1781 555,-52.1781"/>
+<text text-anchor="middle" x="510.5" y="-37.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtpttr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge14" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M366.4685,-188.0811C383.6434,-177.095 407.8852,-159.5289 424,-139.1781 447.7023,-109.2453 432.4898,-87.6539 460,-61.1781 461.2464,-59.9786 462.5712,-58.8434 463.9569,-57.7695"/>
+<polygon fill="#000000" stroke="#000000" points="465.9531,-60.6465 472.4374,-52.2677 462.1433,-54.7741 465.9531,-60.6465"/>
+</g>
+<!-- proc~oqp_dtrttp_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node12" class="node">
+<title>proc~oqp_dtrttp_i64</title>
+<g id="a_proc~~form_rohf_fock~~CallsGraph_node12"><a xlink:href="../proc/oqp_dtrttp_i64.html" xlink:title="oqp_dtrttp_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="555,-94.1781 466,-94.1781 466,-70.1781 555,-70.1781 555,-94.1781"/>
+<text text-anchor="middle" x="510.5" y="-79.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dtrttp_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge15" class="edge">
+<title>proc~orthogonal_transform_sym&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M362.9848,-187.9945C391.9211,-167.2378 450.9357,-124.9051 484.8963,-100.5443"/>
+<polygon fill="#000000" stroke="#000000" points="487.2756,-103.145 493.3611,-94.4723 483.1954,-97.4571 487.2756,-103.145"/>
+</g>
+<!-- proc~triangular_to_full&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge16" class="edge">
+<title>proc~triangular_to_full&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M232.2643,-160.1781C319.7425,-160.1781 496.1326,-160.1781 586.8214,-160.1781"/>
+<polygon fill="#000000" stroke="#000000" points="586.9149,-163.6782 596.9148,-160.1781 586.9148,-156.6782 586.9149,-163.6782"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge18" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M534.8748,-226.1686C543.241,-221.9045 552.6083,-216.971 561,-212.1781 579.9262,-201.3686 600.6799,-188.281 616.6372,-177.94"/>
+<polygon fill="#000000" stroke="#000000" points="618.9641,-180.601 625.4283,-172.2067 615.1402,-174.7378 618.9641,-180.601"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node15" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="670.5,-250.1781 616.5,-250.1781 616.5,-226.1781 670.5,-226.1781 670.5,-250.1781"/>
+<text text-anchor="middle" x="643.5" y="-235.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge17" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M561.161,-238.1781C576.1366,-238.1781 592.25,-238.1781 606.2172,-238.1781"/>
+<polygon fill="#000000" stroke="#000000" points="606.4252,-241.6782 616.4252,-238.1781 606.4251,-234.6782 606.4252,-241.6782"/>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;dsymm -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge19" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;dsymm</title>
+<path fill="none" stroke="#000000" d="M560.0243,-325.6254C575.3573,-327.9311 591.9807,-330.4309 606.3269,-332.5882"/>
+<polygon fill="#000000" stroke="#000000" points="605.9105,-336.0648 616.3198,-334.0909 606.9515,-329.1427 605.9105,-336.0648"/>
+</g>
+<!-- proc~oqp_dsymm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge20" class="edge">
+<title>proc~oqp_dsymm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M541.7519,-306.0875C548.6807,-302.3771 555.5689,-297.7631 561,-292.1781 586.7771,-265.6706 577.175,-248.3884 597,-217.1781 605.3209,-204.0787 616.2194,-190.5723 625.3738,-179.9967"/>
+<polygon fill="#000000" stroke="#000000" points="628.2584,-182.0181 632.2588,-172.2075 623.0136,-177.3821 628.2584,-182.0181"/>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge22" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M545.6483,-52.1884C551.0293,-54.7512 556.3372,-57.7421 561,-61.1781 565.0602,-64.1702 604.3425,-112.0778 627.2063,-140.133"/>
+<polygon fill="#000000" stroke="#000000" points="624.6898,-142.5856 633.7177,-148.1307 630.1182,-138.1661 624.6898,-142.5856"/>
+</g>
+<!-- dtpttr -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node16" class="node">
+<title>dtpttr</title>
+<polygon fill="#777777" stroke="#777777" points="670.5,-52.1781 616.5,-52.1781 616.5,-28.1781 670.5,-28.1781 670.5,-52.1781"/>
+<text text-anchor="middle" x="643.5" y="-37.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtpttr</text>
+</g>
+<!-- proc~oqp_dtpttr_i64&#45;&gt;dtpttr -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge21" class="edge">
+<title>proc~oqp_dtpttr_i64&#45;&gt;dtpttr</title>
+<path fill="none" stroke="#000000" d="M555.1571,-40.1781C571.5895,-40.1781 590.0237,-40.1781 605.7848,-40.1781"/>
+<polygon fill="#000000" stroke="#000000" points="606.2118,-43.6782 616.2117,-40.1781 606.2117,-36.6782 606.2118,-43.6782"/>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge24" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M534.8748,-94.1877C543.241,-98.4518 552.6083,-103.3853 561,-108.1781 579.9262,-118.9877 600.6799,-132.0753 616.6372,-142.4163"/>
+<polygon fill="#000000" stroke="#000000" points="615.1402,-145.6185 625.4283,-148.1496 618.9641,-139.7552 615.1402,-145.6185"/>
+</g>
+<!-- dtrttp -->
+<g id="proc~~form_rohf_fock~~CallsGraph_node17" class="node">
+<title>dtrttp</title>
+<polygon fill="#777777" stroke="#777777" points="670.5,-94.1781 616.5,-94.1781 616.5,-70.1781 670.5,-70.1781 670.5,-94.1781"/>
+<text text-anchor="middle" x="643.5" y="-79.7781" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dtrttp</text>
+</g>
+<!-- proc~oqp_dtrttp_i64&#45;&gt;dtrttp -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge23" class="edge">
+<title>proc~oqp_dtrttp_i64&#45;&gt;dtrttp</title>
+<path fill="none" stroke="#000000" d="M555.1571,-82.1781C571.5895,-82.1781 590.0237,-82.1781 605.7848,-82.1781"/>
+<polygon fill="#000000" stroke="#000000" points="606.2118,-85.6782 616.2117,-82.1781 606.2117,-78.6782 606.2118,-85.6782"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge25" class="edge">
+<title>proc~pack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M378.1085,-121.9674C420.1804,-127.0224 496.2274,-136.4682 561,-146.1781 569.3644,-147.432 578.1911,-148.8397 586.8373,-150.2663"/>
+<polygon fill="#000000" stroke="#000000" points="586.4258,-153.7459 596.8658,-151.9416 587.5793,-146.8416 586.4258,-153.7459"/>
+</g>
+<!-- proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge26" class="edge">
+<title>proc~pack_f90&#45;&gt;proc~oqp_dtrttp_i64</title>
+<path fill="none" stroke="#000000" d="M378.1078,-111.1515C400.147,-106.3283 429.9533,-99.8054 455.7042,-94.1699"/>
+<polygon fill="#000000" stroke="#000000" points="456.6964,-97.5357 465.7169,-91.9787 455.1998,-90.6975 456.6964,-97.5357"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;interface~show_message -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge27" class="edge">
+<title>proc~unpack_f90&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M371.3331,-28.1573C414.2481,-9.7272 502.2939,19.5324 561,-19.1781 594.9091,-41.5377 575.9573,-68.4365 597,-103.1781 604.9354,-116.2796 615.6419,-129.6162 624.7811,-140.0919"/>
+<polygon fill="#000000" stroke="#000000" points="622.4171,-142.6989 631.6917,-147.8207 627.6354,-138.0331 622.4171,-142.6989"/>
+</g>
+<!-- proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64 -->
+<g id="proc~~form_rohf_fock~~CallsGraph_edge28" class="edge">
+<title>proc~unpack_f90&#45;&gt;proc~oqp_dtpttr_i64</title>
+<path fill="none" stroke="#000000" d="M385.8209,-40.1781C406.7651,-40.1781 432.764,-40.1781 455.5921,-40.1781"/>
+<polygon fill="#000000" stroke="#000000" points="455.828,-43.6782 465.828,-40.1781 455.828,-36.6782 455.828,-43.6782"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocform_rohf_fockCallsGraph = svgPanZoom('#procform_rohf_fockCallsGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~form_rohf_fock~~CalledByGraph Pages: 1 -->
+<svg id="procform_rohf_fockCalledByGraph" width="303pt" height="32pt"
+ viewBox="0.00 0.00 303.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~form_rohf_fock~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~form_rohf_fock~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 299,-28 299,4 -4,4"/>
+<!-- proc~form_rohf_fock -->
+<g id="proc~~form_rohf_fock~~CalledByGraph_node1" class="node">
+<title>proc~form_rohf_fock</title>
+<polygon fill="none" stroke="#000000" points="295,-24 202,-24 202,0 295,0 295,-24"/>
+<text text-anchor="middle" x="248.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">form_rohf_fock</text>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~form_rohf_fock~~CalledByGraph_node2" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~form_rohf_fock~~CalledByGraph_node2"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="166,-24 102,-24 102,0 166,0 166,-24"/>
+<text text-anchor="middle" x="134" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;proc~form_rohf_fock -->
+<g id="proc~~form_rohf_fock~~CalledByGraph_edge1" class="edge">
+<title>proc~scf_driver&#45;&gt;proc~form_rohf_fock</title>
+<path fill="none" stroke="#000000" d="M166.1993,-12C174.0913,-12 182.7743,-12 191.4512,-12"/>
+<polygon fill="#000000" stroke="#000000" points="191.5865,-15.5001 201.5865,-12 191.5864,-8.5001 191.5865,-15.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~form_rohf_fock~~CalledByGraph_node3" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~form_rohf_fock~~CalledByGraph_node3"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="66,-24 0,-24 0,0 66,0 66,-24"/>
+<text text-anchor="middle" x="33" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~form_rohf_fock~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M66.0712,-12C74.2514,-12 83.127,-12 91.6809,-12"/>
+<polygon fill="#000000" stroke="#000000" points="91.8869,-15.5001 101.8868,-12 91.8868,-8.5001 91.8869,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">form_rohf_fock</span><span class="p">(</span><span class="n">fock_a_ao</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b_ao</span><span class="p">,</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                            </span><span class="n">MOs</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_tri</span><span class="p">,</span><span class="w"> </span><span class="n">work</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                            </span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">vshift</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">use </span><span class="n">mathlib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">orthogonal_transform_sym</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">orthogonal_transform2</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">triangular_to_full</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">unpack_matrix</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">pack_matrix</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fock_a_ao</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fock_b_ao</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">fock_mo</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">MOs</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">overlap_tri</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">),</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">work</span>
+<span class="w">    </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nocca</span><span class="p">,</span><span class="w"> </span><span class="n">noccb</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">vshift</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">dimension</span><span class="p">(:,:)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">overlap</span><span class="p">,</span><span class="w"> </span><span class="n">work_matrix</span><span class="p">,</span><span class="w"> </span><span class="n">fock</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">acc</span><span class="p">,</span><span class="w"> </span><span class="n">aoo</span><span class="p">,</span><span class="w"> </span><span class="n">avv</span><span class="p">,</span><span class="w"> </span><span class="n">bcc</span><span class="p">,</span><span class="w"> </span><span class="n">boo</span><span class="p">,</span><span class="w"> </span><span class="n">bvv</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">nbf_tri</span>
+
+<span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="p">;</span><span class="w"> </span><span class="n">aoo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="p">;</span><span class="w"> </span><span class="n">avv</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span>
+<span class="w">    </span><span class="n">bcc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="p">;</span><span class="w"> </span><span class="n">boo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="p">;</span><span class="w"> </span><span class="n">bvv</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span>
+<span class="w">    </span><span class="n">nbf_tri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nbf</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">nbf</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span>
+
+<span class="w">    </span><span class="c">! Allocate full matrices</span>
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">overlap</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">work_matrix</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">fock</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">fock_a</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">fock_b</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Transform alpha and beta Fock matrices to MO basis</span>
+<span class="w">    </span><span class="k">call </span><span class="n">orthogonal_transform_sym</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a_ao</span><span class="p">,</span><span class="w"> </span><span class="n">MOs</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">)</span>
+<span class="w">    </span><span class="n">fock_a_ao</span><span class="p">(:</span><span class="n">nbf_tri</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">(:</span><span class="n">nbf_tri</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">orthogonal_transform_sym</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b_ao</span><span class="p">,</span><span class="w"> </span><span class="n">MOs</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">)</span>
+<span class="w">    </span><span class="n">fock_b_ao</span><span class="p">(:</span><span class="n">nbf_tri</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">(:</span><span class="n">nbf_tri</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Unpack triangular matrices to full matrices</span>
+<span class="w">    </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">fock_a_ao</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">fock_b_ao</span><span class="p">,</span><span class="w"> </span><span class="n">fock_b</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Construct ROHF Fock matrix in MO basis using Guest-Saunders method</span>
+<span class="w">    </span><span class="k">associate</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">na</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">nocca</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">              </span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">noccb</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">      </span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="o">+</span><span class="w"> </span><span class="n">bcc</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aoo</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_a</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                             </span><span class="o">+</span><span class="w"> </span><span class="n">boo</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">avv</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_a</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                               </span><span class="o">+</span><span class="w"> </span><span class="n">bvv</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">fock_a</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                     </span><span class="o">+</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">))</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5_dp</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">fock_a</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                                     </span><span class="o">+</span><span class="w"> </span><span class="n">fock_b</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span><span class="n">nb</span><span class="p">))</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_a</span><span class="p">(</span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">,</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">      </span><span class="n">fock</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock_a</span><span class="p">(</span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">:</span><span class="n">na</span><span class="p">)</span>
+
+<span class="w">      </span><span class="c">! Apply Vshift to the diagonal</span>
+<span class="w">      </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nb</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">na</span>
+<span class="w">        </span><span class="n">fock</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">vshift</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">0.5_dp</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">      do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">na</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<span class="w">        </span><span class="n">fock</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fock</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">vshift</span>
+<span class="w">      </span><span class="k">end do</span>
+<span class="k">    end associate</span>
+
+<span class="w">    </span><span class="c">! Pack fock to fock_mo, make it triangular</span>
+<span class="w">    </span><span class="k">call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">fock</span><span class="p">,</span><span class="w"> </span><span class="n">fock_mo</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">triangular_to_full</span><span class="p">(</span><span class="n">fock_mo</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;u&#39;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Back-transform ROHF Fock matrix to AO basis</span>
+<span class="w">    </span><span class="k">call </span><span class="n">unpack_matrix</span><span class="p">(</span><span class="n">overlap_tri</span><span class="p">,</span><span class="w"> </span><span class="n">overlap</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">dsymm</span><span class="p">(</span><span class="s1">&#39;l&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;u&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">overlap</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">MOs</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">work</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">orthogonal_transform2</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">work</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">fock</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                               </span><span class="n">work_matrix</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">overlap</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">pack_matrix</span><span class="p">(</span><span class="n">work_matrix</span><span class="p">,</span><span class="w"> </span><span class="n">fock_a_ao</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">form_rohf_fock</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

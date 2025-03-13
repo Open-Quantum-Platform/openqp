@@ -1,0 +1,728 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>oqp_banner.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>oqp_banner.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for source files.">69 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/oqp_banner.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">oqp_banner.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/oqp_banner_mod.html">oqp_banner_mod</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/oqp_banner.f90.html#src">oqp_banner.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~oqp_banner.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefileoqp_bannerf90EfferentGraph" width="641pt" height="210pt"
+ viewBox="0.00 0.00 641.00 210.49" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph" class="graph" transform="scale(.6547 .6547) rotate(0) translate(4 317.4791)">
+<title>sourcefile~~oqp_banner.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-317.4791 975,-317.4791 975,4 -4,4"/>
+<!-- sourcefile~oqp_banner.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~oqp_banner.f90</title>
+<polygon fill="none" stroke="#000000" points="971,-115.0566 873,-115.0566 873,-91.0566 971,-91.0566 971,-115.0566"/>
+<text text-anchor="middle" x="922" y="-100.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">oqp_banner.F90</text>
+</g>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~c_interop.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/c_interop.f90.html" xlink:title="c_interop.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="837,-135.0566 752,-135.0566 752,-111.0566 837,-111.0566 837,-135.0566"/>
+<text text-anchor="middle" x="794.5" y="-120.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">c_interop.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872.7052,-110.7891C864.3356,-112.102 855.6151,-113.4699 847.1628,-114.7958"/>
+<polygon fill="#000000" stroke="#000000" points="846.3644,-111.3781 837.0276,-116.3856 847.4493,-118.2936 846.3644,-111.3781"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="414.5,-124.0566 326.5,-124.0566 326.5,-100.0566 414.5,-100.0566 414.5,-124.0566"/>
+<text text-anchor="middle" x="370.5" y="-109.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M794.5,-83.0566C755.3274,-79.2109 753.3425,-111.614 716,-124.0566 631.2896,-152.2823 604.7977,-152.4112 516,-143.0566"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="408.5,-44.0566 332.5,-44.0566 332.5,-20.0566 408.5,-20.0566 408.5,-44.0566"/>
+<text text-anchor="middle" x="370.5" y="-29.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M872.8088,-94.1319C849.1987,-90.1584 820.4614,-85.7725 794.5,-83.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M794.5,-83.0566C754.9356,-78.9177 753.7361,-52.6446 716,-40.0566 611.4511,-5.1814 578.9379,-10.2828 469,-18.0566 452.605,-19.2159 434.789,-21.4477 418.8737,-23.7945"/>
+<polygon fill="#000000" stroke="#000000" points="418.0811,-20.3748 408.7235,-25.3431 419.137,-27.2947 418.0811,-20.3748"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="716,-115.0566 599,-115.0566 599,-91.0566 716,-91.0566 716,-115.0566"/>
+<text text-anchor="middle" x="657.5" y="-100.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M794.5,-83.0566C767.2726,-80.3836 737.1749,-84.0409 712.1413,-88.9279"/>
+<polygon fill="#000000" stroke="#000000" points="711.1868,-85.5512 702.1032,-91.0046 712.605,-92.406 711.1868,-85.5512"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="689.5,-73.0566 625.5,-73.0566 625.5,-49.0566 689.5,-49.0566 689.5,-73.0566"/>
+<text text-anchor="middle" x="657.5" y="-58.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M794.5,-83.0566C762.5062,-79.9157 726.6394,-74.071 699.6317,-69.195"/>
+<polygon fill="#000000" stroke="#000000" points="700.2084,-65.7425 689.7411,-67.3813 698.9458,-72.6277 700.2084,-65.7425"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M772.9812,-135.1085C746.6423,-149.2307 700.2582,-172.0915 657.5,-183.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-183.0566C594.1951,-199.2909 580.9937,-149.9035 516,-143.0566"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M751.9033,-116.8381C743.6852,-115.6384 734.8838,-114.3535 726.0805,-113.0684"/>
+<polygon fill="#000000" stroke="#000000" points="726.5724,-109.6032 716.1717,-111.6218 725.5612,-116.5297 726.5724,-109.6032"/>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M773.23,-110.9364C757.6537,-102.3116 735.8566,-90.7575 716,-82.0566 710.6181,-79.6983 704.8789,-77.3932 699.178,-75.2252"/>
+<polygon fill="#000000" stroke="#000000" points="700.2829,-71.9023 689.6896,-71.7211 697.8578,-78.4688 700.2829,-71.9023"/>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="562.5,-195.0566 469.5,-195.0566 469.5,-171.0566 562.5,-171.0566 562.5,-195.0566"/>
+<text text-anchor="middle" x="516" y="-180.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-183.0566C630.1904,-190.06 598.9287,-190.7842 572.7469,-189.4515"/>
+<polygon fill="#000000" stroke="#000000" points="572.808,-185.9486 562.6102,-188.822 572.374,-192.9352 572.808,-185.9486"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-305.0566 32.5,-305.0566 32.5,-281.0566 102.5,-281.0566 102.5,-305.0566"/>
+<text text-anchor="middle" x="67.5" y="-290.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-183.0566C610.4276,-195.1281 606.4649,-216.3233 563,-238.0566 506.8877,-266.1139 493.8638,-277.8446 433,-293.0566 341.438,-315.9412 315.3031,-301.6501 221.5,-312.0566"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="272,-142.0566 171,-142.0566 171,-118.0566 272,-118.0566 272,-142.0566"/>
+<text text-anchor="middle" x="221.5" y="-127.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M326.1985,-117.4085C312.3981,-119.0756 296.9335,-120.9438 282.213,-122.7222"/>
+<polygon fill="#000000" stroke="#000000" points="281.6784,-119.2612 272.1704,-123.9354 282.518,-126.2107 281.6784,-119.2612"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-125.0566 25.5,-125.0566 25.5,-101.0566 109.5,-101.0566 109.5,-125.0566"/>
+<text text-anchor="middle" x="67.5" y="-110.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M337.3651,-99.9772C300.6658,-87.1687 243.742,-69.1465 221.5,-72.0566"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M336.1028,-44.076C306.2356,-53.8359 261.602,-66.8097 221.5,-72.0566"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.4578,-115.1217C590.6341,-127.6932 537.1356,-145.2832 516,-143.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516,-143.0566C485.3463,-139.8273 451.6517,-132.8717 424.4136,-126.3659"/>
+<polygon fill="#000000" stroke="#000000" points="425.2324,-122.9631 414.6881,-123.9971 423.5758,-129.7643 425.2324,-122.9631"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516,-32.0566C483.9562,-26.5767 447.359,-26.6065 418.8848,-27.9912"/>
+<polygon fill="#000000" stroke="#000000" points="418.5746,-24.503 408.7853,-28.555 418.9648,-31.4921 418.5746,-24.503"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="433,-284.0566 308,-284.0566 308,-260.0566 433,-260.0566 433,-284.0566"/>
+<text text-anchor="middle" x="370.5" y="-269.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.2343,-66.7802C615.6993,-69.8895 605.9625,-74.6802 599,-82.0566 560.1946,-123.1686 601.9097,-163.0434 563,-204.0566 544.3998,-223.6623 479.6534,-244.0394 430.3376,-257.312"/>
+<polygon fill="#000000" stroke="#000000" points="429.1535,-254.0049 420.3848,-259.9514 430.9479,-260.771 429.1535,-254.0049"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.3113,-67.6825C616,-70.8246 606.3715,-75.407 599,-82.0566 571.5455,-106.8227 588.3789,-130.1675 563,-157.0566 560.1197,-160.1083 556.7998,-162.8905 553.2838,-165.4036"/>
+<polygon fill="#000000" stroke="#000000" points="551.3948,-162.4571 544.8384,-170.7796 555.1538,-168.3622 551.3948,-162.4571"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="563,-84.0566 469,-84.0566 469,-60.0566 563,-60.0566 563,-84.0566"/>
+<text text-anchor="middle" x="516" y="-69.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.3915,-63.5527C609.9868,-64.7502 591.0565,-66.2218 573.2998,-67.6022"/>
+<polygon fill="#000000" stroke="#000000" points="572.7147,-64.137 563.0161,-68.4017 573.2573,-71.116 572.7147,-64.137"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.2991,-53.8299C596.6926,-47.56 553.6946,-38.5029 516,-32.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516,-32.0566C424.4152,-16.3944 396.5672,17.0314 308,-11.0566 263.1586,-25.2775 268.1157,-65.7346 221.5,-72.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M221.5,-72.0566C183.8901,-76.7978 142.426,-88.2081 112.0063,-97.7908"/>
+<polygon fill="#000000" stroke="#000000" points="110.5875,-94.5702 102.135,-100.9582 112.7262,-101.2355 110.5875,-94.5702"/>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M337.3286,-284.0774C307.4964,-294.1329 262.2296,-307.5381 221.5,-312.0566"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M494.3462,-170.9892C473.9291,-159.6711 444.7591,-143.672 433,-138.0566 425.8416,-134.6382 418.113,-131.2149 410.6125,-128.0269"/>
+<polygon fill="#000000" stroke="#000000" points="411.8703,-124.7593 401.294,-124.1327 409.1712,-131.218 411.8703,-124.7593"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M505.555,-170.8664C490.1061,-152.9794 460.069,-118.7439 433,-91.0566 419.651,-77.4027 404.0304,-62.6566 391.7448,-51.322"/>
+<polygon fill="#000000" stroke="#000000" points="393.946,-48.5917 384.2104,-44.412 389.2146,-53.7505 393.946,-48.5917"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M490.7562,-195.2504C483.4592,-199.2372 475.67,-203.9629 469,-209.0566 450.7653,-222.9819 451.9795,-233.1649 433,-246.0566 427.7048,-249.6534 421.8335,-252.8966 415.8709,-255.7739"/>
+<polygon fill="#000000" stroke="#000000" points="414.1789,-252.6972 406.4958,-259.9924 417.0514,-259.0807 414.1789,-252.6972"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-152.0566C341.6152,-146.3314 309.3103,-141.386 282.1837,-137.6422"/>
+<polygon fill="#000000" stroke="#000000" points="282.4387,-134.1448 272.0586,-136.2671 281.4966,-141.0811 282.4387,-134.1448"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.2181,-172.7354C440.7256,-166.5374 403.5616,-158.6097 370.5,-152.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-152.0566C342.0211,-146.4118 334.0835,-145.8068 308,-133.0566 265.7367,-112.3974 268.1157,-65.7346 221.5,-72.0566"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="420.5,-204.0566 320.5,-204.0566 320.5,-180.0566 420.5,-180.0566 420.5,-204.0566"/>
+<text text-anchor="middle" x="370.5" y="-189.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.162,-185.9538C456.9039,-186.712 443.5168,-187.5401 430.6696,-188.3348"/>
+<polygon fill="#000000" stroke="#000000" points="430.2788,-184.8522 420.514,-188.963 430.711,-191.8388 430.2788,-184.8522"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="264.5,-184.0566 178.5,-184.0566 178.5,-160.0566 264.5,-160.0566 264.5,-184.0566"/>
+<text text-anchor="middle" x="221.5" y="-169.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-152.0566C337.0634,-145.4291 298.9634,-150.7692 269.6606,-157.5908"/>
+<polygon fill="#000000" stroke="#000000" points="268.5573,-154.2579 259.6848,-160.0484 270.2317,-161.0547 268.5573,-154.2579"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="264,-244.0566 179,-244.0566 179,-220.0566 264,-220.0566 264,-244.0566"/>
+<text text-anchor="middle" x="221.5" y="-229.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.1086,-195.1748C472.2492,-201.5444 451.848,-208.8772 433,-213.0566 379.7988,-224.8537 317.5232,-229.362 274.3886,-231.0655"/>
+<polygon fill="#000000" stroke="#000000" points="273.9937,-227.5773 264.1251,-231.4322 274.2437,-234.5728 273.9937,-227.5773"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M472.3452,-84.0579C457.1642,-88.2314 439.9594,-92.9613 424.0693,-97.3297"/>
+<polygon fill="#000000" stroke="#000000" points="423.0897,-93.969 414.3752,-99.9947 424.9453,-100.7186 423.0897,-93.969"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M468.8306,-68.3053C410.4688,-64.5245 308.1908,-60.7142 221.5,-72.0566"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M341.5602,-180.0217C330.9978,-175.6281 318.9579,-170.6188 308,-166.0566 291.9981,-159.3945 288.0023,-157.7177 272,-151.0566 268.1046,-149.4351 264.0399,-147.7438 259.9821,-146.0558"/>
+<polygon fill="#000000" stroke="#000000" points="261.1865,-142.7661 250.6091,-142.1573 258.4982,-149.2293 261.1865,-142.7661"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge34" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M357.13,-204.2233C323.7873,-234.3587 238.4185,-310.1797 221.5,-312.0566"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M221.5,-312.0566C184.8157,-316.1264 143.2865,-310.3975 112.6063,-304.1927"/>
+<polygon fill="#000000" stroke="#000000" points="113.1482,-300.7299 102.6402,-302.0837 111.6989,-307.5783 113.1482,-300.7299"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M320.4707,-185.3413C305.7707,-183.3681 289.6409,-181.203 274.7477,-179.204"/>
+<polygon fill="#000000" stroke="#000000" points="275.0441,-175.7124 264.6673,-177.8509 274.1128,-182.6502 275.0441,-175.7124"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge33" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M325.7951,-204.0579C309.4573,-208.4439 290.8307,-213.4444 273.8832,-217.994"/>
+<polygon fill="#000000" stroke="#000000" points="272.8794,-214.6395 264.1288,-220.6126 274.6944,-221.4001 272.8794,-214.6395"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge35" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M189.9642,-159.9747C166.3994,-150.9467 133.9838,-138.5277 108.4221,-128.7346"/>
+<polygon fill="#000000" stroke="#000000" points="109.584,-125.4317 98.9936,-125.1224 107.0796,-131.9684 109.584,-125.4317"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge37" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M191.0746,-244.1083C167.1346,-253.5909 133.5735,-266.8846 107.4672,-277.2255"/>
+<polygon fill="#000000" stroke="#000000" points="105.8705,-274.0933 97.8622,-281.03 108.4484,-280.6013 105.8705,-274.0933"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_node16" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~oqp_banner.f90~~EfferentGraph_node16"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-244.0566 0,-244.0566 0,-220.0566 135,-220.0566 135,-244.0566"/>
+<text text-anchor="middle" x="67.5" y="-229.6566" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~oqp_banner.f90~~EfferentGraph_edge36" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M178.6024,-232.0566C168.2083,-232.0566 156.7753,-232.0566 145.3181,-232.0566"/>
+<polygon fill="#000000" stroke="#000000" points="145.269,-228.5567 135.269,-232.0566 145.269,-235.5567 145.269,-228.5567"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefileoqp_bannerf90EfferentGraph = svgPanZoom('#sourcefileoqp_bannerf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="c">!&gt; @brief   The initialization of Open Quantum Platform (OpenQP = OQP in source code level)</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a><span class="c">!&gt; @details This module initialize entire OQP in Fortran side.</span>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="c">!&gt;          It does:</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a><span class="c">!&gt;          1) Setting up the log file</span>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="c">!&gt;          2) Printing out author information</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a><span class="c">!&gt;          3) Printing out the basic information regarding OS, date, HW Specs.</span>
+<a id="ln-7" name="ln-7" href="#ln-7"></a><span class="c">!&gt;</span>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="c">!&gt; @param infos(in,out)     Molecule information</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a><span class="k">module </span><span class="n">oqp_banner_mod</span>
+<a id="ln-10" name="ln-10" href="#ln-10"></a>
+<a id="ln-11" name="ln-11" href="#ln-11"></a><span class="w">  </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">module_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;oqp_banner_mod&quot;</span>
+<a id="ln-12" name="ln-12" href="#ln-12"></a>
+<a id="ln-13" name="ln-13" href="#ln-13"></a><span class="k">contains</span>
+<a id="ln-14" name="ln-14" href="#ln-14"></a>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="k">  subroutine </span><span class="n">oqp_banner_C</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;oqp_banner&quot;</span><span class="p">)</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">    </span><span class="k">use </span><span class="n">c_interop</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">oqp_handle_t</span><span class="p">,</span><span class="w"> </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">    </span><span class="n">inf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">oqp_handle_get_info</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">    </span><span class="k">call </span><span class="n">oqp_banner</span><span class="p">(</span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">oqp_banner_C</span>
+<a id="ln-23" name="ln-23" href="#ln-23"></a>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">oqp_banner</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="c">!$  use omp_lib, only: omp_get_max_threads</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="k">use </span><span class="nb">iso_c_binding</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="kt">c_char</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="kt">    </span><span class="k">use </span><span class="n">parallel</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">par_env_t</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="k">    type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="n">CPU_core</span><span class="p">,</span><span class="w"> </span><span class="n">i</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">28</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">cdate</span>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="p">:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">hostnames</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">par_env_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">pe</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a>
+<a id="ln-38" name="ln-38" href="#ln-38"></a><span class="w">  </span><span class="c">! Section of Tagarray for the log filename</span>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="w">  </span><span class="c">! We are getting lot file name from Python via tagarray</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">log_filename</span><span class="p">(:)</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;oqp_banner&quot;</span>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a><span class="w">          </span><span class="n">OQP_log_filename</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<a id="ln-45" name="ln-45" href="#ln-45"></a>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">log_filename</span><span class="p">)</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="kt">character</span><span class="p">(</span><span class="nb">ubound</span><span class="p">(</span><span class="n">log_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">)</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a><span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">log_filename</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<a id="ln-50" name="ln-50" href="#ln-50"></a><span class="w">       </span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">(</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">log_filename</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">    </span><span class="k">end do</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a><span class="k">    call </span><span class="n">pe</span><span class="p">%</span><span class="n">init</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">comm</span><span class="p">,</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">%</span><span class="n">usempi</span><span class="p">)</span>
+<a id="ln-53" name="ln-53" href="#ln-53"></a>
+<a id="ln-54" name="ln-54" href="#ln-54"></a>
+<a id="ln-55" name="ln-55" href="#ln-55"></a><span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">newunit</span><span class="o">=</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+<a id="ln-56" name="ln-56" href="#ln-56"></a>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/,10x, &quot;***********************************************************&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*             OpenQP: Open Quantum Platform               *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                Version: 1.0 Aug, 2024                   *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-62" name="ln-62" href="#ln-62"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-63" name="ln-63" href="#ln-63"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;***********************************************************&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*     The most efficient implementation of MRSF-TDDFT.    *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;***********************************************************&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   OpenQP was initiated by Prof. Cheol Ho Choi in 2012.  *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   It has since been developed by:                       *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Dr. Vladimir Mironov                                  *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Dr. Konstantin Komarov                                *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Mr. Igor Gerasimov                                    *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Dr. Hiroya Nakata                                     *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Dr. Mohsen Mazaherifar                                *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Mr. Alireza Lashkaripour                              *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   In 2024, Prof. Jingbai Li at Hoffmann Institute of    *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*   Advanced Materials began developing PyOQP.            *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;*                                                         *&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(10x,   &quot;***********************************************************&quot;)&#39;</span><span class="p">)</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="k">call </span><span class="nb">fdate</span><span class="p">(</span><span class="n">cdate</span><span class="p">)</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a><span class="w">    </span><span class="k">call </span><span class="n">pe</span><span class="p">%</span><span class="n">get_hostnames</span><span class="p">(</span><span class="n">hostnames</span><span class="p">)</span>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">    </span><span class="n">CPU_core</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a><span class="w">  </span><span class="c">!$  CPU_core = omp_get_max_threads()</span>
+<a id="ln-86" name="ln-86" href="#ln-86"></a>
+<a id="ln-87" name="ln-87" href="#ln-87"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pe</span><span class="p">%</span><span class="n">use_mpi</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-88" name="ln-88" href="#ln-88"></a><span class="k">        write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/20x,A,&quot;Job Details:&quot;,/,22x,&quot;Start Time: &quot;,A,/,22x,&quot;Host List: &quot;,A,/,22x,&quot;Resources Allocated:&quot;,/,24x,&quot;OpenMP Threads: &quot;,I4,/,24x,&quot;MPI Processors: &quot;,I4)&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-89" name="ln-89" href="#ln-89"></a><span class="w">                  </span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="w"> </span><span class="n">cdate</span><span class="p">,</span><span class="w"> </span><span class="n">hostnames</span><span class="p">,</span><span class="w"> </span><span class="n">CPU_core</span><span class="p">,</span><span class="w"> </span><span class="n">pe</span><span class="p">%</span><span class="n">size</span>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">    </span><span class="k">else</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a><span class="k">        write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;(/20x,A,&quot;Job Details:&quot;,/,22x,&quot;Start Time: &quot;,A,/,22x,&quot;Host: &quot;,A,/,22x,&quot;Resources Allocated:&quot;,/,24x,&quot;OpenMP Threads: &quot;,I4)&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<a id="ln-92" name="ln-92" href="#ln-92"></a><span class="w">                  </span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="w"> </span><span class="n">cdate</span><span class="p">,</span><span class="w"> </span><span class="n">hostnames</span><span class="p">,</span><span class="w"> </span><span class="n">CPU_core</span>
+<a id="ln-93" name="ln-93" href="#ln-93"></a><span class="w">    </span><span class="k">endif</span>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="k">    close</span><span class="w"> </span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">  </span><span class="k">end subroutine </span><span class="n">oqp_banner</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="k">end module </span><span class="n">oqp_banner_mod</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

@@ -1,0 +1,2658 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mathlib &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mathlib
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.6% of total for modules and submodules.">285 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/mathlib.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/mathlib.f90.html'>mathlib.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mathlib</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#inters-0"
+         aria-expanded="false" aria-controls="inters-0">
+         <h4 class="card-header bg-primary text-white">Interfaces</h4>
+      </a>
+      <div id="inters-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mathlib.html#interface-pack_matrix">pack_matrix</a>
+            <a class="list-group-item" href="../module/mathlib.html#interface-unpack_matrix">unpack_matrix</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#funcs-0"
+         aria-expanded="false" aria-controls="funcs-0">
+         <h4 class="card-header bg-primary text-white">Functions</h4>
+      </a>
+      <div id="funcs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mathlib.html#proc-traceprod_sym_packed">traceprod_sym_packed</a>
+        </div>
+      </div>
+    </div>
+
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/mathlib.html#proc-orb_to_dens">orb_to_dens</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-solve_linear_equations">solve_linear_equations</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-symmetrize_matrix">symmetrize_matrix</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-antisymmetrize_matrix">antisymmetrize_matrix</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-triangular_to_full">triangular_to_full</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-orthogonal_transform_sym">orthogonal_transform_sym</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-orthogonal_transform">orthogonal_transform</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-orthogonal_transform2">orthogonal_transform2</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-matrix_invsqrt">matrix_invsqrt</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-pack_f90">PACK_F90</a>
+            <a class="list-group-item" href="../module/mathlib.html#proc-unpack_f90">UNPACK_F90</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='oqp_linalg.html'>oqp_linalg</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mathlib~~UsesGraph Pages: 1 -->
+<svg id="modulemathlibUsesGraph" width="641pt" height="204pt"
+ viewBox="0.00 0.00 641.00 204.35" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mathlib~~UsesGraph" class="graph" transform="scale(.9801 .9801) rotate(0) translate(4 204.4982)">
+<title>module~~mathlib~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-204.4982 650,-204.4982 650,4 -4,4"/>
+<!-- module~mathlib -->
+<g id="module~~mathlib~~UsesGraph_node1" class="node">
+<title>module~mathlib</title>
+<polygon fill="none" stroke="#000000" points="646,-37.4982 592,-37.4982 592,-13.4982 646,-13.4982 646,-37.4982"/>
+<text text-anchor="middle" x="619" y="-23.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mathlib</text>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~mathlib~~UsesGraph_node2" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~mathlib~~UsesGraph_node2"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-57.4982 489,-57.4982 489,-33.4982 556,-33.4982 556,-57.4982"/>
+<text text-anchor="middle" x="522.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~oqp_linalg -->
+<g id="module~~mathlib~~UsesGraph_edge1" class="edge">
+<title>module~mathlib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-31.1225C583.9291,-32.7668 575.0471,-34.6076 566.3567,-36.4087"/>
+<polygon fill="#000000" stroke="#000000" points="565.393,-33.034 556.3114,-38.4907 566.8136,-39.8883 565.393,-33.034"/>
+</g>
+<!-- module~precision -->
+<g id="module~~mathlib~~UsesGraph_node3" class="node">
+<title>module~precision</title>
+<g id="a_module~~mathlib~~UsesGraph_node3"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-74.4982 142,-74.4982 142,-50.4982 203,-50.4982 203,-74.4982"/>
+<text text-anchor="middle" x="172.5" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~mathlib&#45;&gt;module~precision -->
+<g id="module~~mathlib~~UsesGraph_edge2" class="edge">
+<title>module~mathlib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9443,-20.2584C536.0998,-10.2278 404.1189,9.4224 294.5,-5.4982"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-5.4982C258.8005,-10.6557 221.8177,-30.3009 198.0658,-45.0973"/>
+<polygon fill="#000000" stroke="#000000" points="196.176,-42.1512 189.6407,-50.4904 199.9499,-48.0468 196.176,-42.1512"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="module~~mathlib~~UsesGraph_node5" class="node">
+<title>module~blas_wrap</title>
+<g id="a_module~~mathlib~~UsesGraph_node5"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-57.4982 380.5,-57.4982 380.5,-33.4982 446.5,-33.4982 446.5,-57.4982"/>
+<text text-anchor="middle" x="413.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="module~~mathlib~~UsesGraph_edge3" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-45.4982C478.7628,-45.4982 467.4795,-45.4982 456.7965,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="456.7947,-41.9983 446.7947,-45.4982 456.7947,-48.9983 456.7947,-41.9983"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="module~~mathlib~~UsesGraph_node6" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_module~~mathlib~~UsesGraph_node6"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-99.4982 374,-99.4982 374,-75.4982 453,-75.4982 453,-99.4982"/>
+<text text-anchor="middle" x="413.5" y="-85.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~mathlib~~UsesGraph_edge4" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.265,-57.5337C479.7487,-61.9712 466.5263,-67.066 454.29,-71.7809"/>
+<polygon fill="#000000" stroke="#000000" points="452.8124,-68.5994 444.7396,-75.4609 455.3293,-75.1313 452.8124,-68.5994"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~mathlib~~UsesGraph_node4" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~mathlib~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-74.4982 0,-74.4982 0,-50.4982 94,-50.4982 94,-74.4982"/>
+<text text-anchor="middle" x="47" y="-60.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~mathlib~~UsesGraph_edge5" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-62.4982C130.4618,-62.4982 117.2165,-62.4982 104.2832,-62.4982"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-58.9983 94.0202,-62.4982 104.0202,-65.9983 104.0203,-58.9983"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="module~~mathlib~~UsesGraph_edge8" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M394.6641,-33.2968C371.6437,-19.7798 331.214,-.5009 294.5,-5.4982"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~mathlib~~UsesGraph_node7" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~mathlib~~UsesGraph_node7"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-57.4982 251,-57.4982 251,-33.4982 338,-33.4982 338,-57.4982"/>
+<text text-anchor="middle" x="294.5" y="-43.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mathlib~~UsesGraph_edge6" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-45.4982C370.4498,-45.4982 359.3275,-45.4982 348.4544,-45.4982"/>
+<polygon fill="#000000" stroke="#000000" points="348.154,-41.9983 338.1539,-45.4982 348.1539,-48.9983 348.154,-41.9983"/>
+</g>
+<!-- module~messages -->
+<g id="module~~mathlib~~UsesGraph_node8" class="node">
+<title>module~messages</title>
+<g id="a_module~~mathlib~~UsesGraph_node8"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-137.4982 261.5,-137.4982 261.5,-113.4982 327.5,-113.4982 327.5,-137.4982"/>
+<text text-anchor="middle" x="294.5" y="-123.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="module~~mathlib~~UsesGraph_edge7" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.3604,-57.5933C384.2087,-60.3782 378.8585,-63.4281 374,-66.4982 354.1394,-79.0481 332.823,-95.0165 317.2673,-107.175"/>
+<polygon fill="#000000" stroke="#000000" points="314.945,-104.5491 309.2638,-113.4919 319.2818,-110.0438 314.945,-104.5491"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~mathlib~~UsesGraph_edge11" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.9736,-83.3979C329.6221,-78.7972 258.0316,-71.3708 213.2045,-66.7206"/>
+<polygon fill="#000000" stroke="#000000" points="213.5495,-63.2377 203.2418,-65.6872 212.8272,-70.2004 213.5495,-63.2377"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~mathlib~~UsesGraph_edge9" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M379.3994,-75.4627C366.5776,-70.9374 351.8187,-65.7283 338.2399,-60.9358"/>
+<polygon fill="#000000" stroke="#000000" points="339.2004,-57.5633 328.6056,-57.5355 336.8706,-64.1642 339.2004,-57.5633"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~mathlib~~UsesGraph_edge10" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.8477,-99.5216C363.7049,-103.3992 350.1523,-107.7269 337.6451,-111.7208"/>
+<polygon fill="#000000" stroke="#000000" points="336.347,-108.4611 327.8856,-114.8373 338.4764,-115.1294 336.347,-108.4611"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~mathlib~~UsesGraph_edge15" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-113.3863C256.0979,-104.9064 234.3205,-93.3727 215,-83.4982 212.2312,-82.0831 209.354,-80.6283 206.4607,-79.1763"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-75.9276 197.2773,-74.6004 204.6667,-82.1929 207.7887,-75.9276"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~mathlib~~UsesGraph_node9" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-200.4982 130,-200.4982 130,-176.4982 215,-176.4982 215,-200.4982"/>
+<text text-anchor="middle" x="172.5" y="-186.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~mathlib~~UsesGraph_edge12" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-137.6101C256.0979,-146.09 234.3205,-157.6237 215,-167.4982 212.2312,-168.9133 209.354,-170.3681 206.4607,-171.82"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-168.8035 197.2773,-176.396 207.7887,-175.0687 204.6667,-168.8035"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~mathlib~~UsesGraph_node10" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-158.4982 136.5,-158.4982 136.5,-134.4982 208.5,-134.4982 208.5,-158.4982"/>
+<text text-anchor="middle" x="172.5" y="-144.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~mathlib~~UsesGraph_edge13" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-131.1811C248.3109,-133.4488 232.9133,-136.0992 218.6653,-138.5517"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-135.1485 208.5419,-140.2943 218.9907,-142.0471 217.8032,-135.1485"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~mathlib~~UsesGraph_node11" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~mathlib~~UsesGraph_node11"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-116.4982 133,-116.4982 133,-92.4982 212,-92.4982 212,-116.4982"/>
+<text text-anchor="middle" x="172.5" y="-102.0982" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~mathlib~~UsesGraph_edge14" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-119.8153C249.3385,-117.7245 235.302,-115.3084 222.0189,-113.0219"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-109.5535 212.052,-111.3063 221.3133,-116.452 222.5008,-109.5535"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulemathlibUsesGraph = svgPanZoom('#modulemathlibUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~mathlib~~UsedByGraph Pages: 1 -->
+<svg id="modulemathlibUsedByGraph" width="462pt" height="1306pt"
+ viewBox="0.00 0.00 462.00 1305.59" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~mathlib~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 1301.5917)">
+<title>module~~mathlib~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-1301.5917 458,-1301.5917 458,4 -4,4"/>
+<!-- module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_node1" class="node">
+<title>module~mathlib</title>
+<polygon fill="none" stroke="#000000" points="54,-654 0,-654 0,-630 54,-630 54,-654"/>
+<text text-anchor="middle" x="27" y="-639.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mathlib</text>
+</g>
+<!-- module~grd1 -->
+<g id="module~~mathlib~~UsedByGraph_node2" class="node">
+<title>module~grd1</title>
+<g id="a_module~~mathlib~~UsedByGraph_node2"><a xlink:href="../module/grd1.html" xlink:title="grd1">
+<polygon fill="#337ab7" stroke="#337ab7" points="239,-1238 185,-1238 185,-1214 239,-1214 239,-1238"/>
+<text text-anchor="middle" x="212" y="-1223.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd1</text>
+</a>
+</g>
+</g>
+<!-- module~grd1&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge1" class="edge">
+<title>module~grd1&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M184.7848,-1228.5516C156.6898,-1229.5387 113.714,-1226.1478 90,-1200 53.3447,-1159.5826 32.6202,-763.1244 27.9957,-664.2501"/>
+<polygon fill="#000000" stroke="#000000" points="31.4885,-664.0105 27.5328,-654.1818 24.4959,-664.3321 31.4885,-664.0105"/>
+</g>
+<!-- proc~build_pfon_density -->
+<g id="module~~mathlib~~UsedByGraph_node3" class="node">
+<title>proc~build_pfon_density</title>
+<g id="a_module~~mathlib~~UsedByGraph_node3"><a xlink:href="../proc/build_pfon_density.html" xlink:title="build_pfon_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="268,-1158 156,-1158 156,-1134 268,-1134 268,-1158"/>
+<text text-anchor="middle" x="212" y="-1143.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">build_pfon_density</text>
+</a>
+</g>
+</g>
+<!-- proc~build_pfon_density&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge2" class="edge">
+<title>proc~build_pfon_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M155.7584,-1150.0433C132.3331,-1148.6092 106.7449,-1142.4417 90,-1125 57.6031,-1091.255 34.1438,-755.003 28.375,-664.3921"/>
+<polygon fill="#000000" stroke="#000000" points="31.866,-664.1369 27.7462,-654.3759 24.8798,-664.5756 31.866,-664.1369"/>
+</g>
+<!-- proc~dftder -->
+<g id="module~~mathlib~~UsedByGraph_node4" class="node">
+<title>proc~dftder</title>
+<g id="a_module~~mathlib~~UsedByGraph_node4"><a xlink:href="../proc/dftder.html" xlink:title="dftder">
+<polygon fill="#d9534f" stroke="#d9534f" points="239,-1116 185,-1116 185,-1092 239,-1092 239,-1116"/>
+<text text-anchor="middle" x="212" y="-1101.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dftder</text>
+</a>
+</g>
+</g>
+<!-- proc~dftder&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge3" class="edge">
+<title>proc~dftder&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M184.8056,-1107.6653C156.9369,-1109.7565 114.3402,-1108.0456 90,-1083 60.4032,-1052.5455 35.218,-749.7279 28.6606,-664.3201"/>
+<polygon fill="#000000" stroke="#000000" points="32.1375,-663.882 27.8913,-654.1753 25.1576,-664.4113 32.1375,-663.882"/>
+</g>
+<!-- proc~eijden -->
+<g id="module~~mathlib~~UsedByGraph_node5" class="node">
+<title>proc~eijden</title>
+<g id="a_module~~mathlib~~UsedByGraph_node5"><a xlink:href="../proc/eijden.html" xlink:title="eijden">
+<polygon fill="#d9534f" stroke="#d9534f" points="239,-1074 185,-1074 185,-1050 239,-1050 239,-1074"/>
+<text text-anchor="middle" x="212" y="-1059.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eijden</text>
+</a>
+</g>
+</g>
+<!-- proc~eijden&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge4" class="edge">
+<title>proc~eijden&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M184.879,-1065.5934C157.0709,-1067.6253 114.5237,-1065.8659 90,-1041 63.1919,-1013.8178 36.4071,-744.1831 29.0029,-664.2317"/>
+<polygon fill="#000000" stroke="#000000" points="32.4866,-663.893 28.0888,-654.254 25.5158,-664.5317 32.4866,-663.893"/>
+</g>
+<!-- proc~electric_moments -->
+<g id="module~~mathlib~~UsedByGraph_node6" class="node">
+<title>proc~electric_moments</title>
+<g id="a_module~~mathlib~~UsedByGraph_node6"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="266,-1032 158,-1032 158,-1008 266,-1008 266,-1032"/>
+<text text-anchor="middle" x="212" y="-1017.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge5" class="edge">
+<title>proc~electric_moments&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.9875,-1023.7947C134.1412,-1022.5009 107.5897,-1016.5157 90,-999 42.3765,-951.5766 30.3663,-734.8046 27.6934,-664.2577"/>
+<polygon fill="#000000" stroke="#000000" points="31.1905,-664.1098 27.3406,-654.2392 24.1948,-664.3562 31.1905,-664.1098"/>
+</g>
+<!-- proc~form_rohf_fock -->
+<g id="module~~mathlib~~UsedByGraph_node7" class="node">
+<title>proc~form_rohf_fock</title>
+<g id="a_module~~mathlib~~UsedByGraph_node7"><a xlink:href="../proc/form_rohf_fock.html" xlink:title="form_rohf_fock">
+<polygon fill="#d9534f" stroke="#d9534f" points="258.5,-990 165.5,-990 165.5,-966 258.5,-966 258.5,-990"/>
+<text text-anchor="middle" x="212" y="-975.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">form_rohf_fock</text>
+</a>
+</g>
+</g>
+<!-- proc~form_rohf_fock&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge6" class="edge">
+<title>proc~form_rohf_fock&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M165.4845,-981.886C139.9745,-981.3974 109.6356,-976.1137 90,-957 47.9649,-916.0821 32.4722,-729.6998 28.2847,-664.5562"/>
+<polygon fill="#000000" stroke="#000000" points="31.7547,-663.9583 27.6494,-654.1912 24.7678,-664.3866 31.7547,-663.9583"/>
+</g>
+<!-- proc~get_ab_initio_density -->
+<g id="module~~mathlib~~UsedByGraph_node8" class="node">
+<title>proc~get_ab_initio_density</title>
+<g id="a_module~~mathlib~~UsedByGraph_node8"><a xlink:href="../proc/get_ab_initio_density.html" xlink:title="get_ab_initio_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="274,-948 150,-948 150,-924 274,-924 274,-948"/>
+<text text-anchor="middle" x="212" y="-933.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_density</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_density&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge7" class="edge">
+<title>proc~get_ab_initio_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M149.9655,-938.6926C128.5355,-936.4509 105.9316,-930.0584 90,-915 53.3865,-880.3933 34.7763,-723.0408 29.007,-664.2482"/>
+<polygon fill="#000000" stroke="#000000" points="32.4795,-663.7926 28.0501,-654.1682 25.5109,-664.4542 32.4795,-663.7926"/>
+</g>
+<!-- proc~get_ab_initio_orbital -->
+<g id="module~~mathlib~~UsedByGraph_node9" class="node">
+<title>proc~get_ab_initio_orbital</title>
+<g id="a_module~~mathlib~~UsedByGraph_node9"><a xlink:href="../proc/get_ab_initio_orbital.html" xlink:title="get_ab_initio_orbital">
+<polygon fill="#d9534f" stroke="#d9534f" points="272,-906 152,-906 152,-882 272,-882 272,-906"/>
+<text text-anchor="middle" x="212" y="-891.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_orbital</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_orbital&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge8" class="edge">
+<title>proc~get_ab_initio_orbital&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M151.8554,-896.5086C130.0039,-894.3744 106.6232,-888.1025 90,-873 58.8279,-844.6795 37.5323,-716.4658 30.0081,-664.2393"/>
+<polygon fill="#000000" stroke="#000000" points="33.4325,-663.4558 28.5758,-654.0398 26.5005,-664.4293 33.4325,-663.4558"/>
+</g>
+<!-- proc~get_spin_square -->
+<g id="module~~mathlib~~UsedByGraph_node10" class="node">
+<title>proc~get_spin_square</title>
+<g id="a_module~~mathlib~~UsedByGraph_node10"><a xlink:href="../proc/get_spin_square.html" xlink:title="get_spin_square">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="261.5,-864 162.5,-864 162.5,-840 261.5,-840 261.5,-864"/>
+<text text-anchor="middle" x="212" y="-849.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_spin_square</text>
+</a>
+</g>
+</g>
+<!-- proc~get_spin_square&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge9" class="edge">
+<title>proc~get_spin_square&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M162.4577,-854.7774C138.0597,-853.5645 109.7257,-847.9463 90,-831 64.1877,-808.8246 40.8346,-709.073 31.4108,-664.1055"/>
+<polygon fill="#000000" stroke="#000000" points="34.8113,-663.265 29.3703,-654.174 27.9546,-664.6738 34.8113,-663.265"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="module~~mathlib~~UsedByGraph_node11" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_module~~mathlib~~UsedByGraph_node11"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="281.5,-822 142.5,-822 142.5,-798 281.5,-798 281.5,-822"/>
+<text text-anchor="middle" x="212" y="-807.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge10" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M142.2002,-809.8259C123.6846,-806.791 104.7614,-800.6512 90,-789 50.4459,-757.7799 35.3114,-696.947 29.852,-664.1781"/>
+<polygon fill="#000000" stroke="#000000" points="33.303,-663.5902 28.3502,-654.2243 26.3814,-664.6346 33.303,-663.5902"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="module~~mathlib~~UsedByGraph_node12" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_module~~mathlib~~UsedByGraph_node12"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="274,-780 150,-780 150,-756 274,-756 274,-780"/>
+<text text-anchor="middle" x="212" y="-765.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge11" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M149.8067,-767.4749C129.33,-764.7664 107.3784,-758.8999 90,-747 60.6635,-726.9118 42.7691,-688.2548 33.8878,-663.8659"/>
+<polygon fill="#000000" stroke="#000000" points="37.0865,-662.4041 30.5292,-654.0823 30.4658,-664.677 37.0865,-662.4041"/>
+</g>
+<!-- proc~guess_hcore -->
+<g id="module~~mathlib~~UsedByGraph_node13" class="node">
+<title>proc~guess_hcore</title>
+<g id="a_module~~mathlib~~UsedByGraph_node13"><a xlink:href="../proc/guess_hcore.html" xlink:title="guess_hcore">
+<polygon fill="#d9534f" stroke="#d9534f" points="251.5,-738 172.5,-738 172.5,-714 251.5,-714 251.5,-738"/>
+<text text-anchor="middle" x="212" y="-723.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_hcore&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge12" class="edge">
+<title>proc~guess_hcore&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172.4301,-725.2415C147.5596,-723.3404 115.4769,-718.1966 90,-705 70.5503,-694.9254 53.341,-676.7193 41.8449,-662.4605"/>
+<polygon fill="#000000" stroke="#000000" points="44.3429,-659.9693 35.4563,-654.2005 38.8058,-664.252 44.3429,-659.9693"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="module~~mathlib~~UsedByGraph_node14" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_module~~mathlib~~UsedByGraph_node14"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="254,-696 170,-696 170,-672 254,-672 254,-696"/>
+<text text-anchor="middle" x="212" y="-681.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge13" class="edge">
+<title>proc~guess_huckel&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M169.8888,-678.3579C146.2287,-674.7878 116.264,-669.5975 90,-663 81.4005,-660.8398 72.2822,-658.0823 63.7328,-655.2813"/>
+<polygon fill="#000000" stroke="#000000" points="64.6173,-651.886 54.0231,-652.0064 62.3801,-658.5189 64.6173,-651.886"/>
+</g>
+<!-- proc~huckel_guess -->
+<g id="module~~mathlib~~UsedByGraph_node15" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_module~~mathlib~~UsedByGraph_node15"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="254,-654 170,-654 170,-630 254,-630 254,-654"/>
+<text text-anchor="middle" x="212" y="-639.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge14" class="edge">
+<title>proc~huckel_guess&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M169.5573,-642C137.7806,-642 94.7254,-642 64.2712,-642"/>
+<polygon fill="#000000" stroke="#000000" points="64.0639,-638.5001 54.0638,-642 64.0638,-645.5001 64.0639,-638.5001"/>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop -->
+<g id="module~~mathlib~~UsedByGraph_node16" class="node">
+<title>proc~int2_td_data_t_parallel_stop</title>
+<g id="a_module~~mathlib~~UsedByGraph_node16"><a xlink:href="../proc/int2_td_data_t_parallel_stop.html" xlink:title="int2_td_data_t%int2_td_data_t_parallel_stop">
+<polygon fill="#d9534f" stroke="#d9534f" points="334,-612 90,-612 90,-588 334,-588 334,-612"/>
+<text text-anchor="middle" x="212" y="-597.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_td_data_t%int2_td_data_t_parallel_stop</text>
+</a>
+</g>
+</g>
+<!-- proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge15" class="edge">
+<title>proc~int2_td_data_t_parallel_stop&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M131.9011,-612.003C117.8591,-614.6142 103.4447,-617.6227 90,-621 81.4005,-623.1602 72.2822,-625.9177 63.7328,-628.7187"/>
+<polygon fill="#000000" stroke="#000000" points="62.3801,-625.4811 54.0231,-631.9936 64.6173,-632.114 62.3801,-625.4811"/>
+</g>
+<!-- proc~mo_to_ao -->
+<g id="module~~mathlib~~UsedByGraph_node17" class="node">
+<title>proc~mo_to_ao</title>
+<g id="a_module~~mathlib~~UsedByGraph_node17"><a xlink:href="../proc/mo_to_ao.html" xlink:title="mo_to_ao">
+<polygon fill="#d9534f" stroke="#d9534f" points="244,-570 180,-570 180,-546 244,-546 244,-570"/>
+<text text-anchor="middle" x="212" y="-555.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mo_to_ao</text>
+</a>
+</g>
+</g>
+<!-- proc~mo_to_ao&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge16" class="edge">
+<title>proc~mo_to_ao&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.7396,-558.2763C154.1158,-559.7016 118.0533,-564.4689 90,-579 70.5503,-589.0746 53.341,-607.2807 41.8449,-621.5395"/>
+<polygon fill="#000000" stroke="#000000" points="38.8058,-619.748 35.4563,-629.7995 44.3429,-624.0307 38.8058,-619.748"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~mathlib~~UsedByGraph_node18" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~mathlib~~UsedByGraph_node18"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="266.5,-528 157.5,-528 157.5,-504 266.5,-504 266.5,-528"/>
+<text text-anchor="middle" x="212" y="-513.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge17" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.2513,-515.6669C134.7745,-517.8874 109.5064,-523.643 90,-537 60.6635,-557.0882 42.7691,-595.7452 33.8878,-620.1341"/>
+<polygon fill="#000000" stroke="#000000" points="30.4658,-619.323 30.5292,-629.9177 37.0865,-621.5959 30.4658,-619.323"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="module~~mathlib~~UsedByGraph_node19" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_module~~mathlib~~UsedByGraph_node19"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="266.5,-486 157.5,-486 157.5,-462 266.5,-462 266.5,-486"/>
+<text text-anchor="middle" x="212" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge18" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.2496,-472.328C134.3785,-474.2555 108.8102,-480.1531 90,-495 50.4459,-526.2201 35.3114,-587.053 29.852,-619.8219"/>
+<polygon fill="#000000" stroke="#000000" points="26.3814,-619.3654 28.3502,-629.7757 33.303,-620.4098 26.3814,-619.3654"/>
+</g>
+<!-- proc~run_population_analysis -->
+<g id="module~~mathlib~~UsedByGraph_node20" class="node">
+<title>proc~run_population_analysis</title>
+<g id="a_module~~mathlib~~UsedByGraph_node20"><a xlink:href="../proc/run_population_analysis.html" xlink:title="run_population_analysis">
+<polygon fill="#d9534f" stroke="#d9534f" points="282.5,-444 141.5,-444 141.5,-420 282.5,-420 282.5,-444"/>
+<text text-anchor="middle" x="212" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">run_population_analysis</text>
+</a>
+</g>
+</g>
+<!-- proc~run_population_analysis&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge19" class="edge">
+<title>proc~run_population_analysis&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.2368,-431.4421C122.8161,-434.4872 104.1829,-440.8155 90,-453 64.1877,-475.1754 40.8346,-574.927 31.4108,-619.8945"/>
+<polygon fill="#000000" stroke="#000000" points="27.9546,-619.3262 29.3703,-629.826 34.8113,-620.735 27.9546,-619.3262"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="module~~mathlib~~UsedByGraph_node21" class="node">
+<title>proc~scf_driver</title>
+<g id="a_module~~mathlib~~UsedByGraph_node21"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="244,-402 180,-402 180,-378 244,-378 244,-402"/>
+<text text-anchor="middle" x="212" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge20" class="edge">
+<title>proc~scf_driver&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.9267,-386.7051C152.6553,-385.7483 114.1792,-389.0327 90,-411 58.8279,-439.3205 37.5323,-567.5342 30.0081,-619.7607"/>
+<polygon fill="#000000" stroke="#000000" points="26.5005,-619.5707 28.5758,-629.9602 33.4325,-620.5442 26.5005,-619.5707"/>
+</g>
+<!-- proc~sfdmat -->
+<g id="module~~mathlib~~UsedByGraph_node22" class="node">
+<title>proc~sfdmat</title>
+<g id="a_module~~mathlib~~UsedByGraph_node22"><a xlink:href="../proc/sfdmat.html" xlink:title="sfdmat">
+<polygon fill="#d9534f" stroke="#d9534f" points="239,-360 185,-360 185,-336 239,-336 239,-360"/>
+<text text-anchor="middle" x="212" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">sfdmat</text>
+</a>
+</g>
+</g>
+<!-- proc~sfdmat&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge21" class="edge">
+<title>proc~sfdmat&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M184.9677,-344.7412C157.437,-343.027 115.3031,-345.0838 90,-369 53.3865,-403.6067 34.7763,-560.9592 29.007,-619.7518"/>
+<polygon fill="#000000" stroke="#000000" points="25.5109,-619.5458 28.0501,-629.8318 32.4795,-620.2074 25.5109,-619.5458"/>
+</g>
+<!-- proc~symmetrize_matrices -->
+<g id="module~~mathlib~~UsedByGraph_node23" class="node">
+<title>proc~symmetrize_matrices</title>
+<g id="a_module~~mathlib~~UsedByGraph_node23"><a xlink:href="../proc/symmetrize_matrices.html" xlink:title="symmetrize_matrices">
+<polygon fill="#d9534f" stroke="#d9534f" points="275.5,-318 148.5,-318 148.5,-294 275.5,-294 275.5,-318"/>
+<text text-anchor="middle" x="212" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">symmetrize_matrices</text>
+</a>
+</g>
+</g>
+<!-- proc~symmetrize_matrices&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge22" class="edge">
+<title>proc~symmetrize_matrices&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M148.46,-303.19C127.385,-305.5252 105.4005,-312.0089 90,-327 47.9649,-367.9179 32.4722,-554.3002 28.2847,-619.4438"/>
+<polygon fill="#000000" stroke="#000000" points="24.7678,-619.6134 27.6494,-629.8088 31.7547,-620.0417 24.7678,-619.6134"/>
+</g>
+<!-- proc~tddft_fxc -->
+<g id="module~~mathlib~~UsedByGraph_node24" class="node">
+<title>proc~tddft_fxc</title>
+<g id="a_module~~mathlib~~UsedByGraph_node24"><a xlink:href="../proc/tddft_fxc.html" xlink:title="tddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="241,-276 183,-276 183,-252 241,-252 241,-276"/>
+<text text-anchor="middle" x="212" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_fxc&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge23" class="edge">
+<title>proc~tddft_fxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M182.8941,-260.3582C155.1534,-258.6407 114.1382,-260.9633 90,-285 42.3765,-332.4234 30.3663,-549.1954 27.6934,-619.7423"/>
+<polygon fill="#000000" stroke="#000000" points="24.1948,-619.6438 27.3406,-629.7608 31.1905,-619.8902 24.1948,-619.6438"/>
+</g>
+<!-- proc~tddft_gxc -->
+<g id="module~~mathlib~~UsedByGraph_node25" class="node">
+<title>proc~tddft_gxc</title>
+<g id="a_module~~mathlib~~UsedByGraph_node25"><a xlink:href="../proc/tddft_gxc.html" xlink:title="tddft_gxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="242.5,-234 181.5,-234 181.5,-210 242.5,-210 242.5,-234"/>
+<text text-anchor="middle" x="212" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tddft_gxc</text>
+</a>
+</g>
+</g>
+<!-- proc~tddft_gxc&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge24" class="edge">
+<title>proc~tddft_gxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M181.4734,-218.1822C153.696,-216.5525 113.5427,-219.1287 90,-243 63.1919,-270.1822 36.4071,-539.8169 29.0029,-619.7683"/>
+<polygon fill="#000000" stroke="#000000" points="25.5158,-619.4683 28.0888,-629.746 32.4866,-620.107 25.5158,-619.4683"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="module~~mathlib~~UsedByGraph_node26" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_module~~mathlib~~UsedByGraph_node26"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="453,-1280 371,-1280 371,-1256 453,-1256 453,-1280"/>
+<text text-anchor="middle" x="412" y="-1265.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge25" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M371.1599,-1280.0059C302.8765,-1297.2988 165.5946,-1319.7292 90,-1247 47.138,-1205.7627 30.9248,-768.5488 27.6518,-664.2485"/>
+<polygon fill="#000000" stroke="#000000" points="31.1489,-664.0968 27.3449,-654.2085 24.1522,-664.3108 31.1489,-664.0968"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;module~grd1 -->
+<g id="module~~mathlib~~UsedByGraph_edge33" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5599,-1259.2976C334.7868,-1251.7852 283.5767,-1241.0311 249.1227,-1233.7958"/>
+<polygon fill="#000000" stroke="#000000" points="249.5096,-1230.3007 239.0037,-1231.6708 248.0709,-1237.1513 249.5096,-1230.3007"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="module~~mathlib~~UsedByGraph_node27" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_module~~mathlib~~UsedByGraph_node27"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="250,-192 174,-192 174,-168 250,-168 250,-192"/>
+<text text-anchor="middle" x="212" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge26" class="edge">
+<title>proc~tdhf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M173.9078,-175.7718C146.7281,-175.0181 111.3445,-179.037 90,-201 60.4032,-231.4545 35.218,-534.2721 28.6606,-619.6799"/>
+<polygon fill="#000000" stroke="#000000" points="25.1576,-619.5887 27.8913,-629.8247 32.1375,-620.118 25.1576,-619.5887"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="module~~mathlib~~UsedByGraph_node28" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_module~~mathlib~~UsedByGraph_node28"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="454,-1196 370,-1196 370,-1172 454,-1172 454,-1196"/>
+<text text-anchor="middle" x="412" y="-1181.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge27" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M369.96,-1188.1491C292.0119,-1194.8496 129.3999,-1203.8564 90,-1167 52.6357,-1132.0477 32.5709,-759.8228 28.0114,-664.2598"/>
+<polygon fill="#000000" stroke="#000000" points="31.4958,-663.844 27.5321,-654.0185 24.5035,-664.1713 31.4958,-663.844"/>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~mathlib~~UsedByGraph_edge34" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M369.5851,-1192.9071C333.8385,-1200.4139 283.1996,-1211.0481 249.0566,-1218.2181"/>
+<polygon fill="#000000" stroke="#000000" points="248.0921,-1214.8442 239.0249,-1220.3248 249.5307,-1221.6948 248.0921,-1214.8442"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="module~~mathlib~~UsedByGraph_node29" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_module~~mathlib~~UsedByGraph_node29"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="265,-150 159,-150 159,-126 265,-126 265,-150"/>
+<text text-anchor="middle" x="212" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge28" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M158.868,-133.793C134.6251,-134.8648 107.4891,-140.7832 90,-159 57.6031,-192.745 34.1438,-528.997 28.375,-619.6079"/>
+<polygon fill="#000000" stroke="#000000" points="24.8798,-619.4244 27.7462,-629.6241 31.866,-619.8631 24.8798,-619.4244"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="module~~mathlib~~UsedByGraph_node30" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_module~~mathlib~~UsedByGraph_node30"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="257.5,-108 166.5,-108 166.5,-84 257.5,-84 257.5,-108"/>
+<text text-anchor="middle" x="212" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge29" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M166.4164,-91.5345C140.4057,-91.6472 109.2458,-96.7461 90,-117 54.7966,-154.0473 33.1681,-523.8838 28.1347,-619.5204"/>
+<polygon fill="#000000" stroke="#000000" points="24.6371,-619.3854 27.615,-629.5531 31.6277,-619.7475 24.6371,-619.3854"/>
+</g>
+<!-- proc~tdhf_unrelaxed_density -->
+<g id="module~~mathlib~~UsedByGraph_node31" class="node">
+<title>proc~tdhf_unrelaxed_density</title>
+<g id="a_module~~mathlib~~UsedByGraph_node31"><a xlink:href="../proc/tdhf_unrelaxed_density.html" xlink:title="tdhf_unrelaxed_density">
+<polygon fill="#d9534f" stroke="#d9534f" points="280,-66 144,-66 144,-42 280,-42 280,-66"/>
+<text text-anchor="middle" x="212" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_unrelaxed_density</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_unrelaxed_density&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge30" class="edge">
+<title>proc~tdhf_unrelaxed_density&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M143.9079,-50.918C123.9801,-53.5563 103.8519,-60.294 90,-75 51.9518,-115.3945 32.2385,-519.6097 27.9179,-619.6806"/>
+<polygon fill="#000000" stroke="#000000" points="24.4133,-619.718 27.4868,-629.8572 31.407,-620.0143 24.4133,-619.718"/>
+</g>
+<!-- proc~utddft_fxc -->
+<g id="module~~mathlib~~UsedByGraph_node32" class="node">
+<title>proc~utddft_fxc</title>
+<g id="a_module~~mathlib~~UsedByGraph_node32"><a xlink:href="../proc/utddft_fxc.html" xlink:title="utddft_fxc">
+<polygon fill="#d9534f" stroke="#d9534f" points="244.5,-24 179.5,-24 179.5,0 244.5,0 244.5,-24"/>
+<text text-anchor="middle" x="212" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">utddft_fxc</text>
+</a>
+</g>
+</g>
+<!-- proc~utddft_fxc&#45;&gt;module~mathlib -->
+<g id="module~~mathlib~~UsedByGraph_edge31" class="edge">
+<title>proc~utddft_fxc&#45;&gt;module~mathlib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M179.2752,-7.7812C151.3911,-6.1876 112.3819,-9.0568 90,-33 49.1173,-76.7345 31.3997,-515.1482 27.7373,-619.7005"/>
+<polygon fill="#000000" stroke="#000000" points="24.2371,-619.6502 27.3925,-629.7642 31.2329,-619.89 24.2371,-619.6502"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="module~~mathlib~~UsedByGraph_node33" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_module~~mathlib~~UsedByGraph_node33"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="448.5,-1238 375.5,-1238 375.5,-1214 448.5,-1214 448.5,-1238"/>
+<text text-anchor="middle" x="412" y="-1223.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;module~grd1 -->
+<g id="module~~mathlib~~UsedByGraph_edge32" class="edge">
+<title>proc~hf_gradient&#45;&gt;module~grd1</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M375.3169,-1226C339.4961,-1226 285.2618,-1226 249.2487,-1226"/>
+<polygon fill="#000000" stroke="#000000" points="249.1518,-1222.5001 239.1517,-1226 249.1517,-1229.5001 249.1518,-1222.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+
+
+        <section>
+          <h2>Interfaces</h2>
+              <div class="card">
+    <div class="card-header bg-light codesum">
+      <span class="anchor" id="interface-pack_matrix"></span>
+      <h3>public        interface <a href='../interface/pack_matrix.html'>pack_matrix</a> 
+      </h3>
+    </div>
+    <ul class="list-group">
+          <li class="list-group-item">
+                <h3>
+    public  subroutine <a href='../proc/pack_f90.html'>PACK_F90</a>(A, AP, UPLO)  
+
+    </h3>
+    
+  <p>@brief Fortran-90 routine for packing symmetric matrix to 1D array</p>
+<p>@date      6 October 2021   - Initial release -
+@author    Igor S. Gerasimov</p>
+<p>@param[in]          A    - matrix for packing (N x N)
+@param[out]         AP   - packed matrix ( N*(N+1)/2 )
+@param[in,optional] UPLO - format of packed matrix, <code>U</code> for upper and <code>L</code> for lower</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo"></span>
+              character(len=1),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+          <li class="list-group-item">
+                <h3>
+    private  subroutine PACK_F77(A, N, AP, UPLO) bind(C, name="MTX_PACK")  
+
+    </h3>
+  <p>@brief Fortran-77 routine for packing symmetric matrix to 1D array</p>
+<p>@date      6 October 2021   - Initial release -
+@author    Igor S. Gerasimov</p>
+<p>@param[in]          A    - matrix for packing (N x N)
+@param[in]          N    - shape of matrix A
+@param[out]         AP   - packed matrix ( N*(N+1)/2 )
+@param[in]          UPLO - format of packed matrix, <code>U</code> for upper and <code>L</code> for lower</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(N,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>N</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~2"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+    </ul>
+  </div>
+
+              <div class="card">
+    <div class="card-header bg-light codesum">
+      <span class="anchor" id="interface-unpack_matrix"></span>
+      <h3>public        interface <a href='../interface/unpack_matrix.html'>unpack_matrix</a> 
+      </h3>
+    </div>
+    <ul class="list-group">
+          <li class="list-group-item">
+                <h3>
+    public  subroutine <a href='../proc/unpack_f90.html'>UNPACK_F90</a>(AP, A, UPLO)  
+
+    </h3>
+    
+  <p>@brief Fortran-90 routine for unpacking 1D array to symmetric matrix</p>
+<p>@details   LAPACK returns only upper or lower filling of matrix</p>
+<p>@date      6 October 2021   - Initial release -
+@author    Igor S. Gerasimov</p>
+<p>@param[in]          AP   - packed matrix (N x N)
+@param[out]         A    - matrix for unpacking ( N*(N+1)/2 )
+@param[in,optional] UPLO - format of packed matrix, <code>U</code> for upper and <code>L</code> for lower</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~3"></span>
+              character(len=1),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+          <li class="list-group-item">
+                <h3>
+    private  subroutine UNPACK_F77(AP, A, N, UPLO) bind(C, name="MTX_UNPACK")  
+
+    </h3>
+  <p>@brief Fortran-77 routine for unpacking 1D array to symmetric matrix</p>
+<p>@details   LAPACK returns only upper or lower filling of matrix</p>
+<p>@date      6 October 2021   - Initial release -
+@author    Igor S. Gerasimov</p>
+<p>@param[in]          AP   - packed matrix
+@param[out]         A    - matrix for unpacking (N x N)
+@param[in]          N    - shape of matrix A
+@param[in]          UPLO - format of packed matrix, <code>U</code> for upper and <code>L</code> for lower</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~5"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(N,*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>N</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~4"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+          </li>
+    </ul>
+  </div>
+
+        </section>
+        <br>
+
+
+
+        <section>
+          <h2>Functions</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-traceprod_sym_packed"></span> <h3>public  function <a href='../proc/traceprod_sym_packed.html'>traceprod_sym_packed</a>(a, b, n) result(res)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief  Compute the trace of the product of two symmetric matrices in packed format
+@detail The trace is actually an inner product of matrices, assuming they are vectors
+@param[in]  a  first matrix
+@param[in]  b  second matrix
+@param[in]  n  dimension of matrices <code>A</code> and <code>B</code></p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~136"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~82"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~215"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <h4>
+    Return Value
+    <small>real(kind=dp)</small>
+    </h4>
+    
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-orb_to_dens"></span> <h3>public  subroutine <a href='../proc/orb_to_dens.html'>orb_to_dens</a>(d, v, x, m, n, ldv)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute density matrix from a set of orbitals and respective occupation numbers
+@detail Compute the transformation: D = V * X * V^T
+@param[out]  d   density matrix
+@param[in]   v   matrix of orbitals
+@param[in]   x   vector of occupation numbers
+@param[in]   m   number of columns in <code>V</code>
+@param[in]   n   dimension of <code>D</code>
+@param[in]   ldv leading dimension of <code>V</code></p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d~13"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>d</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-v~52"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>v</strong>(ldv,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x~135"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>x</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~38"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~214"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldv~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldv</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-solve_linear_equations"></span> <h3>public  subroutine <a href='../proc/solve_linear_equations.html'>solve_linear_equations</a>(a, b, n, nrhs, lda, ierr)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute the solution to a real system of linear equations A * X = B
+@detai Wrapper for DSYSV from Lapack
+@param[in,out] A      general matrix, destroyed on exit.
+@param[in,out] B      RHS on entry. The solution on exit.
+@param[in]     n      size of the problem.
+@param[in]     nrhs   number of RHS vectors
+@param[in]     lda    leading dimension of matrix A
+@param[out]    ierr   Error flag, ierr=0 if no errors. Read DSYEV manual for details</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~137"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~83"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~216"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nrhs"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nrhs</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~77"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ierr~4"></span>
+              integer,
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ierr</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-symmetrize_matrix"></span> <h3>public  subroutine <a href='../proc/symmetrize_matrix.html'>symmetrize_matrix</a>(a, n)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute <code>A = A + A^T</code> of a square matrix
+@param[inout] a  square NxN matrix
+@param[in]    n  matrix dimension</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~138"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(n,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~217"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-antisymmetrize_matrix"></span> <h3>public  subroutine <a href='../proc/antisymmetrize_matrix.html'>antisymmetrize_matrix</a>(a, n)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute <code>A = A - A^T</code> of a square matrix
+@param[inout] a  square NxN matrix
+@param[in]    n  matrix dimension</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~139"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(n,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~218"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-triangular_to_full"></span> <h3>public  subroutine <a href='../proc/triangular_to_full.html'>triangular_to_full</a>(a, n, uplo)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Fill the upper/lower triangle of the symmetric matrix
+@param[inout] a     square NxN matrix in triangular form
+@param[in]    n     matrix dimension
+@param[in]    uplo  U if <code>A</code> is upper triangular, L if lower triangular</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~140"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(n,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~219"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~79"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>uplo</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-orthogonal_transform_sym"></span> <h3>public  subroutine <a href='../proc/orthogonal_transform_sym.html'>orthogonal_transform_sym</a>(n, m, a, u, ldu, b)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute orthogonal transformation of a symmetric marix A
+       in packed format:
+       B = U^T * A * U
+@param[in]    a      Matrix to transform
+@param[in]    u      Orthogonal matrix U(ldu,m)
+@param[in]    n      dimension of matrix A
+@param[in]    m      dimension of matrix B
+@param[in]    ldu    leading dimension of matrix U
+@param[out]   b      Result
+@param[inout] wrk    Scratch space
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~220"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~39"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~141"></span>
+              real(kind=8),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-u"></span>
+              real(kind=8),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>u</strong>(n,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldu"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldu</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~84"></span>
+              real(kind=8),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-orthogonal_transform"></span> <h3>public  subroutine <a href='../proc/orthogonal_transform.html'>orthogonal_transform</a>(trans, ld, u, a, b, wrk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute orthogonal transformation of a square marix
+@param[in]    trans  If trans='n' compute B = U^T * A * U
+                     If trans='t' compute B = U * A * U^T
+@param[in]    ld     Dimension of matrices
+@param[in]    u      Square orthogonal matrix
+@param[inout] a      Matrix to transform, optionally output matrix
+@param[out]   b      Result, can be absent for in-place transform of matrix A
+@param[inout] wrk    Scratch space, optional
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans~46"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ld~5"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ld</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-u~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>u</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~142"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~85"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wrk~10"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout),</td>
+              <td>optional,</td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>wrk</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-orthogonal_transform2"></span> <h3>public  subroutine <a href='../proc/orthogonal_transform2.html'>orthogonal_transform2</a>(trans, m, n, u, ldu, a, lda, b, ldb, wrk)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute orthogonal transformation of a square marix
+@param[in]    trans  If trans='n' compute B = U^T * A * U
+                     If trans='t' compute B = U * A * U^T
+@param[in]    ld     Dimension of matrices
+@param[in]    u      Square orthogonal matrix
+@param[in]    a      Matrix to transform
+@param[out]   b      Result
+@param[inout] wrk    Scratch space
+@author Vladimir Mironov</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-trans~47"></span>
+              character(len=1),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>trans</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~40"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~221"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-u~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>u</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldu~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldu</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~143"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~78"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-b~86"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>b</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldb~25"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldb</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wrk~11"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>wrk</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-matrix_invsqrt"></span> <h3>public  subroutine <a href='../proc/matrix_invsqrt.html'>matrix_invsqrt</a>(s, q, nbf, qrnk, tol)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Compute matrix inverse square root using SVD and removing
+ linear dependency
+@detail This subroutine is used to obtain set of <code>canonical orbitals</code>
+  by diagonalization of the basis set overlap matrix
+  Q = S^{-1/2}, Q^T * S * Q = I
+@param[in]   s    Overlap matrix, symmetric packed format
+@param[out]  q    Matrix inverse square root, square matrix
+@param[in]   nbf  Dimeension of matrices S and Q, basis set size
+@param[out]  qrnk Rank of matrix Q
+@param[in]   tol  optional, tolerance to remove linear dependency,
+                  default = 1.0e-8</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-s~10"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>s</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-q~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>q</strong>(nbf,*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~44"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-qrnk"></span>
+              integer,
+            </td>
+<td>intent(out),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>qrnk</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-tol~7"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>tol</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-pack_f90"></span> <h3>public  subroutine <a href='../proc/pack_f90.html'>PACK_F90</a>(A, AP, UPLO)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Fortran-90 routine for packing symmetric matrix to 1D array</p><a href="../proc/pack_f90.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo"></span>
+              character(len=1),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-unpack_f90"></span> <h3>public  subroutine <a href='../proc/unpack_f90.html'>UNPACK_F90</a>(AP, A, UPLO)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Fortran-90 routine for unpacking 1D array to symmetric matrix</p><a href="../proc/unpack_f90.html" class="pull-right"><emph>Read more&hellip;</emph></a>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ap~3"></span>
+              real(kind=dp),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>AP</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~4"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>A</strong>(:,:)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-uplo~3"></span>
+              character(len=1),
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>UPLO</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

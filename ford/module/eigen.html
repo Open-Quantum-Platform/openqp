@@ -1,0 +1,1040 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>eigen &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>eigen
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for modules and submodules.">107 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/eigen.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/eigen.f90.html'>eigen.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">eigen</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/eigen.html#proc-diag_symm_packed">diag_symm_packed</a>
+            <a class="list-group-item" href="../module/eigen.html#proc-diag_symm_full">diag_symm_full</a>
+            <a class="list-group-item" href="../module/eigen.html#proc-schmd">schmd</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='oqp_linalg.html'>oqp_linalg</a></li>
+                  <li class="list-inline-item"><a href='mathlib_types.html'>mathlib_types</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~eigen~~UsesGraph Pages: 1 -->
+<svg id="moduleeigenUsesGraph" width="641pt" height="189pt"
+ viewBox="0.00 0.00 641.00 189.27" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~eigen~~UsesGraph" class="graph" transform="scale(.9801 .9801) rotate(0) translate(4 189.1124)">
+<title>module~~eigen~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-189.1124 650,-189.1124 650,4 -4,4"/>
+<!-- module~eigen -->
+<g id="module~~eigen~~UsesGraph_node1" class="node">
+<title>module~eigen</title>
+<polygon fill="none" stroke="#000000" points="646,-82.1124 592,-82.1124 592,-58.1124 646,-58.1124 646,-82.1124"/>
+<text text-anchor="middle" x="619" y="-67.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">eigen</text>
+</g>
+<!-- module~mathlib_types -->
+<g id="module~~eigen~~UsesGraph_node2" class="node">
+<title>module~mathlib_types</title>
+<g id="a_module~~eigen~~UsesGraph_node2"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-42.1124 251,-42.1124 251,-18.1124 338,-18.1124 338,-42.1124"/>
+<text text-anchor="middle" x="294.5" y="-27.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~mathlib_types -->
+<g id="module~~eigen~~UsesGraph_edge1" class="edge">
+<title>module~eigen&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.5,-9.1124C391.964,-9.2029 368.5645,-12.5977 348.2591,-16.6321"/>
+<polygon fill="#000000" stroke="#000000" points="347.3306,-13.2504 338.2561,-18.7189 348.7602,-20.1029 347.3306,-13.2504"/>
+</g>
+<!-- module~messages -->
+<g id="module~~eigen~~UsesGraph_node3" class="node">
+<title>module~messages</title>
+<g id="a_module~~eigen~~UsesGraph_node3"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-122.1124 261.5,-122.1124 261.5,-98.1124 327.5,-98.1124 327.5,-122.1124"/>
+<text text-anchor="middle" x="294.5" y="-107.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~messages -->
+<g id="module~~eigen~~UsesGraph_edge2" class="edge">
+<title>module~eigen&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9286,-79.9328C580.8781,-83.7321 567.917,-87.9239 556,-91.1124 510.868,-103.1881 499.4835,-107.4221 453,-112.1124 418.0663,-115.6374 409.1083,-112.554 374,-112.1124 362.2547,-111.9647 349.5356,-111.6943 337.7872,-111.399"/>
+<polygon fill="#000000" stroke="#000000" points="337.8501,-107.8996 327.7616,-111.1356 337.6662,-114.8972 337.8501,-107.8996"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="module~~eigen~~UsesGraph_node4" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_module~~eigen~~UsesGraph_node4"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-82.1124 489,-82.1124 489,-58.1124 556,-58.1124 556,-82.1124"/>
+<text text-anchor="middle" x="522.5" y="-67.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~oqp_linalg -->
+<g id="module~~eigen~~UsesGraph_edge3" class="edge">
+<title>module~eigen&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-70.1124C583.9291,-70.1124 575.0471,-70.1124 566.3567,-70.1124"/>
+<polygon fill="#000000" stroke="#000000" points="566.3114,-66.6125 556.3114,-70.1124 566.3113,-73.6125 566.3114,-66.6125"/>
+</g>
+<!-- module~precision -->
+<g id="module~~eigen~~UsesGraph_node5" class="node">
+<title>module~precision</title>
+<g id="a_module~~eigen~~UsesGraph_node5"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-59.1124 142,-59.1124 142,-35.1124 203,-35.1124 203,-59.1124"/>
+<text text-anchor="middle" x="172.5" y="-44.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~precision -->
+<g id="module~~eigen~~UsesGraph_edge4" class="edge">
+<title>module~eigen&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.0133,-57.991C557.3515,-40.1203 481.6041,-8.8263 413.5,-9.1124"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.5,-9.1124C341.5764,-2.552 321.3951,7.0299 251,-9.1124 233.2036,-13.1933 214.7554,-21.8611 200.2181,-29.889"/>
+<polygon fill="#000000" stroke="#000000" points="198.2093,-27.0063 191.2759,-35.0175 201.6918,-33.0785 198.2093,-27.0063"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~eigen~~UsesGraph_edge8" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-98.0005C256.0979,-89.5206 234.3205,-77.987 215,-68.1124 212.2312,-66.6973 209.354,-65.2425 206.4607,-63.7906"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-60.5419 197.2773,-59.2146 204.6667,-66.8072 207.7887,-60.5419"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~eigen~~UsesGraph_node6" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-185.1124 130,-185.1124 130,-161.1124 215,-161.1124 215,-185.1124"/>
+<text text-anchor="middle" x="172.5" y="-170.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~eigen~~UsesGraph_edge5" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-122.2244C256.0979,-130.7043 234.3205,-142.2379 215,-152.1124 212.2312,-153.5275 209.354,-154.9823 206.4607,-156.4343"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-153.4177 197.2773,-161.0103 207.7887,-159.683 204.6667,-153.4177"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~eigen~~UsesGraph_node7" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-143.1124 136.5,-143.1124 136.5,-119.1124 208.5,-119.1124 208.5,-143.1124"/>
+<text text-anchor="middle" x="172.5" y="-128.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~eigen~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-115.7953C248.3109,-118.063 232.9133,-120.7134 218.6653,-123.166"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-119.7628 208.5419,-124.9085 218.9907,-126.6613 217.8032,-119.7628"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~eigen~~UsesGraph_node10" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~eigen~~UsesGraph_node10"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-101.1124 133,-101.1124 133,-77.1124 212,-77.1124 212,-101.1124"/>
+<text text-anchor="middle" x="172.5" y="-86.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~eigen~~UsesGraph_edge7" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-104.4295C249.3385,-102.3387 235.302,-99.9226 222.0189,-97.6362"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-94.1677 212.052,-95.9206 221.3133,-101.0663 222.5008,-94.1677"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="module~~eigen~~UsesGraph_node9" class="node">
+<title>module~blas_wrap</title>
+<g id="a_module~~eigen~~UsesGraph_node9"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-61.1124 380.5,-61.1124 380.5,-37.1124 446.5,-37.1124 446.5,-61.1124"/>
+<text text-anchor="middle" x="413.5" y="-46.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="module~~eigen~~UsesGraph_edge9" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-63.6404C478.7628,-61.686 467.4795,-59.5122 456.7965,-57.454"/>
+<polygon fill="#000000" stroke="#000000" points="457.2763,-53.9821 446.7947,-55.527 455.952,-60.8557 457.2763,-53.9821"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="module~~eigen~~UsesGraph_node11" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_module~~eigen~~UsesGraph_node11"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-103.1124 374,-103.1124 374,-79.1124 453,-79.1124 453,-103.1124"/>
+<text text-anchor="middle" x="413.5" y="-88.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="module~~eigen~~UsesGraph_edge10" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-76.5845C480.8143,-78.1436 471.9967,-79.8424 463.3372,-81.5108"/>
+<polygon fill="#000000" stroke="#000000" points="462.4546,-78.1164 453.2973,-83.4451 463.7789,-84.99 462.4546,-78.1164"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~eigen~~UsesGraph_node8" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~eigen~~UsesGraph_node8"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-59.1124 0,-59.1124 0,-35.1124 94,-35.1124 94,-59.1124"/>
+<text text-anchor="middle" x="47" y="-44.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~eigen~~UsesGraph_edge11" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-47.1124C130.4618,-47.1124 117.2165,-47.1124 104.2832,-47.1124"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-43.6125 94.0202,-47.1124 104.0202,-50.6125 104.0203,-43.6125"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~eigen~~UsesGraph_edge12" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-43.8199C370.3477,-42.2226 359.0981,-40.4264 348.1182,-38.6733"/>
+<polygon fill="#000000" stroke="#000000" points="348.5807,-35.2029 338.1539,-37.0824 347.477,-42.1154 348.5807,-35.2029"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="module~~eigen~~UsesGraph_edge13" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.9894,-61.1641C371.9794,-70.3961 346.9226,-83.2404 326.9952,-93.4552"/>
+<polygon fill="#000000" stroke="#000000" points="325.2641,-90.4095 317.9617,-98.0858 328.4573,-96.6388 325.2641,-90.4095"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="module~~eigen~~UsesGraph_edge14" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3555,-59.8233C356.5912,-66.3082 323.7431,-72.8449 294.5,-70.1124"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-70.1124C267.1135,-67.5535 236.7143,-61.8303 213.1115,-56.7335"/>
+<polygon fill="#000000" stroke="#000000" points="213.6311,-53.264 203.1115,-54.5242 212.1209,-60.0991 213.6311,-53.264"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="module~~eigen~~UsesGraph_edge15" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.9894,-79.0608C371.9794,-69.8288 346.9226,-56.9845 326.9952,-46.7696"/>
+<polygon fill="#000000" stroke="#000000" points="328.4573,-43.5861 317.9617,-42.139 325.2641,-49.8154 328.4573,-43.5861"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="module~~eigen~~UsesGraph_edge16" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.8747,-97.4392C362.2656,-99.2927 349.516,-101.3284 337.6965,-103.2155"/>
+<polygon fill="#000000" stroke="#000000" points="336.9243,-99.7944 327.6012,-104.8274 338.028,-106.7068 336.9243,-99.7944"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="module~~eigen~~UsesGraph_edge17" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.7818,-82.4319C350.7542,-77.8197 321.1321,-72.6009 294.5,-70.1124"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmoduleeigenUsesGraph = svgPanZoom('#moduleeigenUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~eigen~~UsedByGraph Pages: 1 -->
+<svg id="moduleeigenUsedByGraph" width="287pt" height="158pt"
+ viewBox="0.00 0.00 287.00 158.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~eigen~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 154)">
+<title>module~~eigen~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-154 283,-154 283,4 -4,4"/>
+<!-- module~eigen -->
+<g id="module~~eigen~~UsedByGraph_node1" class="node">
+<title>module~eigen</title>
+<polygon fill="none" stroke="#000000" points="54,-87 0,-87 0,-63 54,-63 54,-87"/>
+<text text-anchor="middle" x="27" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">eigen</text>
+</g>
+<!-- proc~corresponding_orbital_projection -->
+<g id="module~~eigen~~UsedByGraph_node2" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<g id="a_module~~eigen~~UsedByGraph_node2"><a xlink:href="../proc/corresponding_orbital_projection.html" xlink:title="corresponding_orbital_projection">
+<polygon fill="#d9534f" stroke="#d9534f" points="279,-150 90,-150 90,-126 279,-126 279,-150"/>
+<text text-anchor="middle" x="184.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">corresponding_orbital_projection</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;module~eigen -->
+<g id="module~~eigen~~UsedByGraph_edge1" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M116.1803,-125.9926C107.2106,-123.5002 98.27,-120.529 90,-117 75.7409,-110.9152 61.2489,-101.5228 49.7649,-93.1619"/>
+<polygon fill="#000000" stroke="#000000" points="51.7195,-90.2526 41.6231,-87.0411 47.5132,-95.8478 51.7195,-90.2526"/>
+</g>
+<!-- proc~get_ab_initio_orbital -->
+<g id="module~~eigen~~UsedByGraph_node3" class="node">
+<title>proc~get_ab_initio_orbital</title>
+<g id="a_module~~eigen~~UsedByGraph_node3"><a xlink:href="../proc/get_ab_initio_orbital.html" xlink:title="get_ab_initio_orbital">
+<polygon fill="#d9534f" stroke="#d9534f" points="244.5,-108 124.5,-108 124.5,-84 244.5,-84 244.5,-108"/>
+<text text-anchor="middle" x="184.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_ab_initio_orbital</text>
+</a>
+</g>
+</g>
+<!-- proc~get_ab_initio_orbital&#45;&gt;module~eigen -->
+<g id="module~~eigen~~UsedByGraph_edge2" class="edge">
+<title>proc~get_ab_initio_orbital&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M124.0568,-87.9409C103.897,-85.2529 82.0427,-82.339 64.1853,-79.958"/>
+<polygon fill="#000000" stroke="#000000" points="64.5509,-76.4759 54.1761,-78.6235 63.6257,-83.4145 64.5509,-76.4759"/>
+</g>
+<!-- proc~matrix_invsqrt -->
+<g id="module~~eigen~~UsedByGraph_node4" class="node">
+<title>proc~matrix_invsqrt</title>
+<g id="a_module~~eigen~~UsedByGraph_node4"><a xlink:href="../proc/matrix_invsqrt.html" xlink:title="matrix_invsqrt">
+<polygon fill="#d9534f" stroke="#d9534f" points="228.5,-66 140.5,-66 140.5,-42 228.5,-42 228.5,-66"/>
+<text text-anchor="middle" x="184.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">matrix_invsqrt</text>
+</a>
+</g>
+</g>
+<!-- proc~matrix_invsqrt&#45;&gt;module~eigen -->
+<g id="module~~eigen~~UsedByGraph_edge3" class="edge">
+<title>proc~matrix_invsqrt&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M140.2083,-59.9056C116.2223,-63.1037 86.9236,-67.0102 64.1421,-70.0477"/>
+<polygon fill="#000000" stroke="#000000" points="63.6257,-66.5855 54.1761,-71.3765 64.5509,-73.5241 63.6257,-66.5855"/>
+</g>
+<!-- proc~rpaeig -->
+<g id="module~~eigen~~UsedByGraph_node5" class="node">
+<title>proc~rpaeig</title>
+<g id="a_module~~eigen~~UsedByGraph_node5"><a xlink:href="../proc/rpaeig.html" xlink:title="rpaeig">
+<polygon fill="#d9534f" stroke="#d9534f" points="211.5,-24 157.5,-24 157.5,0 211.5,0 211.5,-24"/>
+<text text-anchor="middle" x="184.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rpaeig</text>
+</a>
+</g>
+</g>
+<!-- proc~rpaeig&#45;&gt;module~eigen -->
+<g id="module~~eigen~~UsedByGraph_edge4" class="edge">
+<title>proc~rpaeig&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M157.2052,-15.3394C137.8745,-18.3504 111.641,-23.7651 90,-33 75.7409,-39.0848 61.2489,-48.4772 49.7649,-56.8381"/>
+<polygon fill="#000000" stroke="#000000" points="47.5132,-54.1522 41.6231,-62.9589 51.7195,-59.7474 47.5132,-54.1522"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+
+
+
+
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-diag_symm_packed"></span> <h3>public  subroutine <a href='../proc/diag_symm_packed.html'>diag_symm_packed</a>(mode, ldvect, nvect, n, h, eig, vector, ierr)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Find eigenvalues and eigenvectors of symmetric matrix
+       in packed format
+@param[in]     mode   algorithm of diagonalization (not used now)
+@param[in]     n      matrix dimension
+@param[in]     ldvect leading dimension of eigenvector matrix
+@param[in]     nvect  required number of eigenvectors
+@param[in,out] h      matrix to be diagonalized
+@param[out]    eig    eigenvalues
+@param[out]    vector eigenvectors
+@param[out]    ierr   status</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mode"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mode</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldvect"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldvect</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nvect"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nvect</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~242"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-h~8"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>h</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-eig~2"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>eig</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vector"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vector</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ierr~7"></span>
+              integer,
+            </td>
+<td>intent(out),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ierr</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-diag_symm_full"></span> <h3>public  subroutine <a href='../proc/diag_symm_full.html'>diag_symm_full</a>(mode, n, a, lda, eival, ierr)  
+</h3></div>
+    <div class="card-body">
+          
+  <p>@brief Find eigenvalues and eigenvectors of symmetric matrix
+       in full format
+@param[in]     mode   algorithm of diagonalization (not used now)
+@param[in]     n      matrix dimension
+@param[in,out] a      matrix to be diagonalized, overwritten by
+                      the eigenvectors on the exit
+@param[in]     lda    leading dimension of the matrix
+@param[out]    eig    eigenvalues
+@param[out]    ierr   status</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mode~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mode</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~243"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~160"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-lda~90"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>lda</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-eival"></span>
+              real(kind=dp),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>eival</strong>(*)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ierr~8"></span>
+              integer,
+            </td>
+<td>intent(out),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ierr</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-schmd"></span> <h3>public  subroutine <a href='../proc/schmd.html'>schmd</a>(v, m, n, ldv, x)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-v~57"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>v</strong>(ldv,n)</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-m~53"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>m</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-n~244"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>n</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ldv~3"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ldv</strong></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-x~178"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>x</strong>(n)</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

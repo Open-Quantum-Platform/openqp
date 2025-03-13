@@ -1,0 +1,1966 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>libint_compute_eri &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>libint_compute_eri
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 1.0% of total for procedures.">157 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/int_libint.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/int_libint.f90.html'>int_libint.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/int2e_libint.html'>int2e_libint</a></li>
+            <li class="breadcrumb-item active" aria-current="page">libint_compute_eri</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine libint_compute_eri(basis, ppairs, cutoffs, shell_ids, deriv_order, erieval, flips, zero_shq)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item">boys_lut</li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~libint_compute_eri~~UsesGraph Pages: 1 -->
+<svg id="proclibint_compute_eriUsesGraph" width="629pt" height="192pt"
+ viewBox="0.00 0.00 629.00 191.61" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~libint_compute_eri~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 187.6099)">
+<title>proc~~libint_compute_eri~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-187.6099 625,-187.6099 625,4 -4,4"/>
+<!-- proc~libint_compute_eri -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node1" class="node">
+<title>proc~libint_compute_eri</title>
+<polygon fill="none" stroke="#000000" points="621,-129 510,-129 510,-105 621,-105 621,-129"/>
+<text text-anchor="middle" x="565.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">libint_compute_eri</text>
+</g>
+<!-- boys_lut -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node2" class="node">
+<title>boys_lut</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="467,-150 411,-150 411,-126 467,-126 467,-150"/>
+<text text-anchor="middle" x="439" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">boys_lut</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;boys_lut -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge1" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;boys_lut</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.647,-126.272C498.7417,-128.0824 487.539,-129.9421 477.3597,-131.632"/>
+<polygon fill="#000000" stroke="#000000" points="476.4693,-128.2318 467.1776,-133.3223 477.6158,-135.1373 476.4693,-128.2318"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node3" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node3"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-108 404,-108 404,-84 474,-84 474,-108"/>
+<text text-anchor="middle" x="439" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;module~basis_tools -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge2" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M509.647,-107.728C501.1772,-106.3219 492.528,-104.8861 484.3181,-103.5232"/>
+<polygon fill="#000000" stroke="#000000" points="484.6387,-100.0286 474.2005,-101.8436 483.4923,-106.9341 484.6387,-100.0286"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node4" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node4"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-150 0,-150 0,-126 94,-126 94,-150"/>
+<text text-anchor="middle" x="47" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge3" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-178C231.4024,-194.4492 139.5053,-170.6061 87.7549,-153.2771"/>
+<polygon fill="#000000" stroke="#000000" points="88.8586,-149.9556 78.264,-150.0203 86.5865,-156.5766 88.8586,-149.9556"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node5" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node5"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-66 250,-66 250,-42 368,-42 368,-66"/>
+<text text-anchor="middle" x="309" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge4" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-84.6342C389.1241,-79.8863 371.8316,-74.2995 356.0662,-69.206"/>
+<polygon fill="#000000" stroke="#000000" points="357.0759,-65.8541 346.4842,-66.1103 354.9239,-72.5151 357.0759,-65.8541"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node6" class="node">
+<title>module~constants</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node6"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-150 277,-150 277,-126 341,-126 341,-150"/>
+<text text-anchor="middle" x="309" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-107.3658C387.4769,-112.6459 367.9225,-118.9635 350.8282,-124.4863"/>
+<polygon fill="#000000" stroke="#000000" points="349.5302,-121.2274 341.0905,-127.6323 351.6823,-127.8884 349.5302,-121.2274"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node7" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node7"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-24 269.5,-24 269.5,0 348.5,0 348.5,-24"/>
+<text text-anchor="middle" x="309" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.0475,-83.779C414.9623,-69.8173 391.8329,-47.0879 368,-33 364.8177,-31.1189 361.44,-29.3671 357.975,-27.7433"/>
+<polygon fill="#000000" stroke="#000000" points="359.2422,-24.4784 348.6728,-23.7436 356.477,-30.9091 359.2422,-24.4784"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node8" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node8"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-108 282,-108 282,-84 336,-84 336,-108"/>
+<text text-anchor="middle" x="309" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-96C386.094,-96 364.5903,-96 346.5452,-96"/>
+<polygon fill="#000000" stroke="#000000" points="346.3749,-92.5001 336.3749,-96 346.3748,-99.5001 346.3749,-92.5001"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node9" class="node">
+<title>module~precision</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node9"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-150 141.5,-150 141.5,-126 202.5,-126 202.5,-150"/>
+<text text-anchor="middle" x="172" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M416.4213,-108.0798C412.1239,-110.7792 407.7898,-113.7995 404,-117 385.2165,-132.8627 388.4719,-145.3859 368,-159 345.0609,-174.2549 335.9495,-172.2872 309,-178"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-178C271.0553,-186.0435 228.2886,-169.2928 200.7858,-155.0633"/>
+<polygon fill="#000000" stroke="#000000" points="202.1905,-151.8444 191.7272,-150.1801 198.8688,-158.0061 202.1905,-151.8444"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node10" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node10"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-28 130,-28 130,-4 214,-4 214,-28"/>
+<text text-anchor="middle" x="172" y="-13.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge9" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M265.6523,-41.9766C252.4053,-38.3022 237.7009,-34.2236 223.9441,-30.4079"/>
+<polygon fill="#000000" stroke="#000000" points="224.7006,-26.9856 214.129,-27.6854 222.8296,-33.731 224.7006,-26.9856"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge10" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-138C257.6649,-138 233.0702,-138 212.5278,-138"/>
+<polygon fill="#000000" stroke="#000000" points="212.5085,-134.5001 202.5084,-138 212.5084,-141.5001 212.5085,-134.5001"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge12" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8455,-98.0708C246.6291,-101.0109 183.3878,-107.1583 130,-117 120.2428,-118.7987 109.931,-121.0871 100.0171,-123.4876"/>
+<polygon fill="#000000" stroke="#000000" points="99.1308,-120.1013 90.2711,-125.9114 100.8203,-126.8944 99.1308,-120.1013"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge13" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-104.2978C262.0981,-110.3787 234.8389,-118.7355 212.4274,-125.6062"/>
+<polygon fill="#000000" stroke="#000000" points="211.3711,-122.2692 202.8362,-128.5466 213.4229,-128.9617 211.3711,-122.2692"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge11" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9167,-89.2968C271.4333,-85.97 259.6579,-81.2888 250,-75 230.5043,-62.3054 232.6876,-50.8567 214,-37 212.3792,-35.7982 210.6793,-34.6325 208.9306,-33.5072"/>
+<polygon fill="#000000" stroke="#000000" points="210.321,-30.2656 199.9223,-28.2364 206.7859,-36.3074 210.321,-30.2656"/>
+</g>
+<!-- mpi -->
+<g id="proc~~libint_compute_eri~~UsesGraph_node11" class="node">
+<title>mpi</title>
+<g id="a_proc~~libint_compute_eri~~UsesGraph_node11"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-70 145,-70 145,-46 199,-46 199,-70"/>
+<text text-anchor="middle" x="172" y="-55.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge14" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-88.4924C261.0113,-82.6893 231.8293,-74.595 208.789,-68.2043"/>
+<polygon fill="#000000" stroke="#000000" points="209.5823,-64.7922 199.0106,-65.492 207.7112,-71.5375 209.5823,-64.7922"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~libint_compute_eri~~UsesGraph_edge15" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-138C130.2434,-138 117.203,-138 104.4454,-138"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-134.5001 94.3156,-138 104.3156,-141.5001 104.3156,-134.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~44"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ppairs~6"></span>
+              type(<a href='../type/int2_pair_storage.html'>int2_pair_storage</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ppairs</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cutoffs~5"></span>
+              type(<a href='../type/int2_cutoffs_t.html'>int2_cutoffs_t</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cutoffs</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-shell_ids"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>shell_ids</strong>(4)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-deriv_order~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>deriv_order</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-erieval"></span>
+              type(<a href='../type/libint_t.html'>libint_t</a>),
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>erieval</strong>(*)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-flips~2"></span>
+              integer,
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>flips</strong>(4)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-zero_shq~2"></span>
+              logical,
+            </td>
+<td>intent(out)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>zero_shq</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~libint_compute_eri~~CallsGraph Pages: 1 -->
+<svg id="proclibint_compute_eriCallsGraph" width="464pt" height="2720pt"
+ viewBox="0.00 0.00 464.00 2720.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~libint_compute_eri~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 2716)">
+<title>proc~~libint_compute_eri~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-2716 460,-2716 460,4 -4,4"/>
+<!-- proc~libint_compute_eri -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node1" class="node">
+<title>proc~libint_compute_eri</title>
+<polygon fill="none" stroke="#000000" points="111,-1368 0,-1368 0,-1344 111,-1344 111,-1368"/>
+<text text-anchor="middle" x="55.5" y="-1353.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">libint_compute_eri</text>
+</g>
+<!-- ab_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node2" class="node">
+<title>ab_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2712 274.5,-2712 274.5,-2688 328.5,-2688 328.5,-2712"/>
+<text text-anchor="middle" x="301.5" y="-2697.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ab_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;ab_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge1" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;ab_x</title>
+<path fill="none" stroke="#000000" d="M55.9037,-1368.1651C60.2726,-1498.2219 99.5528,-2628.311 147,-2679 176.38,-2710.3874 228.7717,-2710.9121 264.314,-2706.7877"/>
+<polygon fill="#000000" stroke="#000000" points="264.8585,-2710.2462 274.3085,-2705.4556 263.9337,-2703.3075 264.8585,-2710.2462"/>
+</g>
+<!-- ab_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node3" class="node">
+<title>ab_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2670 274.5,-2670 274.5,-2646 328.5,-2646 328.5,-2670"/>
+<text text-anchor="middle" x="301.5" y="-2655.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ab_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;ab_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge2" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;ab_y</title>
+<path fill="none" stroke="#000000" d="M55.9323,-1368.174C60.5231,-1495.9788 101.0441,-2588.0151 147,-2637 176.4154,-2668.3542 228.7986,-2668.887 264.3293,-2664.7734"/>
+<polygon fill="#000000" stroke="#000000" points="264.869,-2668.2325 274.3203,-2663.4446 263.9461,-2661.2936 264.869,-2668.2325"/>
+</g>
+<!-- ab_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node4" class="node">
+<title>ab_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2628 274.5,-2628 274.5,-2604 328.5,-2604 328.5,-2628"/>
+<text text-anchor="middle" x="301.5" y="-2613.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ab_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;ab_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge3" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;ab_z</title>
+<path fill="none" stroke="#000000" d="M55.962,-1368.163C60.7787,-1493.585 102.5322,-2547.7155 147,-2595 176.4531,-2626.3188 228.8272,-2626.8601 264.3456,-2622.7581"/>
+<polygon fill="#000000" stroke="#000000" points="264.8802,-2626.2179 274.3329,-2621.4327 263.9593,-2619.2787 264.8802,-2626.2179"/>
+</g>
+<!-- alpha1over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node5" class="node">
+<title>alpha1over_zetapluseta</title>
+<polygon fill="#777777" stroke="#777777" points="371.5,-2586 231.5,-2586 231.5,-2562 371.5,-2562 371.5,-2586"/>
+<text text-anchor="middle" x="301.5" y="-2571.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha1over_zetapluseta</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha1over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge4" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha1over_zetapluseta</title>
+<path fill="none" stroke="#000000" d="M55.993,-1368.1316C61.0397,-1491.0407 104.0171,-2507.4123 147,-2553 165.7718,-2572.9094 193.8085,-2580.3699 220.8664,-2582.1087"/>
+<polygon fill="#000000" stroke="#000000" points="221.0389,-2585.618 231.1673,-2582.509 221.3108,-2578.6232 221.0389,-2585.618"/>
+</g>
+<!-- alpha1rho_over_zeta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node6" class="node">
+<title>alpha1rho_over_zeta2</title>
+<polygon fill="#777777" stroke="#777777" points="367,-2544 236,-2544 236,-2520 367,-2520 367,-2544"/>
+<text text-anchor="middle" x="301.5" y="-2529.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha1rho_over_zeta2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha1rho_over_zeta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge5" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha1rho_over_zeta2</title>
+<path fill="none" stroke="#000000" d="M55.558,-1368.3116C56.2321,-1486.8551 64.1704,-2423.3937 147,-2511 166.963,-2532.1143 197.3491,-2539.2139 225.9073,-2540.3396"/>
+<polygon fill="#000000" stroke="#000000" points="225.8569,-2543.8391 235.9124,-2540.5017 225.9705,-2536.84 225.8569,-2543.8391"/>
+</g>
+<!-- alpha2over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node7" class="node">
+<title>alpha2over_zetapluseta</title>
+<polygon fill="#777777" stroke="#777777" points="371.5,-2502 231.5,-2502 231.5,-2478 371.5,-2478 371.5,-2502"/>
+<text text-anchor="middle" x="301.5" y="-2487.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha2over_zetapluseta</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha2over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge6" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha2over_zetapluseta</title>
+<path fill="none" stroke="#000000" d="M55.5958,-1368.2251C56.618,-1483.9907 67.1213,-2384.7657 147,-2469 165.8288,-2488.8555 193.8774,-2496.3047 220.929,-2498.0495"/>
+<polygon fill="#000000" stroke="#000000" points="221.0973,-2501.5587 231.2266,-2498.4529 221.3713,-2494.564 221.0973,-2501.5587"/>
+</g>
+<!-- alpha2rho_over_zeta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node8" class="node">
+<title>alpha2rho_over_zeta2</title>
+<polygon fill="#777777" stroke="#777777" points="367,-2460 236,-2460 236,-2436 367,-2436 367,-2460"/>
+<text text-anchor="middle" x="301.5" y="-2445.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha2rho_over_zeta2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha2rho_over_zeta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge7" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha2rho_over_zeta2</title>
+<path fill="none" stroke="#000000" d="M55.6358,-1368.1164C57.0143,-1480.9828 70.0657,-2346.1303 147,-2427 167.0281,-2448.0526 197.4247,-2455.1423 225.9731,-2456.2771"/>
+<polygon fill="#000000" stroke="#000000" points="225.9172,-2459.7766 235.974,-2456.4433 226.0335,-2452.7776 225.9172,-2459.7766"/>
+</g>
+<!-- alpha3over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node9" class="node">
+<title>alpha3over_zetapluseta</title>
+<polygon fill="#777777" stroke="#777777" points="371.5,-2418 231.5,-2418 231.5,-2394 371.5,-2394 371.5,-2418"/>
+<text text-anchor="middle" x="301.5" y="-2403.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha3over_zetapluseta</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha3over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge8" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha3over_zetapluseta</title>
+<path fill="none" stroke="#000000" d="M55.6835,-1368.332C57.4538,-1479.5666 73.0808,-2307.5684 147,-2385 165.8948,-2404.7926 193.9574,-2412.2287 221.0015,-2413.9805"/>
+<polygon fill="#000000" stroke="#000000" points="221.1649,-2417.4896 231.2954,-2414.3875 221.4415,-2410.495 221.1649,-2417.4896"/>
+</g>
+<!-- alpha3rho_over_eta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node10" class="node">
+<title>alpha3rho_over_eta2</title>
+<polygon fill="#777777" stroke="#777777" points="364.5,-2376 238.5,-2376 238.5,-2352 364.5,-2352 364.5,-2376"/>
+<text text-anchor="middle" x="301.5" y="-2361.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha3rho_over_eta2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha3rho_over_eta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge9" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha3rho_over_eta2</title>
+<path fill="none" stroke="#000000" d="M55.7291,-1368.1676C57.8764,-1476.2003 76.0089,-2268.9144 147,-2343 167.6065,-2364.5047 199.0396,-2371.4034 228.1864,-2372.2788"/>
+<polygon fill="#000000" stroke="#000000" points="228.3545,-2375.78 238.3791,-2372.3514 228.4043,-2368.7802 228.3545,-2375.78"/>
+</g>
+<!-- alpha4over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node11" class="node">
+<title>alpha4over_zetapluseta</title>
+<polygon fill="#777777" stroke="#777777" points="371.5,-2334 231.5,-2334 231.5,-2310 371.5,-2310 371.5,-2334"/>
+<text text-anchor="middle" x="301.5" y="-2319.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha4over_zetapluseta</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha4over_zetapluseta -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge10" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha4over_zetapluseta</title>
+<path fill="none" stroke="#000000" d="M55.785,-1368.3106C58.3526,-1474.2803 79.0016,-2230.327 147,-2301 165.9722,-2320.7185 194.051,-2328.1389 221.0866,-2329.899"/>
+<polygon fill="#000000" stroke="#000000" points="221.2441,-2333.408 231.3759,-2330.3102 221.5237,-2326.4136 221.2441,-2333.408"/>
+</g>
+<!-- alpha4rho_over_eta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node12" class="node">
+<title>alpha4rho_over_eta2</title>
+<polygon fill="#777777" stroke="#777777" points="364.5,-2292 238.5,-2292 238.5,-2268 364.5,-2268 364.5,-2292"/>
+<text text-anchor="middle" x="301.5" y="-2277.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">alpha4rho_over_eta2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;alpha4rho_over_eta2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge11" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;alpha4rho_over_eta2</title>
+<path fill="none" stroke="#000000" d="M55.8364,-1368.0864C58.8009,-1470.5568 81.913,-2191.6541 147,-2259 167.6982,-2280.4165 199.1442,-2287.3028 228.2758,-2288.1928"/>
+<polygon fill="#000000" stroke="#000000" points="228.4353,-2291.694 238.4621,-2288.2715 228.4895,-2284.6942 228.4353,-2291.694"/>
+</g>
+<!-- cd_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node13" class="node">
+<title>cd_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2250 274.5,-2250 274.5,-2226 328.5,-2226 328.5,-2250"/>
+<text text-anchor="middle" x="301.5" y="-2235.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">cd_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;cd_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge12" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;cd_x</title>
+<path fill="none" stroke="#000000" d="M55.901,-1368.1504C59.3133,-1468.1352 84.8828,-2153.0407 147,-2217 176.9529,-2247.8412 229.2066,-2248.4975 264.5616,-2244.5516"/>
+<polygon fill="#000000" stroke="#000000" points="265.0281,-2248.0205 274.4998,-2243.2732 264.135,-2241.0777 265.0281,-2248.0205"/>
+</g>
+<!-- cd_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node14" class="node">
+<title>cd_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2208 274.5,-2208 274.5,-2184 328.5,-2184 328.5,-2208"/>
+<text text-anchor="middle" x="301.5" y="-2193.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">cd_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;cd_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge13" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;cd_y</title>
+<path fill="none" stroke="#000000" d="M55.9708,-1368.1685C59.8462,-1465.4272 87.8394,-2114.4123 147,-2175 176.9498,-2205.6723 228.9704,-2206.432 264.2934,-2202.5503"/>
+<polygon fill="#000000" stroke="#000000" points="264.7487,-2206.0206 274.2284,-2201.2894 263.8673,-2199.0763 264.7487,-2206.0206"/>
+</g>
+<!-- cd_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node15" class="node">
+<title>cd_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-2166 274.5,-2166 274.5,-2142 328.5,-2142 328.5,-2166"/>
+<text text-anchor="middle" x="301.5" y="-2151.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">cd_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;cd_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge14" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;cd_z</title>
+<path fill="none" stroke="#000000" d="M56.046,-1368.1384C60.3994,-1462.4335 90.7827,-2075.7688 147,-2133 177.0411,-2163.5829 229.0401,-2164.3638 264.3332,-2160.5113"/>
+<polygon fill="#000000" stroke="#000000" points="264.776,-2163.9832 274.2593,-2159.2591 263.8998,-2157.0383 264.776,-2163.9832"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_0 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node16" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_0</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-2124 150.5,-2124 150.5,-2100 452.5,-2100 452.5,-2124"/>
+<text text-anchor="middle" x="301.5" y="-2109.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_0</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_0 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge15" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_0</title>
+<path fill="none" stroke="#000000" d="M56.1267,-1368.0577C60.9728,-1459.1548 93.7124,-2037.11 147,-2091 147.8089,-2091.8181 148.6335,-2092.6147 149.4732,-2093.3905"/>
+<polygon fill="#000000" stroke="#000000" points="147.4401,-2096.2479 157.414,-2099.8217 151.8457,-2090.8081 147.4401,-2096.2479"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_1 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node17" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_1</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-2082 150.5,-2082 150.5,-2058 452.5,-2058 452.5,-2082"/>
+<text text-anchor="middle" x="301.5" y="-2067.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_1</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_1 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge16" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_1</title>
+<path fill="none" stroke="#000000" d="M56.2303,-1368.2051C61.6407,-1456.7451 96.6817,-1998.4892 147,-2049 147.8119,-2049.815 148.6395,-2050.6088 149.4819,-2051.3818"/>
+<polygon fill="#000000" stroke="#000000" points="147.4606,-2054.2477 157.4457,-2057.7902 151.8491,-2048.7941 147.4606,-2054.2477"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_10 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node18" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_10</title>
+<polygon fill="#777777" stroke="#777777" points="456,-2040 147,-2040 147,-2016 456,-2016 456,-2040"/>
+<text text-anchor="middle" x="301.5" y="-2025.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_10</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_10 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge17" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_10</title>
+<path fill="none" stroke="#000000" d="M56.3243,-1368.0051C62.2587,-1452.827 99.5803,-1959.7953 147,-2007 147.9442,-2007.94 148.9093,-2008.8515 149.894,-2009.7355"/>
+<polygon fill="#000000" stroke="#000000" points="147.7913,-2012.5347 157.8091,-2015.9833 152.1284,-2007.0401 147.7913,-2012.5347"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_11 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node19" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_11</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1998 147,-1998 147,-1974 456,-1974 456,-1998"/>
+<text text-anchor="middle" x="301.5" y="-1983.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_11</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_11 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge18" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_11</title>
+<path fill="none" stroke="#000000" d="M56.4452,-1368.0074C62.9808,-1449.6354 102.5117,-1921.1318 147,-1965 147.9487,-1965.9355 148.918,-1966.8427 149.9068,-1967.7225"/>
+<polygon fill="#000000" stroke="#000000" points="147.8189,-1970.5329 157.8504,-1973.9417 152.1341,-1965.0212 147.8189,-1970.5329"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_12 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node20" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_12</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1956 147,-1956 147,-1932 456,-1932 456,-1956"/>
+<text text-anchor="middle" x="301.5" y="-1941.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_12</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_12 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge19" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_12</title>
+<path fill="none" stroke="#000000" d="M55.5836,-1368.3712C56.3615,-1443.909 64.3791,-1842.4113 147,-1923 147.9538,-1923.9303 148.9279,-1924.8326 149.9214,-1925.7076"/>
+<polygon fill="#000000" stroke="#000000" points="147.8504,-1928.5306 157.8973,-1931.8938 152.1406,-1922.9994 147.8504,-1928.5306"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_13 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node21" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_13</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1914 147,-1914 147,-1890 456,-1890 456,-1914"/>
+<text text-anchor="middle" x="301.5" y="-1899.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_13</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_13 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge20" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_13</title>
+<path fill="none" stroke="#000000" d="M55.7568,-1368.3876C57.5213,-1440.644 70.2031,-1807.0272 147,-1881 147.9596,-1881.9243 148.9394,-1882.8208 149.9382,-1883.6903"/>
+<polygon fill="#000000" stroke="#000000" points="147.8868,-1886.5278 157.9512,-1889.8382 152.1479,-1880.9741 147.8868,-1886.5278"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_14 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node22" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_14</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1872 147,-1872 147,-1848 456,-1848 456,-1872"/>
+<text text-anchor="middle" x="301.5" y="-1857.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_14</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_14 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge21" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_14</title>
+<path fill="none" stroke="#000000" d="M55.955,-1368.2879C58.7572,-1436.8621 75.969,-1771.5784 147,-1839 147.9939,-1839.9434 149.009,-1840.8578 150.0439,-1841.7438"/>
+<polygon fill="#000000" stroke="#000000" points="148.2533,-1844.7767 158.3476,-1847.9948 152.4633,-1839.1842 148.2533,-1844.7767"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_15 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node23" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_15</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1830 147,-1830 147,-1806 456,-1806 456,-1830"/>
+<text text-anchor="middle" x="301.5" y="-1815.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_15</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_15 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge22" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_15</title>
+<path fill="none" stroke="#000000" d="M56.1793,-1368.0638C60.0675,-1432.5652 81.674,-1736.0626 147,-1797 148.0021,-1797.9348 149.025,-1798.8408 150.0674,-1799.7188"/>
+<polygon fill="#000000" stroke="#000000" points="148.3055,-1802.7696 158.4227,-1805.9149 152.4752,-1797.1469 148.3055,-1802.7696"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_16 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node24" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_16</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1788 147,-1788 147,-1764 456,-1764 456,-1788"/>
+<text text-anchor="middle" x="301.5" y="-1773.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_16</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_16 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge23" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_16</title>
+<path fill="none" stroke="#000000" d="M56.4638,-1368.1062C61.5634,-1428.9523 87.4454,-1700.5959 147,-1755 148.0118,-1755.9243 149.044,-1756.8202 150.0953,-1757.6886"/>
+<polygon fill="#000000" stroke="#000000" points="148.368,-1760.7604 158.5121,-1763.8181 152.4889,-1755.1019 148.368,-1760.7604"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_17 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node25" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_17</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1746 147,-1746 147,-1722 456,-1722 456,-1746"/>
+<text text-anchor="middle" x="301.5" y="-1731.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_17</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_17 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge24" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_17</title>
+<path fill="none" stroke="#000000" d="M56.8354,-1368.3313C63.2989,-1425.6332 93.242,-1665.133 147,-1713 148.1688,-1714.0407 149.3636,-1715.0451 150.5826,-1716.0143"/>
+<polygon fill="#000000" stroke="#000000" points="148.7692,-1719.018 158.9611,-1721.9121 152.7985,-1713.2939 148.7692,-1719.018"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_18 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node26" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_18</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1704 147,-1704 147,-1680 456,-1680 456,-1704"/>
+<text text-anchor="middle" x="301.5" y="-1689.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_18</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_18 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge25" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_18</title>
+<path fill="none" stroke="#000000" d="M57.2721,-1368.2863C65.1718,-1421.2861 98.9125,-1629.5337 147,-1671 148.3389,-1672.1546 149.7101,-1673.2639 151.111,-1674.3295"/>
+<polygon fill="#000000" stroke="#000000" points="149.1981,-1677.2611 159.4419,-1679.9659 153.1207,-1671.4634 149.1981,-1677.2611"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_19 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node27" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_19</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1662 147,-1662 147,-1638 456,-1638 456,-1662"/>
+<text text-anchor="middle" x="301.5" y="-1647.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_19</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_19 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge26" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_19</title>
+<path fill="none" stroke="#000000" d="M57.8411,-1368.2665C67.3413,-1416.7212 104.5398,-1593.867 147,-1629 148.398,-1630.1567 149.8287,-1631.2673 151.2894,-1632.3333"/>
+<polygon fill="#000000" stroke="#000000" points="149.6715,-1635.4557 159.9655,-1637.9628 153.4818,-1629.5835 149.6715,-1635.4557"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node28" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_2</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1620 150.5,-1620 150.5,-1596 452.5,-1596 452.5,-1620"/>
+<text text-anchor="middle" x="301.5" y="-1605.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge27" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_2</title>
+<path fill="none" stroke="#000000" d="M56.2119,-1368.0171C59.2137,-1406.9038 74.3237,-1530.0845 147,-1587 148.5984,-1588.2518 150.2357,-1589.4482 151.9084,-1590.5915"/>
+<polygon fill="#000000" stroke="#000000" points="150.1915,-1593.6441 160.5489,-1595.875 153.8434,-1587.6721 150.1915,-1593.6441"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_20 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node29" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_20</title>
+<polygon fill="#777777" stroke="#777777" points="456,-1578 147,-1578 147,-1554 456,-1554 456,-1578"/>
+<text text-anchor="middle" x="301.5" y="-1563.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_20</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_20 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge28" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_20</title>
+<path fill="none" stroke="#000000" d="M57.3833,-1368.2489C63.3665,-1402.6018 85.3232,-1500.2652 147,-1545 148.8694,-1546.3559 150.7858,-1547.6448 152.744,-1548.8695"/>
+<polygon fill="#000000" stroke="#000000" points="151.1493,-1551.9881 161.5813,-1553.8382 154.5799,-1545.8864 151.1493,-1551.9881"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_3 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node30" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_3</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1536 150.5,-1536 150.5,-1512 452.5,-1512 452.5,-1536"/>
+<text text-anchor="middle" x="301.5" y="-1521.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_3</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_3 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge29" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_3</title>
+<path fill="none" stroke="#000000" d="M59.0549,-1368.0287C68.2545,-1396.8343 95.7749,-1469.8355 147,-1503 149.3682,-1504.5332 151.7996,-1505.9764 154.2851,-1507.3343"/>
+<polygon fill="#000000" stroke="#000000" points="152.9892,-1510.5978 163.5054,-1511.8869 156.0884,-1504.3212 152.9892,-1510.5978"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_4 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node31" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_4</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1494 150.5,-1494 150.5,-1470 452.5,-1470 452.5,-1494"/>
+<text text-anchor="middle" x="301.5" y="-1479.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_4</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_4 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge30" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_4</title>
+<path fill="none" stroke="#000000" d="M62.1352,-1368.2748C75.1001,-1390.9202 106.1377,-1438.9655 147,-1461 150.5181,-1462.8971 154.1443,-1464.6452 157.8546,-1466.2552"/>
+<polygon fill="#000000" stroke="#000000" points="156.6504,-1469.5428 167.2363,-1469.979 159.2329,-1463.0366 156.6504,-1469.5428"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_5 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node32" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_5</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1452 150.5,-1452 150.5,-1428 452.5,-1428 452.5,-1452"/>
+<text text-anchor="middle" x="301.5" y="-1437.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_5</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_5 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge31" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_5</title>
+<path fill="none" stroke="#000000" d="M68.5959,-1368.0325C85.3913,-1382.708 116.0603,-1407.0338 147,-1419 152.9646,-1421.3069 159.1442,-1423.3668 165.4482,-1425.2057"/>
+<polygon fill="#000000" stroke="#000000" points="164.8763,-1428.677 175.4439,-1427.9173 166.709,-1421.9212 164.8763,-1428.677"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_6 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node33" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_6</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1410 150.5,-1410 150.5,-1386 452.5,-1386 452.5,-1410"/>
+<text text-anchor="middle" x="301.5" y="-1395.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_6</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_6 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge32" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_6</title>
+<path fill="none" stroke="#000000" d="M104.2416,-1368.0471C118.0144,-1371.2165 133.0503,-1374.4566 147,-1377 161.8548,-1379.7085 177.5715,-1382.2337 193.0691,-1384.5268"/>
+<polygon fill="#000000" stroke="#000000" points="192.8111,-1388.026 203.2104,-1385.9999 193.8174,-1381.0987 192.8111,-1388.026"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_7 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node34" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_7</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1368 150.5,-1368 150.5,-1344 452.5,-1344 452.5,-1368"/>
+<text text-anchor="middle" x="301.5" y="-1353.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_7</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_7 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge33" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_7</title>
+<path fill="none" stroke="#000000" d="M111.0139,-1356C120.0479,-1356 129.7853,-1356 139.911,-1356"/>
+<polygon fill="#000000" stroke="#000000" points="140.1544,-1359.5001 150.1544,-1356 140.1544,-1352.5001 140.1544,-1359.5001"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_8 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node35" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_8</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1326 150.5,-1326 150.5,-1302 452.5,-1302 452.5,-1326"/>
+<text text-anchor="middle" x="301.5" y="-1311.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_8</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_8 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge34" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_8</title>
+<path fill="none" stroke="#000000" d="M104.2416,-1343.9529C118.0144,-1340.7835 133.0503,-1337.5434 147,-1335 161.8548,-1332.2915 177.5715,-1329.7663 193.0691,-1327.4732"/>
+<polygon fill="#000000" stroke="#000000" points="193.8174,-1330.9013 203.2104,-1326.0001 192.8111,-1323.974 193.8174,-1330.9013"/>
+</g>
+<!-- f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_9 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node36" class="node">
+<title>f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_9</title>
+<polygon fill="#777777" stroke="#777777" points="452.5,-1284 150.5,-1284 150.5,-1260 452.5,-1260 452.5,-1284"/>
+<text text-anchor="middle" x="301.5" y="-1269.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_9</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_9 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge35" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;f_ab_s___0__s___1___twoprep_s___0__s___1___ab__up_9</title>
+<path fill="none" stroke="#000000" d="M68.5959,-1343.9675C85.3913,-1329.292 116.0603,-1304.9662 147,-1293 152.9646,-1290.6931 159.1442,-1288.6332 165.4482,-1286.7943"/>
+<polygon fill="#000000" stroke="#000000" points="166.709,-1290.0788 175.4439,-1284.0827 164.8763,-1283.323 166.709,-1290.0788"/>
+</g>
+<!-- fgrid -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node37" class="node">
+<title>fgrid</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1242 274.5,-1242 274.5,-1218 328.5,-1218 328.5,-1242"/>
+<text text-anchor="middle" x="301.5" y="-1227.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">fgrid</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;fgrid -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge36" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;fgrid</title>
+<path fill="none" stroke="#000000" d="M62.1352,-1343.7252C75.1001,-1321.0798 106.1377,-1273.0345 147,-1251 183.4416,-1231.3493 231.4874,-1227.6833 264.2638,-1227.9162"/>
+<polygon fill="#000000" stroke="#000000" points="264.2682,-1231.4169 274.3349,-1228.1135 264.4054,-1224.4182 264.2682,-1231.4169"/>
+</g>
+<!-- igrid -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node38" class="node">
+<title>igrid</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1200 274.5,-1200 274.5,-1176 328.5,-1176 328.5,-1200"/>
+<text text-anchor="middle" x="301.5" y="-1185.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">igrid</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;igrid -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge37" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;igrid</title>
+<path fill="none" stroke="#000000" d="M59.0549,-1343.9713C68.2545,-1315.1657 95.7749,-1242.1645 147,-1209 181.9592,-1186.3665 230.7001,-1183.3527 264.0316,-1184.5513"/>
+<polygon fill="#000000" stroke="#000000" points="264.1111,-1188.0597 274.275,-1185.069 264.4644,-1181.0686 264.1111,-1188.0597"/>
+</g>
+<!-- irgrd -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node39" class="node">
+<title>irgrd</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1158 274.5,-1158 274.5,-1134 328.5,-1134 328.5,-1158"/>
+<text text-anchor="middle" x="301.5" y="-1143.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">irgrd</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;irgrd -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge38" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;irgrd</title>
+<path fill="none" stroke="#000000" d="M57.3833,-1343.7511C63.3665,-1309.3982 85.3232,-1211.7348 147,-1167 180.9101,-1142.4047 230.2803,-1139.8713 264.0279,-1141.7145"/>
+<polygon fill="#000000" stroke="#000000" points="264.1755,-1145.2335 274.3966,-1142.4444 264.6671,-1138.2508 264.1755,-1145.2335"/>
+</g>
+<!-- oo2e -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node40" class="node">
+<title>oo2e</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1116 274.5,-1116 274.5,-1092 328.5,-1092 328.5,-1116"/>
+<text text-anchor="middle" x="301.5" y="-1101.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oo2e</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;oo2e -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge39" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;oo2e</title>
+<path fill="none" stroke="#000000" d="M56.2119,-1343.9829C59.2137,-1305.0962 74.3237,-1181.9155 147,-1125 180.22,-1098.9842 230.2654,-1096.8641 264.3305,-1099.1854"/>
+<polygon fill="#000000" stroke="#000000" points="264.0953,-1102.6779 274.3531,-1100.0268 264.681,-1095.7024 264.0953,-1102.6779"/>
+</g>
+<!-- oo2z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node41" class="node">
+<title>oo2z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1074 274.5,-1074 274.5,-1050 328.5,-1050 328.5,-1074"/>
+<text text-anchor="middle" x="301.5" y="-1059.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oo2z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;oo2z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge40" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;oo2z</title>
+<path fill="none" stroke="#000000" d="M57.8411,-1343.7335C67.3413,-1295.2788 104.5398,-1118.133 147,-1083 179.6035,-1056.0228 230.0012,-1054.1623 264.3029,-1056.8029"/>
+<polygon fill="#000000" stroke="#000000" points="264.1121,-1060.3003 274.394,-1057.7441 264.7623,-1053.3305 264.1121,-1060.3003"/>
+</g>
+<!-- oo2ze -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node42" class="node">
+<title>oo2ze</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-1032 274.5,-1032 274.5,-1008 328.5,-1008 328.5,-1032"/>
+<text text-anchor="middle" x="301.5" y="-1017.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oo2ze</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;oo2ze -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge41" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;oo2ze</title>
+<path fill="none" stroke="#000000" d="M57.2721,-1343.7137C65.1718,-1290.7139 98.9125,-1082.4663 147,-1041 179.1406,-1013.2848 229.8615,-1011.6403 264.3496,-1014.5287"/>
+<polygon fill="#000000" stroke="#000000" points="264.1936,-1018.0305 274.4932,-1015.5468 264.8927,-1011.0655 264.1936,-1018.0305"/>
+</g>
+<!-- pa_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node43" class="node">
+<title>pa_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-990 274.5,-990 274.5,-966 328.5,-966 328.5,-990"/>
+<text text-anchor="middle" x="301.5" y="-975.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pa_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;pa_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge42" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;pa_x</title>
+<path fill="none" stroke="#000000" d="M56.8354,-1343.6687C63.2989,-1286.3668 93.242,-1046.867 147,-999 178.696,-970.7774 229.5168,-969.2469 264.1493,-972.3"/>
+<polygon fill="#000000" stroke="#000000" points="264.0275,-975.8064 274.3384,-973.3702 264.7588,-968.8447 264.0275,-975.8064"/>
+</g>
+<!-- pa_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node44" class="node">
+<title>pa_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-948 274.5,-948 274.5,-924 328.5,-924 328.5,-948"/>
+<text text-anchor="middle" x="301.5" y="-933.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pa_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;pa_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge43" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;pa_y</title>
+<path fill="none" stroke="#000000" d="M56.4638,-1343.8938C61.5634,-1283.0477 87.4454,-1011.4041 147,-957 178.3339,-928.3759 229.2362,-926.9358 263.9861,-930.1191"/>
+<polygon fill="#000000" stroke="#000000" points="263.8928,-933.6295 274.2124,-931.2305 264.6492,-926.6705 263.8928,-933.6295"/>
+</g>
+<!-- pa_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node45" class="node">
+<title>pa_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-906 274.5,-906 274.5,-882 328.5,-882 328.5,-906"/>
+<text text-anchor="middle" x="301.5" y="-891.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">pa_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;pa_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge44" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;pa_z</title>
+<path fill="none" stroke="#000000" d="M56.1793,-1343.9362C60.0675,-1279.4348 81.674,-975.9374 147,-915 178.1236,-885.9672 229.2984,-884.6762 264.1526,-888.0013"/>
+<polygon fill="#000000" stroke="#000000" points="264.0763,-891.5147 274.4052,-889.1558 264.8597,-884.5587 264.0763,-891.5147"/>
+</g>
+<!-- qc_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node46" class="node">
+<title>qc_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-864 274.5,-864 274.5,-840 328.5,-840 328.5,-864"/>
+<text text-anchor="middle" x="301.5" y="-849.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">qc_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;qc_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge45" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;qc_x</title>
+<path fill="none" stroke="#000000" d="M55.955,-1343.7121C58.7572,-1275.1379 75.969,-940.4216 147,-873 177.8705,-843.6982 229.1031,-842.4686 264.0396,-845.8812"/>
+<polygon fill="#000000" stroke="#000000" points="263.9837,-849.3977 274.3182,-847.0633 264.7836,-842.4436 263.9837,-849.3977"/>
+</g>
+<!-- qc_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node47" class="node">
+<title>qc_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-822 274.5,-822 274.5,-798 328.5,-798 328.5,-822"/>
+<text text-anchor="middle" x="301.5" y="-807.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">qc_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;qc_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge46" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;qc_y</title>
+<path fill="none" stroke="#000000" d="M55.7568,-1343.6124C57.5213,-1271.356 70.2031,-904.9728 147,-831 177.6547,-801.4726 228.9366,-800.2945 263.9432,-803.7804"/>
+<polygon fill="#000000" stroke="#000000" points="263.905,-807.2997 274.244,-804.9858 264.7186,-800.3472 263.905,-807.2997"/>
+</g>
+<!-- qc_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node48" class="node">
+<title>qc_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-780 274.5,-780 274.5,-756 328.5,-756 328.5,-780"/>
+<text text-anchor="middle" x="301.5" y="-765.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">qc_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;qc_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge47" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;qc_z</title>
+<path fill="none" stroke="#000000" d="M55.5836,-1343.6288C56.3615,-1268.091 64.3791,-869.5887 147,-789 177.5565,-759.1951 229.0891,-758.1401 264.163,-761.7255"/>
+<polygon fill="#000000" stroke="#000000" points="264.1329,-765.2468 274.4781,-762.9605 264.9651,-758.2965 264.1329,-765.2468"/>
+</g>
+<!-- rfinc -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node49" class="node">
+<title>rfinc</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-738 274.5,-738 274.5,-714 328.5,-714 328.5,-738"/>
+<text text-anchor="middle" x="301.5" y="-723.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rfinc</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rfinc -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge48" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rfinc</title>
+<path fill="none" stroke="#000000" d="M56.4452,-1343.9926C62.9808,-1262.3646 102.5117,-790.8682 147,-747 177.3942,-717.0295 228.9644,-716.0129 264.0911,-719.6523"/>
+<polygon fill="#000000" stroke="#000000" points="264.0745,-723.1758 274.423,-720.9043 264.9167,-716.2266 264.0745,-723.1758"/>
+</g>
+<!-- rho12_over_alpha1 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node50" class="node">
+<title>rho12_over_alpha1</title>
+<polygon fill="#777777" stroke="#777777" points="359,-696 244,-696 244,-672 359,-672 359,-696"/>
+<text text-anchor="middle" x="301.5" y="-681.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rho12_over_alpha1</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rho12_over_alpha1 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge49" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rho12_over_alpha1</title>
+<path fill="none" stroke="#000000" d="M56.3243,-1343.9949C62.2587,-1259.173 99.5803,-752.2047 147,-705 169.3207,-682.7805 203.2654,-676.4201 233.6578,-676.093"/>
+<polygon fill="#000000" stroke="#000000" points="233.7705,-679.5943 243.8066,-676.1991 233.8438,-672.5946 233.7705,-679.5943"/>
+</g>
+<!-- rho12_over_alpha2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node51" class="node">
+<title>rho12_over_alpha2</title>
+<polygon fill="#777777" stroke="#777777" points="359,-654 244,-654 244,-630 359,-630 359,-654"/>
+<text text-anchor="middle" x="301.5" y="-639.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rho12_over_alpha2</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rho12_over_alpha2 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge50" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rho12_over_alpha2</title>
+<path fill="none" stroke="#000000" d="M56.2303,-1343.7949C61.6407,-1255.2549 96.6817,-713.5108 147,-663 169.2276,-640.6873 203.1638,-634.3185 233.5746,-634.0098"/>
+<polygon fill="#000000" stroke="#000000" points="233.6923,-637.5113 243.7307,-634.1232 233.7705,-630.5117 233.6923,-637.5113"/>
+</g>
+<!-- rho34_over_alpha3 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node52" class="node">
+<title>rho34_over_alpha3</title>
+<polygon fill="#777777" stroke="#777777" points="359,-612 244,-612 244,-588 359,-588 359,-612"/>
+<text text-anchor="middle" x="301.5" y="-597.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rho34_over_alpha3</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rho34_over_alpha3 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge51" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rho34_over_alpha3</title>
+<path fill="none" stroke="#000000" d="M56.1267,-1343.9423C60.9728,-1252.8452 93.7124,-674.89 147,-621 169.1447,-598.605 203.0733,-592.2286 233.5006,-591.9363"/>
+<polygon fill="#000000" stroke="#000000" points="233.6225,-595.4379 243.6631,-592.0561 233.7051,-588.4384 233.6225,-595.4379"/>
+</g>
+<!-- rho34_over_alpha4 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node53" class="node">
+<title>rho34_over_alpha4</title>
+<polygon fill="#777777" stroke="#777777" points="359,-570 244,-570 244,-546 359,-546 359,-570"/>
+<text text-anchor="middle" x="301.5" y="-555.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rho34_over_alpha4</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rho34_over_alpha4 -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge52" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rho34_over_alpha4</title>
+<path fill="none" stroke="#000000" d="M56.046,-1343.8616C60.3994,-1249.5665 90.7827,-636.2312 147,-579 169.1555,-556.4449 203.2543,-550.0996 233.7866,-549.8679"/>
+<polygon fill="#000000" stroke="#000000" points="233.9344,-553.3702 243.982,-550.0091 234.0314,-546.3709 233.9344,-553.3702"/>
+</g>
+<!-- rmr -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node54" class="node">
+<title>rmr</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-528 274.5,-528 274.5,-504 328.5,-504 328.5,-528"/>
+<text text-anchor="middle" x="301.5" y="-513.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rmr</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;rmr -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge53" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;rmr</title>
+<path fill="none" stroke="#000000" d="M55.9708,-1343.8315C59.8462,-1246.5728 87.8394,-597.5877 147,-537 176.9498,-506.3277 228.9704,-505.568 264.2934,-509.4497"/>
+<polygon fill="#000000" stroke="#000000" points="263.8673,-512.9237 274.2284,-510.7106 264.7487,-505.9794 263.8673,-512.9237"/>
+</g>
+<!-- roe -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node55" class="node">
+<title>roe</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-486 274.5,-486 274.5,-462 328.5,-462 328.5,-486"/>
+<text text-anchor="middle" x="301.5" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">roe</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;roe -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge54" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;roe</title>
+<path fill="none" stroke="#000000" d="M55.901,-1343.8496C59.3133,-1243.8648 84.8828,-558.9593 147,-495 176.9529,-464.1588 229.2066,-463.5025 264.5616,-467.4484"/>
+<polygon fill="#000000" stroke="#000000" points="264.135,-470.9223 274.4998,-468.7268 265.0281,-463.9795 264.135,-470.9223"/>
+</g>
+<!-- roz -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node56" class="node">
+<title>roz</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-444 274.5,-444 274.5,-420 328.5,-420 328.5,-444"/>
+<text text-anchor="middle" x="301.5" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">roz</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;roz -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge55" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;roz</title>
+<path fill="none" stroke="#000000" d="M55.8364,-1343.9136C58.8009,-1241.4432 81.913,-520.3459 147,-453 176.8774,-422.0857 229.1493,-421.447 264.529,-425.4168"/>
+<polygon fill="#000000" stroke="#000000" points="264.1084,-428.8915 274.4746,-426.7024 265.0059,-421.9492 264.1084,-428.8915"/>
+</g>
+<!-- two_alpha0_bra -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node57" class="node">
+<title>two_alpha0_bra</title>
+<polygon fill="#777777" stroke="#777777" points="350,-402 253,-402 253,-378 350,-378 350,-402"/>
+<text text-anchor="middle" x="301.5" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">two_alpha0_bra</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;two_alpha0_bra -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge56" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;two_alpha0_bra</title>
+<path fill="none" stroke="#000000" d="M55.785,-1343.6894C58.3526,-1237.7197 79.0016,-481.673 147,-411 171.0485,-386.0056 209.7287,-380.7707 242.3692,-381.7768"/>
+<polygon fill="#000000" stroke="#000000" points="242.5628,-385.2911 252.7283,-382.3056 242.9198,-378.3002 242.5628,-385.2911"/>
+</g>
+<!-- two_alpha0_ket -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node58" class="node">
+<title>two_alpha0_ket</title>
+<polygon fill="#777777" stroke="#777777" points="349,-360 254,-360 254,-336 349,-336 349,-360"/>
+<text text-anchor="middle" x="301.5" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">two_alpha0_ket</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;two_alpha0_ket -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge57" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;two_alpha0_ket</title>
+<path fill="none" stroke="#000000" d="M55.7291,-1343.8324C57.8764,-1235.7997 76.0089,-443.0856 147,-369 171.3559,-343.5825 210.8366,-338.5697 243.7902,-339.7898"/>
+<polygon fill="#000000" stroke="#000000" points="243.6025,-343.2847 253.7836,-340.3529 243.9964,-336.2958 243.6025,-343.2847"/>
+</g>
+<!-- two_alpha1bra -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node59" class="node">
+<title>two_alpha1bra</title>
+<polygon fill="#777777" stroke="#777777" points="347,-318 256,-318 256,-294 347,-294 347,-318"/>
+<text text-anchor="middle" x="301.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">two_alpha1bra</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;two_alpha1bra -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge58" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;two_alpha1bra</title>
+<path fill="none" stroke="#000000" d="M55.6835,-1343.668C57.4538,-1232.4334 73.0808,-404.4316 147,-327 171.8163,-301.0045 212.447,-296.3241 245.8143,-297.842"/>
+<polygon fill="#000000" stroke="#000000" points="245.7058,-301.3422 255.9109,-298.4953 246.1578,-294.3568 245.7058,-301.3422"/>
+</g>
+<!-- two_alpha1ket -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node60" class="node">
+<title>two_alpha1ket</title>
+<polygon fill="#777777" stroke="#777777" points="346.5,-276 256.5,-276 256.5,-252 346.5,-252 346.5,-276"/>
+<text text-anchor="middle" x="301.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">two_alpha1ket</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;two_alpha1ket -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge59" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;two_alpha1ket</title>
+<path fill="none" stroke="#000000" d="M55.6358,-1343.8836C57.0143,-1231.0172 70.0657,-365.8697 147,-285 171.8558,-258.8727 212.6812,-254.2511 246.1245,-255.828"/>
+<polygon fill="#000000" stroke="#000000" points="246.0308,-259.3294 256.2406,-256.4995 246.4944,-252.3448 246.0308,-259.3294"/>
+</g>
+<!-- wp_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node61" class="node">
+<title>wp_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-234 274.5,-234 274.5,-210 328.5,-210 328.5,-234"/>
+<text text-anchor="middle" x="301.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wp_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wp_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge60" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wp_x</title>
+<path fill="none" stroke="#000000" d="M55.5958,-1343.7749C56.618,-1228.0093 67.1213,-327.2343 147,-243 176.583,-211.8039 228.9258,-211.2331 264.4017,-215.295"/>
+<polygon fill="#000000" stroke="#000000" points="264.0049,-218.7728 274.3763,-216.6083 264.9188,-211.8327 264.0049,-218.7728"/>
+</g>
+<!-- wp_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node62" class="node">
+<title>wp_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-192 274.5,-192 274.5,-168 328.5,-168 328.5,-192"/>
+<text text-anchor="middle" x="301.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wp_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wp_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge61" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wp_y</title>
+<path fill="none" stroke="#000000" d="M55.558,-1343.6884C56.2321,-1225.1449 64.1704,-288.6063 147,-201 176.5367,-169.76 228.8906,-169.1997 264.3817,-173.276"/>
+<polygon fill="#000000" stroke="#000000" points="263.9886,-176.7544 274.3608,-174.5936 264.905,-169.8146 263.9886,-176.7544"/>
+</g>
+<!-- wp_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node63" class="node">
+<title>wp_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-150 274.5,-150 274.5,-126 328.5,-126 328.5,-150"/>
+<text text-anchor="middle" x="301.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wp_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wp_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge62" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wp_z</title>
+<path fill="none" stroke="#000000" d="M55.993,-1343.8684C61.0397,-1220.9593 104.0171,-204.5877 147,-159 176.4935,-127.7192 228.8578,-127.1688 264.363,-131.2584"/>
+<polygon fill="#000000" stroke="#000000" points="263.9735,-134.7372 274.3464,-132.58 264.8922,-127.7978 263.9735,-134.7372"/>
+</g>
+<!-- wq_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node64" class="node">
+<title>wq_x</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-108 274.5,-108 274.5,-84 328.5,-84 328.5,-108"/>
+<text text-anchor="middle" x="301.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wq_x</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wq_x -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge63" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wq_x</title>
+<path fill="none" stroke="#000000" d="M55.962,-1343.837C60.7787,-1218.415 102.5322,-164.2845 147,-117 176.4531,-85.6812 228.8272,-85.1399 264.3456,-89.2419"/>
+<polygon fill="#000000" stroke="#000000" points="263.9593,-92.7213 274.3329,-90.5673 264.8802,-85.7821 263.9593,-92.7213"/>
+</g>
+<!-- wq_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node65" class="node">
+<title>wq_y</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-66 274.5,-66 274.5,-42 328.5,-42 328.5,-66"/>
+<text text-anchor="middle" x="301.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wq_y</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wq_y -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge64" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wq_y</title>
+<path fill="none" stroke="#000000" d="M55.9323,-1343.826C60.5231,-1216.0212 101.0441,-123.9849 147,-75 176.4154,-43.6458 228.7986,-43.113 264.3293,-47.2266"/>
+<polygon fill="#000000" stroke="#000000" points="263.9461,-50.7064 274.3203,-48.5554 264.869,-43.7675 263.9461,-50.7064"/>
+</g>
+<!-- wq_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_node66" class="node">
+<title>wq_z</title>
+<polygon fill="#777777" stroke="#777777" points="328.5,-24 274.5,-24 274.5,0 328.5,0 328.5,-24"/>
+<text text-anchor="middle" x="301.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">wq_z</text>
+</g>
+<!-- proc~libint_compute_eri&#45;&gt;wq_z -->
+<g id="proc~~libint_compute_eri~~CallsGraph_edge65" class="edge">
+<title>proc~libint_compute_eri&#45;&gt;wq_z</title>
+<path fill="none" stroke="#000000" d="M55.9037,-1343.8349C60.2726,-1213.7781 99.5528,-83.689 147,-33 176.38,-1.6126 228.7717,-1.0879 264.314,-5.2123"/>
+<polygon fill="#000000" stroke="#000000" points="263.9337,-8.6925 274.3085,-6.5444 264.8585,-1.7538 263.9337,-8.6925"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~libint_compute_eri~~CalledByGraph Pages: 1 -->
+<svg id="proclibint_compute_eriCalledByGraph" width="641pt" height="159pt"
+ viewBox="0.00 0.00 641.00 158.57" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~libint_compute_eri~~CalledByGraph" class="graph" transform="scale(.5584 .5584) rotate(0) translate(4 280)">
+<title>proc~~libint_compute_eri~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-280 1144,-280 1144,4 -4,4"/>
+<!-- proc~libint_compute_eri -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node1" class="node">
+<title>proc~libint_compute_eri</title>
+<polygon fill="none" stroke="#000000" points="1140,-151 1029,-151 1029,-127 1140,-127 1140,-151"/>
+<text text-anchor="middle" x="1084.5" y="-136.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">libint_compute_eri</text>
+</g>
+<!-- none~run_generic -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node2" class="node">
+<title>none~run_generic</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node2"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run_generic" xlink:title="int2_compute_t%run_generic">
+<polygon fill="#a7506f" stroke="#a7506f" points="868,-171 700,-171 700,-147 868,-147 868,-171"/>
+<text text-anchor="middle" x="784" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run_generic</text>
+</a>
+</g>
+</g>
+<!-- none~run_generic&#45;&gt;proc~libint_compute_eri -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge1" class="edge">
+<title>none~run_generic&#45;&gt;proc~libint_compute_eri</title>
+<path fill="none" stroke="#000000" d="M868.1056,-153.4023C915.786,-150.2289 974.5696,-146.3165 1018.83,-143.3707"/>
+<polygon fill="#000000" stroke="#000000" points="1019.151,-146.8572 1028.8965,-142.7007 1018.6861,-139.8726 1019.151,-146.8572"/>
+</g>
+<!-- proc~ints_exchange -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node3" class="node">
+<title>proc~ints_exchange</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node3"><a xlink:href="../proc/ints_exchange.html" xlink:title="ints_exchange">
+<polygon fill="#d9534f" stroke="#d9534f" points="993,-131 904,-131 904,-107 993,-107 993,-131"/>
+<text text-anchor="middle" x="948.5" y="-116.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ints_exchange</text>
+</a>
+</g>
+</g>
+<!-- none~run_generic&#45;&gt;proc~ints_exchange -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge5" class="edge">
+<title>none~run_generic&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M833.3554,-146.9987C852.5428,-142.333 874.5897,-136.9721 894.2227,-132.1981"/>
+<polygon fill="#000000" stroke="#000000" points="895.0517,-135.5986 903.9416,-129.8349 893.3977,-128.7968 895.0517,-135.5986"/>
+</g>
+<!-- proc~ints_exchange&#45;&gt;proc~libint_compute_eri -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge2" class="edge">
+<title>proc~ints_exchange&#45;&gt;proc~libint_compute_eri</title>
+<path fill="none" stroke="#000000" d="M993.0315,-125.5487C1001.2721,-126.7606 1010.0368,-128.0495 1018.7521,-129.3312"/>
+<polygon fill="#000000" stroke="#000000" points="1018.5233,-132.8351 1028.9261,-130.8274 1019.5418,-125.9096 1018.5233,-132.8351"/>
+</g>
+<!-- none~run_cam -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node4" class="node">
+<title>none~run_cam</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node4"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run_cam" xlink:title="int2_compute_t%run_cam">
+<polygon fill="#a7506f" stroke="#a7506f" points="664,-171 513,-171 513,-147 664,-147 664,-171"/>
+<text text-anchor="middle" x="588.5" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run_cam</text>
+</a>
+</g>
+</g>
+<!-- none~run_cam&#45;&gt;none~run_generic -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge3" class="edge">
+<title>none~run_cam&#45;&gt;none~run_generic</title>
+<path fill="none" stroke="#000000" d="M664.0854,-159C672.5033,-159 681.1528,-159 689.7657,-159"/>
+<polygon fill="#000000" stroke="#000000" points="689.8439,-162.5001 699.8438,-159 689.8438,-155.5001 689.8439,-162.5001"/>
+</g>
+<!-- none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node5" class="node">
+<title>none~run~6</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node5"><a xlink:href="../type/int2_compute_t.html#boundprocedure-run~6" xlink:title="int2_compute_t%run">
+<polygon fill="#a7506f" stroke="#a7506f" points="449,-192 327,-192 327,-168 449,-168 449,-192"/>
+<text text-anchor="middle" x="388" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%run</text>
+</a>
+</g>
+</g>
+<!-- none~run~6&#45;&gt;none~run_generic -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge4" class="edge">
+<title>none~run~6&#45;&gt;none~run_generic</title>
+<path fill="none" stroke="#000000" d="M449.2468,-183.0305C505.2637,-185.0831 590.3657,-186.3944 664,-180 681.3495,-178.4934 699.9527,-175.7834 717.2083,-172.8001"/>
+<polygon fill="#000000" stroke="#000000" points="717.9628,-176.2208 727.1927,-171.019 716.7334,-169.3296 717.9628,-176.2208"/>
+</g>
+<!-- none~run~6&#45;&gt;none~run_cam -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge8" class="edge">
+<title>none~run~6&#45;&gt;none~run_cam</title>
+<path fill="none" stroke="#000000" d="M449.2461,-173.5852C466.0751,-171.8226 484.6416,-169.8779 502.5827,-167.9988"/>
+<polygon fill="#000000" stroke="#000000" points="503.1811,-171.4554 512.7621,-166.9327 502.4518,-164.4935 503.1811,-171.4554"/>
+</g>
+<!-- none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node6" class="node">
+<title>none~set_screening~2</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node6"><a xlink:href="../type/int2_compute_t.html#boundprocedure-set_screening~2" xlink:title="int2_compute_t%set_screening">
+<polygon fill="#a7506f" stroke="#a7506f" points="477,-150 299,-150 299,-126 477,-126 477,-150"/>
+<text text-anchor="middle" x="388" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute_t%set_screening</text>
+</a>
+</g>
+</g>
+<!-- none~set_screening~2&#45;&gt;proc~ints_exchange -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge6" class="edge">
+<title>none~set_screening~2&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M477.1226,-134.9789C594.393,-131.0036 796.9415,-124.1376 893.8107,-120.8539"/>
+<polygon fill="#000000" stroke="#000000" points="894.0938,-124.3464 903.9695,-120.5095 893.8566,-117.3504 894.0938,-124.3464"/>
+</g>
+<!-- proc~grd2_driver -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node7" class="node">
+<title>proc~grd2_driver</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node7"><a xlink:href="../proc/grd2_driver.html" xlink:title="grd2_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="821,-79 747,-79 747,-55 821,-55 821,-79"/>
+<text text-anchor="middle" x="784" y="-64.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~grd2_driver&#45;&gt;proc~ints_exchange -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge7" class="edge">
+<title>proc~grd2_driver&#45;&gt;proc~ints_exchange</title>
+<path fill="none" stroke="#000000" d="M821.3276,-78.7996C844.8431,-86.2331 875.4255,-95.9005 900.7065,-103.892"/>
+<polygon fill="#000000" stroke="#000000" points="899.8751,-107.2998 910.465,-106.9768 901.985,-100.6254 899.8751,-107.2998"/>
+</g>
+<!-- proc~fock_jk -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node8" class="node">
+<title>proc~fock_jk</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node8"><a xlink:href="../proc/fock_jk.html" xlink:title="fock_jk">
+<polygon fill="#d9534f" stroke="#d9534f" points="235.5,-150 181.5,-150 181.5,-126 235.5,-126 235.5,-150"/>
+<text text-anchor="middle" x="208.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">fock_jk</text>
+</a>
+</g>
+</g>
+<!-- proc~fock_jk&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge9" class="edge">
+<title>proc~fock_jk&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M235.7622,-144.3789C259.8335,-150.0112 295.8103,-158.4292 326.7468,-165.6678"/>
+<polygon fill="#000000" stroke="#000000" points="326.0581,-169.1011 336.5925,-167.9715 327.653,-162.2852 326.0581,-169.1011"/>
+</g>
+<!-- proc~fock_jk&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge15" class="edge">
+<title>proc~fock_jk&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M235.7622,-138C250.2942,-138 269.1652,-138 288.6468,-138"/>
+<polygon fill="#000000" stroke="#000000" points="288.8704,-141.5001 298.8704,-138 288.8703,-134.5001 288.8704,-141.5001"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node9" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node9"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="625,-37 552,-37 552,-13 625,-13 625,-37"/>
+<text text-anchor="middle" x="588.5" y="-22.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grd2_driver -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge21" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grd2_driver</title>
+<path fill="none" stroke="#000000" d="M625.2721,-32.8999C656.8828,-39.6909 702.6588,-49.5252 736.9377,-56.8894"/>
+<polygon fill="#000000" stroke="#000000" points="736.216,-60.3142 746.7281,-58.9927 737.6864,-53.4703 736.216,-60.3142"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node10" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node10"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="263,-108 154,-108 154,-84 263,-84 263,-108"/>
+<text text-anchor="middle" x="208.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge10" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M246.9689,-108.036C252.5846,-110.5724 258.1135,-113.5484 263,-117 283.081,-131.1844 278.0011,-146.2136 299,-159 304.5171,-162.3594 310.5287,-165.1814 316.7382,-167.552"/>
+<polygon fill="#000000" stroke="#000000" points="316.0217,-171.0055 326.6162,-170.918 318.2796,-164.3796 316.0217,-171.0055"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge16" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M259.9375,-108.0355C280.78,-112.9123 305.0162,-118.5832 326.7607,-123.671"/>
+<polygon fill="#000000" stroke="#000000" points="326.0205,-127.0923 336.555,-125.9627 327.6154,-120.2764 326.0205,-127.0923"/>
+</g>
+<!-- proc~scf_driver -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node11" class="node">
+<title>proc~scf_driver</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node11"><a xlink:href="../proc/scf_driver.html" xlink:title="scf_driver">
+<polygon fill="#d9534f" stroke="#d9534f" points="240.5,-66 176.5,-66 176.5,-42 240.5,-42 240.5,-66"/>
+<text text-anchor="middle" x="208.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge11" class="edge">
+<title>proc~scf_driver&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M240.6572,-61.5869C248.7002,-64.6954 256.7935,-69.0196 263,-75 292.2487,-103.1831 267.903,-132.8705 299,-159 304.3898,-163.5288 310.5827,-167.1188 317.1389,-169.9592"/>
+<polygon fill="#000000" stroke="#000000" points="316.3602,-173.4037 326.9531,-173.6067 318.7988,-166.8422 316.3602,-173.4037"/>
+</g>
+<!-- proc~scf_driver&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge17" class="edge">
+<title>proc~scf_driver&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M240.7053,-65.8018C248.0878,-68.6747 255.8623,-71.8355 263,-75 295.5043,-89.411 331.6841,-107.9276 356.7212,-121.1498"/>
+<polygon fill="#000000" stroke="#000000" points="355.2669,-124.3403 365.7405,-125.9385 358.5495,-118.1577 355.2669,-124.3403"/>
+</g>
+<!-- proc~tdhf_2e_grad -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node12" class="node">
+<title>proc~tdhf_2e_grad</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node12"><a xlink:href="../proc/tdhf_2e_grad.html" xlink:title="tdhf_2e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="629.5,-79 547.5,-79 547.5,-55 629.5,-55 629.5,-79"/>
+<text text-anchor="middle" x="588.5" y="-64.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_2e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_2e_grad&#45;&gt;proc~grd2_driver -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge22" class="edge">
+<title>proc~tdhf_2e_grad&#45;&gt;proc~grd2_driver</title>
+<path fill="none" stroke="#000000" d="M629.9605,-67C661.2124,-67 704.1089,-67 736.699,-67"/>
+<polygon fill="#000000" stroke="#000000" points="736.8902,-70.5001 746.8902,-67 736.8902,-63.5001 736.8902,-70.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node13" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node13"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="246.5,-276 170.5,-276 170.5,-252 246.5,-252 246.5,-276"/>
+<text text-anchor="middle" x="208.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M241.2814,-251.9737C248.4913,-249.1611 256.0477,-246.0823 263,-243 295.5043,-228.589 331.6841,-210.0724 356.7212,-196.8502"/>
+<polygon fill="#000000" stroke="#000000" points="358.5495,-199.8423 365.7405,-192.0615 355.2669,-193.6597 358.5495,-199.8423"/>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge18" class="edge">
+<title>proc~tdhf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M246.5985,-253.8799C252.584,-251.0668 258.3269,-247.5029 263,-243 292.2487,-214.8169 267.903,-185.1295 299,-159 300.5497,-157.6978 302.1658,-156.4733 303.8379,-155.3219"/>
+<polygon fill="#000000" stroke="#000000" points="305.7746,-158.2432 312.6159,-150.1532 302.2228,-152.2112 305.7746,-158.2432"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node14" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node14"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="261.5,-234 155.5,-234 155.5,-210 261.5,-210 261.5,-234"/>
+<text text-anchor="middle" x="208.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge13" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M259.9375,-209.9645C280.78,-205.0877 305.0162,-199.4168 326.7607,-194.329"/>
+<polygon fill="#000000" stroke="#000000" points="327.6154,-197.7236 336.555,-192.0373 326.0205,-190.9077 327.6154,-197.7236"/>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge19" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M246.9689,-209.964C252.5846,-207.4276 258.1135,-204.4516 263,-201 283.081,-186.8156 278.0011,-171.7864 299,-159 302.0064,-157.1694 305.1597,-155.4983 308.4118,-153.9729"/>
+<polygon fill="#000000" stroke="#000000" points="309.9229,-157.1348 317.7988,-150.0481 307.2226,-150.6766 309.9229,-157.1348"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="254,-192 163,-192 163,-168 254,-168 254,-192"/>
+<text text-anchor="middle" x="208.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;none~run~6 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;none~run~6</title>
+<path fill="none" stroke="#000000" d="M254.2599,-180C273.1837,-180 295.5739,-180 316.5676,-180"/>
+<polygon fill="#000000" stroke="#000000" points="316.7401,-183.5001 326.7401,-180 316.74,-176.5001 316.7401,-183.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;none~set_screening~2 -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge20" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;none~set_screening~2</title>
+<path fill="none" stroke="#000000" d="M254.2599,-169.293C276.2543,-164.1466 302.9315,-157.9046 326.6561,-152.3535"/>
+<polygon fill="#000000" stroke="#000000" points="327.6811,-155.7082 336.6207,-150.0219 326.0863,-148.8923 327.6811,-155.7082"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node16" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node16"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="92,-66 26,-66 26,-42 92,-42 92,-66"/>
+<text text-anchor="middle" x="59" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~scf_driver -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge24" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~scf_driver</title>
+<path fill="none" stroke="#000000" d="M92.1789,-54C114.0597,-54 142.9087,-54 166.402,-54"/>
+<polygon fill="#000000" stroke="#000000" points="166.44,-57.5001 176.44,-54 166.4399,-50.5001 166.44,-57.5001"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node17" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node17"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-276 14.5,-276 14.5,-252 103.5,-252 103.5,-276"/>
+<text text-anchor="middle" x="59" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge26" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.8549,-264C121.6243,-264 142.0923,-264 160.1875,-264"/>
+<polygon fill="#000000" stroke="#000000" points="160.2457,-267.5001 170.2457,-264 160.2457,-260.5001 160.2457,-267.5001"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="430,-66 346,-66 346,-42 430,-42 430,-66"/>
+<text text-anchor="middle" x="388" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_2e_grad -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge25" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_2e_grad</title>
+<path fill="none" stroke="#000000" d="M430.0314,-56.7252C461.2508,-58.7494 503.9978,-61.5211 537.2271,-63.6756"/>
+<polygon fill="#000000" stroke="#000000" points="537.0052,-67.1684 547.2108,-64.3229 537.4582,-60.1831 537.0052,-67.1684"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node19" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node19"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-234 0,-234 0,-210 118,-210 118,-234"/>
+<text text-anchor="middle" x="59" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge27" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.0864,-222C126.9813,-222 136.1861,-222 145.1658,-222"/>
+<polygon fill="#000000" stroke="#000000" points="145.18,-225.5001 155.18,-222 145.18,-218.5001 145.18,-225.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node20" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node20"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-192 7.5,-192 7.5,-168 110.5,-168 110.5,-192"/>
+<text text-anchor="middle" x="59" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge28" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.8683,-180C124.3091,-180 138.8422,-180 152.4852,-180"/>
+<polygon fill="#000000" stroke="#000000" points="152.7119,-183.5001 162.7118,-180 152.7118,-176.5001 152.7119,-183.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node21" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node21"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="107,-108 11,-108 11,-84 107,-84 107,-108"/>
+<text text-anchor="middle" x="59" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge23" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M107.1257,-96C118.7958,-96 131.4618,-96 143.7598,-96"/>
+<polygon fill="#000000" stroke="#000000" points="143.9736,-99.5001 153.9735,-96 143.9735,-92.5001 143.9736,-99.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_node22" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~libint_compute_eri~~CalledByGraph_node22"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="257,-24 160,-24 160,0 257,0 257,-24"/>
+<text text-anchor="middle" x="208.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~libint_compute_eri~~CalledByGraph_edge29" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M257.0753,-23.3658C281.4403,-29.0668 310.9742,-35.9772 335.8204,-41.7908"/>
+<polygon fill="#000000" stroke="#000000" points="335.2629,-45.2549 345.7974,-44.1253 336.8578,-38.439 335.2629,-45.2549"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panproclibint_compute_eriCalledByGraph = svgPanZoom('#proclibint_compute_eriCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

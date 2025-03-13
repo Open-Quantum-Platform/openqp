@@ -1,0 +1,29 @@
+oqp.molecule package
+====================
+
+Submodules
+----------
+
+oqp.molecule.molecule module
+----------------------------
+
+.. automodule:: oqp.molecule.molecule
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.molecule.oqpdata module
+---------------------------
+
+.. automodule:: oqp.molecule.oqpdata
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: oqp.molecule
+   :members:
+   :undoc-members:
+   :show-inheritance:

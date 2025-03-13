@@ -1,0 +1,1684 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>hf_gradient_mod &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>hf_gradient_mod
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.6% of total for modules and submodules.">277 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/hf_gradient.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/hf_gradient.f90.html'>hf_gradient.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">hf_gradient_mod</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/hf_gradient_mod.html#variable-module_name~8">module_name</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#types-0"
+         aria-expanded="false" aria-controls="types-0">
+         <h4 class="card-header bg-primary text-white">Derived Types</h4>
+      </a>
+      <div id="types-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/hf_gradient_mod.html#type-grd2_hf_compute_data_t">grd2_hf_compute_data_t</a>
+            <a class="list-group-item" href="../module/hf_gradient_mod.html#type-grd2_rhf_compute_data_t">grd2_rhf_compute_data_t</a>
+            <a class="list-group-item" href="../module/hf_gradient_mod.html#type-grd2_uhf_compute_data_t">grd2_uhf_compute_data_t</a>
+        </div>
+      </div>
+    </div>
+
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#subs-0"
+         aria-expanded="false" aria-controls="subs-0">
+         <h4 class="card-header bg-primary text-white">Subroutines</h4>
+      </a>
+      <div id="subs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/hf_gradient_mod.html#proc-hf_gradient">hf_gradient</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='grd2.html'>grd2</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~hf_gradient_mod~~UsesGraph Pages: 1 -->
+<svg id="modulehf_gradient_modUsesGraph" width="641pt" height="421pt"
+ viewBox="0.00 0.00 641.00 421.40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~hf_gradient_mod~~UsesGraph" class="graph" transform="scale(.6892 .6892) rotate(0) translate(4 607.3982)">
+<title>module~~hf_gradient_mod~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-607.3982 926,-607.3982 926,4 -4,4"/>
+<!-- module~hf_gradient_mod -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node1" class="node">
+<title>module~hf_gradient_mod</title>
+<polygon fill="none" stroke="#000000" points="922,-294.8552 819,-294.8552 819,-270.8552 922,-270.8552 922,-294.8552"/>
+<text text-anchor="middle" x="870.5" y="-280.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">hf_gradient_mod</text>
+</g>
+<!-- module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474.5,-374.8552 404.5,-374.8552 404.5,-350.8552 474.5,-350.8552 474.5,-374.8552"/>
+<text text-anchor="middle" x="439.5" y="-360.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- module~hf_gradient_mod&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge1" class="edge">
+<title>module~hf_gradient_mod&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M864.9188,-295.0113C843.5259,-339.5949 762.3152,-491.0286 650.5,-480.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.5,-480.8552C630.1999,-482.6967 519.2084,-413.7955 466.8546,-380.4552"/>
+<polygon fill="#000000" stroke="#000000" points="468.6977,-377.4795 458.386,-375.0465 464.9298,-383.3789 468.6977,-377.4795"/>
+</g>
+<!-- module~grd2 -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node3" class="node">
+<title>module~grd2</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node3"><a xlink:href="../module/grd2.html" xlink:title="grd2">
+<polygon fill="#337ab7" stroke="#337ab7" points="783,-294.8552 729,-294.8552 729,-270.8552 783,-270.8552 783,-294.8552"/>
+<text text-anchor="middle" x="756" y="-280.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2</text>
+</a>
+</g>
+</g>
+<!-- module~hf_gradient_mod&#45;&gt;module~grd2 -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge2" class="edge">
+<title>module~hf_gradient_mod&#45;&gt;module~grd2</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M818.9443,-282.8552C810.2632,-282.8552 801.4057,-282.8552 793.1809,-282.8552"/>
+<polygon fill="#000000" stroke="#000000" points="793.1621,-279.3553 783.1621,-282.8552 793.1621,-286.3553 793.1621,-279.3553"/>
+</g>
+<!-- module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node4" class="node">
+<title>module~precision</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node4"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-335.8552 141.5,-335.8552 141.5,-311.8552 202.5,-311.8552 202.5,-335.8552"/>
+<text text-anchor="middle" x="172" y="-321.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~hf_gradient_mod&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge3" class="edge">
+<title>module~hf_gradient_mod&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M859.8645,-270.5689C834.2541,-241.8145 765.863,-169.8587 693,-133.8552 643.6012,-109.446 626.0089,-117.7678 572,-106.8552 513.3383,-95.0026 493.1577,-109.3606 439.5,-82.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-82.8552C402.068,-63.0392 407.6215,-34.8206 368,-19.8552 318.9386,-1.3243 291.4366,12.2918 250,-19.8552 204.8189,-54.9073 181.2909,-236.8459 174.282,-301.239"/>
+<polygon fill="#000000" stroke="#000000" points="170.767,-301.1969 173.1971,-311.5093 177.7283,-301.9323 170.767,-301.1969"/>
+</g>
+<!-- module~types -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node5" class="node">
+<title>module~types</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node5"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="568.5,-492.8552 514.5,-492.8552 514.5,-468.8552 568.5,-468.8552 568.5,-492.8552"/>
+<text text-anchor="middle" x="541.5" y="-478.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- module~hf_gradient_mod&#45;&gt;module~types -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge4" class="edge">
+<title>module~hf_gradient_mod&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.5,-480.8552C626.8007,-478.699 600.0828,-478.6611 579.0306,-479.1808"/>
+<polygon fill="#000000" stroke="#000000" points="578.7782,-475.6867 568.8874,-479.4844 578.9877,-482.6835 578.7782,-475.6867"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge10" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.371,-374.8907C397.599,-390.7978 350.2204,-415.6217 309,-404.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-404.8552C282.3458,-397.8933 274.2864,-398.8585 250,-385.8552 228.3829,-374.2811 206.7905,-356.5155 191.8233,-342.9635"/>
+<polygon fill="#000000" stroke="#000000" points="193.9472,-340.1602 184.2316,-335.9343 189.1914,-345.2965 193.9472,-340.1602"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node7" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node7"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-416.8552 0,-416.8552 0,-392.8552 94,-392.8552 94,-416.8552"/>
+<text text-anchor="middle" x="47" y="-402.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M422.3646,-375.0732C416.4834,-379.354 409.8985,-384.2448 404,-388.8552 387.5906,-401.6813 387.5833,-411.7651 368,-418.8552 321.1289,-435.8249 183.2453,-422.2762 104.2748,-412.5506"/>
+<polygon fill="#000000" stroke="#000000" points="104.3648,-409.0346 94.0078,-411.2668 103.4963,-415.9806 104.3648,-409.0346"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node8" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node8"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-536.8552 250,-536.8552 250,-512.8552 368,-512.8552 368,-536.8552"/>
+<text text-anchor="middle" x="309" y="-522.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.3845,-374.9553C413.0834,-378.8246 407.8228,-383.512 404,-388.8552 372.8371,-432.4123 405.1331,-465.2615 368,-503.8552 366.9399,-504.957 365.8183,-506.0011 364.645,-506.9905"/>
+<polygon fill="#000000" stroke="#000000" points="362.514,-504.2083 356.2583,-512.7591 366.481,-509.9757 362.514,-504.2083"/>
+</g>
+<!-- module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node9" class="node">
+<title>module~constants</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node9"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-376.8552 277,-376.8552 277,-352.8552 341,-352.8552 341,-376.8552"/>
+<text text-anchor="middle" x="309" y="-362.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M404.1848,-363.3965C387.932,-363.6455 368.5157,-363.9431 351.4708,-364.2043"/>
+<polygon fill="#000000" stroke="#000000" points="351.1591,-360.7086 341.2139,-364.3615 351.2664,-367.7078 351.1591,-360.7086"/>
+</g>
+<!-- module~io_constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node13" class="node">
+<title>module~io_constants</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node13"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-174.8552 269.5,-174.8552 269.5,-150.8552 348.5,-150.8552 348.5,-174.8552"/>
+<text text-anchor="middle" x="309" y="-160.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M431.4058,-350.4617C423.8803,-338.7026 412.5731,-320.4165 404,-303.8552 385.7023,-268.5085 390.4589,-254.7155 368,-221.8552 357.8388,-206.9882 343.6337,-192.6475 331.7081,-181.8276"/>
+<polygon fill="#000000" stroke="#000000" points="333.709,-178.9256 323.8939,-174.9363 329.079,-184.1756 333.709,-178.9256"/>
+</g>
+<!-- module~parallel -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node14" class="node">
+<title>module~parallel</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node14"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-494.8552 282,-494.8552 282,-470.8552 336,-470.8552 336,-494.8552"/>
+<text text-anchor="middle" x="309" y="-480.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M419.7494,-374.9128C414.2186,-378.8959 408.4961,-383.6536 404,-388.8552 381.6378,-414.7263 393.033,-433.5586 368,-456.8552 361.5804,-462.8295 353.5644,-467.5822 345.5303,-471.3014"/>
+<polygon fill="#000000" stroke="#000000" points="344.0641,-468.1207 336.1852,-475.2041 346.7616,-474.5801 344.0641,-468.1207"/>
+</g>
+<!-- module~grd2&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge11" class="edge">
+<title>module~grd2&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-362.8552C522.9355,-361.0523 502.3806,-360.733 484.6157,-360.9816"/>
+<polygon fill="#000000" stroke="#000000" points="484.4415,-357.4844 474.5146,-361.1867 484.5837,-364.4829 484.4415,-357.4844"/>
+</g>
+<!-- module~grd2&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge16" class="edge">
+<title>module~grd2&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M748.112,-270.6227C722.9881,-233.3033 640.6375,-123.2836 541.5,-120.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-120.8552C494.3753,-109.9186 482.8739,-104.2807 439.5,-82.8552"/>
+</g>
+<!-- module~grd2&#45;&gt;module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge12" class="edge">
+<title>module~grd2&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.5,-362.8552C602.6185,-370.2188 589.7176,-367.5379 541.5,-362.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-362.8552C493.0335,-358.1484 486.2917,-309.3758 439.5,-322.8552"/>
+</g>
+<!-- module~grd2_rys -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node11" class="node">
+<title>module~grd2_rys</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node11"><a xlink:href="../module/grd2_rys.html" xlink:title="grd2_rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="570.5,-296.8552 512.5,-296.8552 512.5,-272.8552 570.5,-272.8552 570.5,-296.8552"/>
+<text text-anchor="middle" x="541.5" y="-282.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2_rys</text>
+</a>
+</g>
+</g>
+<!-- module~grd2&#45;&gt;module~grd2_rys -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge13" class="edge">
+<title>module~grd2&#45;&gt;module~grd2_rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M746.927,-295.0692C730.4799,-315.7939 693.4396,-356.2517 650.5,-362.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M650.5,-362.8552C610.3814,-369.0249 574.3284,-330.5729 555.4268,-305.4435"/>
+<polygon fill="#000000" stroke="#000000" points="558.1698,-303.2636 549.4778,-297.2055 552.4948,-307.3617 558.1698,-303.2636"/>
+</g>
+<!-- module~int2_compute -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node12" class="node">
+<title>module~int2_compute</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node12"><a xlink:href="../module/int2_compute.html" xlink:title="int2_compute">
+<polygon fill="#337ab7" stroke="#337ab7" points="693,-294.8552 608,-294.8552 608,-270.8552 693,-270.8552 693,-294.8552"/>
+<text text-anchor="middle" x="650.5" y="-280.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute</text>
+</a>
+</g>
+</g>
+<!-- module~grd2&#45;&gt;module~int2_compute -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge14" class="edge">
+<title>module~grd2&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M728.8311,-282.8552C721.0202,-282.8552 712.2219,-282.8552 703.4174,-282.8552"/>
+<polygon fill="#000000" stroke="#000000" points="703.1377,-279.3553 693.1377,-282.8552 703.1376,-286.3553 703.1377,-279.3553"/>
+</g>
+<!-- module~grd2&#45;&gt;module~io_constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge15" class="edge">
+<title>module~grd2&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-120.8552C510.2281,-121.1618 505.4957,-136.9245 475,-143.8552 436.5864,-152.5855 392.2143,-157.4 359.0153,-159.9965"/>
+<polygon fill="#000000" stroke="#000000" points="358.365,-156.535 348.6507,-160.7638 358.8818,-163.5159 358.365,-156.535"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge17" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M153.2862,-335.9817C132.3907,-349.5221 98.3729,-371.5656 74.4623,-387.0596"/>
+<polygon fill="#000000" stroke="#000000" points="72.3305,-384.2704 65.8417,-392.6458 76.1371,-390.1449 72.3305,-384.2704"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge20" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M524.9547,-468.6333C520.1097,-464.5797 515.0356,-459.8242 511,-454.8552 489.9352,-428.9184 497.0071,-413.9975 475,-388.8552 472.665,-386.1876 470.0101,-383.6328 467.2278,-381.2375"/>
+<polygon fill="#000000" stroke="#000000" points="469.2383,-378.3662 459.2099,-374.9483 464.918,-383.874 469.2383,-378.3662"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge23" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M514.261,-470.7596C471.163,-455.0581 384.3964,-424.5482 309,-404.8552"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node6" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-536.8552 130,-536.8552 130,-512.8552 214,-512.8552 214,-536.8552"/>
+<text text-anchor="middle" x="172" y="-522.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge18" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-566.8552C357.8008,-589.3436 326.9854,-623.2635 250,-587.8552 227.6638,-577.582 233.3784,-560.9854 214,-545.8552 212.4096,-544.6135 210.7342,-543.4156 209.005,-542.2646"/>
+<polygon fill="#000000" stroke="#000000" points="210.4355,-539.0421 200.0562,-536.9156 206.844,-545.0505 210.4355,-539.0421"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge19" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-566.8552C435.1083,-568.0641 389.2917,-552.8042 353.1709,-540.342"/>
+<polygon fill="#000000" stroke="#000000" points="353.8773,-536.8828 343.2826,-536.9172 351.5864,-543.4973 353.8773,-536.8828"/>
+</g>
+<!-- module~functionals -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node10" class="node">
+<title>module~functionals</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node10"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-578.8552 273.5,-578.8552 273.5,-554.8552 344.5,-554.8552 344.5,-578.8552"/>
+<text text-anchor="middle" x="309" y="-564.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge21" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-566.8552C412.0459,-574.4122 380.0942,-574.5489 354.6785,-572.7299"/>
+<polygon fill="#000000" stroke="#000000" points="354.8323,-569.2306 344.5744,-571.881 354.2462,-576.206 354.8323,-569.2306"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge22" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M532.8703,-493.0566C517.1891,-513.8989 481.7076,-555.2373 439.5,-566.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-566.8552C398.6651,-578.0954 404.4976,-525.3437 368,-503.8552 361.0829,-499.7827 353.2484,-496.3125 345.601,-493.436"/>
+<polygon fill="#000000" stroke="#000000" points="346.6924,-490.1099 336.0975,-490.1094 344.3796,-496.7168 346.6924,-490.1099"/>
+</g>
+<!-- tagarray -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node15" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="468.5,-492.8552 410.5,-492.8552 410.5,-468.8552 468.5,-468.8552 468.5,-492.8552"/>
+<text text-anchor="middle" x="439.5" y="-478.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge24" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M514.4337,-480.8552C503.5695,-480.8552 490.8313,-480.8552 478.9709,-480.8552"/>
+<polygon fill="#000000" stroke="#000000" points="478.8434,-477.3553 468.8433,-480.8552 478.8433,-484.3553 478.8434,-477.3553"/>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge25" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-524.8552C241.1722,-524.8552 232.4436,-524.8552 224.0637,-524.8552"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-521.3553 214.0516,-524.8552 224.0516,-528.3553 224.0516,-521.3553"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge26" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-355.2425C257.5772,-349.4659 232.8455,-342.0645 212.2467,-335.8998"/>
+<polygon fill="#000000" stroke="#000000" points="213.0921,-332.4996 202.5084,-332.9855 211.0851,-339.2057 213.0921,-332.4996"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge28" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.39,-560.1373C264.7882,-557.0295 256.2779,-552.4884 250,-545.8552 211.1392,-504.7956 232.9749,-477.1094 214,-423.8552 204.1598,-396.2382 190.7536,-365.2248 181.7588,-345.1615"/>
+<polygon fill="#000000" stroke="#000000" points="184.9252,-343.6691 177.6159,-335.9993 178.5469,-346.5532 184.9252,-343.6691"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge27" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-555.9299C257.4565,-551.0536 238.4524,-545.2275 221.2204,-539.9447"/>
+<polygon fill="#000000" stroke="#000000" points="221.9027,-536.4932 211.316,-536.9083 219.851,-543.1857 221.9027,-536.4932"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node21" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-578.8552 131.5,-578.8552 131.5,-554.8552 212.5,-554.8552 212.5,-578.8552"/>
+<text text-anchor="middle" x="172" y="-564.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge29" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-566.8552C257.9991,-566.8552 239.7453,-566.8552 222.9899,-566.8552"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-563.3553 212.79,-566.8552 222.79,-570.3553 222.7901,-563.3553"/>
+</g>
+<!-- module~grd2_rys&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge30" class="edge">
+<title>module~grd2_rys&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.2865,-296.972C512.8759,-307.5998 492.7626,-323.4111 475,-336.8552 471.5736,-339.4486 467.939,-342.1575 464.3532,-344.8061"/>
+<polygon fill="#000000" stroke="#000000" points="462.1861,-342.0551 456.1955,-350.7937 466.3281,-347.6982 462.1861,-342.0551"/>
+</g>
+<!-- module~grd2_rys&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge32" class="edge">
+<title>module~grd2_rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M517.4273,-272.6801C497.1639,-262.9899 467.146,-249.9213 439.5,-242.8552"/>
+</g>
+<!-- module~grd2_rys&#45;&gt;module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge31" class="edge">
+<title>module~grd2_rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M512.8748,-296.8557C492.6428,-305.0059 464.7408,-315.584 439.5,-322.8552"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge34" class="edge">
+<title>module~int2_compute&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M618.4536,-295.0055C581.603,-308.9773 521.0159,-331.9487 480.6928,-347.2371"/>
+<polygon fill="#000000" stroke="#000000" points="479.2662,-344.0348 471.1566,-350.8527 481.7479,-350.5801 479.2662,-344.0348"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge40" class="edge">
+<title>module~int2_compute&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.8035,-270.6349C631.4007,-243.6345 594.9225,-179.6453 541.5,-158.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-158.8552C505.2232,-144.7376 506.7567,-124.3679 475,-101.8552 460.4009,-91.5057 455.5447,-90.7808 439.5,-82.8552"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~atomic_structure_m -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge33" class="edge">
+<title>module~int2_compute&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-402.8552C389.2069,-425.1137 411.8379,-470.6426 368,-503.8552 366.1341,-505.2689 364.1646,-506.5933 362.1223,-507.8335"/>
+<polygon fill="#000000" stroke="#000000" points="360.0119,-504.9894 352.7961,-512.7472 363.2748,-511.1824 360.0119,-504.9894"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~parallel -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge39" class="edge">
+<title>module~int2_compute&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M644.1076,-294.9195C632.6101,-315.345 606.3991,-356.4969 572,-376.8552 520.3549,-407.4202 496.2869,-383.4471 439.5,-402.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-402.8552C400.589,-420.0762 359.2998,-447.052 333.83,-464.8427"/>
+<polygon fill="#000000" stroke="#000000" points="331.6577,-462.0921 325.5106,-470.7214 335.6973,-467.8089 331.6577,-462.0921"/>
+</g>
+<!-- module~int2_pairs -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node16" class="node">
+<title>module~int2_pairs</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node16"><a xlink:href="../module/int2_pairs.html" xlink:title="int2_pairs">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-254.8552 277,-254.8552 277,-230.8552 341,-230.8552 341,-254.8552"/>
+<text text-anchor="middle" x="309" y="-240.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2_pairs -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge35" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-158.8552C532.1124,-155.3319 412.4998,-201.729 348.6164,-227.031"/>
+<polygon fill="#000000" stroke="#000000" points="347.2452,-223.8096 339.2412,-230.7512 349.8271,-230.316 347.2452,-223.8096"/>
+</g>
+<!-- module~int2e_libint -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node17" class="node">
+<title>module~int2e_libint</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node17"><a xlink:href="../module/int2e_libint.html" xlink:title="int2e_libint">
+<polygon fill="#337ab7" stroke="#337ab7" points="475,-294.8552 404,-294.8552 404,-270.8552 475,-270.8552 475,-294.8552"/>
+<text text-anchor="middle" x="439.5" y="-280.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_libint</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_libint -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge36" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-158.8552C492.2199,-140.3595 511.5449,-218.9727 475,-256.8552 472.4077,-259.5424 469.5113,-262.1512 466.5213,-264.6136"/>
+<polygon fill="#000000" stroke="#000000" points="464.336,-261.8788 458.5331,-270.7431 468.5973,-267.4323 464.336,-261.8788"/>
+</g>
+<!-- module~int2e_rys -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node18" class="node">
+<title>module~int2e_rys</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node18"><a xlink:href="../module/int2e_rys.html" xlink:title="int2e_rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="572,-254.8552 511,-254.8552 511,-230.8552 572,-230.8552 572,-254.8552"/>
+<text text-anchor="middle" x="541.5" y="-240.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_rys</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_rys -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge37" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.7964,-270.8539C606.5285,-266.7189 593.7724,-262.0377 581.9604,-257.7031"/>
+<polygon fill="#000000" stroke="#000000" points="582.9075,-254.3225 572.3139,-254.1631 580.4959,-260.894 582.9075,-254.3225"/>
+</g>
+<!-- module~messages -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node19" class="node">
+<title>module~messages</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node19"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="472.5,-134.8552 406.5,-134.8552 406.5,-110.8552 472.5,-110.8552 472.5,-134.8552"/>
+<text text-anchor="middle" x="439.5" y="-120.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~messages -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge38" class="edge">
+<title>module~int2_compute&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M541.5,-158.8552C522.1261,-151.5839 500.5319,-143.9021 482.2186,-137.5105"/>
+<polygon fill="#000000" stroke="#000000" points="483.2892,-134.1773 472.6944,-134.1992 480.9905,-140.7891 483.2892,-134.1773"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge43" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M297.4779,-470.7754C285.4289,-458.0467 266.0711,-437.3234 250,-418.8552 227.9127,-393.4735 203.4451,-363.321 187.9073,-343.9021"/>
+<polygon fill="#000000" stroke="#000000" points="190.605,-341.6712 181.6327,-336.0365 185.1328,-346.0366 190.605,-341.6712"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge41" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-491.1531C264.5765,-496.4741 241.5349,-503.538 221.0312,-509.8238"/>
+<polygon fill="#000000" stroke="#000000" points="219.7406,-506.5586 211.2057,-512.836 221.7924,-513.2511 219.7406,-506.5586"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge42" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9101,-484.6713C245.9484,-486.1144 181.0445,-485.316 130,-465.8552 105.668,-456.5786 82.162,-438.1187 66.415,-423.9241"/>
+<polygon fill="#000000" stroke="#000000" points="68.6317,-421.2061 58.9244,-416.9613 63.8659,-426.3332 68.6317,-421.2061"/>
+</g>
+<!-- mpi -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node20" class="node">
+<title>mpi</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node20"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-456.8552 145,-456.8552 145,-432.8552 199,-432.8552 199,-456.8552"/>
+<text text-anchor="middle" x="172" y="-442.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge44" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-475.3476C261.0113,-469.5445 231.8293,-461.4502 208.789,-455.0595"/>
+<polygon fill="#000000" stroke="#000000" points="209.5823,-451.6474 199.0106,-452.3472 207.7112,-458.3928 209.5823,-451.6474"/>
+</g>
+<!-- module~int2_pairs&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge45" class="edge">
+<title>module~int2_pairs&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.4197,-254.9544C269.1053,-259.003 258.9643,-263.7865 250,-268.8552 230.8291,-279.6952 210.5391,-294.105 195.4598,-305.4558"/>
+<polygon fill="#000000" stroke="#000000" points="193.0576,-302.8862 187.2314,-311.7353 197.3043,-308.4509 193.0576,-302.8862"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge50" class="edge">
+<title>module~int2e_libint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.9519,-275.5865C376.8365,-271.7293 339.144,-270.0829 309,-282.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-282.8552C299.9628,-286.6844 249.8164,-301.4269 212.7959,-312.1393"/>
+<polygon fill="#000000" stroke="#000000" points="211.3835,-308.9041 202.7473,-315.0414 213.3259,-315.6292 211.3835,-308.9041"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge46" class="edge">
+<title>module~int2e_libint&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-282.8552C283.6346,-293.6028 268.528,-281.4683 250,-301.8552 199.8104,-357.0802 244.2492,-397.6366 214,-465.8552 207.8068,-479.8223 198.0299,-493.8232 189.467,-504.679"/>
+<polygon fill="#000000" stroke="#000000" points="186.5703,-502.6924 182.9515,-512.65 191.9902,-507.1225 186.5703,-502.6924"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge47" class="edge">
+<title>module~int2e_libint&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.7961,-295.0807C415.9935,-299.2812 409.601,-304.121 404,-308.8552 386.9571,-323.2606 386.9466,-332.0654 368,-343.8552 362.6084,-347.2102 356.6059,-350.1275 350.5519,-352.632"/>
+<polygon fill="#000000" stroke="#000000" points="349.1817,-349.4085 341.0765,-356.2317 351.6676,-355.9522 349.1817,-349.4085"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~int2_pairs -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge48" class="edge">
+<title>module~int2e_libint&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8403,-271.925C387.4382,-266.8976 367.8713,-260.9001 350.7821,-255.662"/>
+<polygon fill="#000000" stroke="#000000" points="351.6359,-252.263 341.0492,-252.6787 349.5845,-258.9557 351.6359,-252.263"/>
+</g>
+<!-- module~libint_f -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node24" class="node">
+<title>module~libint_f</title>
+<g id="a_module~~hf_gradient_mod~~UsesGraph_node24"><a xlink:href="../module/libint_f.html" xlink:title="libint_f">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-334.8552 282,-334.8552 282,-310.8552 336,-310.8552 336,-334.8552"/>
+<text text-anchor="middle" x="309" y="-320.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">libint_f</text>
+</a>
+</g>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~libint_f -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge49" class="edge">
+<title>module~int2e_libint&#45;&gt;module~libint_f</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8403,-293.7854C385.8841,-299.2892 364.1349,-305.9557 345.9959,-311.5155"/>
+<polygon fill="#000000" stroke="#000000" points="344.8724,-308.199 336.3372,-314.476 346.9239,-314.8917 344.8724,-308.199"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~basis_tools -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge51" class="edge">
+<title>module~int2e_rys&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M520.6228,-255.0837C517.1469,-257.6953 513.7754,-260.6457 511,-263.8552 487.3381,-291.2186 498.2605,-309.1498 475,-336.8552 472.8387,-339.4296 470.3716,-341.887 467.7677,-344.1918"/>
+<polygon fill="#000000" stroke="#000000" points="465.3521,-341.6414 459.7146,-350.6119 469.7157,-347.1149 465.3521,-341.6414"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge53" class="edge">
+<title>module~int2e_rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M510.6558,-246.7864C490.162,-248.4462 462.8332,-248.819 439.5,-242.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-242.8552C357.4014,-221.8716 325.968,-184.3139 250,-221.8552 216.0988,-238.6083 192.878,-277.9434 181.0682,-302.5788"/>
+<polygon fill="#000000" stroke="#000000" points="177.8149,-301.277 176.8385,-311.8268 184.1807,-304.1885 177.8149,-301.277"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge52" class="edge">
+<title>module~int2e_rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522.2717,-255.0734C518.4129,-257.8042 514.4785,-260.8014 511,-263.8552 493.0262,-279.6348 493.8256,-289.1023 475,-303.8552 460.9145,-314.8935 456.6961,-317.9015 439.5,-322.8552"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.5,-322.8552C409.6181,-331.4634 376.2451,-342.2251 350.7282,-350.6998"/>
+<polygon fill="#000000" stroke="#000000" points="349.3863,-347.4578 341.0085,-353.9434 351.6022,-354.0978 349.3863,-347.4578"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge57" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M406.4922,-116.7844C365.6357,-111.2028 295.855,-108.2163 250,-141.8552 197.3008,-180.5149 179.8562,-262.1366 174.3679,-301.5832"/>
+<polygon fill="#000000" stroke="#000000" points="170.8934,-301.1613 173.1176,-311.5201 177.8387,-302.0353 170.8934,-301.1613"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge56" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M406.2317,-133.0524C391.5982,-137.5378 374.1136,-142.897 358.0322,-147.8262"/>
+<polygon fill="#000000" stroke="#000000" points="356.7739,-144.5511 348.2386,-150.8281 358.8253,-151.2438 356.7739,-144.5511"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node22" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-52.8552 266.5,-52.8552 266.5,-28.8552 351.5,-28.8552 351.5,-52.8552"/>
+<text text-anchor="middle" x="309" y="-38.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge54" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M421.7961,-110.6297C415.9935,-106.4293 409.601,-101.5895 404,-96.8552 386.9571,-82.4498 386.9466,-73.6451 368,-61.8552 365.2306,-60.1319 362.3001,-58.5242 359.2842,-57.0285"/>
+<polygon fill="#000000" stroke="#000000" points="360.6116,-53.7878 350.0562,-52.8743 357.7381,-60.1708 360.6116,-53.7878"/>
+</g>
+<!-- comm_PAR -->
+<g id="module~~hf_gradient_mod~~UsesGraph_node23" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-94.8552 273,-94.8552 273,-70.8552 345,-70.8552 345,-94.8552"/>
+<text text-anchor="middle" x="309" y="-80.4552" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge55" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M406.2317,-112.658C390.7026,-107.8982 371.9628,-102.1542 355.0964,-96.9844"/>
+<polygon fill="#000000" stroke="#000000" points="356.0073,-93.6029 345.4206,-94.0186 353.9559,-100.2956 356.0073,-93.6029"/>
+</g>
+<!-- module~libint_f&#45;&gt;iso_c_binding -->
+<g id="module~~hf_gradient_mod~~UsesGraph_edge58" class="edge">
+<title>module~libint_f&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.943,-326.9187C270.7098,-329.886 258.3706,-335.0111 250,-343.8552 211.1392,-384.9148 238.7322,-415.0185 214,-465.8552 207.316,-479.5942 197.5143,-493.5836 189.0606,-504.4901"/>
+<polygon fill="#000000" stroke="#000000" points="186.1597,-502.5139 182.6553,-512.5123 191.63,-506.8816 186.1597,-502.5139"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panmodulehf_gradient_modUsesGraph = svgPanZoom('#modulehf_gradient_modUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-module_name~8"></span>
+              character(len=*),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>module_name</strong></td>
+<td> =</td>
+                <td>&#34;hf_gradient_mod&#34;</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+        <section>
+          <h2>Derived Types</h2>
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-grd2_hf_compute_data_t"></span>
+      <h3>
+        type, public, abstract, extends(<a href='../type/grd2_compute_data_t.html'>grd2_compute_data_t</a>)&nbsp;::&nbsp;
+        <a href='../type/grd2_hf_compute_data_t.html'>grd2_hf_compute_data_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-attenuated~3"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>attenuated</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mu~7"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mu</strong></td>
+<td> =</td>
+                <td>1.0d99</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale~5"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale2"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale2</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coulscale"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>coulscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cur_pass~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cur_pass</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-da~6"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>da</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-db~2"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>db</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2a"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2a</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2b"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2b</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~37"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure(<a href='../interface/grd2_compute_data_t_init.html'>grd2_compute_data_t_init</a>), public, deferred, pass ::
+  <strong><a href='../type/grd2_compute_data_t.html#boundprocedure-init~23'>init</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/grd2_compute_data_t_clean.html'>grd2_compute_data_t_clean</a>), public, deferred, pass ::
+  <strong><a href='../type/grd2_compute_data_t.html#boundprocedure-clean~25'>clean</a></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure(<a href='../interface/grd2_compute_data_t_get_density.html'>grd2_compute_data_t_get_density</a>), public, deferred, pass ::
+  <strong><a href='../type/grd2_compute_data_t.html#boundprocedure-get_density~6'>get_density</a></strong></td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-grd2_rhf_compute_data_t"></span>
+      <h3>
+        type, public, extends(<a href='../type/grd2_hf_compute_data_t.html'>grd2_hf_compute_data_t</a>)&nbsp;::&nbsp;
+        <a href='../type/grd2_rhf_compute_data_t.html'>grd2_rhf_compute_data_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-attenuated~3"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>attenuated</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mu~7"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mu</strong></td>
+<td> =</td>
+                <td>1.0d99</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale~5"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale2"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale2</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coulscale"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>coulscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cur_pass~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cur_pass</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-da~6"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>da</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-db~2"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>db</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2a"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2a</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2b"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2b</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~37"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_rhf_compute_data_t.html#boundprocedure-init~4'>init</a></strong> => grd2_rhf_compute_data_t_init</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_rhf_compute_data_t.html#boundprocedure-clean~6'>clean</a></strong> => grd2_rhf_compute_data_t_clean</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_rhf_compute_data_t.html#boundprocedure-get_density'>get_density</a></strong> => grd2_rhf_compute_data_t_get_density</td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+              <div class="card">
+    <div class="card-header codesum">
+      <span class="anchor" id="type-grd2_uhf_compute_data_t"></span>
+      <h3>
+        type, public, extends(<a href='../type/grd2_hf_compute_data_t.html'>grd2_hf_compute_data_t</a>)&nbsp;::&nbsp;
+        <a href='../type/grd2_uhf_compute_data_t.html'>grd2_uhf_compute_data_t</a>
+        
+      </h3>
+    </div>
+    <div class="card-body">
+      
+
+        <h4>Components</h4>
+          <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-attenuated~3"></span>
+              logical,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>attenuated</strong></td>
+<td> =</td>
+                <td>.false.</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-mu~7"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>mu</strong></td>
+<td> =</td>
+                <td>1.0d99</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale~5"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-hfscale2"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>hfscale2</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-coulscale"></span>
+              real(kind=dp),
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>coulscale</strong></td>
+<td> =</td>
+                <td>1.0d0</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-cur_pass~2"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>cur_pass</strong></td>
+<td> =</td>
+                <td>1</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-da~6"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>da</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-db~2"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              pointer
+            </td>
+            <td>::</td>
+            <td><strong>db</strong>(:)</td>
+<td>=&gt; </td>
+                <td>null()</td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2a"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2a</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-d2b"></span>
+              real(kind=dp),
+            </td>
+              <td>public,</td>
+            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>d2b</strong>(:,:)</td>
+                <td></td>
+                <td></td>
+            <td>
+
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~37"></span>
+              integer,
+            </td>
+              <td>public</td>
+            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+<td> =</td>
+                <td>0</td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+
+
+        <h4>Type-Bound Procedures</h4>
+        <table class="table table-striped varlist">
+          <tbody>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_uhf_compute_data_t.html#boundprocedure-init~5'>init</a></strong> => grd2_uhf_compute_data_t_init</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_uhf_compute_data_t.html#boundprocedure-clean~7'>clean</a></strong> => grd2_uhf_compute_data_t_clean</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>  procedure, public ::
+  <strong><a href='../type/grd2_uhf_compute_data_t.html#boundprocedure-get_density~2'>get_density</a></strong> => grd2_uhf_compute_data_t_get_density</td>
+                <td></td>
+              </tr>
+          </tbody>
+        </table>
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+        <section>
+          <h2>Subroutines</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-hf_gradient"></span> <h3>public  subroutine <a href='../proc/hf_gradient.html'>hf_gradient</a>(infos)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~26"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

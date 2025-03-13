@@ -1,0 +1,1311 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>c_interop.F90 &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>c_interop.F90
+      <small>Source File</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for source files.">227 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/c_interop.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+            <li class="breadcrumb-item active" aria-current="page">c_interop.F90</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#mods-0"
+         aria-expanded="false" aria-controls="mods-0">
+         <h4 class="card-header bg-primary text-white">Modules</h4>
+      </a>
+      <div id="mods-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/c_interop.html">c_interop</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../sourcefile/c_interop.f90.html#src">c_interop.F90</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    <div class="col-md-9" id='text'>
+      
+      <br>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">This file depends on</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~c_interop.f90~~EfferentGraph Pages: 1 -->
+<svg id="sourcefilec_interopf90EfferentGraph" width="641pt" height="287pt"
+ viewBox="0.00 0.00 641.00 287.25" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~c_interop.f90~~EfferentGraph" class="graph" transform="scale(.7586 .7586) rotate(0) translate(4 374.6679)">
+<title>sourcefile~~c_interop.f90~~EfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-374.6679 841,-374.6679 841,4 -4,4"/>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node1" class="node">
+<title>sourcefile~c_interop.f90</title>
+<polygon fill="none" stroke="#000000" points="837,-292.2656 752,-292.2656 752,-268.2656 837,-268.2656 837,-292.2656"/>
+<text text-anchor="middle" x="794.5" y="-277.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">c_interop.F90</text>
+</g>
+<!-- sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node2" class="node">
+<title>sourcefile~basis_tools.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/basis_tools.f90.html" xlink:title="basis_tools.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="562.5,-155.2656 469.5,-155.2656 469.5,-131.2656 562.5,-131.2656 562.5,-155.2656"/>
+<text text-anchor="middle" x="516" y="-140.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge1" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-23.2656C598.5876,-2.4263 547.7022,-82.0886 526.5113,-121.8947"/>
+<polygon fill="#000000" stroke="#000000" points="523.3656,-120.3583 521.8873,-130.8495 529.5853,-123.57 523.3656,-120.3583"/>
+</g>
+<!-- sourcefile~messages.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node3" class="node">
+<title>sourcefile~messages.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="414.5,-315.2656 326.5,-315.2656 326.5,-291.2656 414.5,-291.2656 414.5,-315.2656"/>
+<text text-anchor="middle" x="370.5" y="-300.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge2" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M774.9727,-292.3063C724.2848,-322.0213 584.4237,-394.1897 469,-362.2656 440.5101,-354.3858 411.9757,-335.8382 393.0078,-321.6255"/>
+<polygon fill="#000000" stroke="#000000" points="395.0577,-318.7865 385.0005,-315.4543 390.7846,-324.331 395.0577,-318.7865"/>
+</g>
+<!-- sourcefile~strings.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node4" class="node">
+<title>sourcefile~strings.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/strings.f90.html" xlink:title="strings.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="102.5,-74.2656 32.5,-74.2656 32.5,-50.2656 102.5,-50.2656 102.5,-74.2656"/>
+<text text-anchor="middle" x="67.5" y="-59.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge3" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M793.2837,-268.0259C787.9359,-222.0192 761.8914,-60.1923 657.5,-23.2656"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M657.5,-23.2656C510.8424,28.6121 462.024,-20.44 308,-42.2656 268.9316,-47.8017 260.9133,-64.157 221.5,-62.2656"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M221.5,-62.2656C185.0842,-60.2353 143.7494,-60.3688 113.0784,-60.9365"/>
+<polygon fill="#000000" stroke="#000000" points="112.6249,-57.4451 102.7,-61.1526 112.7707,-64.4436 112.6249,-57.4451"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node5" class="node">
+<title>sourcefile~tagarray_driver.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/tagarray_driver.f90.html" xlink:title="tagarray_driver.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="716,-313.2656 599,-313.2656 599,-289.2656 716,-289.2656 716,-313.2656"/>
+<text text-anchor="middle" x="657.5" y="-298.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_driver.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge4" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~tagarray_driver.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M751.9033,-286.795C743.6852,-288.0547 734.8838,-289.4039 726.0805,-290.7533"/>
+<polygon fill="#000000" stroke="#000000" points="725.5259,-287.2973 716.1717,-292.2721 726.5866,-294.2165 725.5259,-287.2973"/>
+</g>
+<!-- sourcefile~types.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node6" class="node">
+<title>sourcefile~types.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node6"><a xlink:href="../sourcefile/types.f90.html" xlink:title="types.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="689.5,-271.2656 625.5,-271.2656 625.5,-247.2656 689.5,-247.2656 689.5,-271.2656"/>
+<text text-anchor="middle" x="657.5" y="-256.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge5" class="edge">
+<title>sourcefile~c_interop.f90&#45;&gt;sourcefile~types.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M751.9033,-273.7362C735.2511,-271.1837 716.2038,-268.264 699.5998,-265.7188"/>
+<polygon fill="#000000" stroke="#000000" points="700.0353,-262.2448 689.6204,-264.1892 698.9746,-269.164 700.0353,-262.2448"/>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge11" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M506.7593,-155.4954C491.9077,-174.9179 461.4974,-213.7395 433,-244.2656 419.9695,-258.2238 404.3489,-272.97 391.9838,-284.2285"/>
+<polygon fill="#000000" stroke="#000000" points="389.4693,-281.7831 384.3882,-291.08 394.1579,-286.9809 389.4693,-281.7831"/>
+</g>
+<!-- sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node7" class="node">
+<title>sourcefile~atomic_structure.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node7"><a xlink:href="../sourcefile/atomic_structure.f90.html" xlink:title="atomic_structure.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="433,-75.2656 308,-75.2656 308,-51.2656 433,-51.2656 433,-75.2656"/>
+<text text-anchor="middle" x="370.5" y="-60.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge6" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M499.384,-131.1565C483.0089,-119.5398 457.0229,-101.9409 433,-89.2656 426.4258,-85.7968 419.2849,-82.455 412.2587,-79.3891"/>
+<polygon fill="#000000" stroke="#000000" points="413.3861,-76.0657 402.8126,-75.3933 410.659,-82.5127 413.3861,-76.0657"/>
+</g>
+<!-- sourcefile~basis_library.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node8" class="node">
+<title>sourcefile~basis_library.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node8"><a xlink:href="../sourcefile/basis_library.f90.html" xlink:title="basis_library.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="420.5,-155.2656 320.5,-155.2656 320.5,-131.2656 420.5,-131.2656 420.5,-155.2656"/>
+<text text-anchor="middle" x="370.5" y="-140.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge7" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~basis_library.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.162,-143.2656C456.9039,-143.2656 443.5168,-143.2656 430.6696,-143.2656"/>
+<polygon fill="#000000" stroke="#000000" points="430.514,-139.7657 420.514,-143.2656 430.514,-146.7657 430.514,-139.7657"/>
+</g>
+<!-- sourcefile~constants.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node9" class="node">
+<title>sourcefile~constants.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node9"><a xlink:href="../sourcefile/constants.f90.html" xlink:title="constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="264.5,-157.2656 178.5,-157.2656 178.5,-133.2656 264.5,-133.2656 264.5,-157.2656"/>
+<text text-anchor="middle" x="221.5" y="-142.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge8" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M478.7155,-155.3549C449.5555,-164.36 407.8354,-176.2626 370.5,-183.2656"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-183.2656C350.4737,-187.022 301.3526,-172.7876 264.9546,-160.682"/>
+<polygon fill="#000000" stroke="#000000" points="265.6549,-157.2244 255.0607,-157.3408 263.4152,-163.8564 265.6549,-157.2244"/>
+</g>
+<!-- sourcefile~constants_io.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node10" class="node">
+<title>sourcefile~constants_io.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node10"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="272,-199.2656 171,-199.2656 171,-175.2656 272,-175.2656 272,-199.2656"/>
+<text text-anchor="middle" x="221.5" y="-184.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge9" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-183.2656C341.8581,-188.638 309.5824,-190.0578 282.4123,-189.9629"/>
+<polygon fill="#000000" stroke="#000000" points="282.3032,-186.4617 272.2673,-189.8575 282.2304,-193.4613 282.3032,-186.4617"/>
+</g>
+<!-- sourcefile~elements.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node11" class="node">
+<title>sourcefile~elements.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node11"><a xlink:href="../sourcefile/elements.f90.html" xlink:title="elements.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="264,-115.2656 179,-115.2656 179,-91.2656 264,-91.2656 264,-115.2656"/>
+<text text-anchor="middle" x="221.5" y="-100.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">elements.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge10" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M473.6247,-131.17C460.6761,-127.8467 446.334,-124.5367 433,-122.2656 379.448,-113.1445 317.4735,-108.2287 274.5141,-105.6989"/>
+<polygon fill="#000000" stroke="#000000" points="274.4727,-102.1911 264.291,-105.1208 274.0774,-109.1799 274.4727,-102.1911"/>
+</g>
+<!-- sourcefile~parallel.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node13" class="node">
+<title>sourcefile~parallel.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node13"><a xlink:href="../sourcefile/parallel.f90.html" xlink:title="parallel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="408.5,-235.2656 332.5,-235.2656 332.5,-211.2656 408.5,-211.2656 408.5,-235.2656"/>
+<text text-anchor="middle" x="370.5" y="-220.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge12" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M499.384,-155.3747C483.0089,-166.9914 457.0229,-184.5903 433,-197.2656 426.4258,-200.7344 419.2849,-204.0762 412.2587,-207.1421"/>
+<polygon fill="#000000" stroke="#000000" points="410.659,-204.0185 402.8126,-211.1379 413.3861,-210.4655 410.659,-204.0185"/>
+</g>
+<!-- sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node14" class="node">
+<title>sourcefile~precision.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node14"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="109.5,-216.2656 25.5,-216.2656 25.5,-192.2656 109.5,-192.2656 109.5,-216.2656"/>
+<text text-anchor="middle" x="67.5" y="-201.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge13" class="edge">
+<title>sourcefile~basis_tools.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M370.5,-183.2656C341.9647,-188.618 334.0835,-189.5154 308,-202.2656 265.7367,-222.9248 267.7575,-271.8233 221.5,-263.2656"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M221.5,-263.2656C177.9321,-255.2054 130.7631,-235.3302 100.2673,-220.8697"/>
+<polygon fill="#000000" stroke="#000000" points="101.505,-217.5808 90.9776,-216.3868 98.4627,-223.8851 101.505,-217.5808"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge14" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M354.836,-291.0708C328.6103,-270.6535 275.678,-229.4444 244.9817,-205.5467"/>
+<polygon fill="#000000" stroke="#000000" points="246.9949,-202.6784 236.9541,-199.297 242.6947,-208.2018 246.9949,-202.6784"/>
+</g>
+<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge15" class="edge">
+<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M332.2934,-291.2113C302.4184,-282.2249 259.6887,-270.3306 221.5,-263.2656"/>
+</g>
+<!-- sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge16" class="edge">
+<title>sourcefile~tagarray_driver.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M598.7287,-301.6752C547.7447,-302.0304 474.5295,-302.5407 424.8781,-302.8867"/>
+<polygon fill="#000000" stroke="#000000" points="424.6325,-299.3882 414.6572,-302.9579 424.6814,-306.388 424.6325,-299.3882"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge18" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~basis_tools.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M642.6245,-247.0708C617.8253,-226.7407 567.8801,-185.7963 538.6746,-161.854"/>
+<polygon fill="#000000" stroke="#000000" points="540.6287,-158.9301 530.6762,-155.297 536.1908,-164.3436 540.6287,-158.9301"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge17" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~atomic_structure.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M652.4306,-246.9678C640.7597,-220.18 609.3872,-156.2425 563,-122.2656 528.0538,-96.6688 481.8313,-82.0281 443.4392,-73.7344"/>
+<polygon fill="#000000" stroke="#000000" points="443.848,-70.2454 433.348,-71.6598 442.4383,-77.102 443.848,-70.2454"/>
+</g>
+<!-- sourcefile~functionals.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node12" class="node">
+<title>sourcefile~functionals.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node12"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="563,-353.2656 469,-353.2656 469,-329.2656 563,-329.2656 563,-353.2656"/>
+<text text-anchor="middle" x="516" y="-338.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge19" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~functionals.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.2071,-268.9787C616.4813,-272.1036 607.1915,-275.9045 599,-280.2656 576.6862,-292.1451 553.7077,-309.5047 537.6023,-322.6701"/>
+<polygon fill="#000000" stroke="#000000" points="535.2964,-320.0355 529.8466,-329.1212 539.7728,-325.4172 535.2964,-320.0355"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge20" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~parallel.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M625.4478,-261.6758C596.7554,-263.475 553.5458,-265.3014 516,-263.2656"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516,-263.2656C478.9107,-261.2545 438.2739,-249.2015 409.3959,-238.8467"/>
+<polygon fill="#000000" stroke="#000000" points="410.2903,-235.4463 399.6969,-235.2741 407.8708,-242.0149 410.2903,-235.4463"/>
+</g>
+<!-- sourcefile~types.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge21" class="edge">
+<title>sourcefile~types.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M516,-263.2656C385.3031,-256.1788 350.3464,-286.2985 221.5,-263.2656"/>
+</g>
+<!-- sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge22" class="edge">
+<title>sourcefile~atomic_structure.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M307.7585,-63.9919C281.1435,-64.0025 249.7936,-63.6233 221.5,-62.2656"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge26" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M357.8062,-131.1174C333.5456,-109.1829 277.9662,-64.9753 221.5,-62.2656"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge23" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M320.4707,-143.9371C305.7707,-144.1345 289.6409,-144.351 274.7477,-144.5509"/>
+<polygon fill="#000000" stroke="#000000" points="274.6194,-141.0522 264.6673,-144.6862 274.7134,-148.0515 274.6194,-141.0522"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge24" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~constants_io.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M329.7851,-155.2888C311.8818,-160.5757 290.6759,-166.8378 271.7965,-172.4129"/>
+<polygon fill="#000000" stroke="#000000" points="270.765,-169.0681 262.1657,-175.2569 272.7475,-175.7815 270.765,-169.0681"/>
+</g>
+<!-- sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge25" class="edge">
+<title>sourcefile~basis_library.f90&#45;&gt;sourcefile~elements.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M325.7951,-131.2643C309.4573,-126.8783 290.8307,-121.8779 273.8832,-117.3282"/>
+<polygon fill="#000000" stroke="#000000" points="274.6944,-113.9221 264.1288,-114.7096 272.8794,-120.6827 274.6944,-113.9221"/>
+</g>
+<!-- sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge27" class="edge">
+<title>sourcefile~constants.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M189.9642,-157.3475C166.3994,-166.3756 133.9838,-178.7945 108.4221,-188.5877"/>
+<polygon fill="#000000" stroke="#000000" points="107.0796,-185.3538 98.9936,-192.1999 109.584,-191.8905 107.0796,-185.3538"/>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge29" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~strings.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M178.6024,-91.8448C158.0284,-86.3673 133.3838,-79.8061 112.5386,-74.2564"/>
+<polygon fill="#000000" stroke="#000000" points="113.2091,-70.813 102.6452,-71.6224 111.4081,-77.5774 113.2091,-70.813"/>
+</g>
+<!-- sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_node15" class="node">
+<title>sourcefile~physical_constants.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~EfferentGraph_node15"><a xlink:href="../sourcefile/physical_constants.f90.html" xlink:title="physical_constants.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="135,-116.2656 0,-116.2656 0,-92.2656 135,-92.2656 135,-116.2656"/>
+<text text-anchor="middle" x="67.5" y="-101.8656" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge28" class="edge">
+<title>sourcefile~elements.f90&#45;&gt;sourcefile~physical_constants.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M178.6024,-103.5442C168.2083,-103.6117 156.7753,-103.6859 145.3181,-103.7603"/>
+<polygon fill="#000000" stroke="#000000" points="145.246,-100.2606 135.269,-103.8255 145.2915,-107.2604 145.246,-100.2606"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge30" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M469.9629,-329.2422C455.6221,-325.4968 439.6731,-321.3314 424.8211,-317.4525"/>
+<polygon fill="#000000" stroke="#000000" points="425.3073,-313.9622 414.7474,-314.8216 423.5384,-320.735 425.3073,-313.9622"/>
+</g>
+<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge31" class="edge">
+<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M468.6531,-344.3671C425.4897,-345.5898 360.6245,-343.3487 308,-324.2656 263.7755,-308.2286 267.7575,-271.8233 221.5,-263.2656"/>
+</g>
+<!-- sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90 -->
+<g id="sourcefile~~c_interop.f90~~EfferentGraph_edge32" class="edge">
+<title>sourcefile~parallel.f90&#45;&gt;sourcefile~precision.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M338.607,-235.2942C301.9038,-248.5206 243.8207,-267.395 221.5,-263.2656"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var pansourcefilec_interopf90EfferentGraph = svgPanZoom('#sourcefilec_interopf90EfferentGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Files dependent on this one</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: sourcefile~~c_interop.f90~~AfferentGraph Pages: 1 -->
+<svg id="sourcefilec_interopf90AfferentGraph" width="269pt" height="746pt"
+ viewBox="0.00 0.00 269.00 746.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="sourcefile~~c_interop.f90~~AfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 742)">
+<title>sourcefile~~c_interop.f90~~AfferentGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-742 265,-742 265,4 -4,4"/>
+<!-- sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node1" class="node">
+<title>sourcefile~c_interop.f90</title>
+<polygon fill="none" stroke="#000000" points="85,-381 0,-381 0,-357 85,-357 85,-381"/>
+<text text-anchor="middle" x="42.5" y="-366.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">c_interop.F90</text>
+</g>
+<!-- sourcefile~apply_basis.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node2" class="node">
+<title>sourcefile~apply_basis.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/apply_basis.f90.html" xlink:title="apply_basis.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="239.5,-738 142.5,-738 142.5,-714 239.5,-714 239.5,-738"/>
+<text text-anchor="middle" x="191" y="-723.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">apply_basis.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~apply_basis.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge1" class="edge">
+<title>sourcefile~apply_basis.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M142.3946,-718.6911C134.3913,-715.5847 126.822,-711.1943 121,-705 77.563,-658.7855 52.276,-459.1409 44.832,-391.5039"/>
+<polygon fill="#000000" stroke="#000000" points="48.2674,-390.7147 43.7191,-381.1459 41.3075,-391.4626 48.2674,-390.7147"/>
+</g>
+<!-- sourcefile~electric_moments.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node3" class="node">
+<title>sourcefile~electric_moments.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/electric_moments.f90.html" xlink:title="electric_moments.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="256,-696 126,-696 126,-672 256,-672 256,-696"/>
+<text text-anchor="middle" x="191" y="-681.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge2" class="edge">
+<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M132.805,-671.9701C128.4652,-669.5091 124.4451,-666.552 121,-663 82.6512,-623.4619 54.693,-453.2739 45.6416,-391.5068"/>
+<polygon fill="#000000" stroke="#000000" points="49.0605,-390.6915 44.1733,-381.2912 42.1317,-391.6874 49.0605,-390.6915"/>
+</g>
+<!-- sourcefile~get_basis_overlap.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node4" class="node">
+<title>sourcefile~get_basis_overlap.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/get_basis_overlap.f90.html" xlink:title="get_basis_overlap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="256,-654 126,-654 126,-630 256,-630 256,-654"/>
+<text text-anchor="middle" x="191" y="-639.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_basis_overlap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge3" class="edge">
+<title>sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M132.9606,-629.8161C128.5876,-627.3879 124.5173,-624.4805 121,-621 87.6323,-587.9816 57.3934,-446.401 46.6482,-391.1788"/>
+<polygon fill="#000000" stroke="#000000" points="50.0287,-390.2221 44.7103,-381.0589 43.1536,-391.5387 50.0287,-390.2221"/>
+</g>
+<!-- sourcefile~get_states_overlap.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node5" class="node">
+<title>sourcefile~get_states_overlap.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/get_states_overlap.f90.html" xlink:title="get_states_overlap.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="258.5,-612 123.5,-612 123.5,-588 258.5,-588 258.5,-612"/>
+<text text-anchor="middle" x="191" y="-597.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~get_states_overlap.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge4" class="edge">
+<title>sourcefile~get_states_overlap.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M133.8485,-587.9648C129.1753,-585.5091 124.7982,-582.5545 121,-579 66.0855,-527.6092 49.3465,-434.1531 44.4395,-391.4143"/>
+<polygon fill="#000000" stroke="#000000" points="47.8974,-390.8254 43.3886,-381.2378 40.9344,-391.5445 47.8974,-390.8254"/>
+</g>
+<!-- sourcefile~guess_hcore.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node6" class="node">
+<title>sourcefile~guess_hcore.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/guess_hcore.f90.html" xlink:title="guess_hcore.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="242,-570 140,-570 140,-546 242,-546 242,-570"/>
+<text text-anchor="middle" x="191" y="-555.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_hcore.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_hcore.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge5" class="edge">
+<title>sourcefile~guess_hcore.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M139.7859,-548.2309C132.9782,-545.392 126.4724,-541.7282 121,-537 75.7429,-497.8976 54.8305,-427.0715 46.7632,-391.1593"/>
+<polygon fill="#000000" stroke="#000000" points="50.1523,-390.2685 44.6593,-381.2089 43.3038,-391.7166 50.1523,-390.2685"/>
+</g>
+<!-- sourcefile~guess_huckel.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node7" class="node">
+<title>sourcefile~guess_huckel.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/guess_huckel.f90.html" xlink:title="guess_huckel.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="244,-528 138,-528 138,-504 244,-504 244,-528"/>
+<text text-anchor="middle" x="191" y="-513.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge6" class="edge">
+<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M137.7594,-504.5733C131.7824,-502.0005 126.0405,-498.8521 121,-495 85.071,-467.5423 61.5176,-418.5365 50.2529,-390.4166"/>
+<polygon fill="#000000" stroke="#000000" points="53.5177,-389.1551 46.6586,-381.0803 46.9851,-391.6701 53.5177,-389.1551"/>
+</g>
+<!-- sourcefile~guess_json.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node8" class="node">
+<title>sourcefile~guess_json.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/guess_json.f90.html" xlink:title="guess_json.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="237.5,-486 144.5,-486 144.5,-462 237.5,-462 237.5,-486"/>
+<text text-anchor="middle" x="191" y="-471.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_json.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~guess_json.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge7" class="edge">
+<title>sourcefile~guess_json.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M144.3177,-463.7637C136.2148,-460.9494 128.1155,-457.4151 121,-453 94.3521,-436.4654 70.8449,-408.5859 56.6608,-389.5153"/>
+<polygon fill="#000000" stroke="#000000" points="59.3429,-387.2512 50.6479,-381.1975 53.67,-391.3522 59.3429,-387.2512"/>
+</g>
+<!-- sourcefile~hf_energy.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node9" class="node">
+<title>sourcefile~hf_energy.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node9"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="233.5,-444 148.5,-444 148.5,-420 233.5,-420 233.5,-444"/>
+<text text-anchor="middle" x="191" y="-429.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge8" class="edge">
+<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M148.3256,-420.6802C139.1896,-417.8471 129.6791,-414.5815 121,-411 104.0053,-403.9871 85.8564,-394.424 71.2948,-386.1944"/>
+<polygon fill="#000000" stroke="#000000" points="72.7058,-382.9685 62.2918,-381.0192 69.2172,-389.0373 72.7058,-382.9685"/>
+</g>
+<!-- sourcefile~hf_gradient.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node10" class="node">
+<title>sourcefile~hf_gradient.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node10"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="239,-402 143,-402 143,-378 239,-378 239,-402"/>
+<text text-anchor="middle" x="191" y="-387.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge9" class="edge">
+<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M142.7863,-383.1819C127.6414,-381.0402 110.8418,-378.6645 95.391,-376.4795"/>
+<polygon fill="#000000" stroke="#000000" points="95.8548,-373.0104 85.4633,-375.0756 94.8746,-379.9414 95.8548,-373.0104"/>
+</g>
+<!-- sourcefile~int1e.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node11" class="node">
+<title>sourcefile~int1e.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node11"><a xlink:href="../sourcefile/int1e.f90.html" xlink:title="int1e.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="222,-360 160,-360 160,-336 222,-336 222,-360"/>
+<text text-anchor="middle" x="191" y="-345.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~int1e.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge10" class="edge">
+<title>sourcefile~int1e.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M159.8695,-352.4023C141.1472,-355.0499 116.8273,-358.4891 95.1843,-361.5497"/>
+<polygon fill="#000000" stroke="#000000" points="94.5471,-358.1049 85.1357,-362.9707 95.5273,-365.0359 94.5471,-358.1049"/>
+</g>
+<!-- sourcefile~oqp_banner.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node12" class="node">
+<title>sourcefile~oqp_banner.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node12"><a xlink:href="../sourcefile/oqp_banner.f90.html" xlink:title="oqp_banner.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="240,-318 142,-318 142,-294 240,-294 240,-318"/>
+<text text-anchor="middle" x="191" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_banner.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~oqp_banner.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge11" class="edge">
+<title>sourcefile~oqp_banner.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M146.0966,-318.0174C137.6528,-320.6845 128.9754,-323.7089 121,-327 104.0053,-334.0129 85.8564,-343.576 71.2948,-351.8056"/>
+<polygon fill="#000000" stroke="#000000" points="69.2172,-348.9627 62.2918,-356.9808 72.7058,-355.0315 69.2172,-348.9627"/>
+</g>
+<!-- sourcefile~population_analysis.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node13" class="node">
+<title>sourcefile~population_analysis.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node13"><a xlink:href="../sourcefile/population_analysis.f90.html" xlink:title="population_analysis.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="261,-276 121,-276 121,-252 261,-252 261,-276"/>
+<text text-anchor="middle" x="191" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">population_analysis.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~population_analysis.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge12" class="edge">
+<title>sourcefile~population_analysis.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M139.1712,-276.1259C132.823,-278.5896 126.6062,-281.5215 121,-285 94.3521,-301.5346 70.8449,-329.4141 56.6608,-348.4847"/>
+<polygon fill="#000000" stroke="#000000" points="53.67,-346.6478 50.6479,-356.8025 59.3429,-350.7488 53.67,-346.6478"/>
+</g>
+<!-- sourcefile~resp.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node14" class="node">
+<title>sourcefile~resp.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node14"><a xlink:href="../sourcefile/resp.f90.html" xlink:title="resp.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="220,-234 162,-234 162,-210 220,-210 220,-234"/>
+<text text-anchor="middle" x="191" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">resp.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~resp.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge13" class="edge">
+<title>sourcefile~resp.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M161.9313,-225.8779C148.4299,-228.8251 132.7948,-233.9861 121,-243 85.071,-270.4577 61.5176,-319.4635 50.2529,-347.5834"/>
+<polygon fill="#000000" stroke="#000000" points="46.9851,-346.3299 46.6586,-356.9197 53.5177,-348.8449 46.9851,-346.3299"/>
+</g>
+<!-- sourcefile~tdhf_energy.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node15" class="node">
+<title>sourcefile~tdhf_energy.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node15"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="239.5,-192 142.5,-192 142.5,-168 239.5,-168 239.5,-192"/>
+<text text-anchor="middle" x="191" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge14" class="edge">
+<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M142.3063,-188.7601C134.5917,-191.7242 127.1445,-195.6912 121,-201 75.7429,-240.1024 54.8305,-310.9285 46.7632,-346.8407"/>
+<polygon fill="#000000" stroke="#000000" points="43.3038,-346.2834 44.6593,-356.7911 50.1523,-347.7315 43.3038,-346.2834"/>
+</g>
+<!-- sourcefile~tdhf_gradient.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node16" class="node">
+<title>sourcefile~tdhf_gradient.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node16"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="244,-150 138,-150 138,-126 244,-126 244,-150"/>
+<text text-anchor="middle" x="191" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge15" class="edge">
+<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M137.6683,-148.1645C131.5657,-150.9487 125.8173,-154.4918 121,-159 66.0855,-210.3908 49.3465,-303.8469 44.4395,-346.5857"/>
+<polygon fill="#000000" stroke="#000000" points="40.9344,-346.4555 43.3886,-356.7622 47.8974,-347.1746 40.9344,-346.4555"/>
+</g>
+<!-- sourcefile~tdhf_mrsf_energy.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node17" class="node">
+<title>sourcefile~tdhf_mrsf_energy.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node17"><a xlink:href="../sourcefile/tdhf_mrsf_energy.f90.html" xlink:title="tdhf_mrsf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="254.5,-108 127.5,-108 127.5,-84 254.5,-84 254.5,-108"/>
+<text text-anchor="middle" x="191" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge16" class="edge">
+<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M132.9606,-108.1839C128.5876,-110.6121 124.5173,-113.5195 121,-117 87.6323,-150.0184 57.3934,-291.599 46.6482,-346.8212"/>
+<polygon fill="#000000" stroke="#000000" points="43.1536,-346.4613 44.7103,-356.9411 50.0287,-347.7779 43.1536,-346.4613"/>
+</g>
+<!-- sourcefile~tdhf_sf_energy.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node18" class="node">
+<title>sourcefile~tdhf_sf_energy.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node18"><a xlink:href="../sourcefile/tdhf_sf_energy.f90.html" xlink:title="tdhf_sf_energy.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="247,-66 135,-66 135,-42 247,-42 247,-66"/>
+<text text-anchor="middle" x="191" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge17" class="edge">
+<title>sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M134.8298,-64.9289C129.7157,-67.5951 124.9751,-70.9016 121,-75 82.6512,-114.5381 54.693,-284.7261 45.6416,-346.4932"/>
+<polygon fill="#000000" stroke="#000000" points="42.1317,-346.3126 44.1733,-356.7088 49.0605,-347.3085 42.1317,-346.3126"/>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_node19" class="node">
+<title>sourcefile~tdhf_z_vector.f90</title>
+<g id="a_sourcefile~~c_interop.f90~~AfferentGraph_node19"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="243.5,-24 138.5,-24 138.5,0 243.5,0 243.5,-24"/>
+<text text-anchor="middle" x="191" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
+</a>
+</g>
+</g>
+<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~c_interop.f90 -->
+<g id="sourcefile~~c_interop.f90~~AfferentGraph_edge18" class="edge">
+<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~c_interop.f90</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M138.4936,-20.945C131.953,-23.9056 125.8662,-27.8227 121,-33 77.563,-79.2145 52.276,-278.8591 44.832,-346.4961"/>
+<polygon fill="#000000" stroke="#000000" points="41.3075,-346.5374 43.7191,-356.8541 48.2674,-347.2853 41.3075,-346.5374"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="202pt" height="32pt"
+ viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
+<!-- Source File -->
+<g id="node1" class="node">
+<title>Source File</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node2" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a file to a file which it depends on. A file
+is dependent upon another if the latter must be compiled before the former
+can be.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+      <section>
+        <h2><span class="anchor" id="src"></span>Source Code</h2>
+        <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">c_interop</span>
+<a id="ln-2" name="ln-2" href="#ln-2"></a>
+<a id="ln-3" name="ln-3" href="#ln-3"></a><span class="w">  </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<a id="ln-4" name="ln-4" href="#ln-4"></a><span class="w">  </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">without_abort</span>
+<a id="ln-5" name="ln-5" href="#ln-5"></a><span class="c">!  use types, only: oqp_handle_t</span>
+<a id="ln-6" name="ln-6" href="#ln-6"></a><span class="w">  </span><span class="k">use </span><span class="nb">iso_c_binding</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="kt">c_int</span><span class="p">,</span><span class="w"> </span><span class="kt">c_ptr</span><span class="p">,</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">,</span><span class="w"> </span><span class="nb">c_f_pointer</span><span class="p">,</span><span class="w"> </span><span class="nb">c_associated</span><span class="p">,</span><span class="w"> </span><span class="nb">c_null_ptr</span><span class="p">,</span><span class="w"> </span><span class="kt">c_double</span><span class="p">,</span><span class="w"> </span><span class="kt">c_int32_t</span><span class="p">,</span><span class="w"> </span><span class="kt">c_int64_t</span><span class="p">,</span><span class="w"> </span><span class="kt">c_char</span>
+<a id="ln-7" name="ln-7" href="#ln-7"></a>
+<a id="ln-8" name="ln-8" href="#ln-8"></a><span class="kt">  </span><span class="k">implicit none</span>
+<a id="ln-9" name="ln-9" href="#ln-9"></a>
+<a id="ln-10" name="ln-10" href="#ln-10"></a><span class="k">  private</span>
+<a id="ln-11" name="ln-11" href="#ln-11"></a>
+<a id="ln-12" name="ln-12" href="#ln-12"></a><span class="k">  public </span><span class="n">oqp_handle_t</span>
+<a id="ln-13" name="ln-13" href="#ln-13"></a>
+<a id="ln-14" name="ln-14" href="#ln-14"></a><span class="w">  </span><span class="k">public </span><span class="n">oqp_init</span>
+<a id="ln-15" name="ln-15" href="#ln-15"></a><span class="w">  </span><span class="k">public </span><span class="n">oqp_handle_refresh_ptr</span>
+<a id="ln-16" name="ln-16" href="#ln-16"></a><span class="w">  </span><span class="k">public </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-17" name="ln-17" href="#ln-17"></a>
+<a id="ln-18" name="ln-18" href="#ln-18"></a><span class="w">  </span><span class="k">interface </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-19" name="ln-19" href="#ln-19"></a><span class="w">    </span><span class="k">module procedure </span><span class="n">oqp_handle_get_info_f</span>
+<a id="ln-20" name="ln-20" href="#ln-20"></a><span class="w">    </span><span class="k">module procedure </span><span class="n">oqp_handle_get_info_c</span>
+<a id="ln-21" name="ln-21" href="#ln-21"></a><span class="w">  </span><span class="k">end interface </span><span class="n">oqp_handle_get_info</span>
+<a id="ln-22" name="ln-22" href="#ln-22"></a>
+<a id="ln-23" name="ln-23" href="#ln-23"></a>
+<a id="ln-24" name="ln-24" href="#ln-24"></a><span class="w">  </span><span class="k">type</span><span class="p">,</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">oqp_handle_t</span>
+<a id="ln-25" name="ln-25" href="#ln-25"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-26" name="ln-26" href="#ln-26"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xyz</span>
+<a id="ln-27" name="ln-27" href="#ln-27"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">qn</span>
+<a id="ln-28" name="ln-28" href="#ln-28"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mass</span>
+<a id="ln-29" name="ln-29" href="#ln-29"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">grad</span>
+<a id="ln-30" name="ln-30" href="#ln-30"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mol_prop</span>
+<a id="ln-31" name="ln-31" href="#ln-31"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mol_energy</span>
+<a id="ln-32" name="ln-32" href="#ln-32"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dft</span>
+<a id="ln-33" name="ln-33" href="#ln-33"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tddft</span>
+<a id="ln-34" name="ln-34" href="#ln-34"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">control</span>
+<a id="ln-35" name="ln-35" href="#ln-35"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mpiinfo</span>
+<a id="ln-36" name="ln-36" href="#ln-36"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">elshell</span>
+<a id="ln-37" name="ln-37" href="#ln-37"></a><span class="w">  </span><span class="k">end type</span>
+<a id="ln-38" name="ln-38" href="#ln-38"></a>
+<a id="ln-39" name="ln-39" href="#ln-39"></a><span class="k">contains</span>
+<a id="ln-40" name="ln-40" href="#ln-40"></a>
+<a id="ln-41" name="ln-41" href="#ln-41"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-42" name="ln-42" href="#ln-42"></a>
+<a id="ln-43" name="ln-43" href="#ln-43"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_init</span><span class="p">()</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_init&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<a id="ln-44" name="ln-44" href="#ln-44"></a>
+<a id="ln-45" name="ln-45" href="#ln-45"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-46" name="ln-46" href="#ln-46"></a><span class="k">    type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">res</span>
+<a id="ln-47" name="ln-47" href="#ln-47"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-48" name="ln-48" href="#ln-48"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-49" name="ln-49" href="#ln-49"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+<a id="ln-50" name="ln-50" href="#ln-50"></a>
+<a id="ln-51" name="ln-51" href="#ln-51"></a><span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_null_ptr</span>
+<a id="ln-52" name="ln-52" href="#ln-52"></a>
+<a id="ln-53" name="ln-53" href="#ln-53"></a><span class="nb">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-54" name="ln-54" href="#ln-54"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-55" name="ln-55" href="#ln-55"></a>
+<a id="ln-56" name="ln-56" href="#ln-56"></a><span class="k">    allocate</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-57" name="ln-57" href="#ln-57"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-58" name="ln-58" href="#ln-58"></a>
+<a id="ln-59" name="ln-59" href="#ln-59"></a><span class="k">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-60" name="ln-60" href="#ln-60"></a><span class="w">    </span><span class="k">call </span><span class="n">oqp_handle_refresh_ptr</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-61" name="ln-61" href="#ln-61"></a>
+<a id="ln-62" name="ln-62" href="#ln-62"></a><span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-63" name="ln-63" href="#ln-63"></a>
+<a id="ln-64" name="ln-64" href="#ln-64"></a><span class="w">    </span><span class="k">call </span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">new</span><span class="p">(</span><span class="s2">&quot;OQP&quot;</span><span class="p">)</span>
+<a id="ln-65" name="ln-65" href="#ln-65"></a>
+<a id="ln-66" name="ln-66" href="#ln-66"></a><span class="w">  </span><span class="k">end function </span><span class="n">oqp_init</span>
+<a id="ln-67" name="ln-67" href="#ln-67"></a>
+<a id="ln-68" name="ln-68" href="#ln-68"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-69" name="ln-69" href="#ln-69"></a>
+<a id="ln-70" name="ln-70" href="#ln-70"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_clean</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_clean&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-71" name="ln-71" href="#ln-71"></a>
+<a id="ln-72" name="ln-72" href="#ln-72"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-73" name="ln-73" href="#ln-73"></a><span class="k">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+<a id="ln-74" name="ln-74" href="#ln-74"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">),</span><span class="w"> </span><span class="k">value</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-75" name="ln-75" href="#ln-75"></a>
+<a id="ln-76" name="ln-76" href="#ln-76"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">f_handle</span>
+<a id="ln-77" name="ln-77" href="#ln-77"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-78" name="ln-78" href="#ln-78"></a>
+<a id="ln-79" name="ln-79" href="#ln-79"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">f_handle</span><span class="p">)</span>
+<a id="ln-80" name="ln-80" href="#ln-80"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">f_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-81" name="ln-81" href="#ln-81"></a>
+<a id="ln-82" name="ln-82" href="#ln-82"></a><span class="w">    </span><span class="k">call </span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">delete</span><span class="p">()</span>
+<a id="ln-83" name="ln-83" href="#ln-83"></a>
+<a id="ln-84" name="ln-84" href="#ln-84"></a><span class="w">    </span><span class="k">deallocate</span><span class="p">(</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-85" name="ln-85" href="#ln-85"></a>
+<a id="ln-86" name="ln-86" href="#ln-86"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-87" name="ln-87" href="#ln-87"></a>
+<a id="ln-88" name="ln-88" href="#ln-88"></a><span class="k">    deallocate</span><span class="p">(</span><span class="n">f_handle</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-89" name="ln-89" href="#ln-89"></a>
+<a id="ln-90" name="ln-90" href="#ln-90"></a><span class="w">  </span><span class="k">end function </span><span class="n">oqp_clean</span>
+<a id="ln-91" name="ln-91" href="#ln-91"></a>
+<a id="ln-92" name="ln-92" href="#ln-92"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-93" name="ln-93" href="#ln-93"></a>
+<a id="ln-94" name="ln-94" href="#ln-94"></a><span class="w">  </span><span class="k">subroutine </span><span class="n">oqp_handle_refresh_ptr</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-95" name="ln-95" href="#ln-95"></a>
+<a id="ln-96" name="ln-96" href="#ln-96"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-97" name="ln-97" href="#ln-97"></a><span class="k">    type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-98" name="ln-98" href="#ln-98"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-99" name="ln-99" href="#ln-99"></a>
+<a id="ln-100" name="ln-100" href="#ln-100"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-101" name="ln-101" href="#ln-101"></a>
+<a id="ln-102" name="ln-102" href="#ln-102"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">mol_prop</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">)</span>
+<a id="ln-103" name="ln-103" href="#ln-103"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">mol_energy</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">mol_energy</span><span class="p">)</span>
+<a id="ln-104" name="ln-104" href="#ln-104"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">dft</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">dft</span><span class="p">)</span>
+<a id="ln-105" name="ln-105" href="#ln-105"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">control</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">control</span><span class="p">)</span>
+<a id="ln-106" name="ln-106" href="#ln-106"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">tddft</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">tddft</span><span class="p">)</span>
+<a id="ln-107" name="ln-107" href="#ln-107"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">mpiinfo</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">mpiinfo</span><span class="p">)</span>
+<a id="ln-108" name="ln-108" href="#ln-108"></a><span class="w">    </span><span class="n">c_handle</span><span class="p">%</span><span class="n">elshell</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">elshell</span><span class="p">)</span>
+<a id="ln-109" name="ln-109" href="#ln-109"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">allocated</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">))</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-110" name="ln-110" href="#ln-110"></a><span class="k">        </span><span class="n">c_handle</span><span class="p">%</span><span class="n">xyz</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">)</span>
+<a id="ln-111" name="ln-111" href="#ln-111"></a><span class="w">        </span><span class="n">c_handle</span><span class="p">%</span><span class="n">qn</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">)</span>
+<a id="ln-112" name="ln-112" href="#ln-112"></a><span class="w">        </span><span class="n">c_handle</span><span class="p">%</span><span class="n">mass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">mass</span><span class="p">)</span>
+<a id="ln-113" name="ln-113" href="#ln-113"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-114" name="ln-114" href="#ln-114"></a><span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="nb">allocated</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">grad</span><span class="p">))</span><span class="w"> </span><span class="k">then</span>
+<a id="ln-115" name="ln-115" href="#ln-115"></a><span class="k">        </span><span class="n">c_handle</span><span class="p">%</span><span class="n">grad</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">c_loc</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">grad</span><span class="p">)</span>
+<a id="ln-116" name="ln-116" href="#ln-116"></a><span class="w">    </span><span class="k">end if</span>
+<a id="ln-117" name="ln-117" href="#ln-117"></a>
+<a id="ln-118" name="ln-118" href="#ln-118"></a><span class="k">  end subroutine </span><span class="n">oqp_handle_refresh_ptr</span>
+<a id="ln-119" name="ln-119" href="#ln-119"></a>
+<a id="ln-120" name="ln-120" href="#ln-120"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-121" name="ln-121" href="#ln-121"></a>
+<a id="ln-122" name="ln-122" href="#ln-122"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_handle_get_info_f</span><span class="p">(</span><span class="n">f_handle</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<a id="ln-123" name="ln-123" href="#ln-123"></a>
+<a id="ln-124" name="ln-124" href="#ln-124"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-125" name="ln-125" href="#ln-125"></a><span class="k">    type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">f_handle</span>
+<a id="ln-126" name="ln-126" href="#ln-126"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">res</span>
+<a id="ln-127" name="ln-127" href="#ln-127"></a>
+<a id="ln-128" name="ln-128" href="#ln-128"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">f_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">res</span><span class="p">)</span>
+<a id="ln-129" name="ln-129" href="#ln-129"></a>
+<a id="ln-130" name="ln-130" href="#ln-130"></a><span class="w">  </span><span class="k">end function </span><span class="n">oqp_handle_get_info_f</span>
+<a id="ln-131" name="ln-131" href="#ln-131"></a>
+<a id="ln-132" name="ln-132" href="#ln-132"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-133" name="ln-133" href="#ln-133"></a>
+<a id="ln-134" name="ln-134" href="#ln-134"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_handle_get_info_c</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<a id="ln-135" name="ln-135" href="#ln-135"></a>
+<a id="ln-136" name="ln-136" href="#ln-136"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-137" name="ln-137" href="#ln-137"></a><span class="k">    type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-138" name="ln-138" href="#ln-138"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">res</span>
+<a id="ln-139" name="ln-139" href="#ln-139"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">f_handle</span>
+<a id="ln-140" name="ln-140" href="#ln-140"></a>
+<a id="ln-141" name="ln-141" href="#ln-141"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">f_handle</span><span class="p">)</span>
+<a id="ln-142" name="ln-142" href="#ln-142"></a><span class="w">    </span><span class="k">call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">f_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">res</span><span class="p">)</span>
+<a id="ln-143" name="ln-143" href="#ln-143"></a>
+<a id="ln-144" name="ln-144" href="#ln-144"></a><span class="w">  </span><span class="k">end function </span><span class="n">oqp_handle_get_info_c</span>
+<a id="ln-145" name="ln-145" href="#ln-145"></a>
+<a id="ln-146" name="ln-146" href="#ln-146"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-147" name="ln-147" href="#ln-147"></a>
+<a id="ln-148" name="ln-148" href="#ln-148"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_set_atoms</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">natoms</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">z</span><span class="p">,</span><span class="w"> </span><span class="n">q</span><span class="p">,</span><span class="w"> </span><span class="n">mass</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_set_atoms&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-149" name="ln-149" href="#ln-149"></a>
+<a id="ln-150" name="ln-150" href="#ln-150"></a><span class="w">    </span><span class="k">implicit none</span>
+<a id="ln-151" name="ln-151" href="#ln-151"></a><span class="k">    type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-152" name="ln-152" href="#ln-152"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">),</span><span class="w"> </span><span class="k">value</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">natoms</span>
+<a id="ln-153" name="ln-153" href="#ln-153"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="kt">c_double</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">x</span><span class="p">(</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">y</span><span class="p">(</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">z</span><span class="p">(</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">q</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-154" name="ln-154" href="#ln-154"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="kt">c_double</span><span class="p">),</span><span class="w"> </span><span class="k">optional</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">mass</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-155" name="ln-155" href="#ln-155"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+<a id="ln-156" name="ln-156" href="#ln-156"></a>
+<a id="ln-157" name="ln-157" href="#ln-157"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-158" name="ln-158" href="#ln-158"></a>
+<a id="ln-159" name="ln-159" href="#ln-159"></a><span class="w">    </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+<a id="ln-160" name="ln-160" href="#ln-160"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-161" name="ln-161" href="#ln-161"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-162" name="ln-162" href="#ln-162"></a>
+<a id="ln-163" name="ln-163" href="#ln-163"></a><span class="w">    </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">inf</span><span class="p">%</span><span class="n">set_atoms_arr</span><span class="p">(</span><span class="n">natoms</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">z</span><span class="p">,</span><span class="w"> </span><span class="n">q</span><span class="p">,</span><span class="w"> </span><span class="n">mass</span><span class="p">)</span>
+<a id="ln-164" name="ln-164" href="#ln-164"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-165" name="ln-165" href="#ln-165"></a>
+<a id="ln-166" name="ln-166" href="#ln-166"></a><span class="k">    call </span><span class="n">oqp_handle_refresh_ptr</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span>
+<a id="ln-167" name="ln-167" href="#ln-167"></a>
+<a id="ln-168" name="ln-168" href="#ln-168"></a><span class="w">  </span><span class="k">end function </span><span class="n">oqp_set_atoms</span>
+<a id="ln-169" name="ln-169" href="#ln-169"></a>
+<a id="ln-170" name="ln-170" href="#ln-170"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-171" name="ln-171" href="#ln-171"></a>
+<a id="ln-172" name="ln-172" href="#ln-172"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_get_atoms</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">xyz</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">ok</span><span class="p">)</span>
+<a id="ln-173" name="ln-173" href="#ln-173"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-174" name="ln-174" href="#ln-174"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+<a id="ln-175" name="ln-175" href="#ln-175"></a><span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="kt">c_double</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">xyz</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-176" name="ln-176" href="#ln-176"></a>
+<a id="ln-177" name="ln-177" href="#ln-177"></a><span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nat</span>
+<a id="ln-178" name="ln-178" href="#ln-178"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-179" name="ln-179" href="#ln-179"></a>
+<a id="ln-180" name="ln-180" href="#ln-180"></a><span class="w">    </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+<a id="ln-181" name="ln-181" href="#ln-181"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-182" name="ln-182" href="#ln-182"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-183" name="ln-183" href="#ln-183"></a>
+<a id="ln-184" name="ln-184" href="#ln-184"></a><span class="w">    </span><span class="n">ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="ln-185" name="ln-185" href="#ln-185"></a><span class="w">    </span><span class="n">nat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<a id="ln-186" name="ln-186" href="#ln-186"></a><span class="w">    </span><span class="n">xyz</span><span class="p">(:,</span><span class="mi">1</span><span class="p">:</span><span class="n">nat</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span>
+<a id="ln-187" name="ln-187" href="#ln-187"></a>
+<a id="ln-188" name="ln-188" href="#ln-188"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-189" name="ln-189" href="#ln-189"></a>
+<a id="ln-190" name="ln-190" href="#ln-190"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-191" name="ln-191" href="#ln-191"></a>
+<a id="ln-192" name="ln-192" href="#ln-192"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_get_natom</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_get_natom&#39;</span><span class="p">)</span>
+<a id="ln-193" name="ln-193" href="#ln-193"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-194" name="ln-194" href="#ln-194"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<a id="ln-195" name="ln-195" href="#ln-195"></a>
+<a id="ln-196" name="ln-196" href="#ln-196"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-197" name="ln-197" href="#ln-197"></a>
+<a id="ln-198" name="ln-198" href="#ln-198"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-199" name="ln-199" href="#ln-199"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-200" name="ln-200" href="#ln-200"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-201" name="ln-201" href="#ln-201"></a>
+<a id="ln-202" name="ln-202" href="#ln-202"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">ubound</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<a id="ln-203" name="ln-203" href="#ln-203"></a>
+<a id="ln-204" name="ln-204" href="#ln-204"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-205" name="ln-205" href="#ln-205"></a>
+<a id="ln-206" name="ln-206" href="#ln-206"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-207" name="ln-207" href="#ln-207"></a>
+<a id="ln-208" name="ln-208" href="#ln-208"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_get_nbf</span><span class="p">(</span><span class="n">c_handle</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_get_nbf&#39;</span><span class="p">)</span>
+<a id="ln-209" name="ln-209" href="#ln-209"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-210" name="ln-210" href="#ln-210"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<a id="ln-211" name="ln-211" href="#ln-211"></a>
+<a id="ln-212" name="ln-212" href="#ln-212"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-213" name="ln-213" href="#ln-213"></a>
+<a id="ln-214" name="ln-214" href="#ln-214"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-215" name="ln-215" href="#ln-215"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-216" name="ln-216" href="#ln-216"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-217" name="ln-217" href="#ln-217"></a>
+<a id="ln-218" name="ln-218" href="#ln-218"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">inf</span><span class="p">%</span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<a id="ln-219" name="ln-219" href="#ln-219"></a>
+<a id="ln-220" name="ln-220" href="#ln-220"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-221" name="ln-221" href="#ln-221"></a>
+<a id="ln-222" name="ln-222" href="#ln-222"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-223" name="ln-223" href="#ln-223"></a>
+<a id="ln-224" name="ln-224" href="#ln-224"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_get_basis</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">nsh</span><span class="p">,</span><span class="w"> </span><span class="n">nprim</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">am</span><span class="p">,</span><span class="w"> </span><span class="n">at</span><span class="p">,</span><span class="w"> </span><span class="n">cdeg</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">,</span><span class="w"> </span><span class="n">cc</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">ret</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_get_basis&#39;</span><span class="p">)</span>
+<a id="ln-225" name="ln-225" href="#ln-225"></a><span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<a id="ln-226" name="ln-226" href="#ln-226"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-227" name="ln-227" href="#ln-227"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nsh</span><span class="p">,</span><span class="w"> </span><span class="n">nprim</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+<a id="ln-228" name="ln-228" href="#ln-228"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ret</span>
+<a id="ln-229" name="ln-229" href="#ln-229"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">am</span><span class="p">,</span><span class="w"> </span><span class="n">at</span><span class="p">,</span><span class="w"> </span><span class="n">cdeg</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">,</span><span class="w"> </span><span class="n">cc</span>
+<a id="ln-230" name="ln-230" href="#ln-230"></a>
+<a id="ln-231" name="ln-231" href="#ln-231"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-232" name="ln-232" href="#ln-232"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bas</span>
+<a id="ln-233" name="ln-233" href="#ln-233"></a>
+<a id="ln-234" name="ln-234" href="#ln-234"></a><span class="w">    </span><span class="n">ret</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-235" name="ln-235" href="#ln-235"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-236" name="ln-236" href="#ln-236"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-237" name="ln-237" href="#ln-237"></a>
+<a id="ln-238" name="ln-238" href="#ln-238"></a><span class="w">    </span><span class="n">bas</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">inf</span><span class="p">%</span><span class="n">basis</span>
+<a id="ln-239" name="ln-239" href="#ln-239"></a>
+<a id="ln-240" name="ln-240" href="#ln-240"></a><span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bas</span><span class="p">%</span><span class="n">nbf</span>
+<a id="ln-241" name="ln-241" href="#ln-241"></a><span class="w">    </span><span class="n">nprim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bas</span><span class="p">%</span><span class="n">nprim</span>
+<a id="ln-242" name="ln-242" href="#ln-242"></a><span class="w">    </span><span class="n">nsh</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bas</span><span class="p">%</span><span class="n">nshell</span>
+<a id="ln-243" name="ln-243" href="#ln-243"></a>
+<a id="ln-244" name="ln-244" href="#ln-244"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nbf</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-245" name="ln-245" href="#ln-245"></a>
+<a id="ln-246" name="ln-246" href="#ln-246"></a><span class="cp">#define ADDRESSOF(a,b) if(allocated(a))then;b=c_loc(a);else;return;endif</span>
+<a id="ln-247" name="ln-247" href="#ln-247"></a><span class="w">    </span><span class="n">ADDRESSOF</span><span class="p">(</span><span class="n">bas</span><span class="p">%</span><span class="n">ex</span><span class="p">,</span><span class="w">    </span><span class="n">ex</span><span class="p">)</span>
+<a id="ln-248" name="ln-248" href="#ln-248"></a><span class="w">    </span><span class="n">ADDRESSOF</span><span class="p">(</span><span class="n">bas</span><span class="p">%</span><span class="n">cc</span><span class="p">,</span><span class="w">    </span><span class="n">cc</span><span class="p">)</span>
+<a id="ln-249" name="ln-249" href="#ln-249"></a><span class="w">    </span><span class="n">ADDRESSOF</span><span class="p">(</span><span class="n">bas</span><span class="p">%</span><span class="n">am</span><span class="p">,</span><span class="w"> </span><span class="n">am</span><span class="p">)</span>
+<a id="ln-250" name="ln-250" href="#ln-250"></a><span class="w">    </span><span class="n">ADDRESSOF</span><span class="p">(</span><span class="n">bas</span><span class="p">%</span><span class="n">origin</span><span class="p">,</span><span class="w"> </span><span class="n">at</span><span class="p">)</span>
+<a id="ln-251" name="ln-251" href="#ln-251"></a><span class="w">    </span><span class="n">ADDRESSOF</span><span class="p">(</span><span class="n">bas</span><span class="p">%</span><span class="n">ncontr</span><span class="p">,</span><span class="w">   </span><span class="n">cdeg</span><span class="p">)</span>
+<a id="ln-252" name="ln-252" href="#ln-252"></a><span class="cp">#undef ADDRESSOF</span>
+<a id="ln-253" name="ln-253" href="#ln-253"></a>
+<a id="ln-254" name="ln-254" href="#ln-254"></a><span class="w">    </span><span class="n">ret</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-255" name="ln-255" href="#ln-255"></a>
+<a id="ln-256" name="ln-256" href="#ln-256"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-257" name="ln-257" href="#ln-257"></a>
+<a id="ln-258" name="ln-258" href="#ln-258"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-259" name="ln-259" href="#ln-259"></a>
+<a id="ln-260" name="ln-260" href="#ln-260"></a><span class="c">!&gt; @brief Get calculation results from OQP handle</span>
+<a id="ln-261" name="ln-261" href="#ln-261"></a><span class="c">!&gt; @param[in]    c_handle[in]  OQP handle</span>
+<a id="ln-262" name="ln-262" href="#ln-262"></a><span class="c">!&gt; @param[in]    code[in]      Request string</span>
+<a id="ln-263" name="ln-263" href="#ln-263"></a><span class="c">!&gt; @param[in]    v[out]        Pointer to data</span>
+<a id="ln-264" name="ln-264" href="#ln-264"></a><span class="c">!&gt; @return       positive value:  success, returns size of the data</span>
+<a id="ln-265" name="ln-265" href="#ln-265"></a><span class="c">!&gt;               negative values: -1 - handle not initialized;</span>
+<a id="ln-266" name="ln-266" href="#ln-266"></a><span class="c">!&gt;                                -2 - data not available</span>
+<a id="ln-267" name="ln-267" href="#ln-267"></a><span class="c">!&gt;                                -3 - unknown request code</span>
+<a id="ln-268" name="ln-268" href="#ln-268"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_get</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">code</span><span class="p">,</span><span class="w"> </span><span class="n">type_id</span><span class="p">,</span><span class="w"> </span><span class="n">ndims</span><span class="p">,</span><span class="w"> </span><span class="n">dims</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_get&#39;</span><span class="p">)</span>
+<a id="ln-269" name="ln-269" href="#ln-269"></a><span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">c_f_char</span>
+<a id="ln-270" name="ln-270" href="#ln-270"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">tagarray_get_cptr</span>
+<a id="ln-271" name="ln-271" href="#ln-271"></a><span class="w">    </span><span class="k">use </span><span class="n">tagarray_defines</span>
+<a id="ln-272" name="ln-272" href="#ln-272"></a>
+<a id="ln-273" name="ln-273" href="#ln-273"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-274" name="ln-274" href="#ln-274"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<a id="ln-275" name="ln-275" href="#ln-275"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">code</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-276" name="ln-276" href="#ln-276"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">v</span>
+<a id="ln-277" name="ln-277" href="#ln-277"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int32_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">type_id</span>
+<a id="ln-278" name="ln-278" href="#ln-278"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int32_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ndims</span>
+<a id="ln-279" name="ln-279" href="#ln-279"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dims</span><span class="p">(</span><span class="n">TA_DIMENSIONS_LENGTH</span><span class="p">)</span>
+<a id="ln-280" name="ln-280" href="#ln-280"></a>
+<a id="ln-281" name="ln-281" href="#ln-281"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-282" name="ln-282" href="#ln-282"></a><span class="w">    </span><span class="kt">character</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">code_str</span>
+<a id="ln-283" name="ln-283" href="#ln-283"></a>
+<a id="ln-284" name="ln-284" href="#ln-284"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-285" name="ln-285" href="#ln-285"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-286" name="ln-286" href="#ln-286"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-287" name="ln-287" href="#ln-287"></a>
+<a id="ln-288" name="ln-288" href="#ln-288"></a><span class="w">    </span><span class="n">code_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">trim</span><span class="p">(</span><span class="nb">adjustl</span><span class="p">(</span><span class="n">c_f_char</span><span class="p">(</span><span class="n">code</span><span class="p">)))</span>
+<a id="ln-289" name="ln-289" href="#ln-289"></a>
+<a id="ln-290" name="ln-290" href="#ln-290"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tagarray_get_cptr</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">code_str</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="n">type_id</span><span class="p">,</span><span class="w"> </span><span class="n">ndims</span><span class="p">,</span><span class="w"> </span><span class="n">dims</span><span class="p">)</span>
+<a id="ln-291" name="ln-291" href="#ln-291"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">v</span><span class="p">))</span><span class="w">  </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">2</span>
+<a id="ln-292" name="ln-292" href="#ln-292"></a>
+<a id="ln-293" name="ln-293" href="#ln-293"></a>
+<a id="ln-294" name="ln-294" href="#ln-294"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-295" name="ln-295" href="#ln-295"></a>
+<a id="ln-296" name="ln-296" href="#ln-296"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-297" name="ln-297" href="#ln-297"></a>
+<a id="ln-298" name="ln-298" href="#ln-298"></a><span class="c">!&gt; @brief Allocate storage in OQP handle</span>
+<a id="ln-299" name="ln-299" href="#ln-299"></a><span class="c">!&gt; @param[in]    c_handle[in]  OQP handle</span>
+<a id="ln-300" name="ln-300" href="#ln-300"></a><span class="c">!&gt; @param[in]    tag[in]       Tag to store data at</span>
+<a id="ln-301" name="ln-301" href="#ln-301"></a><span class="c">!&gt; @param[in]    v[out]        Pointer to the data</span>
+<a id="ln-302" name="ln-302" href="#ln-302"></a><span class="c">!&gt; @return       positive value:  success, returns size of the data</span>
+<a id="ln-303" name="ln-303" href="#ln-303"></a><span class="c">!&gt;               negative values: -1 - handle not initialized;</span>
+<a id="ln-304" name="ln-304" href="#ln-304"></a><span class="c">!&gt;                                -2 - data not available</span>
+<a id="ln-305" name="ln-305" href="#ln-305"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_alloc</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="p">,</span><span class="w"> </span><span class="n">type_id</span><span class="p">,</span><span class="w"> </span><span class="n">ndims</span><span class="p">,</span><span class="w"> </span><span class="n">dims</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_alloc&#39;</span><span class="p">)</span>
+<a id="ln-306" name="ln-306" href="#ln-306"></a><span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">c_f_char</span>
+<a id="ln-307" name="ln-307" href="#ln-307"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">tagarray_get_cptr</span>
+<a id="ln-308" name="ln-308" href="#ln-308"></a><span class="w">    </span><span class="k">use </span><span class="n">tagarray_defines</span>
+<a id="ln-309" name="ln-309" href="#ln-309"></a>
+<a id="ln-310" name="ln-310" href="#ln-310"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-311" name="ln-311" href="#ln-311"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<a id="ln-312" name="ln-312" href="#ln-312"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tag</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-313" name="ln-313" href="#ln-313"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="kt">c_ptr</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">v</span>
+<a id="ln-314" name="ln-314" href="#ln-314"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int32_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">type_id</span>
+<a id="ln-315" name="ln-315" href="#ln-315"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int32_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ndims</span>
+<a id="ln-316" name="ln-316" href="#ln-316"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">dims</span><span class="p">(</span><span class="n">TA_DIMENSIONS_LENGTH</span><span class="p">)</span>
+<a id="ln-317" name="ln-317" href="#ln-317"></a>
+<a id="ln-318" name="ln-318" href="#ln-318"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-319" name="ln-319" href="#ln-319"></a><span class="w">    </span><span class="kt">character</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tag_str</span>
+<a id="ln-320" name="ln-320" href="#ln-320"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">data_size</span>
+<a id="ln-321" name="ln-321" href="#ln-321"></a>
+<a id="ln-322" name="ln-322" href="#ln-322"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-323" name="ln-323" href="#ln-323"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-324" name="ln-324" href="#ln-324"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-325" name="ln-325" href="#ln-325"></a>
+<a id="ln-326" name="ln-326" href="#ln-326"></a><span class="w">    </span><span class="n">tag_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">trim</span><span class="p">(</span><span class="nb">adjustl</span><span class="p">(</span><span class="n">c_f_char</span><span class="p">(</span><span class="n">tag</span><span class="p">)))</span>
+<a id="ln-327" name="ln-327" href="#ln-327"></a>
+<a id="ln-328" name="ln-328" href="#ln-328"></a><span class="w">    </span><span class="c">! 1. check, if the data already exist, and clean it if yes</span>
+<a id="ln-329" name="ln-329" href="#ln-329"></a><span class="w">    </span><span class="k">call </span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">([</span><span class="n">tag_str</span><span class="p">])</span>
+<a id="ln-330" name="ln-330" href="#ln-330"></a><span class="w">    </span><span class="c">! 2. allocate the memory in container</span>
+<a id="ln-331" name="ln-331" href="#ln-331"></a><span class="w">    </span><span class="k">call </span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">tag_str</span><span class="p">,</span><span class="w"> </span><span class="n">type_id</span><span class="p">,</span><span class="w"> </span><span class="nb">product</span><span class="p">(</span><span class="n">dims</span><span class="p">(:</span><span class="n">ndims</span><span class="p">)),</span><span class="w"> </span><span class="n">dims</span><span class="p">(:</span><span class="n">ndims</span><span class="p">))</span>
+<a id="ln-332" name="ln-332" href="#ln-332"></a><span class="w">    </span><span class="c">! 3. Get the pointer to the freshly allocated data</span>
+<a id="ln-333" name="ln-333" href="#ln-333"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tagarray_get_cptr</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tag_str</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="n">type_id</span><span class="p">,</span><span class="w"> </span><span class="n">ndims</span><span class="p">,</span><span class="w"> </span><span class="n">dims</span><span class="p">,</span><span class="w"> </span><span class="n">data_size</span><span class="p">)</span>
+<a id="ln-334" name="ln-334" href="#ln-334"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">v</span><span class="p">))</span><span class="w">  </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">2</span>
+<a id="ln-335" name="ln-335" href="#ln-335"></a>
+<a id="ln-336" name="ln-336" href="#ln-336"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-337" name="ln-337" href="#ln-337"></a>
+<a id="ln-338" name="ln-338" href="#ln-338"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-339" name="ln-339" href="#ln-339"></a>
+<a id="ln-340" name="ln-340" href="#ln-340"></a><span class="c">!&gt; @brief Clean an entry in OQP handle</span>
+<a id="ln-341" name="ln-341" href="#ln-341"></a><span class="c">!&gt; @param[in]    c_handle[in]  OQP handle</span>
+<a id="ln-342" name="ln-342" href="#ln-342"></a><span class="c">!&gt; @param[in]    tag[in]       Data tag</span>
+<a id="ln-343" name="ln-343" href="#ln-343"></a><span class="c">!&gt; @return       positive value:  success, returns size of the data</span>
+<a id="ln-344" name="ln-344" href="#ln-344"></a><span class="c">!&gt;               negative values: -1 - handle not initialized;</span>
+<a id="ln-345" name="ln-345" href="#ln-345"></a><span class="c">!&gt;                                -2 - tag not found</span>
+<a id="ln-346" name="ln-346" href="#ln-346"></a><span class="c">!&gt;                                -3 - error removing data</span>
+<a id="ln-347" name="ln-347" href="#ln-347"></a><span class="w">  </span><span class="k">function </span><span class="n">oqp_del</span><span class="p">(</span><span class="n">c_handle</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="p">)</span><span class="w"> </span><span class="k">result</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">bind</span><span class="p">(</span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;oqp_del&#39;</span><span class="p">)</span>
+<a id="ln-348" name="ln-348" href="#ln-348"></a><span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">c_f_char</span>
+<a id="ln-349" name="ln-349" href="#ln-349"></a><span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">data_has_tags</span><span class="p">,</span><span class="w"> </span><span class="n">TA_OK</span>
+<a id="ln-350" name="ln-350" href="#ln-350"></a><span class="w">    </span><span class="k">use </span><span class="n">tagarray_defines</span>
+<a id="ln-351" name="ln-351" href="#ln-351"></a>
+<a id="ln-352" name="ln-352" href="#ln-352"></a><span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">oqp_handle_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">c_handle</span>
+<a id="ln-353" name="ln-353" href="#ln-353"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int64_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">n</span>
+<a id="ln-354" name="ln-354" href="#ln-354"></a><span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="kt">c_char</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tag</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<a id="ln-355" name="ln-355" href="#ln-355"></a><span class="w">    </span><span class="kt">integer</span><span class="p">(</span><span class="kt">c_int32_t</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="nb">stat</span>
+<a id="ln-356" name="ln-356" href="#ln-356"></a>
+<a id="ln-357" name="ln-357" href="#ln-357"></a><span class="nb">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">inf</span>
+<a id="ln-358" name="ln-358" href="#ln-358"></a><span class="w">    </span><span class="kt">character</span><span class="p">(:),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tag_str</span>
+<a id="ln-359" name="ln-359" href="#ln-359"></a>
+<a id="ln-360" name="ln-360" href="#ln-360"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span>
+<a id="ln-361" name="ln-361" href="#ln-361"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(.</span><span class="nb">not</span><span class="p">.</span><span class="nb">c_associated</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">))</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-362" name="ln-362" href="#ln-362"></a><span class="k">    call </span><span class="nb">c_f_pointer</span><span class="p">(</span><span class="n">c_handle</span><span class="p">%</span><span class="n">inf</span><span class="p">,</span><span class="w"> </span><span class="n">inf</span><span class="p">)</span>
+<a id="ln-363" name="ln-363" href="#ln-363"></a>
+<a id="ln-364" name="ln-364" href="#ln-364"></a><span class="w">    </span><span class="n">tag_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">trim</span><span class="p">(</span><span class="nb">adjustl</span><span class="p">(</span><span class="n">c_f_char</span><span class="p">(</span><span class="n">tag</span><span class="p">)))</span>
+<a id="ln-365" name="ln-365" href="#ln-365"></a>
+<a id="ln-366" name="ln-366" href="#ln-366"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">2</span>
+<a id="ln-367" name="ln-367" href="#ln-367"></a><span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">tag_str</span><span class="p">],</span><span class="w"> </span><span class="s1">&#39;c_interop&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;oqp_del&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">WITHOUT_ABORT</span><span class="p">,</span><span class="w"> </span><span class="n">status</span><span class="o">=</span><span class="nb">stat</span><span class="p">)</span>
+<a id="ln-368" name="ln-368" href="#ln-368"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">stat</span><span class="w"> </span><span class="o">/=</span><span class="w"> </span><span class="n">TA_OK</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<a id="ln-369" name="ln-369" href="#ln-369"></a>
+<a id="ln-370" name="ln-370" href="#ln-370"></a><span class="k">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mi">3</span>
+<a id="ln-371" name="ln-371" href="#ln-371"></a><span class="w">    </span><span class="k">call </span><span class="n">inf</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">([</span><span class="n">tag_str</span><span class="p">])</span>
+<a id="ln-372" name="ln-372" href="#ln-372"></a>
+<a id="ln-373" name="ln-373" href="#ln-373"></a><span class="w">    </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="ln-374" name="ln-374" href="#ln-374"></a>
+<a id="ln-375" name="ln-375" href="#ln-375"></a><span class="w">  </span><span class="k">end function</span>
+<a id="ln-376" name="ln-376" href="#ln-376"></a>
+<a id="ln-377" name="ln-377" href="#ln-377"></a><span class="c">!--------------------------------------------------------------------------------</span>
+<a id="ln-378" name="ln-378" href="#ln-378"></a><span class="k">end module </span><span class="n">c_interop</span>
+</pre></div>
+
+      </section>
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

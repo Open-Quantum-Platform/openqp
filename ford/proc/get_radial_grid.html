@@ -1,0 +1,656 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_radial_grid &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_radial_grid
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.2% of total for procedures.">37 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/radial_grid_types.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/radial_grid_types.f90.html'>radial_grid_types.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/dft_radial_grid_types.html'>dft_radial_grid_types</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_radial_grid</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine get_radial_grid(ptrad, wtrad, nrad, rad_grid_type, map_grid)  
+</h2>
+    
+
+    <p>@brief Set the radial points and weights
+@param ptrad [inout]  quadrature points
+@param wtrad [inout]  quadrature weights
+@param rad_grid_type [in]  type of radial grid
+@param rad_grid_type [in]  which quadrature to map on the selected grid</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ptrad"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ptrad</strong>(nrad)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-wtrad"></span>
+              real(kind=dp),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>wtrad</strong>(nrad)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nrad~5"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nrad</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-rad_grid_type~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>rad_grid_type</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-map_grid~3"></span>
+              integer,
+            </td>
+<td>intent(in),</td>
+              <td>optional</td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>map_grid</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_radial_grid~~CallsGraph Pages: 1 -->
+<svg id="procget_radial_gridCallsGraph" width="201pt" height="74pt"
+ viewBox="0.00 0.00 201.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_radial_grid~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>proc~~get_radial_grid~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 197,-70 197,4 -4,4"/>
+<!-- proc~get_radial_grid -->
+<g id="proc~~get_radial_grid~~CallsGraph_node1" class="node">
+<title>proc~get_radial_grid</title>
+<polygon fill="none" stroke="#000000" points="92,-45 0,-45 0,-21 92,-21 92,-45"/>
+<text text-anchor="middle" x="46" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_radial_grid</text>
+</g>
+<!-- set -->
+<g id="proc~~get_radial_grid~~CallsGraph_node2" class="node">
+<title>set</title>
+<polygon fill="#777777" stroke="#777777" points="187.5,-66 133.5,-66 133.5,-42 187.5,-42 187.5,-66"/>
+<text text-anchor="middle" x="160.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">set</text>
+</g>
+<!-- proc~get_radial_grid&#45;&gt;set -->
+<g id="proc~~get_radial_grid~~CallsGraph_edge1" class="edge">
+<title>proc~get_radial_grid&#45;&gt;set</title>
+<path fill="none" stroke="#000000" d="M92.2415,-41.481C102.56,-43.3735 113.3744,-45.3569 123.2746,-47.1726"/>
+<polygon fill="#000000" stroke="#000000" points="122.7343,-50.6319 133.2017,-48.9933 123.9972,-43.7467 122.7343,-50.6319"/>
+</g>
+<!-- transform -->
+<g id="proc~~get_radial_grid~~CallsGraph_node3" class="node">
+<title>transform</title>
+<polygon fill="#777777" stroke="#777777" points="193,-24 128,-24 128,0 193,0 193,-24"/>
+<text text-anchor="middle" x="160.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">transform</text>
+</g>
+<!-- proc~get_radial_grid&#45;&gt;transform -->
+<g id="proc~~get_radial_grid~~CallsGraph_edge2" class="edge">
+<title>proc~get_radial_grid&#45;&gt;transform</title>
+<path fill="none" stroke="#000000" d="M92.2415,-24.519C100.7135,-22.9652 109.5198,-21.3501 117.88,-19.8168"/>
+<polygon fill="#000000" stroke="#000000" points="118.5993,-23.2433 127.8038,-17.9967 117.3365,-16.3581 118.5993,-23.2433"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_radial_grid~~CalledByGraph Pages: 1 -->
+<svg id="procget_radial_gridCalledByGraph" width="490pt" height="200pt"
+ viewBox="0.00 0.00 490.00 200.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_radial_grid~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 196)">
+<title>proc~~get_radial_grid~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-196 486,-196 486,4 -4,4"/>
+<!-- proc~get_radial_grid -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node1" class="node">
+<title>proc~get_radial_grid</title>
+<polygon fill="none" stroke="#000000" points="482,-108 390,-108 390,-84 482,-84 482,-108"/>
+<text text-anchor="middle" x="436" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_radial_grid</text>
+</g>
+<!-- proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node2" class="node">
+<title>proc~dft_initialize</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node2"><a xlink:href="../proc/dft_initialize.html" xlink:title="dft_initialize">
+<polygon fill="#d9534f" stroke="#d9534f" points="354,-108 278,-108 278,-84 354,-84 354,-108"/>
+<text text-anchor="middle" x="316" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_initialize</text>
+</a>
+</g>
+</g>
+<!-- proc~dft_initialize&#45;&gt;proc~get_radial_grid -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge1" class="edge">
+<title>proc~dft_initialize&#45;&gt;proc~get_radial_grid</title>
+<path fill="none" stroke="#000000" d="M354.2987,-96C362.296,-96 370.8878,-96 379.3886,-96"/>
+<polygon fill="#000000" stroke="#000000" points="379.6666,-99.5001 389.6666,-96 379.6665,-92.5001 379.6666,-99.5001"/>
+</g>
+<!-- proc~hf_energy -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node3" class="node">
+<title>proc~hf_energy</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node3"><a xlink:href="../proc/hf_energy.html" xlink:title="hf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="220.5,-192 154.5,-192 154.5,-168 220.5,-168 220.5,-192"/>
+<text text-anchor="middle" x="187.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_energy&#45;&gt;proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge2" class="edge">
+<title>proc~hf_energy&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M220.6183,-169.296C227.8824,-166.3903 235.3765,-162.9392 242,-159 262.5561,-146.7747 283.036,-128.7725 297.2217,-115.139"/>
+<polygon fill="#000000" stroke="#000000" points="299.7301,-117.5812 304.4156,-108.0787 294.8269,-112.5852 299.7301,-117.5812"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node4" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node4"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="224,-150 151,-150 151,-126 224,-126 224,-150"/>
+<text text-anchor="middle" x="187.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge3" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.3229,-125.9645C238.4371,-121.3513 254.7251,-116.0276 269.6209,-111.1589"/>
+<polygon fill="#000000" stroke="#000000" points="270.7539,-114.4709 279.1717,-108.0373 268.5791,-107.8173 270.7539,-114.4709"/>
+</g>
+<!-- proc~oqp_tdhf_z_vector -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node5" class="node">
+<title>proc~oqp_tdhf_z_vector</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node5"><a xlink:href="../proc/oqp_tdhf_z_vector.html" xlink:title="oqp_tdhf_z_vector">
+<polygon fill="#d9534f" stroke="#d9534f" points="242,-108 133,-108 133,-84 242,-84 242,-108"/>
+<text text-anchor="middle" x="187.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tdhf_z_vector</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_tdhf_z_vector&#45;&gt;proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge4" class="edge">
+<title>proc~oqp_tdhf_z_vector&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M242.3683,-96C250.8099,-96 259.4722,-96 267.7556,-96"/>
+<polygon fill="#000000" stroke="#000000" points="267.9999,-99.5001 277.9999,-96 267.9998,-92.5001 267.9999,-99.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node6" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node6"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="225.5,-66 149.5,-66 149.5,-42 225.5,-42 225.5,-66"/>
+<text text-anchor="middle" x="187.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge5" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.3229,-66.0355C238.4371,-70.6487 254.7251,-75.9724 269.6209,-80.8411"/>
+<polygon fill="#000000" stroke="#000000" points="268.5791,-84.1827 279.1717,-83.9627 270.7539,-77.5291 268.5791,-84.1827"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node7" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node7"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="229.5,-24 145.5,-24 145.5,0 229.5,0 229.5,-24"/>
+<text text-anchor="middle" x="187.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~dft_initialize -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge6" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~dft_initialize</title>
+<path fill="none" stroke="#000000" d="M224.0721,-24.121C230.2272,-26.7117 236.4223,-29.6828 242,-33 262.5561,-45.2253 283.036,-63.2275 297.2217,-76.861"/>
+<polygon fill="#000000" stroke="#000000" points="294.8269,-79.4148 304.4156,-83.9213 299.7301,-74.4188 294.8269,-79.4148"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node8" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node8"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="93,-66 4,-66 4,-42 93,-42 93,-66"/>
+<text text-anchor="middle" x="48.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge8" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M93.2456,-54C107.9477,-54 124.3498,-54 139.2971,-54"/>
+<polygon fill="#000000" stroke="#000000" points="139.3741,-57.5001 149.374,-54 139.374,-50.5001 139.3741,-57.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node9" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node9"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge9" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M97.1155,-12C109.348,-12 122.5321,-12 134.9477,-12"/>
+<polygon fill="#000000" stroke="#000000" points="135.1584,-15.5001 145.1584,-12 135.1583,-8.5001 135.1584,-15.5001"/>
+</g>
+<!-- proc~tdhf_z_vector_c -->
+<g id="proc~~get_radial_grid~~CalledByGraph_node10" class="node">
+<title>proc~tdhf_z_vector_c</title>
+<g id="a_proc~~get_radial_grid~~CalledByGraph_node10"><a xlink:href="../proc/tdhf_z_vector_c.html" xlink:title="tdhf_z_vector_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="96.5,-108 .5,-108 .5,-84 96.5,-84 96.5,-108"/>
+<text text-anchor="middle" x="48.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector -->
+<g id="proc~~get_radial_grid~~CalledByGraph_edge7" class="edge">
+<title>proc~tdhf_z_vector_c&#45;&gt;proc~oqp_tdhf_z_vector</title>
+<path fill="none" stroke="#000000" d="M96.7254,-96C105.0663,-96 113.8598,-96 122.5576,-96"/>
+<polygon fill="#000000" stroke="#000000" points="122.6914,-99.5001 132.6914,-96 122.6913,-92.5001 122.6914,-99.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

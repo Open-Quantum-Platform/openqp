@@ -1,0 +1,710 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>print_geo &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>print_geo
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for procedures.">13 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/get_basis_overlap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/get_basis_overlap.f90.html'>get_basis_overlap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/get_structures_ao_overlap_mod.html'>get_structures_ao_overlap_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">print_geo</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/print_geo.html#src">print_geo</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine print_geo(basis, text)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/physical_constants.html'>physical_constants</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~print_geo~~UsesGraph Pages: 1 -->
+<svg id="procprint_geoUsesGraph" width="623pt" height="238pt"
+ viewBox="0.00 0.00 623.00 238.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~print_geo~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 234)">
+<title>proc~~print_geo~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-234 619,-234 619,4 -4,4"/>
+<!-- proc~print_geo -->
+<g id="proc~~print_geo~~UsesGraph_node1" class="node">
+<title>proc~print_geo</title>
+<polygon fill="none" stroke="#000000" points="615,-66 552,-66 552,-42 615,-42 615,-66"/>
+<text text-anchor="middle" x="583.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">print_geo</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~print_geo~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~print_geo~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="495,-66 425,-66 425,-42 495,-42 495,-66"/>
+<text text-anchor="middle" x="460" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~print_geo&#45;&gt;module~basis_tools -->
+<g id="proc~~print_geo~~UsesGraph_edge1" class="edge">
+<title>proc~print_geo&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M551.6957,-54C537.6431,-54 520.8604,-54 505.517,-54"/>
+<polygon fill="#000000" stroke="#000000" points="505.1759,-50.5001 495.1758,-54 505.1758,-57.5001 505.1759,-50.5001"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~print_geo~~UsesGraph_node3" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~print_geo~~UsesGraph_node3"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-230 269.5,-230 269.5,-206 348.5,-206 348.5,-230"/>
+<text text-anchor="middle" x="309" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~print_geo&#45;&gt;module~io_constants -->
+<g id="proc~~print_geo~~UsesGraph_edge2" class="edge">
+<title>proc~print_geo&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M563.6736,-66.1417C525.7937,-89.2989 440.4516,-141.2767 368,-184 358.6057,-189.5396 348.3206,-195.5018 339.0066,-200.8627"/>
+<polygon fill="#000000" stroke="#000000" points="337.0145,-197.9706 330.0851,-205.9853 340.5001,-204.0411 337.0145,-197.9706"/>
+</g>
+<!-- module~physical_constants -->
+<g id="proc~~print_geo~~UsesGraph_node4" class="node">
+<title>module~physical_constants</title>
+<g id="a_proc~~print_geo~~UsesGraph_node4"><a xlink:href="../module/physical_constants.html" xlink:title="physical_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="516,-24 404,-24 404,0 516,0 516,-24"/>
+<text text-anchor="middle" x="460" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~print_geo&#45;&gt;module~physical_constants -->
+<g id="proc~~print_geo~~UsesGraph_edge3" class="edge">
+<title>proc~print_geo&#45;&gt;module~physical_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M551.6957,-43.184C537.6252,-38.3989 520.8177,-32.6829 505.4585,-27.4596"/>
+<polygon fill="#000000" stroke="#000000" points="506.2122,-24.0191 495.6177,-24.1129 503.9583,-30.6463 506.2122,-24.0191"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~print_geo~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M452.1142,-66.2273C430.8836,-99.0921 373.7311,-187.1832 368,-192 363.8226,-195.511 359.0967,-198.6276 354.1826,-201.3727"/>
+<polygon fill="#000000" stroke="#000000" points="352.5505,-198.276 345.2119,-205.9178 355.7142,-204.5203 352.5505,-198.276"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~print_geo~~UsesGraph_node5" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~print_geo~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-148 0,-148 0,-124 94,-124 94,-148"/>
+<text text-anchor="middle" x="47" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_geo~~UsesGraph_edge4" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M429.0717,-41.9781C398.9603,-31.1963 351.6296,-16.6715 309,-14"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~print_geo~~UsesGraph_node6" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~print_geo~~UsesGraph_node6"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-66 250,-66 250,-42 368,-42 368,-66"/>
+<text text-anchor="middle" x="309" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~print_geo~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.978,-54C410.9812,-54 394.3492,-54 378.1138,-54"/>
+<polygon fill="#000000" stroke="#000000" points="378.0835,-50.5001 368.0834,-54 378.0834,-57.5001 378.0835,-50.5001"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~print_geo~~UsesGraph_node7" class="node">
+<title>module~constants</title>
+<g id="a_proc~~print_geo~~UsesGraph_node7"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-150 277,-150 277,-126 341,-126 341,-150"/>
+<text text-anchor="middle" x="309" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~print_geo~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M444.8175,-66.2278C427.1795,-79.9862 396.8053,-102.3246 368,-117 362.6006,-119.7508 356.7557,-122.2993 350.9152,-124.603"/>
+<polygon fill="#000000" stroke="#000000" points="349.3138,-121.4649 341.1697,-128.2416 351.7623,-128.0227 349.3138,-121.4649"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~print_geo~~UsesGraph_node8" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~print_geo~~UsesGraph_node8"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-108 282,-108 282,-84 336,-84 336,-108"/>
+<text text-anchor="middle" x="309" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~print_geo~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M424.978,-63.7412C401.3459,-70.3144 370.2019,-78.977 346.1382,-85.6702"/>
+<polygon fill="#000000" stroke="#000000" points="344.9976,-82.3545 336.3012,-88.4063 346.8734,-89.0985 344.9976,-82.3545"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~print_geo~~UsesGraph_node9" class="node">
+<title>module~precision</title>
+<g id="a_proc~~print_geo~~UsesGraph_node9"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-188 141.5,-188 141.5,-164 202.5,-164 202.5,-188"/>
+<text text-anchor="middle" x="172" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~print_geo~~UsesGraph_edge9" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M453.6086,-66.1066C440.8284,-88.9164 409.7278,-137.8611 368,-159 318.9855,-183.8302 254.1765,-184.1672 212.7776,-180.9888"/>
+<polygon fill="#000000" stroke="#000000" points="213.0468,-177.4991 202.7807,-180.1177 212.4391,-184.4726 213.0468,-177.4991"/>
+</g>
+<!-- module~physical_constants&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_geo~~UsesGraph_edge10" class="edge">
+<title>module~physical_constants&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.6601,-14.7708C375.2479,-15.6538 340.2687,-15.9595 309,-14"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-14C229.1542,-8.9963 200.2421,5.2942 130,-33 95.9741,-51.5501 70.7416,-90.3998 57.4945,-114.7266"/>
+<polygon fill="#000000" stroke="#000000" points="54.2483,-113.381 52.7099,-123.8636 60.4495,-116.6284 54.2483,-113.381"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~print_geo~~UsesGraph_node10" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~print_geo~~UsesGraph_node10"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-66 130,-66 130,-42 214,-42 214,-66"/>
+<text text-anchor="middle" x="172" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~print_geo~~UsesGraph_edge11" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-54C241.1722,-54 232.4436,-54 224.0637,-54"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-50.5001 214.0516,-54 224.0516,-57.5001 224.0516,-50.5001"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~print_geo~~UsesGraph_edge12" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-146.9093C257.5772,-152.2633 232.8455,-159.1232 212.2467,-164.8367"/>
+<polygon fill="#000000" stroke="#000000" points="211.2091,-161.4923 202.5084,-167.5378 213.0801,-168.2376 211.2091,-161.4923"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_geo~~UsesGraph_edge14" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7097,-102.8255C262.8013,-107.3592 236.9917,-113.1616 214,-117 177.7704,-123.0484 136.7929,-127.7424 104.4962,-130.9517"/>
+<polygon fill="#000000" stroke="#000000" points="103.946,-127.4886 94.3323,-131.9413 104.6244,-134.4556 103.946,-127.4886"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~print_geo~~UsesGraph_edge15" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8426,-103.1535C271.4632,-106.5206 259.7803,-111.1115 250,-117 231.4051,-128.1956 231.3036,-136.8968 214,-150 210.2847,-152.8135 206.2541,-155.6041 202.2095,-158.2547"/>
+<polygon fill="#000000" stroke="#000000" points="200.0348,-155.4886 193.4499,-163.7885 203.7735,-161.4066 200.0348,-155.4886"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~print_geo~~UsesGraph_edge13" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-87.7022C264.5765,-82.3811 241.5349,-75.3173 221.0312,-69.0315"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-65.6041 211.2057,-66.0193 219.7406,-72.2967 221.7924,-65.6041"/>
+</g>
+<!-- mpi -->
+<g id="proc~~print_geo~~UsesGraph_node11" class="node">
+<title>mpi</title>
+<g id="a_proc~~print_geo~~UsesGraph_node11"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-108 145,-108 145,-84 199,-84 199,-108"/>
+<text text-anchor="middle" x="172" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~print_geo~~UsesGraph_edge16" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-96C261.1051,-96 232.0908,-96 209.0994,-96"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-92.5001 199.0106,-96 209.0105,-99.5001 209.0106,-92.5001"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~print_geo~~UsesGraph_edge17" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-166.2149C127.2958,-161.6947 110.1963,-156.2228 94.4515,-151.1845"/>
+<polygon fill="#000000" stroke="#000000" points="95.4529,-147.8302 84.8619,-148.1158 93.3194,-154.4971 95.4529,-147.8302"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Print geometry information</p>
+<p>@param[in] basis   The basis class containing geometry information
+@param[in] text    A descriptive text for the geometry output</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~73"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-text"></span>
+              character(len=*),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>text</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~print_geo~~CalledByGraph Pages: 1 -->
+<svg id="procprint_geoCalledByGraph" width="462pt" height="32pt"
+ viewBox="0.00 0.00 462.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~print_geo~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~print_geo~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 458,-28 458,4 -4,4"/>
+<!-- proc~print_geo -->
+<g id="proc~~print_geo~~CalledByGraph_node1" class="node">
+<title>proc~print_geo</title>
+<polygon fill="none" stroke="#000000" points="454,-24 391,-24 391,0 454,0 454,-24"/>
+<text text-anchor="middle" x="422.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">print_geo</text>
+</g>
+<!-- proc~get_structures_ao_overlap -->
+<g id="proc~~print_geo~~CalledByGraph_node2" class="node">
+<title>proc~get_structures_ao_overlap</title>
+<g id="a_proc~~print_geo~~CalledByGraph_node2"><a xlink:href="../proc/get_structures_ao_overlap.html" xlink:title="get_structures_ao_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="355,-24 202,-24 202,0 355,0 355,-24"/>
+<text text-anchor="middle" x="278.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap&#45;&gt;proc~print_geo -->
+<g id="proc~~print_geo~~CalledByGraph_edge1" class="edge">
+<title>proc~get_structures_ao_overlap&#45;&gt;proc~print_geo</title>
+<path fill="none" stroke="#000000" d="M355.1378,-12C363.9178,-12 372.6054,-12 380.6755,-12"/>
+<polygon fill="#000000" stroke="#000000" points="380.8847,-15.5001 390.8847,-12 380.8846,-8.5001 380.8847,-15.5001"/>
+</g>
+<!-- proc~get_structures_ao_overlap_c -->
+<g id="proc~~print_geo~~CalledByGraph_node3" class="node">
+<title>proc~get_structures_ao_overlap_c</title>
+<g id="a_proc~~print_geo~~CalledByGraph_node3"><a xlink:href="../proc/get_structures_ao_overlap_c.html" xlink:title="get_structures_ao_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="166,-24 0,-24 0,0 166,0 166,-24"/>
+<text text-anchor="middle" x="83" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_structures_ao_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap -->
+<g id="proc~~print_geo~~CalledByGraph_edge2" class="edge">
+<title>proc~get_structures_ao_overlap_c&#45;&gt;proc~get_structures_ao_overlap</title>
+<path fill="none" stroke="#000000" d="M166.1931,-12C174.616,-12 183.1864,-12 191.6465,-12"/>
+<polygon fill="#000000" stroke="#000000" points="191.894,-15.5001 201.894,-12 191.894,-8.5001 191.894,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">print_geo</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span><span class="w"> </span><span class="n">text</span><span class="p">)</span>
+<span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">    </span><span class="k">use </span><span class="n">physical_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">bohr_to_angstrom</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">text</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span>
+
+<span class="w">    </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="w"> </span><span class="n">fmt</span><span class="o">=</span><span class="s2">&quot;(&amp;</span>
+<span class="s2">              &amp;/26X,17(&#39;=&#39;)&amp;</span>
+<span class="s2">              &amp;/26X,a&amp;</span>
+<span class="s2">              &amp;/26X,17(&#39;=&#39;)&amp;</span>
+<span class="s2">              &amp;/8X,&#39;Atom     Znuc&#39;,11X,&#39;X&#39;,14X,&#39;Y&#39;,14X,&#39;Z&#39;&amp;</span>
+<span class="s2">              &amp;/6X,62(&#39;-&#39;))&quot;</span><span class="p">)</span><span class="w"> </span><span class="n">text</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">(:))</span>
+<span class="w">       </span><span class="k">write</span><span class="p">(</span><span class="n">iw</span><span class="p">,</span><span class="s1">&#39;(7x,i4,5x,f4.1,3(x,f15.9))&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">zn</span><span class="p">(</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="p">%</span><span class="n">xyz</span><span class="p">(</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="n">i</span><span class="p">)</span><span class="o">*</span><span class="n">bohr_to_angstrom</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">  end subroutine </span><span class="n">print_geo</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

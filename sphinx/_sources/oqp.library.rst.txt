@@ -1,0 +1,77 @@
+oqp.library package
+===================
+
+Submodules
+----------
+
+oqp.library.frequency module
+----------------------------
+
+.. automodule:: oqp.library.frequency
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.guess module
+------------------------
+
+.. automodule:: oqp.library.guess
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.ints\_1e module
+---------------------------
+
+.. automodule:: oqp.library.ints_1e
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.libdlfind module
+----------------------------
+
+.. automodule:: oqp.library.libdlfind
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.libscipy module
+---------------------------
+
+.. automodule:: oqp.library.libscipy
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.runfunc module
+--------------------------
+
+.. automodule:: oqp.library.runfunc
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.set\_basis module
+-----------------------------
+
+.. automodule:: oqp.library.set_basis
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+oqp.library.single\_point module
+--------------------------------
+
+.. automodule:: oqp.library.single_point
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: oqp.library
+   :members:
+   :undoc-members:
+   :show-inheritance:

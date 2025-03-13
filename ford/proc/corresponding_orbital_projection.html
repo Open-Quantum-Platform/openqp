@@ -1,0 +1,1276 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>corresponding_orbital_projection &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>corresponding_orbital_projection
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.3% of total for procedures.">43 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/guess.f90.html'>guess.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/guess.html'>guess</a></li>
+            <li class="breadcrumb-item active" aria-current="page">corresponding_orbital_projection</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/corresponding_orbital_projection.html#src">corresponding_orbital_projection</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine corresponding_orbital_projection(vb, sba, va, ndoc, nact, nproj, nbf, l1co, l0)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/eigen.html'>eigen</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~corresponding_orbital_projection~~UsesGraph Pages: 1 -->
+<svg id="proccorresponding_orbital_projectionUsesGraph" width="641pt" height="141pt"
+ viewBox="0.00 0.00 641.00 140.82" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~corresponding_orbital_projection~~UsesGraph" class="graph" transform="scale(.7292 .7292) rotate(0) translate(4 189.1124)">
+<title>proc~~corresponding_orbital_projection~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-189.1124 875,-189.1124 875,4 -4,4"/>
+<!-- proc~corresponding_orbital_projection -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node1" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<polygon fill="none" stroke="#000000" points="871,-82.1124 682,-82.1124 682,-58.1124 871,-58.1124 871,-82.1124"/>
+<text text-anchor="middle" x="776.5" y="-67.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">corresponding_orbital_projection</text>
+</g>
+<!-- module~eigen -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node2" class="node">
+<title>module~eigen</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node2"><a xlink:href="../module/eigen.html" xlink:title="eigen">
+<polygon fill="#337ab7" stroke="#337ab7" points="646,-82.1124 592,-82.1124 592,-58.1124 646,-58.1124 646,-82.1124"/>
+<text text-anchor="middle" x="619" y="-67.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">eigen</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;module~eigen -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge1" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;module~eigen</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M681.7007,-70.1124C672.8323,-70.1124 664.2475,-70.1124 656.4223,-70.1124"/>
+<polygon fill="#000000" stroke="#000000" points="656.2673,-66.6125 646.2672,-70.1124 656.2672,-73.6125 656.2673,-66.6125"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node3" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node3"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="338,-42.1124 251,-42.1124 251,-18.1124 338,-18.1124 338,-42.1124"/>
+<text text-anchor="middle" x="294.5" y="-27.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~mathlib_types -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge2" class="edge">
+<title>module~eigen&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.5,-9.1124C391.964,-9.2029 368.5645,-12.5977 348.2591,-16.6321"/>
+<polygon fill="#000000" stroke="#000000" points="347.3306,-13.2504 338.2561,-18.7189 348.7602,-20.1029 347.3306,-13.2504"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node4" class="node">
+<title>module~messages</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node4"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="327.5,-122.1124 261.5,-122.1124 261.5,-98.1124 327.5,-98.1124 327.5,-122.1124"/>
+<text text-anchor="middle" x="294.5" y="-107.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~messages -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge3" class="edge">
+<title>module~eigen&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.9286,-79.9328C580.8781,-83.7321 567.917,-87.9239 556,-91.1124 510.868,-103.1881 499.4835,-107.4221 453,-112.1124 418.0663,-115.6374 409.1083,-112.554 374,-112.1124 362.2547,-111.9647 349.5356,-111.6943 337.7872,-111.399"/>
+<polygon fill="#000000" stroke="#000000" points="337.8501,-107.8996 327.7616,-111.1356 337.6662,-114.8972 337.8501,-107.8996"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node5" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node5"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="556,-82.1124 489,-82.1124 489,-58.1124 556,-58.1124 556,-82.1124"/>
+<text text-anchor="middle" x="522.5" y="-67.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~oqp_linalg -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge4" class="edge">
+<title>module~eigen&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M591.8626,-70.1124C583.9291,-70.1124 575.0471,-70.1124 566.3567,-70.1124"/>
+<polygon fill="#000000" stroke="#000000" points="566.3114,-66.6125 556.3114,-70.1124 566.3113,-73.6125 566.3114,-66.6125"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node6" class="node">
+<title>module~precision</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node6"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="203,-59.1124 142,-59.1124 142,-35.1124 203,-35.1124 203,-59.1124"/>
+<text text-anchor="middle" x="172.5" y="-44.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~eigen&#45;&gt;module~precision -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge5" class="edge">
+<title>module~eigen&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M595.0133,-57.991C557.3515,-40.1203 481.6041,-8.8263 413.5,-9.1124"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M413.5,-9.1124C341.5764,-2.552 321.3951,7.0299 251,-9.1124 233.2036,-13.1933 214.7554,-21.8611 200.2181,-29.889"/>
+<polygon fill="#000000" stroke="#000000" points="198.2093,-27.0063 191.2759,-35.0175 201.6918,-33.0785 198.2093,-27.0063"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge9" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-98.0005C256.0979,-89.5206 234.3205,-77.987 215,-68.1124 212.2312,-66.6973 209.354,-65.2425 206.4607,-63.7906"/>
+<polygon fill="#000000" stroke="#000000" points="207.7887,-60.5419 197.2773,-59.2146 204.6667,-66.8072 207.7887,-60.5419"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node7" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="215,-185.1124 130,-185.1124 130,-161.1124 215,-161.1124 215,-185.1124"/>
+<text text-anchor="middle" x="172.5" y="-170.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge6" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.9682,-122.2244C256.0979,-130.7043 234.3205,-142.2379 215,-152.1124 212.2312,-153.5275 209.354,-154.9823 206.4607,-156.4343"/>
+<polygon fill="#000000" stroke="#000000" points="204.6667,-153.4177 197.2773,-161.0103 207.7887,-159.683 204.6667,-153.4177"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node8" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="208.5,-143.1124 136.5,-143.1124 136.5,-119.1124 208.5,-119.1124 208.5,-143.1124"/>
+<text text-anchor="middle" x="172.5" y="-128.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge7" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-115.7953C248.3109,-118.063 232.9133,-120.7134 218.6653,-123.166"/>
+<polygon fill="#000000" stroke="#000000" points="217.8032,-119.7628 208.5419,-124.9085 218.9907,-126.6613 217.8032,-119.7628"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node11" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node11"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="212,-101.1124 133,-101.1124 133,-77.1124 212,-77.1124 212,-101.1124"/>
+<text text-anchor="middle" x="172.5" y="-86.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge8" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M261.485,-104.4295C249.3385,-102.3387 235.302,-99.9226 222.0189,-97.6362"/>
+<polygon fill="#000000" stroke="#000000" points="222.5008,-94.1677 212.052,-95.9206 221.3133,-101.0663 222.5008,-94.1677"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node10" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node10"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="446.5,-61.1124 380.5,-61.1124 380.5,-37.1124 446.5,-37.1124 446.5,-61.1124"/>
+<text text-anchor="middle" x="413.5" y="-46.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge10" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-63.6404C478.7628,-61.686 467.4795,-59.5122 456.7965,-57.454"/>
+<polygon fill="#000000" stroke="#000000" points="457.2763,-53.9821 446.7947,-55.527 455.952,-60.8557 457.2763,-53.9821"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node12" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node12"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="453,-103.1124 374,-103.1124 374,-79.1124 453,-79.1124 453,-103.1124"/>
+<text text-anchor="middle" x="413.5" y="-88.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge11" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M488.907,-76.5845C480.8143,-78.1436 471.9967,-79.8424 463.3372,-81.5108"/>
+<polygon fill="#000000" stroke="#000000" points="462.4546,-78.1164 453.2973,-83.4451 463.7789,-84.99 462.4546,-78.1164"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_node9" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~corresponding_orbital_projection~~UsesGraph_node9"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-59.1124 0,-59.1124 0,-35.1124 94,-35.1124 94,-59.1124"/>
+<text text-anchor="middle" x="47" y="-44.7124" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge12" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.7992,-47.1124C130.4618,-47.1124 117.2165,-47.1124 104.2832,-47.1124"/>
+<polygon fill="#000000" stroke="#000000" points="104.0203,-43.6125 94.0202,-47.1124 104.0202,-50.6125 104.0203,-43.6125"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge13" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3519,-43.8199C370.3477,-42.2226 359.0981,-40.4264 348.1182,-38.6733"/>
+<polygon fill="#000000" stroke="#000000" points="348.5807,-35.2029 338.1539,-37.0824 347.477,-42.1154 348.5807,-35.2029"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge14" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.9894,-61.1641C371.9794,-70.3961 346.9226,-83.2404 326.9952,-93.4552"/>
+<polygon fill="#000000" stroke="#000000" points="325.2641,-90.4095 317.9617,-98.0858 328.4573,-96.6388 325.2641,-90.4095"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge15" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M380.3555,-59.8233C356.5912,-66.3082 323.7431,-72.8449 294.5,-70.1124"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M294.5,-70.1124C267.1135,-67.5535 236.7143,-61.8303 213.1115,-56.7335"/>
+<polygon fill="#000000" stroke="#000000" points="213.6311,-53.264 203.1115,-54.5242 212.1209,-60.0991 213.6311,-53.264"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge16" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M389.9894,-79.0608C371.9794,-69.8288 346.9226,-56.9845 326.9952,-46.7696"/>
+<polygon fill="#000000" stroke="#000000" points="328.4573,-43.5861 317.9617,-42.139 325.2641,-49.8154 328.4573,-43.5861"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge17" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.8747,-97.4392C362.2656,-99.2927 349.516,-101.3284 337.6965,-103.2155"/>
+<polygon fill="#000000" stroke="#000000" points="336.9243,-99.7944 327.6012,-104.8274 338.028,-106.7068 336.9243,-99.7944"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~corresponding_orbital_projection~~UsesGraph_edge18" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M373.7818,-82.4319C350.7542,-77.8197 321.1321,-72.6009 294.5,-70.1124"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panproccorresponding_orbital_projectionUsesGraph = svgPanZoom('#proccorresponding_orbital_projectionUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Corresponding orbital projection
+@param[in]     nproj  number of orbitals from <code>vb</code> to projected onto
+@param[in]     l0     number of the first orbitals from the <code>va</code> space to project <code>vb</code> to
+@param[in,out] va     <code>a</code> orbitals on entry,
+                      replaced by corresponding orbitals on exit
+@param[in]     vb     <code>b</code> orbitals on entry, unchanged on exit
+@param[in]     sba    overlap integrals between the two bases,</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+<p>The corresponding orbitals in the <code>b</code> basis are not generated.</p>
+<div class="alert alert-info">
+<p class="alert-title h4">Note</p>
+</div>
+<p>H.F.King, R.E.Stanton, H.Kim, R.E.Wyatt, R.G.Parr J.Chem.Phys. 47, 1936-1941 (1967)</p>
+</div>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-vb~3"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>vb</strong>(l1co,nproj)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-sba"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>sba</strong>(l1co,nbf)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-va~3"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>va</strong>(nbf,l0)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ndoc"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ndoc</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nact"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nact</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nproj"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nproj</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-nbf~29"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>nbf</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-l1co"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>l1co</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-l0~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>l0</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~corresponding_orbital_projection~~CallsGraph Pages: 1 -->
+<svg id="proccorresponding_orbital_projectionCallsGraph" width="595pt" height="455pt"
+ viewBox="0.00 0.00 595.00 454.81" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~corresponding_orbital_projection~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 450.8142)">
+<title>proc~~corresponding_orbital_projection~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-450.8142 591,-450.8142 591,4 -4,4"/>
+<!-- proc~corresponding_orbital_projection -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node1" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<polygon fill="none" stroke="#000000" points="189,-286 0,-286 0,-262 189,-262 189,-286"/>
+<text text-anchor="middle" x="94.5" y="-271.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">corresponding_orbital_projection</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="587,-226 494,-226 494,-202 587,-202 587,-226"/>
+<text text-anchor="middle" x="540.5" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge1" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M103.3659,-286.101C122.4566,-311.1465 170.1898,-368.5323 225,-395 318.6301,-440.2137 371.6912,-473.9798 458,-416 519.1806,-374.9006 535.0187,-279.594 539.097,-236.2165"/>
+<polygon fill="#000000" stroke="#000000" points="542.5944,-236.39 539.9168,-226.1391 535.6174,-235.8224 542.5944,-236.39"/>
+</g>
+<!-- proc~diag_symm_full -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node3" class="node">
+<title>proc~diag_symm_full</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node3"><a xlink:href="../proc/diag_symm_full.html" xlink:title="diag_symm_full">
+<polygon fill="#d9534f" stroke="#d9534f" points="323,-386 228,-386 228,-362 323,-362 323,-386"/>
+<text text-anchor="middle" x="275.5" y="-371.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">diag_symm_full</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~diag_symm_full -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge2" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~diag_symm_full</title>
+<path fill="none" stroke="#000000" d="M116.3328,-286.0623C148.2681,-303.7061 207.8775,-336.6395 244.3906,-356.8125"/>
+<polygon fill="#000000" stroke="#000000" points="243.1442,-360.1225 253.5897,-361.8949 246.5294,-353.9954 243.1442,-360.1225"/>
+</g>
+<!-- proc~oqp_dgemm_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node4" class="node">
+<title>proc~oqp_dgemm_i64</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node4"><a xlink:href="../proc/oqp_dgemm_i64.html" xlink:title="oqp_dgemm_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="326,-307 225,-307 225,-283 326,-283 326,-307"/>
+<text text-anchor="middle" x="275.5" y="-292.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgemm_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dgemm_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge3" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dgemm_i64</title>
+<path fill="none" stroke="#000000" d="M189.2408,-284.992C197.9973,-286.008 206.7007,-287.0178 215.0222,-287.9832"/>
+<polygon fill="#000000" stroke="#000000" points="214.6243,-291.4605 224.9611,-289.1364 215.4311,-284.5071 214.6243,-291.4605"/>
+</g>
+<!-- proc~oqp_dswap_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node5" class="node">
+<title>proc~oqp_dswap_i64</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node5"><a xlink:href="../proc/oqp_dswap_i64.html" xlink:title="oqp_dswap_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="322.5,-265 228.5,-265 228.5,-241 322.5,-241 322.5,-265"/>
+<text text-anchor="middle" x="275.5" y="-250.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dswap_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dswap_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge4" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dswap_i64</title>
+<path fill="none" stroke="#000000" d="M189.2408,-263.008C199.0598,-261.8688 208.812,-260.7373 218.0339,-259.6673"/>
+<polygon fill="#000000" stroke="#000000" points="218.6656,-263.1176 228.1956,-258.4884 217.8588,-256.1643 218.6656,-263.1176"/>
+</g>
+<!-- proc~oqp_dsyrk_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node6" class="node">
+<title>proc~oqp_dsyrk_i64</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node6"><a xlink:href="../proc/oqp_dsyrk_i64.html" xlink:title="oqp_dsyrk_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="319.5,-186 231.5,-186 231.5,-162 319.5,-162 319.5,-186"/>
+<text text-anchor="middle" x="275.5" y="-171.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dsyrk_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dsyrk_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge5" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~oqp_dsyrk_i64</title>
+<path fill="none" stroke="#000000" d="M116.3328,-261.9377C148.2681,-244.2939 207.8775,-211.3605 244.3906,-191.1875"/>
+<polygon fill="#000000" stroke="#000000" points="246.5294,-194.0046 253.5897,-186.1051 243.1442,-187.8775 246.5294,-194.0046"/>
+</g>
+<!-- proc~schmd -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node7" class="node">
+<title>proc~schmd</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node7"><a xlink:href="../proc/schmd.html" xlink:title="schmd">
+<polygon fill="#d9534f" stroke="#d9534f" points="302.5,-86 248.5,-86 248.5,-62 302.5,-62 302.5,-86"/>
+<text text-anchor="middle" x="275.5" y="-71.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">schmd</text>
+</a>
+</g>
+</g>
+<!-- proc~corresponding_orbital_projection&#45;&gt;proc~schmd -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge6" class="edge">
+<title>proc~corresponding_orbital_projection&#45;&gt;proc~schmd</title>
+<path fill="none" stroke="#000000" d="M105.5499,-261.7902C135.9155,-228.237 220.8264,-134.4128 257.8573,-93.4947"/>
+<polygon fill="#000000" stroke="#000000" points="260.4797,-95.8131 264.5947,-86.05 255.2895,-91.116 260.4797,-95.8131"/>
+</g>
+<!-- proc~diag_symm_full&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge8" class="edge">
+<title>proc~diag_symm_full&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M300.194,-386.1206C337.5349,-402.5388 409.1805,-426.3996 458,-395 513.4872,-359.3119 532.103,-276.0921 537.9779,-236.1554"/>
+<polygon fill="#000000" stroke="#000000" points="541.4642,-236.4894 539.3171,-226.1145 534.5257,-235.564 541.4642,-236.4894"/>
+</g>
+<!-- dsyev -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node10" class="node">
+<title>dsyev</title>
+<polygon fill="#777777" stroke="#777777" points="437,-386 383,-386 383,-362 437,-362 437,-386"/>
+<text text-anchor="middle" x="410" y="-371.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyev</text>
+</g>
+<!-- proc~diag_symm_full&#45;&gt;dsyev -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge7" class="edge">
+<title>proc~diag_symm_full&#45;&gt;dsyev</title>
+<path fill="none" stroke="#000000" d="M323.2984,-374C339.4945,-374 357.3374,-374 372.6047,-374"/>
+<polygon fill="#000000" stroke="#000000" points="372.7111,-377.5001 382.711,-374 372.711,-370.5001 372.7111,-377.5001"/>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge10" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M303.9337,-307.0387C341.2078,-320.8856 407.7479,-338.8383 458,-315 492.5195,-298.6248 517.3776,-259.9517 530.3122,-235.4927"/>
+<polygon fill="#000000" stroke="#000000" points="533.5782,-236.7904 534.9735,-226.2879 527.3332,-233.6279 533.5782,-236.7904"/>
+</g>
+<!-- dgemm -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node8" class="node">
+<title>dgemm</title>
+<polygon fill="#777777" stroke="#777777" points="437,-306 383,-306 383,-282 437,-282 437,-306"/>
+<text text-anchor="middle" x="410" y="-291.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgemm</text>
+</g>
+<!-- proc~oqp_dgemm_i64&#45;&gt;dgemm -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge9" class="edge">
+<title>proc~oqp_dgemm_i64&#45;&gt;dgemm</title>
+<path fill="none" stroke="#000000" d="M326.3487,-294.6219C341.7929,-294.5071 358.4662,-294.3832 372.8325,-294.2763"/>
+<polygon fill="#000000" stroke="#000000" points="372.8614,-297.7763 382.835,-294.202 372.8093,-290.7765 372.8614,-297.7763"/>
+</g>
+<!-- proc~oqp_dswap_i64&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge12" class="edge">
+<title>proc~oqp_dswap_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M322.6509,-250.3112C359.6583,-247.7293 412.3738,-243.0098 458,-235 467.9352,-233.2559 478.4367,-230.9491 488.4964,-228.5037"/>
+<polygon fill="#000000" stroke="#000000" points="489.523,-231.8547 498.3715,-226.0277 487.8205,-225.0648 489.523,-231.8547"/>
+</g>
+<!-- dswap -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node9" class="node">
+<title>dswap</title>
+<polygon fill="#777777" stroke="#777777" points="437,-226 383,-226 383,-202 437,-202 437,-226"/>
+<text text-anchor="middle" x="410" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dswap</text>
+</g>
+<!-- proc~oqp_dswap_i64&#45;&gt;dswap -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge11" class="edge">
+<title>proc~oqp_dswap_i64&#45;&gt;dswap</title>
+<path fill="none" stroke="#000000" d="M316.9519,-240.9805C334.8892,-235.7793 355.7127,-229.7413 373.107,-224.6976"/>
+<polygon fill="#000000" stroke="#000000" points="374.2749,-228.0032 382.9046,-221.8567 372.3254,-221.2801 374.2749,-228.0032"/>
+</g>
+<!-- proc~oqp_dsyrk_i64&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge14" class="edge">
+<title>proc~oqp_dsyrk_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M319.6331,-176.7875C356.7518,-179.5631 411.1162,-184.6383 458,-193 467.8213,-194.7516 478.199,-197.0395 488.1569,-199.4591"/>
+<polygon fill="#000000" stroke="#000000" points="487.3882,-202.8746 497.9388,-201.9076 489.088,-196.0841 487.3882,-202.8746"/>
+</g>
+<!-- dsyrk -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node11" class="node">
+<title>dsyrk</title>
+<polygon fill="#777777" stroke="#777777" points="437,-146 383,-146 383,-122 437,-122 437,-146"/>
+<text text-anchor="middle" x="410" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dsyrk</text>
+</g>
+<!-- proc~oqp_dsyrk_i64&#45;&gt;dsyrk -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge13" class="edge">
+<title>proc~oqp_dsyrk_i64&#45;&gt;dsyrk</title>
+<path fill="none" stroke="#000000" d="M315.8544,-161.9987C333.9659,-156.6124 355.1933,-150.2994 372.9026,-145.0327"/>
+<polygon fill="#000000" stroke="#000000" points="374.2856,-148.273 382.873,-142.0675 372.2901,-141.5634 374.2856,-148.273"/>
+</g>
+<!-- proc~schmd&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge15" class="edge">
+<title>proc~schmd&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M302.6113,-74.298C340.1627,-75.8701 408.9183,-83.0289 458,-113 490.2682,-132.7042 515.5432,-169.6785 529.2181,-193.0076"/>
+<polygon fill="#000000" stroke="#000000" points="526.2214,-194.8187 534.1977,-201.7923 532.3111,-191.3667 526.2214,-194.8187"/>
+</g>
+<!-- proc~oqp_dgeqrf_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node12" class="node">
+<title>proc~oqp_dgeqrf_i64</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node12"><a xlink:href="../proc/oqp_dgeqrf_i64.html" xlink:title="oqp_dgeqrf_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="457.5,-66 362.5,-66 362.5,-42 457.5,-42 457.5,-66"/>
+<text text-anchor="middle" x="410" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dgeqrf_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~schmd&#45;&gt;proc~oqp_dgeqrf_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge16" class="edge">
+<title>proc~schmd&#45;&gt;proc~oqp_dgeqrf_i64</title>
+<path fill="none" stroke="#000000" d="M302.7181,-69.9527C317.0273,-67.8249 335.1383,-65.1319 352.3858,-62.5672"/>
+<polygon fill="#000000" stroke="#000000" points="353.0294,-66.01 362.4058,-61.0772 351.9998,-59.0862 353.0294,-66.01"/>
+</g>
+<!-- proc~oqp_dorgqr_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node13" class="node">
+<title>proc~oqp_dorgqr_i64</title>
+<g id="a_proc~~corresponding_orbital_projection~~CallsGraph_node13"><a xlink:href="../proc/oqp_dorgqr_i64.html" xlink:title="oqp_dorgqr_i64">
+<polygon fill="#d9534f" stroke="#d9534f" points="458,-24 362,-24 362,0 458,0 458,-24"/>
+<text text-anchor="middle" x="410" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_dorgqr_i64</text>
+</a>
+</g>
+</g>
+<!-- proc~schmd&#45;&gt;proc~oqp_dorgqr_i64 -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge17" class="edge">
+<title>proc~schmd&#45;&gt;proc~oqp_dorgqr_i64</title>
+<path fill="none" stroke="#000000" d="M300.3896,-61.9582C317.6246,-53.68 341.13,-42.5087 362,-33 365.4299,-31.4373 369.0071,-29.8302 372.5939,-28.2342"/>
+<polygon fill="#000000" stroke="#000000" points="374.283,-31.3144 382.0168,-24.073 371.4552,-24.911 374.283,-31.3144"/>
+</g>
+<!-- proc~oqp_dgeqrf_i64&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge19" class="edge">
+<title>proc~oqp_dgeqrf_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M438.0558,-66.0299C445.061,-69.849 452.2169,-74.5289 458,-80 492.8201,-112.9412 518.6635,-163.672 531.479,-192.3344"/>
+<polygon fill="#000000" stroke="#000000" points="528.4068,-194.0465 535.6036,-201.8219 534.8264,-191.2556 528.4068,-194.0465"/>
+</g>
+<!-- dgeqrf -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node14" class="node">
+<title>dgeqrf</title>
+<polygon fill="#777777" stroke="#777777" points="567.5,-66 513.5,-66 513.5,-42 567.5,-42 567.5,-66"/>
+<text text-anchor="middle" x="540.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dgeqrf</text>
+</g>
+<!-- proc~oqp_dgeqrf_i64&#45;&gt;dgeqrf -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge18" class="edge">
+<title>proc~oqp_dgeqrf_i64&#45;&gt;dgeqrf</title>
+<path fill="none" stroke="#000000" d="M457.8524,-54C472.692,-54 488.8268,-54 502.8689,-54"/>
+<polygon fill="#000000" stroke="#000000" points="503.143,-57.5001 513.1429,-54 503.1429,-50.5001 503.143,-57.5001"/>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;interface~show_message -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge21" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M445.9571,-24.1533C450.3415,-26.6265 454.5004,-29.5534 458,-33 504.1319,-78.4334 526.9434,-154.4046 535.8487,-191.812"/>
+<polygon fill="#000000" stroke="#000000" points="532.4649,-192.7168 538.0885,-201.696 539.2918,-191.1697 532.4649,-192.7168"/>
+</g>
+<!-- dorgqr -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_node15" class="node">
+<title>dorgqr</title>
+<polygon fill="#777777" stroke="#777777" points="567.5,-24 513.5,-24 513.5,0 567.5,0 567.5,-24"/>
+<text text-anchor="middle" x="540.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dorgqr</text>
+</g>
+<!-- proc~oqp_dorgqr_i64&#45;&gt;dorgqr -->
+<g id="proc~~corresponding_orbital_projection~~CallsGraph_edge20" class="edge">
+<title>proc~oqp_dorgqr_i64&#45;&gt;dorgqr</title>
+<path fill="none" stroke="#000000" d="M458.2226,-12C473.0344,-12 489.1047,-12 503.0794,-12"/>
+<polygon fill="#000000" stroke="#000000" points="503.3018,-15.5001 513.3018,-12 503.3017,-8.5001 503.3018,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~corresponding_orbital_projection~~CalledByGraph Pages: 1 -->
+<svg id="proccorresponding_orbital_projectionCalledByGraph" width="570pt" height="32pt"
+ viewBox="0.00 0.00 570.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~corresponding_orbital_projection~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 566,-28 566,4 -4,4"/>
+<!-- proc~corresponding_orbital_projection -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_node1" class="node">
+<title>proc~corresponding_orbital_projection</title>
+<polygon fill="none" stroke="#000000" points="562,-24 373,-24 373,0 562,0 562,-24"/>
+<text text-anchor="middle" x="467.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">corresponding_orbital_projection</text>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_node2" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~corresponding_orbital_projection~~CalledByGraph_node2"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="337,-24 253,-24 253,0 337,0 337,-24"/>
+<text text-anchor="middle" x="295" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_edge1" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~corresponding_orbital_projection</title>
+<path fill="none" stroke="#000000" d="M337.1982,-12C345.1699,-12 353.8278,-12 362.7635,-12"/>
+<polygon fill="#000000" stroke="#000000" points="362.9485,-15.5001 372.9485,-12 362.9484,-8.5001 362.9485,-15.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_node3" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~corresponding_orbital_projection~~CalledByGraph_node3"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_edge2" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M217.3075,-12C225.4629,-12 234.0971,-12 242.5298,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6701,-15.5001 252.6701,-12 242.67,-8.5001 242.6701,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_node4" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~corresponding_orbital_projection~~CalledByGraph_node4"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~corresponding_orbital_projection~~CalledByGraph_edge3" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w"> </span><span class="k">subroutine </span><span class="n">corresponding_orbital_projection</span><span class="p">(</span><span class="n">vb</span><span class="p">,</span><span class="w"> </span><span class="n">sba</span><span class="p">,</span><span class="w"> </span><span class="n">va</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                   </span><span class="n">ndoc</span><span class="p">,</span><span class="w"> </span><span class="n">nact</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">use </span><span class="n">eigen</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">schmd</span><span class="p">,</span><span class="w"> </span><span class="n">diag_symm_full</span>
+
+<span class="w">  </span><span class="k">implicit none</span>
+
+<span class="k">  </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">vb</span><span class="p">(</span><span class="n">l1co</span><span class="p">,</span><span class="n">nproj</span><span class="p">),</span><span class="w"> </span><span class="n">sba</span><span class="p">(</span><span class="n">l1co</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="n">va</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">l0</span><span class="p">)</span>
+<span class="w">  </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ndoc</span><span class="p">,</span><span class="w"> </span><span class="n">nact</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span>
+
+<span class="w">  </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">vaco</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">rhs</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">d</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">tmp</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">scr</span><span class="p">(:)</span>
+<span class="w">  </span><span class="kt">integer</span><span class="p">,</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">iwrk</span><span class="p">(:)</span>
+<span class="w">  </span><span class="kt">logical</span><span class="p">,</span><span class="w"> </span><span class="k">allocatable</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">unused</span><span class="p">(:)</span>
+<span class="w">  </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">ok</span>
+
+<span class="w">  </span><span class="k">allocate</span><span class="p">(</span><span class="n">vaco</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">rhs</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">d</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">l0</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">tmp</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">scr</span><span class="p">(</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">  </span><span class="k">allocate</span><span class="p">(</span><span class="n">iwrk</span><span class="p">(</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">source</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">  </span><span class="k">allocate</span><span class="p">(</span><span class="n">unused</span><span class="p">(</span><span class="n">nbf</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="n">source</span><span class="o">=</span><span class="p">.</span><span class="n">false</span><span class="p">.,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">           </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+
+<span class="c">! Vb^T * Sba</span>
+<span class="w">  </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">vb</span><span class="p">,</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                     </span><span class="n">sba</span><span class="p">,</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="c">! 1. Project core space</span>
+<span class="w">  </span><span class="k">call </span><span class="n">project</span><span class="p">(</span><span class="n">va</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="c">! 2. Project active space</span>
+<span class="w">  </span><span class="k">call </span><span class="n">project</span><span class="p">(</span><span class="n">va</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="o">+</span><span class="n">nact</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="c">! 3. Project virtual space</span>
+<span class="w">  </span><span class="k">call </span><span class="n">project</span><span class="p">(</span><span class="n">va</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">,</span><span class="w"> </span><span class="n">ndoc</span><span class="o">+</span><span class="n">nact</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nproj</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w"> </span><span class="k">contains</span>
+
+<span class="k">  subroutine </span><span class="n">project</span><span class="p">(</span><span class="n">va</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">,</span><span class="w"> </span><span class="n">minmo</span><span class="p">,</span><span class="w"> </span><span class="n">maxmo</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">va</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="n">rhs</span><span class="p">(</span><span class="n">nbf</span><span class="p">,</span><span class="o">*</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">minmo</span><span class="p">,</span><span class="w"> </span><span class="n">maxmo</span><span class="p">,</span><span class="w"> </span><span class="n">l0</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">nmo</span>
+
+<span class="w">    </span><span class="n">nrest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">l0</span><span class="o">-</span><span class="n">minmo</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">    </span><span class="n">nmo</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">maxmo</span><span class="o">-</span><span class="n">minmo</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nrest</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+<span class="k">    if</span><span class="w"> </span><span class="p">(</span><span class="n">nmo</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span>
+
+<span class="c">!   D = Vb^T * Sab * Va</span>
+<span class="w">    </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nmo</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">rhs</span><span class="p">(</span><span class="n">minmo</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">va</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">minmo</span><span class="p">),</span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="c">!   Diagonalize D^T * D</span>
+<span class="c">!   Eigenvalues run 0 to 1, we want the highest ones first,</span>
+<span class="c">!   that is why we use factor -1</span>
+<span class="c">!   We don&#39;t need eigenvalues</span>
+<span class="w">    </span><span class="k">call </span><span class="n">dsyrk</span><span class="p">(</span><span class="s1">&#39;u&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;t&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">nmo</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="o">-</span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">vaco</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">diag_symm_full</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">vaco</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">scr</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span><span class="p">)</span>
+
+<span class="c">!   The near zero overlap part of the space gets scrambled</span>
+<span class="c">!   in the above diagonalization, we can get a symmetry</span>
+<span class="c">!   adapted space by Gram-Schmidt instead.</span>
+<span class="w">    </span><span class="k">call </span><span class="n">schmd</span><span class="p">(</span><span class="n">vaco</span><span class="p">,</span><span class="n">nmo</span><span class="p">,</span><span class="n">nrest</span><span class="p">,</span><span class="n">nbf</span><span class="p">,</span><span class="n">scr</span><span class="p">)</span>
+
+<span class="c">!   Rotate va to corresponding orbital set, a&#39;=a*v,</span>
+<span class="w">    </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">va</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">minmo</span><span class="p">),</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">vaco</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="c">!   Copy projected orbitals back to end of va</span>
+<span class="w">    </span><span class="n">va</span><span class="p">(:,</span><span class="n">minmo</span><span class="p">:</span><span class="n">l0</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tmp</span><span class="p">(:,</span><span class="mi">1</span><span class="p">:</span><span class="n">nrest</span><span class="p">)</span>
+
+<span class="c">!   Get overlap between `b` and the `a&#39;` corresponding set,</span>
+<span class="c">!   D = Vb^T * Sab * VaCO</span>
+<span class="w">    </span><span class="k">call </span><span class="n">dgemm</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;t&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">nrest</span><span class="p">,</span><span class="w"> </span><span class="n">nmo</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">1.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">va</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">minmo</span><span class="p">),</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">                       </span><span class="n">rhs</span><span class="p">(</span><span class="n">minmo</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">               </span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="n">tmp</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="c">!   Permute `a&#39;` set to maximum overlap with `b` set</span>
+<span class="w">    </span><span class="n">unused</span><span class="p">(:</span><span class="n">nmo</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">true</span><span class="p">.</span>
+<span class="w">    </span><span class="k">do </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nmo</span>
+<span class="w">      </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">maxloc</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">tmp</span><span class="p">(:</span><span class="n">nmo</span><span class="p">,</span><span class="n">i</span><span class="p">)),</span><span class="w"> </span><span class="nb">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">mask</span><span class="o">=</span><span class="n">unused</span><span class="p">)</span>
+<span class="w">      </span><span class="n">iwrk</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">j</span>
+<span class="w">      </span><span class="n">unused</span><span class="p">(</span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    call </span><span class="n">reorder_columns</span><span class="p">(</span><span class="n">va</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">minmo</span><span class="p">),</span><span class="n">iwrk</span><span class="p">,</span><span class="n">nmo</span><span class="p">,</span><span class="n">nbf</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine</span>
+
+<span class="k"> end subroutine </span><span class="n">corresponding_orbital_projection</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

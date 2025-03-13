@@ -1,0 +1,1572 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>get_states_overlap &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>get_states_overlap
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for procedures.">56 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/get_states_overlap.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/get_states_overlap.f90.html'>get_states_overlap.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/get_state_overlap_mod.html'>get_state_overlap_mod</a></li>
+            <li class="breadcrumb-item active" aria-current="page">get_states_overlap</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/get_states_overlap.html#src">get_states_overlap</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine get_states_overlap(infos)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='../module/tdhf_mrsf_lib.html'>tdhf_mrsf_lib</a></li>
+                  <li class="list-inline-item"><a href='../module/precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='../module/atomic_structure_m.html'>atomic_structure_m</a></li>
+                  <li class="list-inline-item"><a href='../module/types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='../module/util.html'>util</a></li>
+                  <li class="list-inline-item"><a href='../module/io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/strings.html'>strings</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_states_overlap~~UsesGraph Pages: 1 -->
+<svg id="procget_states_overlapUsesGraph" width="641pt" height="442pt"
+ viewBox="0.00 0.00 641.00 442.21" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_states_overlap~~UsesGraph" class="graph" transform="scale(.6152 .6152) rotate(0) translate(4 714.8442)">
+<title>proc~~get_states_overlap~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-714.8442 1038,-714.8442 1038,4 -4,4"/>
+<!-- proc~get_states_overlap -->
+<g id="proc~~get_states_overlap~~UsesGraph_node1" class="node">
+<title>proc~get_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="1034,-471.8669 922,-471.8669 922,-447.8669 1034,-447.8669 1034,-471.8669"/>
+<text text-anchor="middle" x="978" y="-457.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_states_overlap</text>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_node2" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node2"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-150.8669 250,-150.8669 250,-126.8669 368,-126.8669 368,-150.8669"/>
+<text text-anchor="middle" x="309" y="-136.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge1" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M921.7306,-450.7853C897.0628,-445.0759 868.5459,-436.0142 845.5,-421.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.5,-421.8669C745.3892,-360.4116 822.5989,-253.4237 726.5,-185.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-185.8669C689.903,-160.1395 689.7597,-138.9093 648,-122.8669 546.6996,-83.9513 511.6212,-99.9432 404,-113.8669 388.0444,-115.9312 370.9478,-119.8689 355.7178,-124.019"/>
+<polygon fill="#000000" stroke="#000000" points="354.6829,-120.6743 346.0098,-126.7593 356.5846,-127.411 354.6829,-120.6743"/>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_node3" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node3"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="482.5,-431.8669 412.5,-431.8669 412.5,-407.8669 482.5,-407.8669 482.5,-431.8669"/>
+<text text-anchor="middle" x="447.5" y="-417.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge2" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.5,-421.8669C786.9541,-387.5452 583.9288,-404.7163 492.6124,-414.5661"/>
+<polygon fill="#000000" stroke="#000000" points="492.1252,-411.0984 482.5669,-415.6689 492.8892,-418.0566 492.1252,-411.0984"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_node4" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node4"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-634.8669 269.5,-634.8669 269.5,-610.8669 348.5,-610.8669 348.5,-634.8669"/>
+<text text-anchor="middle" x="309" y="-620.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~io_constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge3" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-656.8669C690.9343,-651.972 461.8253,-634.3987 358.9178,-626.6186"/>
+<polygon fill="#000000" stroke="#000000" points="359.0099,-623.1157 348.7747,-625.8526 358.4827,-630.0958 359.0099,-623.1157"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~get_states_overlap~~UsesGraph_node5" class="node">
+<title>module~messages</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node5"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="480.5,-550.8669 414.5,-550.8669 414.5,-526.8669 480.5,-526.8669 480.5,-550.8669"/>
+<text text-anchor="middle" x="447.5" y="-536.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~messages -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge4" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M973.8419,-471.8691C961.0081,-506.9603 918.4236,-609.8564 845.5,-656.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.5,-656.8669C801.0474,-685.5235 778.895,-664.078 726.5,-656.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-656.8669C682.9972,-650.8796 687.2089,-616.6409 648,-596.8669 633.8367,-589.724 545.246,-565.2176 490.6694,-550.4423"/>
+<polygon fill="#000000" stroke="#000000" points="491.4669,-547.0324 480.9002,-547.8031 489.6412,-553.7901 491.4669,-547.0324"/>
+</g>
+<!-- module~oqp_tagarray_driver -->
+<g id="proc~~get_states_overlap~~UsesGraph_node6" class="node">
+<title>module~oqp_tagarray_driver</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node6"><a xlink:href="../module/oqp_tagarray_driver.html" xlink:title="oqp_tagarray_driver">
+<polygon fill="#337ab7" stroke="#337ab7" points="648,-155.8669 527,-155.8669 527,-131.8669 648,-131.8669 648,-155.8669"/>
+<text text-anchor="middle" x="587.5" y="-141.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_tagarray_driver</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~oqp_tagarray_driver -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge5" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~oqp_tagarray_driver</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-185.8669C706.2891,-171.6588 681.1823,-162.1738 657.8899,-155.878"/>
+<polygon fill="#000000" stroke="#000000" points="658.5925,-152.4453 648.0381,-153.3706 656.8659,-159.2291 658.5925,-152.4453"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_node7" class="node">
+<title>module~precision</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node7"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-312.8669 141.5,-312.8669 141.5,-288.8669 202.5,-288.8669 202.5,-312.8669"/>
+<text text-anchor="middle" x="172" y="-298.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge6" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-185.8669C698.6324,-167.297 480.9194,-297.7242 447.5,-299.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-299.8669C386.3324,-306.7815 370.4142,-305.0598 309,-300.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-300.8669C276.739,-298.6644 240.1051,-298.8012 212.8416,-299.4139"/>
+<polygon fill="#000000" stroke="#000000" points="212.4189,-295.9235 202.5119,-299.6787 212.5983,-302.9212 212.4189,-295.9235"/>
+</g>
+<!-- module~strings -->
+<g id="proc~~get_states_overlap~~UsesGraph_node8" class="node">
+<title>module~strings</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node8"><a xlink:href="../module/strings.html" xlink:title="strings">
+<polygon fill="#337ab7" stroke="#337ab7" points="872.5,-212.8669 818.5,-212.8669 818.5,-188.8669 872.5,-188.8669 872.5,-212.8669"/>
+<text text-anchor="middle" x="845.5" y="-198.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~strings -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge7" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~strings</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M971.787,-447.7222C950.8784,-406.8518 882.893,-273.9596 856.3015,-221.9807"/>
+<polygon fill="#000000" stroke="#000000" points="859.37,-220.2939 851.6996,-212.9853 853.1382,-223.4821 859.37,-220.2939"/>
+</g>
+<!-- module~tdhf_mrsf_lib -->
+<g id="proc~~get_states_overlap~~UsesGraph_node9" class="node">
+<title>module~tdhf_mrsf_lib</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node9"><a xlink:href="../module/tdhf_mrsf_lib.html" xlink:title="tdhf_mrsf_lib">
+<polygon fill="#337ab7" stroke="#337ab7" points="886,-509.8669 805,-509.8669 805,-485.8669 886,-485.8669 886,-509.8669"/>
+<text text-anchor="middle" x="845.5" y="-495.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_lib</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge8" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~tdhf_mrsf_lib</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M936.0762,-471.8903C923.3887,-475.529 909.3189,-479.5641 896.1257,-483.3478"/>
+<polygon fill="#000000" stroke="#000000" points="894.8928,-480.0603 886.2452,-486.1815 896.8226,-486.789 894.8928,-480.0603"/>
+</g>
+<!-- module~types -->
+<g id="proc~~get_states_overlap~~UsesGraph_node10" class="node">
+<title>module~types</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node10"><a xlink:href="../module/types.html" xlink:title="types">
+<polygon fill="#337ab7" stroke="#337ab7" points="614.5,-197.8669 560.5,-197.8669 560.5,-173.8669 614.5,-173.8669 614.5,-197.8669"/>
+<text text-anchor="middle" x="587.5" y="-183.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">types</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~types -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge9" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.5,-185.8669C696.9682,-165.1063 654.4881,-168.608 624.2756,-175.106"/>
+<polygon fill="#000000" stroke="#000000" points="623.4709,-171.6997 614.5363,-177.3938 625.0717,-178.5142 623.4709,-171.6997"/>
+</g>
+<!-- module~util -->
+<g id="proc~~get_states_overlap~~UsesGraph_node11" class="node">
+<title>module~util</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node11"><a xlink:href="../module/util.html" xlink:title="util">
+<polygon fill="#337ab7" stroke="#337ab7" points="753.5,-708.8669 699.5,-708.8669 699.5,-684.8669 753.5,-684.8669 753.5,-708.8669"/>
+<text text-anchor="middle" x="726.5" y="-694.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">util</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;module~util -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge10" class="edge">
+<title>proc~get_states_overlap&#45;&gt;module~util</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M845.5,-656.8669C820.4945,-672.9868 788.3227,-683.2885 763.7359,-689.3937"/>
+<polygon fill="#000000" stroke="#000000" points="762.6363,-686.0569 753.7061,-691.758 764.2424,-692.8702 762.6363,-686.0569"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_node14" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node14"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-150.8669 130,-150.8669 130,-126.8669 214,-126.8669 214,-150.8669"/>
+<text text-anchor="middle" x="172" y="-136.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge11" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-138.8669C241.1722,-138.8669 232.4436,-138.8669 224.0637,-138.8669"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-135.367 214.0516,-138.8669 224.0516,-142.367 224.0516,-135.367"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge13" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.7623,-407.6085C413.0838,-403.9595 407.7333,-399.4143 404,-393.8669 345.2516,-306.5707 435.0394,-240.97 368,-159.8669 367.2727,-158.987 366.5057,-158.1439 365.7037,-157.3362"/>
+<polygon fill="#000000" stroke="#000000" points="367.6738,-154.4321 357.6578,-150.978 363.3337,-159.9242 367.6738,-154.4321"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge15" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M442.0926,-431.9146C433.8172,-450.382 417.5454,-486.8139 404,-517.8669 387.7603,-555.0966 397.6104,-574.064 368,-601.8669 364.9237,-604.7555 361.424,-607.2508 357.7,-609.4059"/>
+<polygon fill="#000000" stroke="#000000" points="356.1208,-606.2821 348.6974,-613.8415 359.2146,-612.5614 356.1208,-606.2821"/>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge17" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.3813,-431.8857C399.6215,-445.7574 351.8197,-466.0457 309,-460.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-460.8669C281.6509,-457.5592 271.2724,-459.3712 250,-441.8669 211.3528,-410.0656 188.6282,-353.8495 178.4462,-322.8748"/>
+<polygon fill="#000000" stroke="#000000" points="181.6972,-321.5451 175.3622,-313.0528 175.0187,-323.6421 181.6972,-321.5451"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~get_states_overlap~~UsesGraph_node15" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node15"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-312.8669 0,-312.8669 0,-288.8669 94,-288.8669 94,-312.8669"/>
+<text text-anchor="middle" x="47" y="-298.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge12" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-460.8669C204.8302,-448.2682 105.9286,-360.4191 65.8011,-320.5123"/>
+<polygon fill="#000000" stroke="#000000" points="68.0958,-317.8552 58.5751,-313.2067 63.119,-322.7777 68.0958,-317.8552"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_node16" class="node">
+<title>module~constants</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node16"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-352.8669 277,-352.8669 277,-328.8669 341,-328.8669 341,-352.8669"/>
+<text text-anchor="middle" x="309" y="-338.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge14" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.1629,-407.6963C402.8133,-394.3778 365.2093,-372.9286 338.9194,-357.9328"/>
+<polygon fill="#000000" stroke="#000000" points="340.5545,-354.8362 330.1341,-352.9217 337.0862,-360.9166 340.5545,-354.8362"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~get_states_overlap~~UsesGraph_node20" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node20"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-272.8669 282,-272.8669 282,-248.8669 336,-248.8669 336,-272.8669"/>
+<text text-anchor="middle" x="309" y="-258.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge16" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M420.3517,-407.6683C414.3208,-403.9416 408.4166,-399.3474 404,-393.8669 372.5163,-354.7989 401.8375,-323.9149 368,-286.8669 361.912,-280.2013 353.8044,-275.155 345.5538,-271.3694"/>
+<polygon fill="#000000" stroke="#000000" points="346.8604,-268.1225 336.2779,-267.6118 344.2322,-274.6104 346.8604,-268.1225"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge20" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M417.9741,-551.0616C413.0985,-553.6441 408.2532,-556.5934 404,-559.8669 384.517,-574.8622 388.2626,-587.9431 368,-601.8669 364.9057,-603.9932 361.5727,-605.9279 358.1217,-607.6842"/>
+<polygon fill="#000000" stroke="#000000" points="356.4487,-604.6 348.7938,-611.9248 359.3458,-610.9723 356.4487,-604.6"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge21" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M415.2764,-551.0766C411.1525,-553.5583 407.2454,-556.4725 404,-559.8669 375.9306,-589.2248 398.0296,-616.5173 368,-643.8669 347.6327,-662.4165 333.7975,-674.8668 309,-662.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-662.8669C284.2025,-650.867 268.6045,-664.184 250,-643.8669 206.1468,-595.977 181.3261,-390.9564 174.179,-322.912"/>
+<polygon fill="#000000" stroke="#000000" points="177.6514,-322.4629 173.1495,-312.8722 170.688,-323.1771 177.6514,-322.4629"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~get_states_overlap~~UsesGraph_node12" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-550.8669 266.5,-550.8669 266.5,-526.8669 351.5,-526.8669 351.5,-550.8669"/>
+<text text-anchor="middle" x="309" y="-536.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge18" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.3258,-538.8669C398.6048,-538.8669 379.4423,-538.8669 361.7935,-538.8669"/>
+<polygon fill="#000000" stroke="#000000" points="361.6146,-535.367 351.6146,-538.8669 361.6145,-542.367 361.6146,-535.367"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~get_states_overlap~~UsesGraph_node13" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-592.8669 273,-592.8669 273,-568.8669 345,-568.8669 345,-592.8669"/>
+<text text-anchor="middle" x="309" y="-578.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge19" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M414.3258,-548.927C396.526,-554.3247 374.3143,-561.0604 354.8831,-566.9529"/>
+<polygon fill="#000000" stroke="#000000" points="353.8612,-563.6053 345.3072,-569.8568 355.8926,-570.3041 353.8612,-563.6053"/>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge22" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M568.6275,-131.7625C515.1705,-98.066 363.1059,-6.4388 309,-18.8669"/>
+</g>
+<!-- tagarray -->
+<g id="proc~~get_states_overlap~~UsesGraph_node21" class="node">
+<title>tagarray</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="476.5,-146.8669 418.5,-146.8669 418.5,-122.8669 476.5,-122.8669 476.5,-146.8669"/>
+<text text-anchor="middle" x="447.5" y="-132.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray</text>
+</g>
+<!-- module~oqp_tagarray_driver&#45;&gt;tagarray -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge23" class="edge">
+<title>module~oqp_tagarray_driver&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M526.9082,-139.9717C513.283,-139.0958 499.1734,-138.1888 486.6952,-137.3866"/>
+<polygon fill="#000000" stroke="#000000" points="486.8476,-133.8893 476.6436,-136.7404 486.3984,-140.8748 486.8476,-133.8893"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge24" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.4216,-300.8669C130.2434,-300.8669 117.203,-300.8669 104.4454,-300.8669"/>
+<polygon fill="#000000" stroke="#000000" points="104.3156,-297.367 94.3156,-300.8669 104.3156,-304.367 104.3156,-297.367"/>
+</g>
+<!-- module~strings&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge25" class="edge">
+<title>module~strings&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M831.8697,-188.5069C801.4252,-161.6612 724.5376,-98.0194 648,-67.8669 506.3625,-12.0679 455.2655,23.3364 309,-18.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-18.8669C282.7291,-27.1587 272.5425,-22.0319 250,-37.8669 241.9024,-43.5551 207.1158,-90.498 186.8372,-118.3413"/>
+<polygon fill="#000000" stroke="#000000" points="183.8593,-116.4855 180.8152,-126.6336 189.5234,-120.5988 183.8593,-116.4855"/>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge26" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M804.7592,-490.022C744.1718,-478.336 626.7456,-455.6123 527,-435.8669 515.8974,-433.6691 503.9281,-431.2738 492.7313,-429.0218"/>
+<polygon fill="#000000" stroke="#000000" points="493.2071,-425.5474 482.7128,-427.0037 491.8247,-432.4095 493.2071,-425.5474"/>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge29" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M833.3011,-510.0217C790.7453,-551.9629 648.1626,-688.5179 587.5,-696.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.5,-696.8669C464.3281,-716.3081 418.1458,-723.1702 309,-662.8669"/>
+</g>
+<!-- module~int2_compute -->
+<g id="proc~~get_states_overlap~~UsesGraph_node18" class="node">
+<title>module~int2_compute</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node18"><a xlink:href="../module/int2_compute.html" xlink:title="int2_compute">
+<polygon fill="#337ab7" stroke="#337ab7" points="769,-374.8669 684,-374.8669 684,-350.8669 769,-350.8669 769,-374.8669"/>
+<text text-anchor="middle" x="726.5" y="-360.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_compute</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~int2_compute -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge27" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~int2_compute</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M834.5181,-485.4084C813.7801,-461.8821 768.7114,-410.7537 743.8437,-382.5425"/>
+<polygon fill="#000000" stroke="#000000" points="746.3509,-380.0938 737.1128,-374.9066 741.0998,-384.7226 746.3509,-380.0938"/>
+</g>
+<!-- module~oqp_linalg -->
+<g id="proc~~get_states_overlap~~UsesGraph_node19" class="node">
+<title>module~oqp_linalg</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node19"><a xlink:href="../module/oqp_linalg.html" xlink:title="oqp_linalg">
+<polygon fill="#337ab7" stroke="#337ab7" points="760,-549.8669 693,-549.8669 693,-525.8669 760,-525.8669 760,-549.8669"/>
+<text text-anchor="middle" x="726.5" y="-535.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_linalg</text>
+</a>
+</g>
+</g>
+<!-- module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge28" class="edge">
+<title>module~tdhf_mrsf_lib&#45;&gt;module~oqp_linalg</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M809.7961,-509.8682C797.2484,-514.0859 783.0103,-518.8718 769.8999,-523.2787"/>
+<polygon fill="#000000" stroke="#000000" points="768.5045,-520.0552 760.1408,-526.5591 770.7349,-526.6904 768.5045,-520.0552"/>
+</g>
+<!-- module~types&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge31" class="edge">
+<title>module~types&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-174.8669C417.1842,-169.8294 383.8288,-161.255 357.4493,-153.7378"/>
+<polygon fill="#000000" stroke="#000000" points="358.2803,-150.3347 347.7015,-150.9181 356.3351,-157.059 358.2803,-150.3347"/>
+</g>
+<!-- module~types&#45;&gt;module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge32" class="edge">
+<title>module~types&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M579.1844,-197.9755C566.6367,-216.6339 542.668,-253.8277 527,-287.8669 506.1967,-333.0629 522.2747,-355.1713 491,-393.8669 488.6496,-396.7751 485.8806,-399.4342 482.8969,-401.8469"/>
+<polygon fill="#000000" stroke="#000000" points="480.801,-399.042 474.6373,-407.6594 484.8296,-404.7666 480.801,-399.042"/>
+</g>
+<!-- module~types&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge35" class="edge">
+<title>module~types&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-98.8669C281.6205,-101.9129 269.1952,-98.1069 250,-117.8669 210.0139,-159.0294 238.9922,-190.2082 214,-241.8669 207.3461,-255.6205 197.5459,-269.6106 189.0855,-280.5139"/>
+<polygon fill="#000000" stroke="#000000" points="186.1851,-278.5369 182.6734,-288.5328 191.6522,-282.9085 186.1851,-278.5369"/>
+</g>
+<!-- module~types&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge30" class="edge">
+<title>module~types&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-174.8669C426.6883,-171.4087 421.2666,-167.9892 404,-155.8669 384.9595,-142.4992 387.6864,-130.2637 368,-117.8669 344.6885,-103.1873 336.3795,-95.8209 309,-98.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M309,-98.8669C275.3338,-102.6123 238.5546,-113.7648 211.5883,-123.3451"/>
+<polygon fill="#000000" stroke="#000000" points="210.3236,-120.0807 202.1213,-126.7869 212.7154,-126.6594 210.3236,-120.0807"/>
+</g>
+<!-- module~functionals -->
+<g id="proc~~get_states_overlap~~UsesGraph_node17" class="node">
+<title>module~functionals</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node17"><a xlink:href="../module/functionals.html" xlink:title="functionals">
+<polygon fill="#337ab7" stroke="#337ab7" points="344.5,-70.8669 273.5,-70.8669 273.5,-46.8669 344.5,-46.8669 344.5,-70.8669"/>
+<text text-anchor="middle" x="309" y="-56.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals</text>
+</a>
+</g>
+</g>
+<!-- module~types&#45;&gt;module~functionals -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge33" class="edge">
+<title>module~types&#45;&gt;module~functionals</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M560.4941,-185.1255C532.176,-184.0264 486.4621,-181.3411 447.5,-174.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-174.8669C426.6883,-171.4087 419.3402,-170.3501 404,-155.8669 378.2742,-131.5783 393.6861,-109.1975 368,-84.8669 363.8859,-80.97 359.0917,-77.5975 354.0472,-74.6945"/>
+<polygon fill="#000000" stroke="#000000" points="355.2872,-71.3977 344.7898,-69.9642 352.1021,-77.6311 355.2872,-71.3977"/>
+</g>
+<!-- module~types&#45;&gt;module~parallel -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge34" class="edge">
+<title>module~types&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-174.8669C422.2541,-170.6719 363.5632,-215.3184 331.2766,-241.8959"/>
+<polygon fill="#000000" stroke="#000000" points="328.7418,-239.452 323.2964,-248.5404 333.2209,-244.8315 328.7418,-239.452"/>
+</g>
+<!-- module~types&#45;&gt;tagarray -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge36" class="edge">
+<title>module~types&#45;&gt;tagarray</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M560.3402,-176.6126C549.8953,-173.0084 537.8719,-168.8043 527,-164.8669 513.6258,-160.0233 499.0482,-154.5725 486.071,-149.6589"/>
+<polygon fill="#000000" stroke="#000000" points="487.0968,-146.3046 476.5056,-146.0252 484.6109,-152.8484 487.0968,-146.3046"/>
+</g>
+<!-- module~util&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge37" class="edge">
+<title>module~util&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M699.4444,-694.6947C671.3241,-692.9438 626.1091,-691.5531 587.5,-696.8669"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge38" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-331.4887C257.5772,-325.8529 232.8455,-318.632 212.2467,-312.6178"/>
+<polygon fill="#000000" stroke="#000000" points="213.0886,-309.2175 202.5084,-309.7745 211.1267,-315.937 213.0886,-309.2175"/>
+</g>
+<!-- module~functionals&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge40" class="edge">
+<title>module~functionals&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3062,-68.3535C264.6008,-72.2019 256.0605,-77.5323 250,-84.8669 204.4001,-140.0538 243.3232,-176.5593 214,-241.8669 207.7418,-255.805 197.9617,-269.8045 189.4131,-280.6667"/>
+<polygon fill="#000000" stroke="#000000" points="186.5162,-278.6811 182.9123,-288.6442 191.9426,-283.1031 186.5162,-278.6811"/>
+</g>
+<!-- module~functionals&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge39" class="edge">
+<title>module~functionals&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M278.7498,-70.8818C269.3539,-74.9605 259.0837,-79.7822 250,-84.8669 231.018,-95.4924 210.8604,-109.5278 195.793,-120.6262"/>
+<polygon fill="#000000" stroke="#000000" points="193.4775,-117.987 187.5571,-126.7734 197.6645,-123.5968 193.4775,-117.987"/>
+</g>
+<!-- xc_f03_lib_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_node28" class="node">
+<title>xc_f03_lib_m</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="212.5,-70.8669 131.5,-70.8669 131.5,-46.8669 212.5,-46.8669 212.5,-70.8669"/>
+<text text-anchor="middle" x="172" y="-56.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">xc_f03_lib_m</text>
+</g>
+<!-- module~functionals&#45;&gt;xc_f03_lib_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge41" class="edge">
+<title>module~functionals&#45;&gt;xc_f03_lib_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M273.3625,-58.8669C257.9991,-58.8669 239.7453,-58.8669 222.9899,-58.8669"/>
+<polygon fill="#000000" stroke="#000000" points="222.7901,-55.367 212.79,-58.8669 222.79,-62.367 222.7901,-55.367"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge42" class="edge">
+<title>module~int2_compute&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M717.9367,-350.849C704.9639,-333.6759 678.5763,-302.5702 648,-287.8669 566.9668,-248.9002 537.0913,-268.4956 447.5,-260.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-260.8669C392.2535,-246.3316 414.396,-193.1966 368,-159.8669 365.8752,-158.3405 363.6286,-156.9155 361.3019,-155.5864"/>
+<polygon fill="#000000" stroke="#000000" points="362.5254,-152.2843 352.0183,-150.9231 359.3832,-158.5394 362.5254,-152.2843"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge43" class="edge">
+<title>module~int2_compute&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M683.6962,-366.7532C655.9382,-369.9026 619.178,-375.2624 587.5,-383.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.5,-383.8669C555.7924,-392.4795 519.9,-401.6985 492.3962,-408.651"/>
+<polygon fill="#000000" stroke="#000000" points="491.5066,-405.2657 482.666,-411.1046 493.2182,-412.0532 491.5066,-405.2657"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~messages -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge47" class="edge">
+<title>module~int2_compute&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M707.3232,-374.9641C659.0421,-405.421 532.289,-485.38 475.6014,-521.1399"/>
+<polygon fill="#000000" stroke="#000000" points="473.4014,-518.3894 466.811,-526.6851 477.1362,-524.3099 473.4014,-518.3894"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge49" class="edge">
+<title>module~int2_compute&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M707.7114,-350.6533C681.8928,-334.8255 633.4097,-308.4694 587.5,-301.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.5,-301.8669C525.9051,-293.0086 509.6011,-295.8852 447.5,-299.8669"/>
+</g>
+<!-- module~int2_compute&#45;&gt;module~parallel -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge48" class="edge">
+<title>module~int2_compute&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-260.8669C413.2965,-257.9545 374.1692,-258.2903 346.2467,-259.1573"/>
+<polygon fill="#000000" stroke="#000000" points="345.9993,-255.6637 336.1273,-259.51 346.2432,-262.6595 345.9993,-255.6637"/>
+</g>
+<!-- module~int2_pairs -->
+<g id="proc~~get_states_overlap~~UsesGraph_node23" class="node">
+<title>module~int2_pairs</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node23"><a xlink:href="../module/int2_pairs.html" xlink:title="int2_pairs">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-432.8669 277,-432.8669 277,-408.8669 341,-408.8669 341,-432.8669"/>
+<text text-anchor="middle" x="309" y="-418.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2_pairs</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2_pairs -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge44" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.5,-383.8669C559.0845,-391.5853 551.9904,-395.2948 527,-410.8669 509.3236,-421.8815 510.5833,-433.7768 491,-440.8669 454.6428,-454.03 442.4588,-444.8713 404,-440.8669 386.5079,-439.0456 367.4925,-435.3863 351.1017,-431.69"/>
+<polygon fill="#000000" stroke="#000000" points="351.8057,-428.2604 341.2723,-429.3998 350.2172,-435.0778 351.8057,-428.2604"/>
+</g>
+<!-- module~int2e_libint -->
+<g id="proc~~get_states_overlap~~UsesGraph_node24" class="node">
+<title>module~int2e_libint</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node24"><a xlink:href="../module/int2e_libint.html" xlink:title="int2e_libint">
+<polygon fill="#337ab7" stroke="#337ab7" points="483,-351.8669 412,-351.8669 412,-327.8669 483,-327.8669 483,-351.8669"/>
+<text text-anchor="middle" x="447.5" y="-337.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_libint</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_libint -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge45" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_libint</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M587.5,-301.8669C549.5911,-296.415 507.3187,-310.8491 479.2436,-323.4675"/>
+<polygon fill="#000000" stroke="#000000" points="477.512,-320.4134 469.9356,-327.8194 480.4768,-326.7545 477.512,-320.4134"/>
+</g>
+<!-- module~int2e_rys -->
+<g id="proc~~get_states_overlap~~UsesGraph_node25" class="node">
+<title>module~int2e_rys</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node25"><a xlink:href="../module/int2e_rys.html" xlink:title="int2e_rys">
+<polygon fill="#337ab7" stroke="#337ab7" points="618,-355.8669 557,-355.8669 557,-331.8669 618,-331.8669 618,-355.8669"/>
+<text text-anchor="middle" x="587.5" y="-341.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2e_rys</text>
+</a>
+</g>
+</g>
+<!-- module~int2_compute&#45;&gt;module~int2e_rys -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge46" class="edge">
+<title>module~int2_compute&#45;&gt;module~int2e_rys</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M683.6612,-357.0112C666.0897,-354.6094 645.8382,-351.8412 628.4653,-349.4665"/>
+<polygon fill="#000000" stroke="#000000" points="628.4519,-345.9322 618.07,-348.0455 627.5038,-352.8677 628.4519,-345.9322"/>
+</g>
+<!-- module~blas_wrap -->
+<g id="proc~~get_states_overlap~~UsesGraph_node22" class="node">
+<title>module~blas_wrap</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node22"><a xlink:href="../module/blas_wrap.html" xlink:title="blas_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="620.5,-629.8669 554.5,-629.8669 554.5,-605.8669 620.5,-605.8669 620.5,-629.8669"/>
+<text text-anchor="middle" x="587.5" y="-615.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">blas_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~blas_wrap -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge50" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~blas_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M705.3889,-550.0172C681.8827,-563.5459 643.7158,-585.5125 617.2031,-600.7716"/>
+<polygon fill="#000000" stroke="#000000" points="615.2755,-597.8427 608.3543,-605.8644 618.7673,-603.9096 615.2755,-597.8427"/>
+</g>
+<!-- module~lapack_wrap -->
+<g id="proc~~get_states_overlap~~UsesGraph_node26" class="node">
+<title>module~lapack_wrap</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node26"><a xlink:href="../module/lapack_wrap.html" xlink:title="lapack_wrap">
+<polygon fill="#337ab7" stroke="#337ab7" points="627,-549.8669 548,-549.8669 548,-525.8669 627,-525.8669 627,-549.8669"/>
+<text text-anchor="middle" x="587.5" y="-535.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">lapack_wrap</text>
+</a>
+</g>
+</g>
+<!-- module~oqp_linalg&#45;&gt;module~lapack_wrap -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge51" class="edge">
+<title>module~oqp_linalg&#45;&gt;module~lapack_wrap</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M692.852,-537.8669C676.1073,-537.8669 655.539,-537.8669 637.0343,-537.8669"/>
+<polygon fill="#000000" stroke="#000000" points="637.0036,-534.367 627.0035,-537.8669 637.0035,-541.367 637.0036,-534.367"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge54" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-268.7696C262.1871,-274.5349 235.0832,-282.4485 212.7292,-288.9752"/>
+<polygon fill="#000000" stroke="#000000" points="211.4544,-285.7012 202.8362,-291.8636 213.4164,-292.4206 211.4544,-285.7012"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge52" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9823,-252.08C271.3912,-247.8663 259.5219,-242.1322 250,-234.8669 222.3387,-213.761 198.4471,-180.9166 184.6336,-159.6468"/>
+<polygon fill="#000000" stroke="#000000" points="187.4906,-157.6163 179.1837,-151.0401 181.5765,-161.3612 187.4906,-157.6163"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge53" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8416,-262.544C246.6211,-264.994 183.3754,-270.3316 130,-279.8669 120.1233,-281.6313 109.6846,-283.9253 99.667,-286.3468"/>
+<polygon fill="#000000" stroke="#000000" points="98.6847,-282.9844 89.8261,-288.796 100.3754,-289.7772 98.6847,-282.9844"/>
+</g>
+<!-- mpi -->
+<g id="proc~~get_states_overlap~~UsesGraph_node27" class="node">
+<title>mpi</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node27"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-232.8669 145,-232.8669 145,-208.8669 199,-208.8669 199,-232.8669"/>
+<text text-anchor="middle" x="172" y="-218.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge55" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-252.9642C261.0113,-246.8556 231.8293,-238.3353 208.789,-231.6082"/>
+<polygon fill="#000000" stroke="#000000" points="209.5907,-228.1962 199.0106,-228.7532 207.6288,-234.9157 209.5907,-228.1962"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge57" class="edge">
+<title>module~blas_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M554.1869,-605.8107C545.0696,-601.9149 535.3936,-597.2028 527,-591.8669 508.9342,-580.3822 508.8096,-571.7451 491,-559.8669 489.0727,-558.5815 487.0548,-557.3289 484.9883,-556.1171"/>
+<polygon fill="#000000" stroke="#000000" points="486.204,-552.7942 475.7472,-551.0897 482.8588,-558.9431 486.204,-552.7942"/>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge58" class="edge">
+<title>module~blas_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M565.2761,-629.8805C516.356,-654.581 396.7332,-705.3224 309,-662.8669"/>
+</g>
+<!-- module~mathlib_types -->
+<g id="proc~~get_states_overlap~~UsesGraph_node30" class="node">
+<title>module~mathlib_types</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node30"><a xlink:href="../module/mathlib_types.html" xlink:title="mathlib_types">
+<polygon fill="#337ab7" stroke="#337ab7" points="491,-592.8669 404,-592.8669 404,-568.8669 491,-568.8669 491,-592.8669"/>
+<text text-anchor="middle" x="447.5" y="-578.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mathlib_types</text>
+</a>
+</g>
+</g>
+<!-- module~blas_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge56" class="edge">
+<title>module~blas_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M554.322,-609.0984C538.3573,-604.8792 518.8205,-599.7159 500.8405,-594.9641"/>
+<polygon fill="#000000" stroke="#000000" points="501.6068,-591.5465 491.0444,-592.3751 499.8181,-598.3141 501.6068,-591.5465"/>
+</g>
+<!-- module~int2_pairs&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge59" class="edge">
+<title>module~int2_pairs&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8916,-409.9042C267.7197,-405.9519 258.0405,-400.9365 250,-394.8669 222.7246,-374.2774 198.8798,-342.3605 184.9549,-321.5366"/>
+<polygon fill="#000000" stroke="#000000" points="187.8416,-319.5556 179.4458,-313.0933 181.9791,-323.3808 187.8416,-319.5556"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge64" class="edge">
+<title>module~int2e_libint&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M418.1416,-327.7777C390.5291,-317.3338 347.7541,-303.5127 309,-300.8669"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge60" class="edge">
+<title>module~int2e_libint&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M439.1385,-327.6353C422.6014,-303.7526 385.7821,-252.1719 368,-239.8669 322.6931,-208.515 298.4709,-228.0629 250,-201.8669 228.1636,-190.0655 206.4533,-171.8648 191.5034,-158.0553"/>
+<polygon fill="#000000" stroke="#000000" points="193.6076,-155.2282 183.9356,-150.9036 188.7997,-160.3158 193.6076,-155.2282"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge61" class="edge">
+<title>module~int2e_libint&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M411.8328,-340.1244C393.3533,-340.2579 370.6641,-340.4217 351.3039,-340.5615"/>
+<polygon fill="#000000" stroke="#000000" points="351.2063,-337.062 341.2318,-340.6342 351.2569,-344.0618 351.2063,-337.062"/>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~int2_pairs -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge62" class="edge">
+<title>module~int2e_libint&#45;&gt;module~int2_pairs</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M426.7652,-351.9934C403.4089,-365.653 365.2559,-387.9664 338.7306,-403.4793"/>
+<polygon fill="#000000" stroke="#000000" points="336.7418,-400.5878 329.8766,-408.6575 340.2757,-406.6303 336.7418,-400.5878"/>
+</g>
+<!-- module~libint_f -->
+<g id="proc~~get_states_overlap~~UsesGraph_node29" class="node">
+<title>module~libint_f</title>
+<g id="a_proc~~get_states_overlap~~UsesGraph_node29"><a xlink:href="../module/libint_f.html" xlink:title="libint_f">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-192.8669 282,-192.8669 282,-168.8669 336,-168.8669 336,-192.8669"/>
+<text text-anchor="middle" x="309" y="-178.4669" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">libint_f</text>
+</a>
+</g>
+</g>
+<!-- module~int2e_libint&#45;&gt;module~libint_f -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge63" class="edge">
+<title>module~int2e_libint&#45;&gt;module~libint_f</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M438.774,-327.6506C429.7021,-314.7657 415.2783,-293.753 404,-274.8669 386.4673,-245.5073 393.033,-230.1635 368,-206.8669 361.5804,-200.8926 353.5644,-196.1399 345.5303,-192.4207"/>
+<polygon fill="#000000" stroke="#000000" points="346.7616,-189.142 336.1852,-188.518 344.0641,-195.6014 346.7616,-189.142"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~basis_tools -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge65" class="edge">
+<title>module~int2e_rys&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M556.8294,-355.7699C547.1128,-359.8773 536.4465,-364.7436 527,-369.8669 510.0964,-379.0345 507.2579,-383.5976 491,-393.8669 486.5578,-396.6728 481.8209,-399.5845 477.1686,-402.3999"/>
+<polygon fill="#000000" stroke="#000000" points="475.2024,-399.4978 468.4259,-407.6422 478.8022,-405.5013 475.2024,-399.4978"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge67" class="edge">
+<title>module~int2e_rys&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-379.8669C359.505,-384.948 331.9421,-394.3388 250,-361.8669 226.9412,-352.7292 205.098,-334.5152 190.4247,-320.3583"/>
+<polygon fill="#000000" stroke="#000000" points="192.5981,-317.5824 183.0483,-312.9941 187.6524,-322.5363 192.5981,-317.5824"/>
+</g>
+<!-- module~int2e_rys&#45;&gt;module~constants -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge66" class="edge">
+<title>module~int2e_rys&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M556.9107,-355.3969C528.9094,-365.0639 486.084,-377.639 447.5,-379.8669"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M447.5,-379.8669C410.691,-381.9923 370.2874,-368.7028 342.67,-357.0668"/>
+<polygon fill="#000000" stroke="#000000" points="344.0267,-353.8402 333.4615,-353.048 341.2267,-360.2558 344.0267,-353.8402"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~messages -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge69" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M547.7561,-538.1508C529.9681,-538.2778 508.9524,-538.428 490.7687,-538.5578"/>
+<polygon fill="#000000" stroke="#000000" points="490.6916,-535.0582 480.7169,-538.6296 490.7416,-542.058 490.6916,-535.0582"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~precision -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge70" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M547.6421,-529.3468C530.2672,-525.6998 509.6481,-521.4623 491,-517.8669 384.1648,-497.2691 335.7547,-541.8308 250,-474.8669 200.842,-436.4806 181.7932,-360.3534 175.1609,-322.8266"/>
+<polygon fill="#000000" stroke="#000000" points="178.6084,-322.2206 173.5427,-312.9153 171.6998,-323.3486 178.6084,-322.2206"/>
+</g>
+<!-- module~lapack_wrap&#45;&gt;module~mathlib_types -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge68" class="edge">
+<title>module~lapack_wrap&#45;&gt;module~mathlib_types</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M548.1296,-549.9592C532.0391,-554.9013 513.259,-560.6695 496.309,-565.8756"/>
+<polygon fill="#000000" stroke="#000000" points="495.1065,-562.5835 486.5749,-568.8653 497.1618,-569.275 495.1065,-562.5835"/>
+</g>
+<!-- module~libint_f&#45;&gt;iso_c_binding -->
+<g id="proc~~get_states_overlap~~UsesGraph_edge71" class="edge">
+<title>module~libint_f&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-172.5691C264.5765,-167.248 241.5349,-160.1842 221.0312,-153.8984"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-150.471 211.2057,-150.8862 219.7406,-157.1636 221.7924,-150.471"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var panprocget_states_overlapUsesGraph = svgPanZoom('#procget_states_overlapUsesGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief Main subroutine for calculating state overlaps
+       and derivative coupling matrix elements</p>
+<p>@param[in,out] infos   Information class containing molecule parameters</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-infos~43"></span>
+              type(<a href='../type/information.html'>information</a>),
+            </td>
+<td>intent(inout),</td>
+              <td></td>            <td>
+              target
+            </td>
+            <td>::</td>
+            <td><strong>infos</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_states_overlap~~CallsGraph Pages: 1 -->
+<svg id="procget_states_overlapCallsGraph" width="624pt" height="406pt"
+ viewBox="0.00 0.00 624.00 406.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_states_overlap~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 402)">
+<title>proc~~get_states_overlap~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-402 620,-402 620,4 -4,4"/>
+<!-- proc~get_states_overlap -->
+<g id="proc~~get_states_overlap~~CallsGraph_node1" class="node">
+<title>proc~get_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="112,-213 0,-213 0,-189 112,-189 112,-213"/>
+<text text-anchor="middle" x="56" y="-198.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_states_overlap</text>
+</g>
+<!-- interface~data_has_tags -->
+<g id="proc~~get_states_overlap~~CallsGraph_node2" class="node">
+<title>interface~data_has_tags</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node2"><a xlink:href="../interface/data_has_tags.html" xlink:title="data_has_tags">
+<polygon fill="#a7506f" stroke="#a7506f" points="263,-398 175,-398 175,-374 263,-374 263,-398"/>
+<text text-anchor="middle" x="219" y="-383.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">data_has_tags</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;interface~data_has_tags -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge1" class="edge">
+<title>proc~get_states_overlap&#45;&gt;interface~data_has_tags</title>
+<path fill="none" stroke="#000000" d="M59.8227,-213.269C69.624,-242.7794 98.4268,-318.3602 148,-360 153.2001,-364.3679 159.198,-368.0322 165.4589,-371.0989"/>
+<polygon fill="#000000" stroke="#000000" points="164.1941,-374.366 174.7578,-375.1768 167.0054,-367.9553 164.1941,-374.366"/>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~get_states_overlap~~CallsGraph_node3" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node3"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="419,-296 326,-296 326,-272 419,-272 419,-296"/>
+<text text-anchor="middle" x="372.5" y="-281.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;interface~show_message -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge2" class="edge">
+<title>proc~get_states_overlap&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M60.5049,-213.327C71.0086,-239.9912 99.9456,-302.5865 148,-327 204.2662,-355.5854 228.7013,-342.0162 290,-327 310.3268,-322.0206 331.2115,-311.0663 346.8824,-301.4609"/>
+<polygon fill="#000000" stroke="#000000" points="348.8943,-304.3295 355.4629,-296.0166 345.144,-298.4188 348.8943,-304.3295"/>
+</g>
+<!-- interface~tagarray_get_data -->
+<g id="proc~~get_states_overlap~~CallsGraph_node4" class="node">
+<title>interface~tagarray_get_data</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node4"><a xlink:href="../interface/tagarray_get_data.html" xlink:title="tagarray_get_data">
+<polygon fill="#a7506f" stroke="#a7506f" points="274,-318 164,-318 164,-294 274,-294 274,-318"/>
+<text text-anchor="middle" x="219" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tagarray_get_data</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;interface~tagarray_get_data -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge3" class="edge">
+<title>proc~get_states_overlap&#45;&gt;interface~tagarray_get_data</title>
+<path fill="none" stroke="#000000" d="M66.0242,-213.1492C81.6812,-231.3593 113.7184,-265.654 148,-285 151.271,-286.8459 154.7202,-288.544 158.2643,-290.104"/>
+<polygon fill="#000000" stroke="#000000" points="157.2256,-293.4579 167.8104,-293.9174 159.8224,-286.9574 157.2256,-293.4579"/>
+</g>
+<!-- proc~check_states_phase -->
+<g id="proc~~get_states_overlap~~CallsGraph_node5" class="node">
+<title>proc~check_states_phase</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node5"><a xlink:href="../proc/check_states_phase.html" xlink:title="check_states_phase">
+<polygon fill="#d9534f" stroke="#d9534f" points="278,-276 160,-276 160,-252 278,-252 278,-276"/>
+<text text-anchor="middle" x="219" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">check_states_phase</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~check_states_phase -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge4" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~check_states_phase</title>
+<path fill="none" stroke="#000000" d="M80.2051,-213.1841C98.5327,-222.1297 124.4833,-234.2041 148,-243 153.4762,-245.0482 159.2477,-247.0316 165.0368,-248.9084"/>
+<polygon fill="#000000" stroke="#000000" points="164.1576,-252.3008 174.7469,-251.9591 166.2557,-245.6226 164.1576,-252.3008"/>
+</g>
+<!-- proc~compute_states_overlap -->
+<g id="proc~~get_states_overlap~~CallsGraph_node6" class="node">
+<title>proc~compute_states_overlap</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node6"><a xlink:href="../proc/compute_states_overlap.html" xlink:title="compute_states_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="290,-108 148,-108 148,-84 290,-84 290,-108"/>
+<text text-anchor="middle" x="219" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">compute_states_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~compute_states_overlap -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge5" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~compute_states_overlap</title>
+<path fill="none" stroke="#000000" d="M66.0242,-188.8508C81.6812,-170.6407 113.7184,-136.346 148,-117 151.271,-115.1541 154.7202,-113.456 158.2643,-111.896"/>
+<polygon fill="#000000" stroke="#000000" points="159.8224,-115.0426 167.8104,-108.0826 157.2256,-108.5421 159.8224,-115.0426"/>
+</g>
+<!-- proc~get_dcv -->
+<g id="proc~~get_states_overlap~~CallsGraph_node7" class="node">
+<title>proc~get_dcv</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node7"><a xlink:href="../proc/get_dcv.html" xlink:title="get_dcv">
+<polygon fill="#d9534f" stroke="#d9534f" points="246,-192 192,-192 192,-168 246,-168 246,-192"/>
+<text text-anchor="middle" x="219" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_dcv</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~get_dcv -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge6" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~get_dcv</title>
+<path fill="none" stroke="#000000" d="M112.0954,-193.773C135.0991,-190.8093 161.1032,-187.4591 181.7043,-184.805"/>
+<polygon fill="#000000" stroke="#000000" points="182.172,-188.2737 191.6428,-183.5245 181.2775,-181.3311 182.172,-188.2737"/>
+</g>
+<!-- proc~measure_time -->
+<g id="proc~~get_states_overlap~~CallsGraph_node8" class="node">
+<title>proc~measure_time</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node8"><a xlink:href="../proc/measure_time.html" xlink:title="measure_time">
+<polygon fill="#d9534f" stroke="#d9534f" points="263.5,-150 174.5,-150 174.5,-126 263.5,-126 263.5,-150"/>
+<text text-anchor="middle" x="219" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">measure_time</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~measure_time -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge7" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~measure_time</title>
+<path fill="none" stroke="#000000" d="M80.2051,-188.8159C98.5327,-179.8703 124.4833,-167.7959 148,-159 153.4762,-156.9518 159.2477,-154.9684 165.0368,-153.0916"/>
+<polygon fill="#000000" stroke="#000000" points="166.2557,-156.3774 174.7469,-150.0409 164.1576,-149.6992 166.2557,-156.3774"/>
+</g>
+<!-- proc~mrsfxvec -->
+<g id="proc~~get_states_overlap~~CallsGraph_node9" class="node">
+<title>proc~mrsfxvec</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node9"><a xlink:href="../proc/mrsfxvec.html" xlink:title="mrsfxvec">
+<polygon fill="#d9534f" stroke="#d9534f" points="249.5,-234 188.5,-234 188.5,-210 249.5,-210 249.5,-234"/>
+<text text-anchor="middle" x="219" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mrsfxvec</text>
+</a>
+</g>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;proc~mrsfxvec -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge8" class="edge">
+<title>proc~get_states_overlap&#45;&gt;proc~mrsfxvec</title>
+<path fill="none" stroke="#000000" d="M112.0954,-208.227C133.8962,-211.0357 158.3918,-214.1916 178.4294,-216.7731"/>
+<polygon fill="#000000" stroke="#000000" points="178.0982,-220.2593 188.4635,-218.0658 178.9927,-213.3167 178.0982,-220.2593"/>
+</g>
+<!-- remove_records -->
+<g id="proc~~get_states_overlap~~CallsGraph_node10" class="node">
+<title>remove_records</title>
+<polygon fill="#777777" stroke="#777777" points="269,-66 169,-66 169,-42 269,-42 269,-66"/>
+<text text-anchor="middle" x="219" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">remove_records</text>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;remove_records -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge9" class="edge">
+<title>proc~get_states_overlap&#45;&gt;remove_records</title>
+<path fill="none" stroke="#000000" d="M61.4572,-188.9047C73.4147,-163.7815 104.3826,-105.7353 148,-75 151.6448,-72.4317 155.6054,-70.1738 159.7294,-68.1894"/>
+<polygon fill="#000000" stroke="#000000" points="161.1242,-71.3996 168.9591,-64.2676 158.3867,-64.9571 161.1242,-71.3996"/>
+</g>
+<!-- reserve_data -->
+<g id="proc~~get_states_overlap~~CallsGraph_node11" class="node">
+<title>reserve_data</title>
+<polygon fill="#777777" stroke="#777777" points="260,-24 178,-24 178,0 260,0 260,-24"/>
+<text text-anchor="middle" x="219" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">reserve_data</text>
+</g>
+<!-- proc~get_states_overlap&#45;&gt;reserve_data -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge10" class="edge">
+<title>proc~get_states_overlap&#45;&gt;reserve_data</title>
+<path fill="none" stroke="#000000" d="M59.1811,-188.7491C67.8624,-157.7812 94.9363,-75.7948 148,-33 153.8471,-28.2844 160.7245,-24.6274 167.857,-21.7915"/>
+<polygon fill="#000000" stroke="#000000" points="169.3542,-24.9776 177.6685,-18.4108 167.0738,-18.3594 169.3542,-24.9776"/>
+</g>
+<!-- proc~mrsf_tlf -->
+<g id="proc~~get_states_overlap~~CallsGraph_node12" class="node">
+<title>proc~mrsf_tlf</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node12"><a xlink:href="../proc/mrsf_tlf.html" xlink:title="mrsf_tlf">
+<polygon fill="#d9534f" stroke="#d9534f" points="399.5,-108 345.5,-108 345.5,-84 399.5,-84 399.5,-108"/>
+<text text-anchor="middle" x="372.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mrsf_tlf</text>
+</a>
+</g>
+</g>
+<!-- proc~compute_states_overlap&#45;&gt;proc~mrsf_tlf -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge11" class="edge">
+<title>proc~compute_states_overlap&#45;&gt;proc~mrsf_tlf</title>
+<path fill="none" stroke="#000000" d="M290.3575,-96C305.8018,-96 321.5388,-96 335.0503,-96"/>
+<polygon fill="#000000" stroke="#000000" points="335.3611,-99.5001 345.361,-96 335.361,-92.5001 335.3611,-99.5001"/>
+</g>
+<!-- proc~mrsfxvec&#45;&gt;interface~show_message -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge12" class="edge">
+<title>proc~mrsfxvec&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M249.797,-229.8502C262.4237,-233.3921 277.0791,-237.923 290,-243 307.6285,-249.9268 326.6014,-259.2185 341.9027,-267.205"/>
+<polygon fill="#000000" stroke="#000000" points="340.4354,-270.3884 350.9106,-271.9762 343.7119,-264.2025 340.4354,-270.3884"/>
+</g>
+<!-- proc~ov_exact -->
+<g id="proc~~get_states_overlap~~CallsGraph_node13" class="node">
+<title>proc~ov_exact</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node13"><a xlink:href="../proc/ov_exact.html" xlink:title="ov_exact">
+<polygon fill="#d9534f" stroke="#d9534f" points="515,-129 455,-129 455,-105 515,-105 515,-129"/>
+<text text-anchor="middle" x="485" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">ov_exact</text>
+</a>
+</g>
+</g>
+<!-- proc~mrsf_tlf&#45;&gt;proc~ov_exact -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge13" class="edge">
+<title>proc~mrsf_tlf&#45;&gt;proc~ov_exact</title>
+<path fill="none" stroke="#000000" d="M399.7331,-101.0835C413.2591,-103.6084 429.8676,-106.7086 444.8217,-109.5001"/>
+<polygon fill="#000000" stroke="#000000" points="444.3796,-112.9779 454.8521,-111.3724 445.6641,-106.0968 444.3796,-112.9779"/>
+</g>
+<!-- proc~tlf_exp -->
+<g id="proc~~get_states_overlap~~CallsGraph_node14" class="node">
+<title>proc~tlf_exp</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node14"><a xlink:href="../proc/tlf_exp.html" xlink:title="tlf_exp">
+<polygon fill="#d9534f" stroke="#d9534f" points="512,-87 458,-87 458,-63 512,-63 512,-87"/>
+<text text-anchor="middle" x="485" y="-72.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tlf_exp</text>
+</a>
+</g>
+</g>
+<!-- proc~mrsf_tlf&#45;&gt;proc~tlf_exp -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge14" class="edge">
+<title>proc~mrsf_tlf&#45;&gt;proc~tlf_exp</title>
+<path fill="none" stroke="#000000" d="M399.7331,-90.9165C414.136,-88.228 432.0339,-84.887 447.7079,-81.9612"/>
+<polygon fill="#000000" stroke="#000000" points="448.4398,-85.3851 457.6278,-80.1095 447.1553,-78.504 448.4398,-85.3851"/>
+</g>
+<!-- proc~comp_det -->
+<g id="proc~~get_states_overlap~~CallsGraph_node15" class="node">
+<title>proc~comp_det</title>
+<g id="a_proc~~get_states_overlap~~CallsGraph_node15"><a xlink:href="../proc/comp_det.html" xlink:title="comp_det">
+<polygon fill="#d94e8f" stroke="#d94e8f" points="616,-129 551,-129 551,-105 616,-105 616,-129"/>
+<text text-anchor="middle" x="583.5" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comp_det</text>
+</a>
+</g>
+</g>
+<!-- proc~ov_exact&#45;&gt;proc~comp_det -->
+<g id="proc~~get_states_overlap~~CallsGraph_edge15" class="edge">
+<title>proc~ov_exact&#45;&gt;proc~comp_det</title>
+<path fill="none" stroke="#000000" d="M515.0885,-117C523.1329,-117 531.9854,-117 540.5767,-117"/>
+<polygon fill="#000000" stroke="#000000" points="540.8549,-120.5001 550.8548,-117 540.8548,-113.5001 540.8549,-120.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~get_states_overlap~~CalledByGraph Pages: 1 -->
+<svg id="procget_states_overlapCalledByGraph" width="276pt" height="32pt"
+ viewBox="0.00 0.00 276.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~get_states_overlap~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~get_states_overlap~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 272,-28 272,4 -4,4"/>
+<!-- proc~get_states_overlap -->
+<g id="proc~~get_states_overlap~~CalledByGraph_node1" class="node">
+<title>proc~get_states_overlap</title>
+<polygon fill="none" stroke="#000000" points="268,-24 156,-24 156,0 268,0 268,-24"/>
+<text text-anchor="middle" x="212" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">get_states_overlap</text>
+</g>
+<!-- proc~get_state_overlap_c -->
+<g id="proc~~get_states_overlap~~CalledByGraph_node2" class="node">
+<title>proc~get_state_overlap_c</title>
+<g id="a_proc~~get_states_overlap~~CalledByGraph_node2"><a xlink:href="../proc/get_state_overlap_c.html" xlink:title="get_state_overlap_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="120,-24 0,-24 0,0 120,0 120,-24"/>
+<text text-anchor="middle" x="60" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_state_overlap_C</text>
+</a>
+</g>
+</g>
+<!-- proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap -->
+<g id="proc~~get_states_overlap~~CalledByGraph_edge1" class="edge">
+<title>proc~get_state_overlap_c&#45;&gt;proc~get_states_overlap</title>
+<path fill="none" stroke="#000000" d="M120.0744,-12C128.4517,-12 137.0992,-12 145.5848,-12"/>
+<polygon fill="#000000" stroke="#000000" points="145.826,-15.5001 155.8259,-12 145.8259,-8.5001 145.826,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">  </span><span class="k">subroutine </span><span class="n">get_states_overlap</span><span class="p">(</span><span class="n">infos</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">use </span><span class="nb">precision</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">dp</span>
+<span class="w">    </span><span class="k">use </span><span class="n">io_constants</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">iw</span>
+<span class="w">    </span><span class="k">use </span><span class="n">oqp_tagarray_driver</span>
+<span class="w">    </span><span class="k">use </span><span class="n">types</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">information</span>
+<span class="w">    </span><span class="k">use </span><span class="n">strings</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">Cstring</span><span class="p">,</span><span class="w"> </span><span class="n">fstring</span>
+<span class="w">    </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="w">    </span><span class="k">use </span><span class="n">atomic_structure_m</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">atomic_structure</span>
+<span class="w">    </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span>
+<span class="w">    </span><span class="k">use </span><span class="n">tdhf_mrsf_lib</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">mrsfxvec</span>
+<span class="w">    </span><span class="k">use </span><span class="n">util</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">measure_time</span>
+
+<span class="w">    </span><span class="k">implicit none</span>
+
+<span class="k">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">subroutine_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;get_states_overlap&quot;</span>
+
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">information</span><span class="p">),</span><span class="w"> </span><span class="k">target</span><span class="p">,</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">inout</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">infos</span>
+<span class="w">    </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">mrst</span><span class="p">,</span><span class="w"> </span><span class="n">xvec_dim</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="w"> </span><span class="n">ok</span><span class="p">,</span><span class="w"> </span><span class="n">j</span>
+<span class="w">    </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span><span class="p">,</span><span class="w"> </span><span class="n">ndtlf</span>
+
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">allocatable</span><span class="p">,</span><span class="w"> </span><span class="k">target</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bvec</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">bvec_old</span><span class="p">(:,:)</span>
+
+<span class="w">    </span><span class="c">! Tagarray</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_general</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">OQP_td_bvec_mo_old</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_td_bvec_mo</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_overlap_mo</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=*</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">tags_alloc</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="kt">character</span><span class="p">(</span><span class="nb">len</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">        </span><span class="n">OQP_nac</span><span class="w"> </span><span class="o">/</span><span class="p">)</span>
+<span class="w">    </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">contiguous</span><span class="p">,</span><span class="w"> </span><span class="k">pointer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">bvec_mo</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">bvec_mo_old</span><span class="p">(:,:),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nac_out</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">overlap_mo</span><span class="p">(:,:),</span><span class="w"> </span><span class="n">td_states_phase</span><span class="p">(:),</span><span class="w"> </span><span class="n">td_states_overlap</span><span class="p">(:,:)</span>
+
+<span class="w">    </span><span class="c">! Files open</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">IW</span><span class="p">,</span><span class="w"> </span><span class="k">file</span><span class="o">=</span><span class="n">infos</span><span class="p">%</span><span class="n">log_filename</span><span class="p">,</span><span class="w"> </span><span class="n">position</span><span class="o">=</span><span class="s2">&quot;append&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Load basis set</span>
+<span class="w">    </span><span class="n">basis</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">basis</span>
+<span class="w">    </span><span class="n">basis</span><span class="p">%</span><span class="n">atoms</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">atoms</span>
+<span class="w">    </span><span class="n">nstates</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">nstate</span>
+<span class="w">    </span><span class="n">mrst</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">mult</span>
+<span class="w">    </span><span class="n">nbf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nbf</span>
+<span class="w">    </span><span class="n">xvec_dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_a</span><span class="o">*</span><span class="p">(</span><span class="n">nbf</span><span class="o">-</span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_b</span><span class="p">)</span>
+
+<span class="c">!   ndtlf = 0          less accurate</span>
+<span class="c">!   ndtlf = 1 : tlf(1)</span>
+<span class="c">!   ndtlf = 2 : tlf(2) most accurate</span>
+<span class="w">    </span><span class="n">ndtlf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">tddft</span><span class="p">%</span><span class="n">tlf</span>
+
+<span class="w">    </span><span class="c">! Allocate data for outputing in python level</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">remove_records</span><span class="p">(</span><span class="n">tags_alloc</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_td_states_phase</span><span class="p">,</span><span class="w"> </span><span class="n">ta_type_real64</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nstates</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_td_states_phase_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_td_states_overlap</span><span class="p">,</span><span class="w"> </span><span class="n">ta_type_real64</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nstates</span><span class="o">*</span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_td_states_overlap_comment</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">%</span><span class="n">reserve_data</span><span class="p">(</span><span class="n">OQP_nac</span><span class="p">,</span><span class="w"> </span><span class="n">ta_type_real64</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">nstates</span><span class="o">*</span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="w"> </span><span class="o">/</span><span class="p">),</span><span class="w"> </span><span class="n">comment</span><span class="o">=</span><span class="n">OQP_nac_comment</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c">! Load data from python level</span>
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_general</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_td_bvec_mo</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_mo</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_overlap_mo</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_mo</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_td_bvec_mo_old</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_mo_old</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">data_has_tags</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">tags_alloc</span><span class="p">,</span><span class="w"> </span><span class="n">module_name</span><span class="p">,</span><span class="w"> </span><span class="n">subroutine_name</span><span class="p">,</span><span class="w"> </span><span class="n">with_abort</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_td_states_phase</span><span class="p">,</span><span class="w"> </span><span class="n">td_states_phase</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_td_states_overlap</span><span class="p">,</span><span class="w"> </span><span class="n">td_states_overlap</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="n">tagarray_get_data</span><span class="p">(</span><span class="n">infos</span><span class="p">%</span><span class="n">dat</span><span class="p">,</span><span class="w"> </span><span class="n">OQP_nac</span><span class="p">,</span><span class="w"> </span><span class="n">nac_out</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">allocate</span><span class="p">(</span><span class="n">bvec</span><span class="p">(</span><span class="n">xvec_dim</span><span class="p">,</span><span class="n">nstates</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">bvec_old</span><span class="p">(</span><span class="n">xvec_dim</span><span class="p">,</span><span class="n">nstates</span><span class="p">),</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">             </span><span class="n">source</span><span class="o">=</span><span class="mf">0.0_dp</span><span class="p">,</span><span class="w"> </span><span class="nb">stat</span><span class="o">=</span><span class="n">ok</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="p">(</span><span class="w"> </span><span class="n">ok</span><span class="o">/=</span><span class="mi">0</span><span class="w"> </span><span class="p">)</span><span class="w"> </span><span class="k">call </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;Cannot allocate memory&#39;</span><span class="p">,</span><span class="n">with_abort</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">noca</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_a</span>
+<span class="w">    </span><span class="n">nocb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">infos</span><span class="p">%</span><span class="n">mol_prop</span><span class="p">%</span><span class="n">nelec_b</span>
+
+<span class="w">    </span><span class="k">do </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span>
+<span class="w">      </span><span class="k">call </span><span class="n">mrsfxvec</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_mo_old</span><span class="p">(:,</span><span class="n">j</span><span class="p">),</span><span class="w"> </span><span class="n">bvec_old</span><span class="p">(:,</span><span class="n">j</span><span class="p">))</span>
+<span class="w">      </span><span class="k">call </span><span class="n">mrsfxvec</span><span class="p">(</span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_mo</span><span class="p">(:,</span><span class="n">j</span><span class="p">),</span><span class="w"> </span><span class="n">bvec</span><span class="p">(:,</span><span class="n">j</span><span class="p">))</span>
+<span class="w">    </span><span class="k">end do</span>
+
+<span class="k">    call </span><span class="n">check_states_phase</span><span class="p">(</span><span class="n">bvec</span><span class="p">,</span><span class="w"> </span><span class="n">bvec_old</span><span class="p">,</span><span class="w"> </span><span class="n">td_states_phase</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">compute_states_overlap</span><span class="p">(</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">infos</span><span class="p">,</span><span class="w"> </span><span class="n">overlap_mo</span><span class="p">,</span><span class="w"> </span><span class="n">td_states_overlap</span><span class="p">,</span><span class="w"> </span><span class="n">bvec</span><span class="p">,</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="w">          </span><span class="n">bvec_old</span><span class="p">,</span><span class="w"> </span><span class="n">nbf</span><span class="p">,</span><span class="n">noca</span><span class="p">,</span><span class="w"> </span><span class="n">nocb</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="p">,</span><span class="w"> </span><span class="n">ndtlf</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">call </span><span class="n">get_dcv</span><span class="p">(</span><span class="n">nac_out</span><span class="p">,</span><span class="w"> </span><span class="n">td_states_overlap</span><span class="p">,</span><span class="w"> </span><span class="n">nstates</span><span class="p">)</span>
+
+<span class="c">!   call print_nac(infos, td_states_overlap, nac_out)</span>
+
+<span class="c">!   Print timings</span>
+<span class="w">    </span><span class="k">call </span><span class="n">measure_time</span><span class="p">(</span><span class="n">print_total</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">log_unit</span><span class="o">=</span><span class="n">iw</span><span class="p">)</span>
+<span class="w">    </span><span class="k">call </span><span class="nb">flush</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">close</span><span class="p">(</span><span class="n">iw</span><span class="p">)</span>
+
+<span class="w">  </span><span class="k">end subroutine </span><span class="n">get_states_overlap</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

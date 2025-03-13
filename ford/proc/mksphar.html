@@ -1,0 +1,971 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>mksphar &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>mksphar
+      <small>Subroutine</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.4% of total for procedures.">65 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/guess.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/guess.f90.html'>guess.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/guess.html'>guess</a></li>
+            <li class="breadcrumb-item active" aria-current="page">mksphar</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+  
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+      <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    <div class="card card-primary">
+      <div class="card-header text-left"><h3 class="card-title">Source Code</h3></div>
+      <div class="list-group">
+        <a class="list-group-item" href="../proc/mksphar.html#src">mksphar</a>
+      </div>
+    </div>
+
+
+  </div>
+
+    </div>
+    
+    <div class="col-md-9" id='text'>
+    <h2>public  subroutine mksphar(w, l1co, l0co, notsp, basis)  
+</h2>
+        <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+                  <li class="list-inline-item"><a href='../module/messages.html'>messages</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~mksphar~~UsesGraph Pages: 1 -->
+<svg id="procmkspharUsesGraph" width="577pt" height="359pt"
+ viewBox="0.00 0.00 577.00 358.87" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~mksphar~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 354.8676)">
+<title>proc~~mksphar~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-354.8676 573,-354.8676 573,4 -4,4"/>
+<!-- proc~mksphar -->
+<g id="proc~~mksphar~~UsesGraph_node1" class="node">
+<title>proc~mksphar</title>
+<polygon fill="none" stroke="#000000" points="569,-166 510,-166 510,-142 569,-142 569,-166"/>
+<text text-anchor="middle" x="539.5" y="-151.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mksphar</text>
+</g>
+<!-- module~basis_tools -->
+<g id="proc~~mksphar~~UsesGraph_node2" class="node">
+<title>module~basis_tools</title>
+<g id="a_proc~~mksphar~~UsesGraph_node2"><a xlink:href="../module/basis_tools.html" xlink:title="basis_tools">
+<polygon fill="#337ab7" stroke="#337ab7" points="474,-226 404,-226 404,-202 474,-202 474,-226"/>
+<text text-anchor="middle" x="439" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_tools</text>
+</a>
+</g>
+</g>
+<!-- proc~mksphar&#45;&gt;module~basis_tools -->
+<g id="proc~~mksphar~~UsesGraph_edge1" class="edge">
+<title>proc~mksphar&#45;&gt;module~basis_tools</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M519.1623,-166.1419C504.4504,-174.9251 484.3602,-186.9193 467.9729,-196.7028"/>
+<polygon fill="#000000" stroke="#000000" points="466.0995,-193.7448 459.3074,-201.8762 469.6878,-199.7552 466.0995,-193.7448"/>
+</g>
+<!-- module~messages -->
+<g id="proc~~mksphar~~UsesGraph_node3" class="node">
+<title>module~messages</title>
+<g id="a_proc~~mksphar~~UsesGraph_node3"><a xlink:href="../module/messages.html" xlink:title="messages">
+<polygon fill="#337ab7" stroke="#337ab7" points="472,-106 406,-106 406,-82 472,-82 472,-106"/>
+<text text-anchor="middle" x="439" y="-91.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages</text>
+</a>
+</g>
+</g>
+<!-- proc~mksphar&#45;&gt;module~messages -->
+<g id="proc~~mksphar~~UsesGraph_edge2" class="edge">
+<title>proc~mksphar&#45;&gt;module~messages</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M519.1623,-141.8581C504.4504,-133.0749 484.3602,-121.0807 467.9729,-111.2972"/>
+<polygon fill="#000000" stroke="#000000" points="469.6878,-108.2448 459.3074,-106.1238 466.0995,-114.2552 469.6878,-108.2448"/>
+</g>
+<!-- iso_fortran_env -->
+<g id="proc~~mksphar~~UsesGraph_node6" class="node">
+<title>iso_fortran_env</title>
+<g id="a_proc~~mksphar~~UsesGraph_node6"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-288 0,-288 0,-264 94,-264 94,-288"/>
+<text text-anchor="middle" x="47" y="-273.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;iso_fortran_env -->
+<g id="proc~~mksphar~~UsesGraph_edge3" class="edge">
+<title>module~basis_tools&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M434.8491,-226.0036C426.3219,-248.6374 404.5051,-297.2944 368,-319 292.7738,-363.7289 258.4329,-351.7482 172,-338"/>
+</g>
+<!-- module~atomic_structure_m -->
+<g id="proc~~mksphar~~UsesGraph_node7" class="node">
+<title>module~atomic_structure_m</title>
+<g id="a_proc~~mksphar~~UsesGraph_node7"><a xlink:href="../module/atomic_structure_m.html" xlink:title="atomic_structure_m">
+<polygon fill="#337ab7" stroke="#337ab7" points="368,-268 250,-268 250,-244 368,-244 368,-268"/>
+<text text-anchor="middle" x="309" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">atomic_structure_m</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~atomic_structure_m -->
+<g id="proc~~mksphar~~UsesGraph_edge4" class="edge">
+<title>module~basis_tools&#45;&gt;module~atomic_structure_m</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-225.3658C389.1241,-230.1137 371.8316,-235.7005 356.0662,-240.794"/>
+<polygon fill="#000000" stroke="#000000" points="354.9239,-237.4849 346.4842,-243.8897 357.0759,-244.1459 354.9239,-237.4849"/>
+</g>
+<!-- module~constants -->
+<g id="proc~~mksphar~~UsesGraph_node8" class="node">
+<title>module~constants</title>
+<g id="a_proc~~mksphar~~UsesGraph_node8"><a xlink:href="../module/constants.html" xlink:title="constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="341,-226 277,-226 277,-202 341,-202 341,-226"/>
+<text text-anchor="middle" x="309" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~constants -->
+<g id="proc~~mksphar~~UsesGraph_edge5" class="edge">
+<title>module~basis_tools&#45;&gt;module~constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M403.8201,-214C387.6296,-214 368.2877,-214 351.3081,-214"/>
+<polygon fill="#000000" stroke="#000000" points="351.0906,-210.5001 341.0905,-214 351.0905,-217.5001 351.0906,-210.5001"/>
+</g>
+<!-- module~io_constants -->
+<g id="proc~~mksphar~~UsesGraph_node9" class="node">
+<title>module~io_constants</title>
+<g id="a_proc~~mksphar~~UsesGraph_node9"><a xlink:href="../module/io_constants.html" xlink:title="io_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="348.5,-146 269.5,-146 269.5,-122 348.5,-122 348.5,-146"/>
+<text text-anchor="middle" x="309" y="-131.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">io_constants</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~io_constants -->
+<g id="proc~~mksphar~~UsesGraph_edge6" class="edge">
+<title>module~basis_tools&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M425.019,-201.7811C411.1838,-190.0831 389.0788,-172.4256 368,-160 362.1043,-156.5246 355.6594,-153.2262 349.2639,-150.2185"/>
+<polygon fill="#000000" stroke="#000000" points="350.553,-146.9604 339.9988,-146.0332 347.6712,-153.3397 350.553,-146.9604"/>
+</g>
+<!-- module~parallel -->
+<g id="proc~~mksphar~~UsesGraph_node10" class="node">
+<title>module~parallel</title>
+<g id="a_proc~~mksphar~~UsesGraph_node10"><a xlink:href="../module/parallel.html" xlink:title="parallel">
+<polygon fill="#337ab7" stroke="#337ab7" points="336,-310 282,-310 282,-286 336,-286 336,-310"/>
+<text text-anchor="middle" x="309" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">parallel</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~parallel -->
+<g id="proc~~mksphar~~UsesGraph_edge7" class="edge">
+<title>module~basis_tools&#45;&gt;module~parallel</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M428.0475,-226.221C414.9623,-240.1827 391.8329,-262.9121 368,-277 361.09,-281.0846 353.2585,-284.5598 345.6118,-287.4375"/>
+<polygon fill="#000000" stroke="#000000" points="344.3904,-284.1567 336.1081,-290.7637 346.7029,-290.7637 344.3904,-284.1567"/>
+</g>
+<!-- module~precision -->
+<g id="proc~~mksphar~~UsesGraph_node11" class="node">
+<title>module~precision</title>
+<g id="a_proc~~mksphar~~UsesGraph_node11"><a xlink:href="../module/precision.html" xlink:title="precision">
+<polygon fill="#337ab7" stroke="#337ab7" points="202.5,-226 141.5,-226 141.5,-202 202.5,-202 202.5,-226"/>
+<text text-anchor="middle" x="172" y="-211.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision</text>
+</a>
+</g>
+</g>
+<!-- module~basis_tools&#45;&gt;module~precision -->
+<g id="proc~~mksphar~~UsesGraph_edge8" class="edge">
+<title>module~basis_tools&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.4951,-201.939C393.7939,-198.3056 380.4672,-194.8051 368,-193 316.0968,-185.4851 301.9917,-186.1236 250,-193 237.6178,-194.6377 224.4105,-197.6776 212.4508,-200.9458"/>
+<polygon fill="#000000" stroke="#000000" points="211.3974,-197.6067 202.7436,-203.7191 213.3204,-204.3374 211.3974,-197.6067"/>
+</g>
+<!-- comm_IOFILE -->
+<g id="proc~~mksphar~~UsesGraph_node4" class="node">
+<title>comm_IOFILE</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="351.5,-24 266.5,-24 266.5,0 351.5,0 351.5,-24"/>
+<text text-anchor="middle" x="309" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_IOFILE</text>
+</g>
+<!-- module~messages&#45;&gt;comm_IOFILE -->
+<g id="proc~~mksphar~~UsesGraph_edge9" class="edge">
+<title>module~messages&#45;&gt;comm_IOFILE</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M427.4953,-81.704C414.2586,-68.1699 391.3318,-46.5413 368,-33 364.9938,-31.2553 361.8183,-29.6188 358.5628,-28.0908"/>
+<polygon fill="#000000" stroke="#000000" points="359.8182,-24.8206 349.2499,-24.0718 357.0445,-31.2477 359.8182,-24.8206"/>
+</g>
+<!-- comm_PAR -->
+<g id="proc~~mksphar~~UsesGraph_node5" class="node">
+<title>comm_PAR</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="345,-66 273,-66 273,-42 345,-42 345,-66"/>
+<text text-anchor="middle" x="309" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">comm_PAR</text>
+</g>
+<!-- module~messages&#45;&gt;comm_PAR -->
+<g id="proc~~mksphar~~UsesGraph_edge10" class="edge">
+<title>module~messages&#45;&gt;comm_PAR</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-83.8028C390.3896,-79.043 371.7215,-73.2989 354.9198,-68.1292"/>
+<polygon fill="#000000" stroke="#000000" points="355.8682,-64.7591 345.2811,-65.1634 353.8096,-71.4496 355.8682,-64.7591"/>
+</g>
+<!-- module~messages&#45;&gt;module~io_constants -->
+<g id="proc~~mksphar~~UsesGraph_edge11" class="edge">
+<title>module~messages&#45;&gt;module~io_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.8591,-104.1972C391.2817,-108.6825 373.8641,-114.0418 357.8443,-118.971"/>
+<polygon fill="#000000" stroke="#000000" points="356.6167,-115.6867 348.0883,-121.9728 358.6754,-122.3771 356.6167,-115.6867"/>
+</g>
+<!-- module~messages&#45;&gt;module~precision -->
+<g id="proc~~mksphar~~UsesGraph_edge12" class="edge">
+<title>module~messages&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M405.9383,-89.781C366.2793,-86.3421 299.0185,-85.7937 250,-113 217.4812,-131.0487 194.0703,-168.857 181.8055,-192.7493"/>
+<polygon fill="#000000" stroke="#000000" points="178.654,-191.2267 177.3762,-201.7443 184.9339,-194.3192 178.654,-191.2267"/>
+</g>
+<!-- iso_c_binding -->
+<g id="proc~~mksphar~~UsesGraph_node12" class="node">
+<title>iso_c_binding</title>
+<g id="a_proc~~mksphar~~UsesGraph_node12"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="214,-268 130,-268 130,-244 214,-244 214,-268"/>
+<text text-anchor="middle" x="172" y="-253.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~atomic_structure_m&#45;&gt;iso_c_binding -->
+<g id="proc~~mksphar~~UsesGraph_edge13" class="edge">
+<title>module~atomic_structure_m&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M249.7066,-256C241.1722,-256 232.4436,-256 224.0637,-256"/>
+<polygon fill="#000000" stroke="#000000" points="224.0516,-252.5001 214.0516,-256 224.0516,-259.5001 224.0516,-252.5001"/>
+</g>
+<!-- module~constants&#45;&gt;module~precision -->
+<g id="proc~~mksphar~~UsesGraph_edge14" class="edge">
+<title>module~constants&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M276.8796,-214C257.6649,-214 233.0702,-214 212.5278,-214"/>
+<polygon fill="#000000" stroke="#000000" points="212.5085,-210.5001 202.5084,-214 212.5084,-217.5001 212.5085,-210.5001"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_fortran_env -->
+<g id="proc~~mksphar~~UsesGraph_edge16" class="edge">
+<title>module~parallel&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.8098,-308.9494C248.2905,-321.916 193.1667,-341.3668 172,-338"/>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M172,-338C134.4523,-332.0276 95.9605,-310.0744 71.7953,-293.9803"/>
+<polygon fill="#000000" stroke="#000000" points="73.4964,-290.9034 63.267,-288.1445 69.5432,-296.6803 73.4964,-290.9034"/>
+</g>
+<!-- module~parallel&#45;&gt;module~precision -->
+<g id="proc~~mksphar~~UsesGraph_edge17" class="edge">
+<title>module~parallel&#45;&gt;module~precision</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.7526,-291.5423C271.2465,-288.2493 259.4985,-283.527 250,-277 229.7374,-263.0762 233.3784,-250.1302 214,-235 212.4096,-233.7583 210.7342,-232.5604 209.005,-231.4094"/>
+<polygon fill="#000000" stroke="#000000" points="210.4355,-228.1869 200.0562,-226.0603 206.844,-234.1953 210.4355,-228.1869"/>
+</g>
+<!-- module~parallel&#45;&gt;iso_c_binding -->
+<g id="proc~~mksphar~~UsesGraph_edge15" class="edge">
+<title>module~parallel&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-289.7022C264.5765,-284.3811 241.5349,-277.3173 221.0312,-271.0315"/>
+<polygon fill="#000000" stroke="#000000" points="221.7924,-267.6041 211.2057,-268.0193 219.7406,-274.2967 221.7924,-267.6041"/>
+</g>
+<!-- mpi -->
+<g id="proc~~mksphar~~UsesGraph_node13" class="node">
+<title>mpi</title>
+<g id="a_proc~~mksphar~~UsesGraph_node13"><a xlink:href="http://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node410.htm" xlink:title="mpi">
+<polygon fill="#337ab7" stroke="#337ab7" points="199,-310 145,-310 145,-286 199,-286 199,-310"/>
+<text text-anchor="middle" x="172" y="-295.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mpi</text>
+</a>
+</g>
+</g>
+<!-- module~parallel&#45;&gt;mpi -->
+<g id="proc~~mksphar~~UsesGraph_edge18" class="edge">
+<title>module~parallel&#45;&gt;mpi</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9332,-298C261.1051,-298 232.0908,-298 209.0994,-298"/>
+<polygon fill="#000000" stroke="#000000" points="209.0106,-294.5001 199.0106,-298 209.0105,-301.5001 209.0106,-294.5001"/>
+</g>
+<!-- module~precision&#45;&gt;iso_fortran_env -->
+<g id="proc~~mksphar~~UsesGraph_edge19" class="edge">
+<title>module~precision&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M147.602,-226.1014C128.4159,-235.6177 101.4834,-248.9762 80.3128,-259.4769"/>
+<polygon fill="#000000" stroke="#000000" points="78.7398,-256.3501 71.3365,-263.9291 81.8503,-262.6211 78.7398,-256.3501"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+
+    <p>@brief   Generate transformation to spherical harmonics basis</p>
+<p>@details This is used by the MINI basis during the Huckel guess,
+         to convert any d or f shells to spherical harmonics.</p>
+<p>@author  MWS: 4/2013 rewrite returns pure s,p,d,f spherical</p>
+
+
+    <h3>Arguments</h3>
+        <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-w~51"></span>
+              real(kind=dp)
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>w</strong>(l1co,l1co)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-l1co~2"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>l1co</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-l0co"></span>
+              integer
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>l0co</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-notsp"></span>
+              logical
+            </td>
+<td></td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>notsp</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-basis~35"></span>
+              type(<a href='../type/basis_set.html'>basis_set</a>),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>basis</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <br>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Calls</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~mksphar~~CallsGraph Pages: 1 -->
+<svg id="procmkspharCallsGraph" width="196pt" height="32pt"
+ viewBox="0.00 0.00 196.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~mksphar~~CallsGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~mksphar~~CallsGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 192,-28 192,4 -4,4"/>
+<!-- proc~mksphar -->
+<g id="proc~~mksphar~~CallsGraph_node1" class="node">
+<title>proc~mksphar</title>
+<polygon fill="none" stroke="#000000" points="59,-24 0,-24 0,0 59,0 59,-24"/>
+<text text-anchor="middle" x="29.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mksphar</text>
+</g>
+<!-- interface~show_message -->
+<g id="proc~~mksphar~~CallsGraph_node2" class="node">
+<title>interface~show_message</title>
+<g id="a_proc~~mksphar~~CallsGraph_node2"><a xlink:href="../interface/show_message.html" xlink:title="show_message">
+<polygon fill="#a7506f" stroke="#a7506f" points="188,-24 95,-24 95,0 188,0 188,-24"/>
+<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">show_message</text>
+</a>
+</g>
+</g>
+<!-- proc~mksphar&#45;&gt;interface~show_message -->
+<g id="proc~~mksphar~~CallsGraph_edge1" class="edge">
+<title>proc~mksphar&#45;&gt;interface~show_message</title>
+<path fill="none" stroke="#000000" d="M59.2199,-12C67.0452,-12 75.7559,-12 84.4992,-12"/>
+<polygon fill="#000000" stroke="#000000" points="84.7269,-15.5001 94.7268,-12 84.7268,-8.5001 84.7269,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CallsGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CallsGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+  <h3 class="card-title">Called by</h3>
+      </div>
+      <div class="card-body">
+  <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: proc~~mksphar~~CalledByGraph Pages: 1 -->
+<svg id="procmkspharCalledByGraph" width="440pt" height="32pt"
+ viewBox="0.00 0.00 440.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="proc~~mksphar~~CalledByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>proc~~mksphar~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 436,-28 436,4 -4,4"/>
+<!-- proc~mksphar -->
+<g id="proc~~mksphar~~CalledByGraph_node1" class="node">
+<title>proc~mksphar</title>
+<polygon fill="none" stroke="#000000" points="432,-24 373,-24 373,0 432,0 432,-24"/>
+<text text-anchor="middle" x="402.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">mksphar</text>
+</g>
+<!-- proc~huckel_guess -->
+<g id="proc~~mksphar~~CalledByGraph_node2" class="node">
+<title>proc~huckel_guess</title>
+<g id="a_proc~~mksphar~~CalledByGraph_node2"><a xlink:href="../proc/huckel_guess.html" xlink:title="huckel_guess">
+<polygon fill="#d9534f" stroke="#d9534f" points="337,-24 253,-24 253,0 337,0 337,-24"/>
+<text text-anchor="middle" x="295" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel_guess</text>
+</a>
+</g>
+</g>
+<!-- proc~huckel_guess&#45;&gt;proc~mksphar -->
+<g id="proc~~mksphar~~CalledByGraph_edge1" class="edge">
+<title>proc~huckel_guess&#45;&gt;proc~mksphar</title>
+<path fill="none" stroke="#000000" d="M337.1783,-12C345.5328,-12 354.2789,-12 362.5564,-12"/>
+<polygon fill="#000000" stroke="#000000" points="362.7259,-15.5001 372.7259,-12 362.7258,-8.5001 362.7259,-15.5001"/>
+</g>
+<!-- proc~guess_huckel -->
+<g id="proc~~mksphar~~CalledByGraph_node3" class="node">
+<title>proc~guess_huckel</title>
+<g id="a_proc~~mksphar~~CalledByGraph_node3"><a xlink:href="../proc/guess_huckel.html" xlink:title="guess_huckel">
+<polygon fill="#d9534f" stroke="#d9534f" points="217,-24 133,-24 133,0 217,0 217,-24"/>
+<text text-anchor="middle" x="175" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel&#45;&gt;proc~huckel_guess -->
+<g id="proc~~mksphar~~CalledByGraph_edge2" class="edge">
+<title>proc~guess_huckel&#45;&gt;proc~huckel_guess</title>
+<path fill="none" stroke="#000000" d="M217.3075,-12C225.4629,-12 234.0971,-12 242.5298,-12"/>
+<polygon fill="#000000" stroke="#000000" points="242.6701,-15.5001 252.6701,-12 242.67,-8.5001 242.6701,-15.5001"/>
+</g>
+<!-- proc~guess_huckel_c -->
+<g id="proc~~mksphar~~CalledByGraph_node4" class="node">
+<title>proc~guess_huckel_c</title>
+<g id="a_proc~~mksphar~~CalledByGraph_node4"><a xlink:href="../proc/guess_huckel_c.html" xlink:title="guess_huckel_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="97,-24 0,-24 0,0 97,0 97,-24"/>
+<text text-anchor="middle" x="48.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel_C</text>
+</a>
+</g>
+</g>
+<!-- proc~guess_huckel_c&#45;&gt;proc~guess_huckel -->
+<g id="proc~~mksphar~~CalledByGraph_edge3" class="edge">
+<title>proc~guess_huckel_c&#45;&gt;proc~guess_huckel</title>
+<path fill="none" stroke="#000000" d="M97.0464,-12C105.4673,-12 114.2563,-12 122.7704,-12"/>
+<polygon fill="#000000" stroke="#000000" points="122.9762,-15.5001 132.9762,-12 122.9762,-8.5001 122.9762,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+
+
+    
+    
+
+    
+    
+
+
+
+    
+    <section>
+    <h2><span class="anchor" id="src"></span>Source Code</h2>
+    <div class="hl codehilite"><pre><span></span><span class="w">      </span><span class="k">subroutine </span><span class="n">mksphar</span><span class="p">(</span><span class="n">w</span><span class="p">,</span><span class="n">l1co</span><span class="p">,</span><span class="n">l0co</span><span class="p">,</span><span class="n">notsp</span><span class="p">,</span><span class="n">basis</span><span class="p">)</span>
+<span class="w">      </span><span class="k">use </span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">show_message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span>
+<span class="w">      </span><span class="k">use </span><span class="n">basis_tools</span><span class="p">,</span><span class="w"> </span><span class="k">only</span><span class="p">:</span><span class="w"> </span><span class="n">basis_set</span>
+<span class="c">!</span>
+<span class="w">      </span><span class="k">implicit none</span>
+<span class="c">!</span>
+<span class="c">!</span>
+<span class="w">      </span><span class="k">type</span><span class="p">(</span><span class="n">basis_set</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">basis</span>
+<span class="w">      </span><span class="kt">logical</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">notsp</span>
+<span class="w">      </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">w</span><span class="p">(</span><span class="n">l1co</span><span class="p">,</span><span class="n">l1co</span><span class="p">)</span>
+<span class="w">      </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">l1co</span><span class="p">,</span><span class="w"> </span><span class="n">l0co</span>
+<span class="c">!</span>
+<span class="w">      </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">RT0304</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">SQRT</span><span class="p">(</span><span class="w"> </span><span class="mf">3.0D+00</span><span class="o">/</span><span class="w"> </span><span class="mf">4.0D+00</span><span class="p">)</span>
+<span class="w">      </span><span class="kt">real</span><span class="p">(</span><span class="nb">kind</span><span class="o">=</span><span class="n">dp</span><span class="p">),</span><span class="w"> </span><span class="k">parameter</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">RT0920</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">SQRT</span><span class="p">(</span><span class="w"> </span><span class="mf">9.0D+00</span><span class="o">/</span><span class="mi">2</span><span class="mf">0.0D+00</span><span class="p">)</span>
+<span class="w">      </span><span class="kt">integer</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">sph</span><span class="p">,</span><span class="w"> </span><span class="n">ncont</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">cart</span><span class="p">,</span><span class="w"> </span><span class="n">ndim</span><span class="p">,</span><span class="w"> </span><span class="n">l</span>
+<span class="c">!</span>
+<span class="c">!     Transform to spherical harmonic basis</span>
+<span class="w">      </span><span class="n">w</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">      </span><span class="n">sph</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">      </span><span class="n">ncont</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">      </span><span class="n">notsp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">false</span><span class="p">.</span>
+<span class="w">      </span><span class="k">do </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">nshell</span>
+<span class="w">         </span><span class="n">notsp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">notsp</span><span class="w"> </span><span class="p">.</span><span class="nb">or</span><span class="p">.</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="c">!</span>
+<span class="c">!        S,P,L shell is already spherical harmonics.</span>
+<span class="w">         </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            </span><span class="n">cart</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">ao_offset</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+<span class="w">            </span><span class="n">ndim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">naos</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+<span class="w">            </span><span class="k">do </span><span class="n">l</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">ndim</span>
+<span class="w">              </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="n">l</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">sph</span><span class="o">+</span><span class="n">l</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="k">enddo</span>
+<span class="k">            </span><span class="n">sph</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sph</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ndim</span>
+<span class="w">         </span><span class="k">end if</span>
+<span class="c">!</span>
+<span class="w">         </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            </span><span class="n">cart</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">ao_offset</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+<span class="c">!           true D orbitals, from eg irrep of Oh</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="w">  </span><span class="p">,</span><span class="n">sph</span><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">sph</span><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="w">  </span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mf">0.5d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mf">0.5d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="c">!           true d orbitals, from t2g irrep of oh</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">4</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">5</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">ncont</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ncont</span><span class="o">+</span><span class="mi">1</span>
+<span class="w">            </span><span class="n">sph</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sph</span><span class="o">+</span><span class="mi">5</span>
+<span class="w">         </span><span class="k">end if</span>
+<span class="c">!</span>
+<span class="w">         </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            </span><span class="n">cart</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">basis</span><span class="p">%</span><span class="n">ao_offset</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+<span class="c">!           T1U (IN OH) COMBINATIONS</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="w">  </span><span class="p">,</span><span class="n">sph</span><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">5</span><span class="p">,</span><span class="n">sph</span><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">7</span><span class="p">,</span><span class="n">sph</span><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">8</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">4</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">6</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0920</span>
+<span class="c">!           t2u (in oh) combinations</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">5</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">7</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">8</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">4</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="n">rt0304</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">6</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">rt0304</span>
+<span class="c">!           a2u (in oh) combination</span>
+<span class="w">            </span><span class="n">w</span><span class="p">(</span><span class="n">cart</span><span class="o">+</span><span class="mi">9</span><span class="p">,</span><span class="n">sph</span><span class="o">+</span><span class="mi">6</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="mf">1.0d0</span>
+<span class="w">            </span><span class="n">ncont</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ncont</span><span class="o">+</span><span class="mi">3</span>
+<span class="w">            </span><span class="n">sph</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sph</span><span class="o">+</span><span class="mi">7</span>
+<span class="w">         </span><span class="k">end if</span>
+<span class="c">!</span>
+<span class="w">         </span><span class="k">if</span><span class="p">(</span><span class="n">basis</span><span class="p">%</span><span class="n">am</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="k">then</span>
+<span class="k">            CALL </span><span class="n">show_message</span><span class="p">(</span><span class="s1">&#39;MKSPHAR: CALLED FOR BASIS WITH G/H/I AOS&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_ABORT</span><span class="p">)</span>
+<span class="w">         </span><span class="k">end if</span>
+<span class="k">      end do</span>
+
+<span class="k">      </span><span class="n">l0co</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">l1co</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ncont</span>
+
+<span class="w">      </span><span class="k">end subroutine </span><span class="n">mksphar</span>
+</pre></div>
+
+    </section>
+    <br>
+    
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

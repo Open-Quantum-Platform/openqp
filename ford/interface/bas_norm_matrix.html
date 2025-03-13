@@ -1,0 +1,826 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>bas_norm_matrix &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>bas_norm_matrix
+      <small>Interface</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title="<p> 0.0% of total for procedures.</p>Including implementation: 23 statements,  0.2% of total for procedures.">4 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/basis_tools.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/basis_tools.f90.html'>basis_tools.F90</a></li>
+                <li class="breadcrumb-item"><a href='../module/basis_tools.html'>basis_tools</a></li>
+            <li class="breadcrumb-item active" aria-current="page">bas_norm_matrix</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3 hidden-xs hidden-sm visible-md visible-lg">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#modprocs-0"
+         aria-expanded="false" aria-controls="modprocs-0">
+         <h4 class="card-header bg-primary text-white">Module Procedures</h4>
+      </a>
+      <div id="modprocs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../interface/bas_norm_matrix.html#moduleprocedure-bas_norm_matrix_tr">bas_norm_matrix_tr</a>
+            <a class="list-group-item" href="../interface/bas_norm_matrix.html#moduleprocedure-bas_norm_matrix_sq">bas_norm_matrix_sq</a>
+        </div>
+      </div>
+    </div>
+
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      <h2>public interface bas_norm_matrix</h2>
+      
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Called by</h3>
+          </div>
+          <div class="card-body">
+            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: interface~~bas_norm_matrix~~CalledByGraph Pages: 1 -->
+<svg id="interfacebas_norm_matrixCalledByGraph" width="641pt" height="269pt"
+ viewBox="0.00 0.00 641.00 268.94" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="interface~~bas_norm_matrix~~CalledByGraph" class="graph" transform="scale(.825 .825) rotate(0) translate(4 322)">
+<title>interface~~bas_norm_matrix~~CalledByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-322 773,-322 773,4 -4,4"/>
+<!-- interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node1" class="node">
+<title>interface~bas_norm_matrix</title>
+<polygon fill="none" stroke="#000000" points="769,-192 664,-192 664,-168 769,-168 769,-192"/>
+<text text-anchor="middle" x="716.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">bas_norm_matrix</text>
+</g>
+<!-- proc~electrostatic_potential -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node2" class="node">
+<title>proc~electrostatic_potential</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node2"><a xlink:href="../proc/electrostatic_potential.html" xlink:title="electrostatic_potential">
+<polygon fill="#d9534f" stroke="#d9534f" points="615,-318 484,-318 484,-294 615,-294 615,-318"/>
+<text text-anchor="middle" x="549.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electrostatic_potential</text>
+</a>
+</g>
+</g>
+<!-- proc~electrostatic_potential&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge1" class="edge">
+<title>proc~electrostatic_potential&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M609.8424,-293.9727C616.2154,-291.513 622.4032,-288.5553 628,-285 661.9319,-263.4451 689.5589,-224.7324 704.4657,-200.8154"/>
+<polygon fill="#000000" stroke="#000000" points="707.5284,-202.5147 709.7147,-192.1479 701.5408,-198.8886 707.5284,-202.5147"/>
+</g>
+<!-- proc~grad_ee_kinetic -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node3" class="node">
+<title>proc~grad_ee_kinetic</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node3"><a xlink:href="../proc/grad_ee_kinetic.html" xlink:title="grad_ee_kinetic">
+<polygon fill="#d9534f" stroke="#d9534f" points="598,-150 501,-150 501,-126 598,-126 598,-150"/>
+<text text-anchor="middle" x="549.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_ee_kinetic</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_ee_kinetic&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge2" class="edge">
+<title>proc~grad_ee_kinetic&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M597.3555,-150.0355C616.4845,-154.8464 638.6861,-160.43 658.7039,-165.4645"/>
+<polygon fill="#000000" stroke="#000000" points="658.0858,-168.9179 668.6375,-167.9627 659.7932,-162.1293 658.0858,-168.9179"/>
+</g>
+<!-- proc~grad_ee_overlap -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node4" class="node">
+<title>proc~grad_ee_overlap</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node4"><a xlink:href="../proc/grad_ee_overlap.html" xlink:title="grad_ee_overlap">
+<polygon fill="#d9534f" stroke="#d9534f" points="600.5,-276 498.5,-276 498.5,-252 600.5,-252 600.5,-276"/>
+<text text-anchor="middle" x="549.5" y="-261.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_ee_overlap</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_ee_overlap&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge3" class="edge">
+<title>proc~grad_ee_overlap&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M600.6999,-253.1459C609.9958,-250.3834 619.4482,-247.0262 628,-243 652.782,-231.3325 677.9293,-212.6267 695.0513,-198.6237"/>
+<polygon fill="#000000" stroke="#000000" points="697.3394,-201.2729 702.7752,-192.1788 692.8547,-195.8982 697.3394,-201.2729"/>
+</g>
+<!-- proc~grad_en_hellman_feynman -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node5" class="node">
+<title>proc~grad_en_hellman_feynman</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node5"><a xlink:href="../proc/grad_en_hellman_feynman.html" xlink:title="grad_en_hellman_feynman">
+<polygon fill="#d9534f" stroke="#d9534f" points="628,-234 471,-234 471,-210 628,-210 628,-234"/>
+<text text-anchor="middle" x="549.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_en_hellman_feynman</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_en_hellman_feynman&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge4" class="edge">
+<title>proc~grad_en_hellman_feynman&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M597.3555,-209.9645C616.4845,-205.1536 638.6861,-199.57 658.7039,-194.5355"/>
+<polygon fill="#000000" stroke="#000000" points="659.7932,-197.8707 668.6375,-192.0373 658.0858,-191.0821 659.7932,-197.8707"/>
+</g>
+<!-- proc~grad_en_pulay -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node6" class="node">
+<title>proc~grad_en_pulay</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node6"><a xlink:href="../proc/grad_en_pulay.html" xlink:title="grad_en_pulay">
+<polygon fill="#d9534f" stroke="#d9534f" points="595,-192 504,-192 504,-168 595,-168 595,-192"/>
+<text text-anchor="middle" x="549.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grad_en_pulay</text>
+</a>
+</g>
+</g>
+<!-- proc~grad_en_pulay&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge5" class="edge">
+<title>proc~grad_en_pulay&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M595.1335,-180C613.2259,-180 634.3275,-180 653.8138,-180"/>
+<polygon fill="#000000" stroke="#000000" points="653.8321,-183.5001 663.8321,-180 653.8321,-176.5001 653.8321,-183.5001"/>
+</g>
+<!-- proc~multipole_integrals -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node7" class="node">
+<title>proc~multipole_integrals</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node7"><a xlink:href="../proc/multipole_integrals.html" xlink:title="multipole_integrals">
+<polygon fill="#d9534f" stroke="#d9534f" points="607,-108 492,-108 492,-84 607,-84 607,-108"/>
+<text text-anchor="middle" x="549.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">multipole_integrals</text>
+</a>
+</g>
+</g>
+<!-- proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge6" class="edge">
+<title>proc~multipole_integrals&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M604.8692,-108.131C612.7973,-110.6337 620.7246,-113.5747 628,-117 652.782,-128.6675 677.9293,-147.3733 695.0513,-161.3763"/>
+<polygon fill="#000000" stroke="#000000" points="692.8547,-164.1018 702.7752,-167.8212 697.3394,-158.7271 692.8547,-164.1018"/>
+</g>
+<!-- proc~omp_hst -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node8" class="node">
+<title>proc~omp_hst</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node8"><a xlink:href="../proc/omp_hst.html" xlink:title="omp_hst">
+<polygon fill="#d9534f" stroke="#d9534f" points="578.5,-45 520.5,-45 520.5,-21 578.5,-21 578.5,-45"/>
+<text text-anchor="middle" x="549.5" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">omp_hst</text>
+</a>
+</g>
+</g>
+<!-- proc~omp_hst&#45;&gt;interface~bas_norm_matrix -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge7" class="edge">
+<title>proc~omp_hst&#45;&gt;interface~bas_norm_matrix</title>
+<path fill="none" stroke="#000000" d="M577.9629,-45.0083C593.6143,-52.375 612.8673,-62.7409 628,-75 658.7452,-99.9068 686.8229,-136.6515 702.7693,-159.4161"/>
+<polygon fill="#000000" stroke="#000000" points="699.9047,-161.4274 708.4562,-167.6822 705.6717,-157.4598 699.9047,-161.4274"/>
+</g>
+<!-- proc~electric_moments -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node9" class="node">
+<title>proc~electric_moments</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node9"><a xlink:href="../proc/electric_moments.html" xlink:title="electric_moments">
+<polygon fill="#d9534f" stroke="#d9534f" points="419.5,-150 311.5,-150 311.5,-126 419.5,-126 419.5,-150"/>
+<text text-anchor="middle" x="365.5" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments</text>
+</a>
+</g>
+</g>
+<!-- proc~electric_moments&#45;&gt;proc~multipole_integrals -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge17" class="edge">
+<title>proc~electric_moments&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M418.227,-125.9645C439.592,-121.0877 464.4358,-115.4168 486.7255,-110.329"/>
+<polygon fill="#000000" stroke="#000000" points="487.7949,-113.675 496.7653,-108.0373 486.2371,-106.8505 487.7949,-113.675"/>
+</g>
+<!-- proc~get_td_transition_dipole -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node10" class="node">
+<title>proc~get_td_transition_dipole</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node10"><a xlink:href="../proc/get_td_transition_dipole.html" xlink:title="get_td_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="435,-108 296,-108 296,-84 435,-84 435,-108"/>
+<text text-anchor="middle" x="365.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_td_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge18" class="edge">
+<title>proc~get_td_transition_dipole&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M435.0625,-96C450.2769,-96 466.3632,-96 481.5151,-96"/>
+<polygon fill="#000000" stroke="#000000" points="481.8334,-99.5001 491.8334,-96 481.8333,-92.5001 481.8334,-99.5001"/>
+</g>
+<!-- proc~get_transition_dipole -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node11" class="node">
+<title>proc~get_transition_dipole</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node11"><a xlink:href="../proc/get_transition_dipole.html" xlink:title="get_transition_dipole">
+<polygon fill="#d9534f" stroke="#d9534f" points="427.5,-66 303.5,-66 303.5,-42 427.5,-42 427.5,-66"/>
+<text text-anchor="middle" x="365.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_transition_dipole</text>
+</a>
+</g>
+</g>
+<!-- proc~get_transition_dipole&#45;&gt;proc~multipole_integrals -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge19" class="edge">
+<title>proc~get_transition_dipole&#45;&gt;proc~multipole_integrals</title>
+<path fill="none" stroke="#000000" d="M418.227,-66.0355C439.592,-70.9123 464.4358,-76.5832 486.7255,-81.671"/>
+<polygon fill="#000000" stroke="#000000" points="486.2371,-85.1495 496.7653,-83.9627 487.7949,-78.325 486.2371,-85.1495"/>
+</g>
+<!-- proc~hf_gradient -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node12" class="node">
+<title>proc~hf_gradient</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node12"><a xlink:href="../proc/hf_gradient.html" xlink:title="hf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="402,-192 329,-192 329,-168 402,-168 402,-192"/>
+<text text-anchor="middle" x="365.5" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge9" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M402.2929,-171.6016C427.6226,-165.8198 461.8122,-158.0157 490.8664,-151.3838"/>
+<polygon fill="#000000" stroke="#000000" points="491.9357,-154.7298 500.9061,-149.0921 490.3779,-147.9053 491.9357,-154.7298"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_ee_overlap -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge11" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_ee_overlap</title>
+<path fill="none" stroke="#000000" d="M402.205,-186.9122C413.3234,-190.0752 425.1805,-194.5974 435,-201 455.5944,-214.4282 450.1932,-229.9034 471,-243 476.4063,-246.4029 482.3561,-249.2591 488.4879,-251.6554"/>
+<polygon fill="#000000" stroke="#000000" points="487.6268,-255.0619 498.2216,-255.055 489.9349,-248.4533 487.6268,-255.0619"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_en_hellman_feynman -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge13" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_en_hellman_feynman</title>
+<path fill="none" stroke="#000000" d="M402.2929,-188.3984C426.4969,-193.9232 458.7907,-201.2946 486.9633,-207.7253"/>
+<polygon fill="#000000" stroke="#000000" points="486.2083,-211.1429 496.7364,-209.9561 487.7661,-204.3185 486.2083,-211.1429"/>
+</g>
+<!-- proc~hf_gradient&#45;&gt;proc~grad_en_pulay -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge15" class="edge">
+<title>proc~hf_gradient&#45;&gt;proc~grad_en_pulay</title>
+<path fill="none" stroke="#000000" d="M402.2929,-180C428.467,-180 464.1014,-180 493.7542,-180"/>
+<polygon fill="#000000" stroke="#000000" points="493.968,-183.5001 503.9679,-180 493.9679,-176.5001 493.968,-183.5001"/>
+</g>
+<!-- proc~int1e -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node13" class="node">
+<title>proc~int1e</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node13"><a xlink:href="../proc/int1e.html" xlink:title="int1e">
+<polygon fill="#d9534f" stroke="#d9534f" points="392.5,-24 338.5,-24 338.5,0 392.5,0 392.5,-24"/>
+<text text-anchor="middle" x="365.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e</text>
+</a>
+</g>
+</g>
+<!-- proc~int1e&#45;&gt;proc~omp_hst -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge20" class="edge">
+<title>proc~int1e&#45;&gt;proc~omp_hst</title>
+<path fill="none" stroke="#000000" d="M392.6498,-15.0986C423.7667,-18.65 475.0216,-24.4997 510.4274,-28.5406"/>
+<polygon fill="#000000" stroke="#000000" points="510.0821,-32.0239 520.4145,-29.6805 510.8759,-25.069 510.0821,-32.0239"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node14" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node14"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="420,-318 311,-318 311,-294 420,-294 420,-318"/>
+<text text-anchor="middle" x="365.5" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;proc~electrostatic_potential -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge8" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;proc~electrostatic_potential</title>
+<path fill="none" stroke="#000000" d="M420.2079,-306C437.0228,-306 455.8384,-306 473.7981,-306"/>
+<polygon fill="#000000" stroke="#000000" points="473.9595,-309.5001 483.9595,-306 473.9594,-302.5001 473.9595,-309.5001"/>
+</g>
+<!-- proc~tdhf_1e_grad -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node15" class="node">
+<title>proc~tdhf_1e_grad</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node15"><a xlink:href="../proc/tdhf_1e_grad.html" xlink:title="tdhf_1e_grad">
+<polygon fill="#d9534f" stroke="#d9534f" points="406.5,-234 324.5,-234 324.5,-210 406.5,-210 406.5,-234"/>
+<text text-anchor="middle" x="365.5" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_1e_grad</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge10" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_kinetic</title>
+<path fill="none" stroke="#000000" d="M406.5398,-213.7944C416.3494,-210.7264 426.4476,-206.5765 435,-201 455.5944,-187.5718 450.1932,-172.0966 471,-159 477.1563,-155.125 484.0172,-151.9591 491.0492,-149.3737"/>
+<polygon fill="#000000" stroke="#000000" points="492.2917,-152.6495 500.6943,-146.1961 490.1012,-146.0011 492.2917,-152.6495"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_overlap -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge12" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_ee_overlap</title>
+<path fill="none" stroke="#000000" d="M406.7932,-231.4256C430.8451,-236.9157 461.6213,-243.9407 488.4314,-250.0604"/>
+<polygon fill="#000000" stroke="#000000" points="487.9619,-253.5432 498.4901,-252.3564 489.5198,-246.7188 487.9619,-253.5432"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_en_hellman_feynman -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge14" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_en_hellman_feynman</title>
+<path fill="none" stroke="#000000" d="M406.7932,-222C422.8699,-222 441.9509,-222 460.8436,-222"/>
+<polygon fill="#000000" stroke="#000000" points="460.9932,-225.5001 470.9932,-222 460.9931,-218.5001 460.9932,-225.5001"/>
+</g>
+<!-- proc~tdhf_1e_grad&#45;&gt;proc~grad_en_pulay -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge16" class="edge">
+<title>proc~tdhf_1e_grad&#45;&gt;proc~grad_en_pulay</title>
+<path fill="none" stroke="#000000" d="M406.7932,-212.5744C432.461,-206.7154 465.7868,-199.1085 493.7778,-192.7192"/>
+<polygon fill="#000000" stroke="#000000" points="494.8545,-196.0635 503.8248,-190.4259 493.2966,-189.2391 494.8545,-196.0635"/>
+</g>
+<!-- proc~resp_charges_c -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node16" class="node">
+<title>proc~resp_charges_c</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node16"><a xlink:href="../proc/resp_charges_c.html" xlink:title="resp_charges_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="255.5,-318 158.5,-318 158.5,-294 255.5,-294 255.5,-318"/>
+<text text-anchor="middle" x="207" y="-303.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">resp_charges_C</text>
+</a>
+</g>
+</g>
+<!-- proc~resp_charges_c&#45;&gt;proc~oqp_resp_charges -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge24" class="edge">
+<title>proc~resp_charges_c&#45;&gt;proc~oqp_resp_charges</title>
+<path fill="none" stroke="#000000" d="M255.8485,-306C269.9643,-306 285.5967,-306 300.5296,-306"/>
+<polygon fill="#000000" stroke="#000000" points="300.7288,-309.5001 310.7287,-306 300.7287,-302.5001 300.7288,-309.5001"/>
+</g>
+<!-- proc~tdhf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node17" class="node">
+<title>proc~tdhf_energy</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node17"><a xlink:href="../proc/tdhf_energy.html" xlink:title="tdhf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="245,-108 169,-108 169,-84 245,-84 245,-108"/>
+<text text-anchor="middle" x="207" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge21" class="edge">
+<title>proc~tdhf_energy&#45;&gt;proc~get_td_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M245.3684,-96C257.6066,-96 271.6359,-96 285.6888,-96"/>
+<polygon fill="#000000" stroke="#000000" points="285.9003,-99.5001 295.9003,-96 285.9003,-92.5001 285.9003,-99.5001"/>
+</g>
+<!-- proc~tdhf_gradient -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node18" class="node">
+<title>proc~tdhf_gradient</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node18"><a xlink:href="../proc/tdhf_gradient.html" xlink:title="tdhf_gradient">
+<polygon fill="#d9534f" stroke="#d9534f" points="249,-234 165,-234 165,-210 249,-210 249,-234"/>
+<text text-anchor="middle" x="207" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge25" class="edge">
+<title>proc~tdhf_gradient&#45;&gt;proc~tdhf_1e_grad</title>
+<path fill="none" stroke="#000000" d="M249.059,-222C269.0779,-222 293.1915,-222 314.2699,-222"/>
+<polygon fill="#000000" stroke="#000000" points="314.3424,-225.5001 324.3424,-222 314.3423,-218.5001 314.3424,-225.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node19" class="node">
+<title>proc~tdhf_mrsf_energy</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node19"><a xlink:href="../proc/tdhf_mrsf_energy.html" xlink:title="tdhf_mrsf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="260,-66 154,-66 154,-42 260,-42 260,-66"/>
+<text text-anchor="middle" x="207" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge22" class="edge">
+<title>proc~tdhf_mrsf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M260.2191,-54C270.8228,-54 282.126,-54 293.2441,-54"/>
+<polygon fill="#000000" stroke="#000000" points="293.3773,-57.5001 303.3772,-54 293.3772,-50.5001 293.3773,-57.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node20" class="node">
+<title>proc~tdhf_sf_energy</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node20"><a xlink:href="../proc/tdhf_sf_energy.html" xlink:title="tdhf_sf_energy">
+<polygon fill="#d9534f" stroke="#d9534f" points="252.5,-24 161.5,-24 161.5,0 252.5,0 252.5,-24"/>
+<text text-anchor="middle" x="207" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge23" class="edge">
+<title>proc~tdhf_sf_energy&#45;&gt;proc~get_transition_dipole</title>
+<path fill="none" stroke="#000000" d="M252.4197,-24.0355C270.4922,-28.8244 291.4543,-34.3791 310.3852,-39.3955"/>
+<polygon fill="#000000" stroke="#000000" points="309.5107,-42.7845 320.0736,-41.9627 311.3038,-36.018 309.5107,-42.7845"/>
+</g>
+<!-- proc~tdhf_energy_c -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node21" class="node">
+<title>proc~tdhf_energy_c</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node21"><a xlink:href="../proc/tdhf_energy_c.html" xlink:title="tdhf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="103.5,-108 14.5,-108 14.5,-84 103.5,-84 103.5,-108"/>
+<text text-anchor="middle" x="59" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge26" class="edge">
+<title>proc~tdhf_energy_c&#45;&gt;proc~tdhf_energy</title>
+<path fill="none" stroke="#000000" d="M103.8065,-96C121.1599,-96 141.0641,-96 158.7327,-96"/>
+<polygon fill="#000000" stroke="#000000" points="158.8413,-99.5001 168.8412,-96 158.8412,-92.5001 158.8413,-99.5001"/>
+</g>
+<!-- proc~tdhf_gradient_c -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node22" class="node">
+<title>proc~tdhf_gradient_c</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node22"><a xlink:href="../proc/tdhf_gradient_c.html" xlink:title="tdhf_gradient_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="107.5,-234 10.5,-234 10.5,-210 107.5,-210 107.5,-234"/>
+<text text-anchor="middle" x="59" y="-219.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge27" class="edge">
+<title>proc~tdhf_gradient_c&#45;&gt;proc~tdhf_gradient</title>
+<path fill="none" stroke="#000000" d="M107.8709,-222C122.7844,-222 139.243,-222 154.3929,-222"/>
+<polygon fill="#000000" stroke="#000000" points="154.6372,-225.5001 164.6371,-222 154.6371,-218.5001 154.6372,-225.5001"/>
+</g>
+<!-- proc~tdhf_mrsf_energy_c -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node23" class="node">
+<title>proc~tdhf_mrsf_energy_c</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node23"><a xlink:href="../proc/tdhf_mrsf_energy_c.html" xlink:title="tdhf_mrsf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="118,-66 0,-66 0,-42 118,-42 118,-66"/>
+<text text-anchor="middle" x="59" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge28" class="edge">
+<title>proc~tdhf_mrsf_energy_c&#45;&gt;proc~tdhf_mrsf_energy</title>
+<path fill="none" stroke="#000000" d="M118.3445,-54C126.6918,-54 135.2982,-54 143.7157,-54"/>
+<polygon fill="#000000" stroke="#000000" points="143.8594,-57.5001 153.8593,-54 143.8593,-50.5001 143.8594,-57.5001"/>
+</g>
+<!-- proc~tdhf_sf_energy_c -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_node24" class="node">
+<title>proc~tdhf_sf_energy_c</title>
+<g id="a_interface~~bas_norm_matrix~~CalledByGraph_node24"><a xlink:href="../proc/tdhf_sf_energy_c.html" xlink:title="tdhf_sf_energy_C">
+<polygon fill="#d9534f" stroke="#d9534f" points="110.5,-24 7.5,-24 7.5,0 110.5,0 110.5,-24"/>
+<text text-anchor="middle" x="59" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy_C</text>
+</a>
+</g>
+</g>
+<!-- proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy -->
+<g id="interface~~bas_norm_matrix~~CalledByGraph_edge29" class="edge">
+<title>proc~tdhf_sf_energy_c&#45;&gt;proc~tdhf_sf_energy</title>
+<path fill="none" stroke="#000000" d="M110.7632,-12C123.7865,-12 137.8227,-12 151.0411,-12"/>
+<polygon fill="#000000" stroke="#000000" points="151.4317,-15.5001 161.4317,-12 151.4316,-8.5001 151.4317,-15.5001"/>
+</g>
+</g>
+</svg>
+</div>                <script>
+                  var paninterfacebas_norm_matrixCalledByGraph = svgPanZoom('#interfacebas_norm_matrixCalledByGraph',
+                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
+                  );
+                </script>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#CalledByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="CalledByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="641pt" height="27pt"
+ viewBox="0.00 0.00 641.00 27.37" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(.8552 .8552) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 745.5,-28 745.5,4 -4,4"/>
+<!-- Subroutine -->
+<g id="node1" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="71,-24 0,-24 0,0 71,0 71,-24"/>
+<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node2" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="147.5,-24 89.5,-24 89.5,0 147.5,0 147.5,-24"/>
+<text text-anchor="middle" x="118.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Interface -->
+<g id="node3" class="node">
+<title>Interface</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="227,-24 166,-24 166,0 227,0 227,-24"/>
+<text text-anchor="middle" x="196.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Interface</text>
+</g>
+<!-- Type Bound Procedure -->
+<g id="node4" class="node">
+<title>Type Bound Procedure</title>
+<polygon fill="#a7506f" stroke="#a7506f" points="378,-24 245,-24 245,0 378,0 378,-24"/>
+<text text-anchor="middle" x="311.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Type Bound Procedure</text>
+</g>
+<!-- Unknown Procedure Type -->
+<g id="node5" class="node">
+<title>Unknown Procedure Type</title>
+<polygon fill="#777777" stroke="#777777" points="543,-24 396,-24 396,0 543,0 543,-24"/>
+<text text-anchor="middle" x="469.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Unknown Procedure Type</text>
+</g>
+<!-- Program -->
+<g id="node6" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="619.5,-24 561.5,-24 561.5,0 619.5,0 619.5,-24"/>
+<text text-anchor="middle" x="590.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node7" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="741.5,-24 637.5,-24 637.5,0 741.5,0 741.5,-24"/>
+<text text-anchor="middle" x="689.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a procedure to one which it calls. Dashed 
+arrows point from an interface to procedures which implement that interface.
+This could include the module procedures in a generic interface or the
+implementation in a submodule of an interface in a parent module.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+<br>
+
+
+        <h2>Module Procedures</h2>
+            <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-bas_norm_matrix_tr"></span> <h3>private  subroutine bas_norm_matrix_tr(a, p, ld)  
+</h3></div>
+    <div class="card-body">
+        <p>@brief Scale matrix <code>A</code> with matrix \f$ P \cdot P^T \f$
+@details <code>A</code> is a packed square matrix, <code>P</code> is a column vector
+@author  Vladimir Mironov
+@date -Sep, 2018- Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~52"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-p~4"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>p</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ld"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ld</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+            <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-bas_norm_matrix_sq"></span> <h3>private  subroutine bas_norm_matrix_sq(a, p, ld)  
+</h3></div>
+    <div class="card-body">
+        <p>@brief Scale matrix <code>A</code> with matrix \f$ P \cdot P^T \f$
+@details <code>A</code> is a full square matrix, <code>P</code> is a column vector
+@author  Vladimir Mironov
+@date -Sep, 2018- Initial release</p>
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-a~53"></span>
+              real(kind=real64),
+            </td>
+<td>intent(inout)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>a</strong>(:,:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-p~5"></span>
+              real(kind=real64),
+            </td>
+<td>intent(in),</td>
+              <td></td>            <td>
+              allocatable
+            </td>
+            <td>::</td>
+            <td><strong>p</strong>(:)</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-ld~2"></span>
+              integer,
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>ld</strong></td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+
+    </div>
+  </div>
+
+</div>
+  </div>
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>

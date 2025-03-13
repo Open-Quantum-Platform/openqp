@@ -1,0 +1,667 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>elements &ndash; OPENQP</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <link href="../css/local.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>elements
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.1% of total for modules and submodules.">28 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/elements.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/elements.f90.html'>elements.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">elements</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(function () {
+    $('[data-bs-toggle="tooltip"]').tooltip()
+    })
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#vars-0"
+         aria-expanded="false" aria-controls="vars-0">
+         <h4 class="card-header bg-primary text-white">Variables</h4>
+      </a>
+      <div id="vars-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/elements.html#variable-max_element_z">MAX_ELEMENT_Z</a>
+            <a class="list-group-item" href="../module/elements.html#variable-elements_atomname">ELEMENTS_ATOMNAME</a>
+            <a class="list-group-item" href="../module/elements.html#variable-elements_short_name">ELEMENTS_SHORT_NAME</a>
+            <a class="list-group-item" href="../module/elements.html#variable-elements_long_name">ELEMENTS_LONG_NAME</a>
+            <a class="list-group-item" href="../module/elements.html#variable-elements_vdw_radii">ELEMENTS_VDW_RADII</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+      <div class="card mb-4">
+      <a data-bs-toggle="collapse" href="#funcs-0"
+         aria-expanded="false" aria-controls="funcs-0">
+         <h4 class="card-header bg-primary text-white">Functions</h4>
+      </a>
+      <div id="funcs-0" class="collapse">
+        <div class="list-group list-group-flush">
+            <a class="list-group-item" href="../module/elements.html#proc-get_element_id">get_element_id</a>
+        </div>
+      </div>
+    </div>
+
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='physical_constants.html'>physical_constants</a></li>
+                  <li class="list-inline-item"><a href='strings.html'>strings</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_fortran_env'>iso_fortran_env</a></li>
+              </ul>
+            </li>
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~elements~~UsesGraph Pages: 1 -->
+<svg id="moduleelementsUsesGraph" width="348pt" height="94pt"
+ viewBox="0.00 0.00 348.00 94.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~elements~~UsesGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 90)">
+<title>module~~elements~~UsesGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-90 344,-90 344,4 -4,4"/>
+<!-- module~elements -->
+<g id="module~~elements~~UsesGraph_node1" class="node">
+<title>module~elements</title>
+<polygon fill="none" stroke="#000000" points="340,-66 278,-66 278,-42 340,-42 340,-66"/>
+<text text-anchor="middle" x="309" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">elements</text>
+</g>
+<!-- iso_fortran_env -->
+<g id="module~~elements~~UsesGraph_node2" class="node">
+<title>iso_fortran_env</title>
+<g id="a_module~~elements~~UsesGraph_node2"><a xlink:href="http://fortranwiki.org/fortran/show/iso_fortran_env" xlink:title="iso_fortran_env">
+<polygon fill="#337ab7" stroke="#337ab7" points="94,-86 0,-86 0,-62 94,-62 94,-86"/>
+<text text-anchor="middle" x="47" y="-71.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_fortran_env</text>
+</a>
+</g>
+</g>
+<!-- module~elements&#45;&gt;iso_fortran_env -->
+<g id="module~~elements~~UsesGraph_edge1" class="edge">
+<title>module~elements&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.7702,-65.9473C266.6518,-69.6201 253.9291,-73.1743 242,-75 196.0739,-82.0288 143.3486,-81.2342 104.3121,-78.9842"/>
+<polygon fill="#000000" stroke="#000000" points="104.3887,-75.4823 94.1896,-78.3507 103.9514,-82.4686 104.3887,-75.4823"/>
+</g>
+<!-- module~physical_constants -->
+<g id="module~~elements~~UsesGraph_node3" class="node">
+<title>module~physical_constants</title>
+<g id="a_module~~elements~~UsesGraph_node3"><a xlink:href="../module/physical_constants.html" xlink:title="physical_constants">
+<polygon fill="#337ab7" stroke="#337ab7" points="242,-66 130,-66 130,-42 242,-42 242,-66"/>
+<text text-anchor="middle" x="186" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">physical_constants</text>
+</a>
+</g>
+</g>
+<!-- module~elements&#45;&gt;module~physical_constants -->
+<g id="module~~elements~~UsesGraph_edge2" class="edge">
+<title>module~elements&#45;&gt;module~physical_constants</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.9619,-54C270.1024,-54 261.3548,-54 252.468,-54"/>
+<polygon fill="#000000" stroke="#000000" points="252.4152,-50.5001 242.4152,-54 252.4152,-57.5001 252.4152,-50.5001"/>
+</g>
+<!-- module~strings -->
+<g id="module~~elements~~UsesGraph_node4" class="node">
+<title>module~strings</title>
+<g id="a_module~~elements~~UsesGraph_node4"><a xlink:href="../module/strings.html" xlink:title="strings">
+<polygon fill="#337ab7" stroke="#337ab7" points="213,-24 159,-24 159,0 213,0 213,-24"/>
+<text text-anchor="middle" x="186" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">strings</text>
+</a>
+</g>
+</g>
+<!-- module~elements&#45;&gt;module~strings -->
+<g id="module~~elements~~UsesGraph_edge3" class="edge">
+<title>module~elements&#45;&gt;module~strings</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.9619,-43.4016C261.3043,-37.7137 240.6578,-30.6636 223.1507,-24.6856"/>
+<polygon fill="#000000" stroke="#000000" points="223.8541,-21.2274 213.2595,-21.3081 221.592,-27.8519 223.8541,-21.2274"/>
+</g>
+<!-- module~physical_constants&#45;&gt;iso_fortran_env -->
+<g id="module~~elements~~UsesGraph_edge4" class="edge">
+<title>module~physical_constants&#45;&gt;iso_fortran_env</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M129.864,-62.0771C121.5076,-63.2795 112.8833,-64.5204 104.4993,-65.7267"/>
+<polygon fill="#000000" stroke="#000000" points="103.8255,-62.2875 94.4259,-67.1761 104.8225,-69.2162 103.8255,-62.2875"/>
+</g>
+<!-- iso_c_binding -->
+<g id="module~~elements~~UsesGraph_node5" class="node">
+<title>iso_c_binding</title>
+<g id="a_module~~elements~~UsesGraph_node5"><a xlink:href="http://fortranwiki.org/fortran/show/iso_c_binding" xlink:title="iso_c_binding">
+<polygon fill="#337ab7" stroke="#337ab7" points="89,-24 5,-24 5,0 89,0 89,-24"/>
+<text text-anchor="middle" x="47" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">iso_c_binding</text>
+</a>
+</g>
+</g>
+<!-- module~strings&#45;&gt;iso_c_binding -->
+<g id="module~~elements~~UsesGraph_edge5" class="edge">
+<title>module~strings&#45;&gt;iso_c_binding</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M158.8694,-12C141.9049,-12 119.4939,-12 99.1886,-12"/>
+<polygon fill="#000000" stroke="#000000" points="99.1135,-8.5001 89.1135,-12 99.1135,-15.5001 99.1135,-8.5001"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsesGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsesGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+          <div class="card">
+      <h3 class="card-header card-title bg-light">Used by</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: module~~elements~~UsedByGraph Pages: 1 -->
+<svg id="moduleelementsUsedByGraph" width="215pt" height="74pt"
+ viewBox="0.00 0.00 215.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="module~~elements~~UsedByGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
+<title>module~~elements~~UsedByGraph</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 211,-70 211,4 -4,4"/>
+<!-- module~elements -->
+<g id="module~~elements~~UsedByGraph_node1" class="node">
+<title>module~elements</title>
+<polygon fill="none" stroke="#000000" points="62,-45 0,-45 0,-21 62,-21 62,-45"/>
+<text text-anchor="middle" x="31" y="-30.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">elements</text>
+</g>
+<!-- module~basis_library -->
+<g id="module~~elements~~UsedByGraph_node2" class="node">
+<title>module~basis_library</title>
+<g id="a_module~~elements~~UsedByGraph_node2"><a xlink:href="../module/basis_library.html" xlink:title="basis_library">
+<polygon fill="#337ab7" stroke="#337ab7" points="192,-66 113,-66 113,-42 192,-42 192,-66"/>
+<text text-anchor="middle" x="152.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">basis_library</text>
+</a>
+</g>
+</g>
+<!-- module~basis_library&#45;&gt;module~elements -->
+<g id="module~~elements~~UsedByGraph_edge1" class="edge">
+<title>module~basis_library&#45;&gt;module~elements</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M112.7164,-47.1238C99.7193,-44.8774 85.2629,-42.3788 72.1663,-40.1152"/>
+<polygon fill="#000000" stroke="#000000" points="72.4584,-36.6138 62.0084,-38.3595 71.2662,-43.5116 72.4584,-36.6138"/>
+</g>
+<!-- proc~oqp_resp_charges -->
+<g id="module~~elements~~UsedByGraph_node3" class="node">
+<title>proc~oqp_resp_charges</title>
+<g id="a_module~~elements~~UsedByGraph_node3"><a xlink:href="../proc/oqp_resp_charges.html" xlink:title="oqp_resp_charges">
+<polygon fill="#d9534f" stroke="#d9534f" points="207,-24 98,-24 98,0 207,0 207,-24"/>
+<text text-anchor="middle" x="152.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">oqp_resp_charges</text>
+</a>
+</g>
+</g>
+<!-- proc~oqp_resp_charges&#45;&gt;module~elements -->
+<g id="module~~elements~~UsedByGraph_edge2" class="edge">
+<title>proc~oqp_resp_charges&#45;&gt;module~elements</title>
+<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M97.7924,-21.4556C89.2006,-22.9406 80.446,-24.4538 72.2251,-25.8747"/>
+<polygon fill="#000000" stroke="#000000" points="71.4077,-22.464 62.15,-27.6161 72.6,-29.3617 71.4077,-22.464"/>
+</g>
+</g>
+</svg>
+</div>          <div>
+            <a type="button" class="graph-help" data-bs-toggle="modal" href="#UsedByGraph-help-text">Help</a>
+          </div>
+          <div class="modal fade" id="UsedByGraph-help-text" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+<p>Nodes of different colours represent the following: </p>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.40.1 (0)
+ -->
+<!-- Title: Graph Key Pages: 1 -->
+<svg width="517pt" height="32pt"
+ viewBox="0.00 0.00 517.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
+<title>Graph Key</title>
+<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 513,-28 513,4 -4,4"/>
+<!-- Module -->
+<g id="node1" class="node">
+<title>Module</title>
+<polygon fill="#337ab7" stroke="#337ab7" points="54,-24 0,-24 0,0 54,0 54,-24"/>
+<text text-anchor="middle" x="27" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Module</text>
+</g>
+<!-- Submodule -->
+<g id="node2" class="node">
+<title>Submodule</title>
+<polygon fill="#5bc0de" stroke="#5bc0de" points="145.5,-24 72.5,-24 72.5,0 145.5,0 145.5,-24"/>
+<text text-anchor="middle" x="109" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Submodule</text>
+</g>
+<!-- Subroutine -->
+<g id="node3" class="node">
+<title>Subroutine</title>
+<polygon fill="#d9534f" stroke="#d9534f" points="234.5,-24 163.5,-24 163.5,0 234.5,0 234.5,-24"/>
+<text text-anchor="middle" x="199" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Subroutine</text>
+</g>
+<!-- Function -->
+<g id="node4" class="node">
+<title>Function</title>
+<polygon fill="#d94e8f" stroke="#d94e8f" points="311,-24 253,-24 253,0 311,0 311,-24"/>
+<text text-anchor="middle" x="282" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Function</text>
+</g>
+<!-- Program -->
+<g id="node5" class="node">
+<title>Program</title>
+<polygon fill="#f0ad4e" stroke="#f0ad4e" points="387,-24 329,-24 329,0 387,0 387,-24"/>
+<text text-anchor="middle" x="358" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Program</text>
+</g>
+<!-- This Page&#39;s Entity -->
+<g id="node6" class="node">
+<title>This Page&#39;s Entity</title>
+<polygon fill="none" stroke="#000000" points="509,-24 405,-24 405,0 509,0 509,-24"/>
+<text text-anchor="middle" x="457" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
+</g>
+</g>
+</svg>
+
+<p>Solid arrows point from a submodule to the (sub)module which it is
+descended from. Dashed arrows point from a module or program unit to 
+modules which it uses.
+</p>
+ </div>
+            </div>
+          </div>
+        </div>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      <br>
+
+
+        <section>
+          <h2>Variables</h2>
+            <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+<th></th><th scope="col">Initial</th>        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-max_element_z"></span>
+              integer,
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>MAX_ELEMENT_Z</strong></td>
+<td> =</td>
+                <td>110</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-elements_atomname"></span>
+              character(len=2),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ELEMENTS_ATOMNAME</strong>(MAX_ELEMENT_Z)</td>
+<td> =</td>
+                <td>[&#39;H &#39;, &#39;He&#39;, &#39;Li&#39;, &#39;Be&#39;, &#39;B &#39;, &#39;C &#39;, &#39;N &#39;, &#39;O &#39;, &#39;F &#39;, &#39;Ne&#39;, &#39;Na&#39;, &#39;Mg&#39;, &#39;Al&#39;, &#39;Si&#39;, &#39;P &#39;, &#39;S &#39;, &#39;Cl&#39;, &#39;Ar&#39;, &#39;K &#39;, &#39;Ca&#39;, &#39;Sc&#39;, &#39;Ti&#39;, &#39;V &#39;, &#39;Cr&#39;, &#39;Mn&#39;, &#39;Fe&#39;, &#39;Co&#39;, &#39;Ni&#39;, &#39;Cu&#39;, &#39;Zn&#39;, &#39;Ga&#39;, &#39;Ge&#39;, &#39;As&#39;, &#39;Se&#39;, &#39;Br&#39;, &#39;Kr&#39;, &#39;Rb&#39;, &#39;Sr&#39;, &#39;Y &#39;, &#39;Zr&#39;, &#39;Nb&#39;, &#39;Mo&#39;, &#39;Tc&#39;, &#39;Ru&#39;, &#39;Rh&#39;, &#39;Pd&#39;, &#39;Ag&#39;, &#39;Cd&#39;, &#39;In&#39;, &#39;Sn&#39;, &#39;Sb&#39;, &#39;Te&#39;, &#39;I &#39;, &#39;Xe&#39;, &#39;Cs&#39;, &#39;Ba&#39;, &#39;La&#39;, &#39;Ce&#39;, &#39;Pr&#39;, &#39;Nd&#39;, &#39;Pm&#39;, &#39;Sm&#39;, &#39;Eu&#39;, &#39;Gd&#39;, &#39;Tb&#39;, &#39;Dy&#39;, &#39;Ho&#39;, &#39;Er&#39;, &#39;Tm&#39;, &#39;Yb&#39;, &#39;Lu&#39;, &#39;Hf&#39;, &#39;Ta&#39;, &#39;W &#39;, &#39;Re&#39;, &#39;Os&#39;, &#39;Ir&#39;, &#39;Pt&#39;, &#39;Au&#39;, &#39;Hg&#39;, &#39;Tl&#39;, &#39;Pb&#39;, &#39;Bi&#39;, &#39;Po&#39;, &#39;At&#39;, &#39;Rn&#39;, &#39;Fr&#39;, &#39;Ra&#39;, &#39;Ac&#39;, &#39;Th&#39;, &#39;Pa&#39;, &#39;U &#39;, &#39;Np&#39;, &#39;Pu&#39;, &#39;Am&#39;, &#39;Cm&#39;, &#39;Bk&#39;, &#39;Cf&#39;, &#39;Es&#39;, &#39;Fm&#39;, &#39;Md&#39;, &#39;No&#39;, &#39;Lr&#39;, &#39;Rf&#39;, &#39;Db&#39;, &#39;Sg&#39;, &#39;Bh&#39;, &#39;Hs&#39;, &#39;Mt&#39;, &#39;Ds&#39;]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-elements_short_name"></span>
+              character(len=4),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ELEMENTS_SHORT_NAME</strong>(MAX_ELEMENT_Z)</td>
+<td> =</td>
+                <td>[&#34;H   &#34;, &#34;HE  &#34;, &#34;LI  &#34;, &#34;BE  &#34;, &#34;B   &#34;, &#34;C   &#34;, &#34;N   &#34;, &#34;O   &#34;, &#34;F   &#34;, &#34;NE  &#34;, &#34;NA  &#34;, &#34;MG  &#34;, &#34;AL  &#34;, &#34;SI  &#34;, &#34;P   &#34;, &#34;S   &#34;, &#34;CL  &#34;, &#34;AR  &#34;, &#34;K   &#34;, &#34;CA  &#34;, &#34;SC  &#34;, &#34;TI  &#34;, &#34;V   &#34;, &#34;CR  &#34;, &#34;MN  &#34;, &#34;FE  &#34;, &#34;CO  &#34;, &#34;NI  &#34;, &#34;CU  &#34;, &#34;ZN  &#34;, &#34;GA  &#34;, &#34;GE  &#34;, &#34;AS  &#34;, &#34;SE  &#34;, &#34;BR  &#34;, &#34;KR  &#34;, &#34;RB  &#34;, &#34;SR  &#34;, &#34;Y   &#34;, &#34;ZR  &#34;, &#34;NB  &#34;, &#34;MO  &#34;, &#34;TC  &#34;, &#34;RU  &#34;, &#34;RH  &#34;, &#34;PD  &#34;, &#34;AG  &#34;, &#34;CD  &#34;, &#34;IN  &#34;, &#34;SN  &#34;, &#34;SB  &#34;, &#34;TE  &#34;, &#34;I   &#34;, &#34;XE  &#34;, &#34;CS  &#34;, &#34;BA  &#34;, &#34;LA  &#34;, &#34;CE  &#34;, &#34;PR  &#34;, &#34;ND  &#34;, &#34;PM  &#34;, &#34;SM  &#34;, &#34;EU  &#34;, &#34;GD  &#34;, &#34;TB  &#34;, &#34;DY  &#34;, &#34;HO  &#34;, &#34;ER  &#34;, &#34;TM  &#34;, &#34;YB  &#34;, &#34;LU  &#34;, &#34;HF  &#34;, &#34;TA  &#34;, &#34;W   &#34;, &#34;RE  &#34;, &#34;OS  &#34;, &#34;IR  &#34;, &#34;PT  &#34;, &#34;AU  &#34;, &#34;HG  &#34;, &#34;TL  &#34;, &#34;PB  &#34;, &#34;BI  &#34;, &#34;PO  &#34;, &#34;AT  &#34;, &#34;RN  &#34;, &#34;FR  &#34;, &#34;RA  &#34;, &#34;AC  &#34;, &#34;TH  &#34;, &#34;PA  &#34;, &#34;U   &#34;, &#34;NP  &#34;, &#34;PU  &#34;, &#34;AM  &#34;, &#34;CM  &#34;, &#34;BK  &#34;, &#34;CF  &#34;, &#34;ES  &#34;, &#34;FM  &#34;, &#34;MD  &#34;, &#34;NO  &#34;, &#34;LR  &#34;, &#34;RF  &#34;, &#34;DB  &#34;, &#34;SG  &#34;, &#34;BH  &#34;, &#34;HS  &#34;, &#34;MT  &#34;, &#34;DS  &#34;]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-elements_long_name"></span>
+              character(len=16),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ELEMENTS_LONG_NAME</strong>(MAX_ELEMENT_Z)</td>
+<td> =</td>
+                <td>[&#34;HYDROGEN        &#34;, &#34;HELIUM          &#34;, &#34;LITHIUM         &#34;, &#34;BERYLLIUM       &#34;, &#34;BORON           &#34;, &#34;CARBON          &#34;, &#34;NITROGEN        &#34;, &#34;OXYGEN          &#34;, &#34;FLUORINE        &#34;, &#34;NEON            &#34;, &#34;SODIUM          &#34;, &#34;MAGNESIUM       &#34;, &#34;ALUMINIUM       &#34;, &#34;SILICON         &#34;, &#34;PHOSPHORUS      &#34;, &#34;SULFUR          &#34;, &#34;CHLORINE        &#34;, &#34;ARGON           &#34;, &#34;POTASSIUM       &#34;, &#34;CALCIUM         &#34;, &#34;SCANDIUM        &#34;, &#34;TITANIUM        &#34;, &#34;VANADIUM        &#34;, &#34;CHROMIUM        &#34;, &#34;MANGANESE       &#34;, &#34;IRON            &#34;, &#34;COBALT          &#34;, &#34;NICKEL          &#34;, &#34;COPPER          &#34;, &#34;ZINC            &#34;, &#34;GALLIUM         &#34;, &#34;GERMANIUM       &#34;, &#34;ARSENIC         &#34;, &#34;SELENIUM        &#34;, &#34;BROMINE         &#34;, &#34;KRYPTON         &#34;, &#34;RUBIDIUM        &#34;, &#34;STRONTIUM       &#34;, &#34;YTTRIUM         &#34;, &#34;ZIRCONIUM       &#34;, &#34;NIOBIUM         &#34;, &#34;MOLYBDENUM      &#34;, &#34;TECHNETIUM      &#34;, &#34;RUTHENIUM       &#34;, &#34;RHODIUM         &#34;, &#34;PALLADIUM       &#34;, &#34;SILVER          &#34;, &#34;CADMIUM         &#34;, &#34;INDIUM          &#34;, &#34;TIN             &#34;, &#34;ANTIMONY        &#34;, &#34;TELLURIUM       &#34;, &#34;IODINE          &#34;, &#34;XENON           &#34;, &#34;CAESIUM         &#34;, &#34;BARIUM          &#34;, &#34;LANTHANUM       &#34;, &#34;CERIUM          &#34;, &#34;PRASEODYMIUM    &#34;, &#34;NEODYMIUM       &#34;, &#34;PROMETHIUM      &#34;, &#34;SAMARIUM        &#34;, &#34;EUROPIUM        &#34;, &#34;GADOLINIUM      &#34;, &#34;TERBIUM         &#34;, &#34;DYSPROSIUM      &#34;, &#34;HOLMIUM         &#34;, &#34;ERBIUM          &#34;, &#34;THULIUM         &#34;, &#34;YTTERBIUM       &#34;, &#34;LUTETIUM        &#34;, &#34;HAFNIUM         &#34;, &#34;TANTALUM        &#34;, &#34;TUNGSTEN        &#34;, &#34;RHENIUM         &#34;, &#34;OSMIUM          &#34;, &#34;IRIDIUM         &#34;, &#34;PLATINUM        &#34;, &#34;GOLD            &#34;, &#34;MERCURY         &#34;, &#34;THALLIUM        &#34;, &#34;LEAD            &#34;, &#34;BISMUTH         &#34;, &#34;POLONIUM        &#34;, &#34;ASTATINE        &#34;, &#34;RADON           &#34;, &#34;FRANCIUM        &#34;, &#34;RADIUM          &#34;, &#34;ACTINIUM        &#34;, &#34;THORIUM         &#34;, &#34;PROTACTINIUM    &#34;, &#34;URANIUM         &#34;, &#34;NEPTUNIUM       &#34;, &#34;PLUTONIUM       &#34;, &#34;AMERICIUM       &#34;, &#34;CURIUM          &#34;, &#34;BERKELIUM       &#34;, &#34;CALIFORNIUM     &#34;, &#34;EINSTEINIUM     &#34;, &#34;FERMIUM         &#34;, &#34;MENDELEVIUM     &#34;, &#34;NOBELIUM        &#34;, &#34;LAWRENCIUM      &#34;, &#34;RUTHERFORDIUM   &#34;, &#34;DUBNIUM         &#34;, &#34;SEABORGIUM      &#34;, &#34;BOHRIUM         &#34;, &#34;HASSIUM         &#34;, &#34;MEITNERIUM      &#34;, &#34;DARMSTADTIUM    &#34;]</td>
+            <td>
+                
+            </td>
+        </tr>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-elements_vdw_radii"></span>
+              real(kind=real64),
+            </td>
+              <td>public,</td>
+            <td>
+parameter               
+            </td>
+            <td>::</td>
+            <td><strong>ELEMENTS_VDW_RADII</strong>(MAX_ELEMENT_Z)</td>
+<td> =</td>
+                <td>ANGSTROM_TO_BOHR*[1.10, 1.40, 1.81, 1.53, 1.92, 1.70, 1.55, 1.52, 1.47, 1.54, 2.27, 1.73, 1.84, 2.10, 1.80, 1.80, 1.75, 1.88, 2.75, 2.31, 2.30, 2.15, 2.05, 2.05, 2.05, 2.05, 2.00, 2.00, 2.00, 2.10, 1.87, 2.11, 1.85, 1.90, 1.83, 2.02, 3.03, 2.49, 2.40, 2.30, 2.15, 2.10, 2.05, 2.05, 2.00, 2.05, 2.10, 2.20, 1.93, 2.17, 2.06, 2.06, 1.98, 2.16, 3.43, 2.68, 2.43, 2.42, 2.40, 2.39, 2.38, 2.36, 2.35, 2.34, 2.33, 2.31, 2.30, 2.29, 2.27, 2.26, 2.24, 2.25, 2.20, 2.10, 2.05, 2.00, 2.00, 2.05, 2.10, 2.05, 1.96, 2.02, 2.07, 1.97, 2.02, 2.20, 3.48, 2.83, 2.47, 2.45, 2.43, 2.41, 2.39, 2.37, 2.35, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4]</td>
+            <td>
+                
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+        </section>
+        <br>
+
+
+
+
+
+        <section>
+          <h2>Functions</h2>
+              <div class="card">
+    <div class="card-header codesum"><span class="anchor" id="proc-get_element_id"></span> <h3>public  function <a href='../proc/get_element_id.html'>get_element_id</a>(element_name) result(id)  
+</h3></div>
+    <div class="card-body">
+          
+  
+
+  <h4>Arguments</h4>
+      <table class="table table-striped varlist">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
+        <th scope="col"></th>
+        <th scope="col">Name</th>
+        <th scope="col"></th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+              <span class="anchor" id="variable-element_name"></span>
+              character(len=*),
+            </td>
+<td>intent(in)</td>
+              <td></td>            <td>
+              
+            </td>
+            <td>::</td>
+            <td><strong>element_name</strong></td>
+            <td>
+
+            </td>
+        </tr>
+    </tbody>
+  </table>
+
+    <h4>
+    Return Value
+    <small>integer</small>
+    </h4>
+    
+
+    </div>
+  </div>
+
+        </section>
+        <br>
+
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OPENQP
+ was developed by OpenQP Team<br>              &copy; 2025 
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+
+    <!-- MathJax JavaScript
+             ================================================== -->
+             <!-- Placed at the end of the document so the pages load faster -->
+        <script type="text/x-mathjax-config">
+          MathJax.Hub.Config({
+          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
+          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
+          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
+          });
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+  </body>
+</html>
