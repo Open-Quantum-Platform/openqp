@@ -1,3 +1,18 @@
+!**********************************************************************
+!> Module: basis_projection_mod
+!>
+!> Description:
+!>   This module provides routines to project molecular orbitals (MO) and 
+!>   density matrices (DM) from a primary basis set to an alternative 
+!>   (initial) basis set. 
+!>
+!>   The module includes:
+!>     - A C-binding wrapper subroutine (proj_dm_newbas_C) to interface with 
+!>       C codes.
+!>     - The main projection routine (proj_dm_newbas) that performs the MO and 
+!>       DM projection, including orthogonalization and density matrix computation.
+!>     - A utility function (itoa) to convert integers to character strings.
+!**********************************************************************
 module basis_projection_mod
 
   implicit none
@@ -5,7 +20,9 @@ module basis_projection_mod
   character(len=*), parameter :: module_name = "basis_projection_mod"
 
 contains
-
+  !**********************************************************************
+  !> C-binding wrapper for the MO/DM projection routine.
+  !**********************************************************************
   subroutine proj_dm_newbas_C(c_handle) bind(C, name="proj_dm_newbas")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -15,23 +32,27 @@ contains
     call proj_dm_newbas(inf)
   end subroutine proj_dm_newbas_C
 
-  !----------------------------------------------------------------------
-  ! Main subroutine to perform the MO projection between basis sets.
-  ! Projects molecular orbitals (MO) and density matrices (DM) from a
-  ! primary basis set to an alternative (initial) basis set.
-  ! Input data:
-  !    -  OQP::VEC_MO_A are assumed to be present.
-  !       OQP::VEC_MO_A
-  !       OQP::DM_A
-  !       OQP::VEC_MO_B
-  !       OQP::DM_B
-  ! Output data:
-  !    - The projected density matrices and MOs are written into:
-  !       OQP::VEC_MO_A
-  !       OQP::DM_A
-  !       OQP::VEC_MO_B
-  !       OQP::DM_B
-  !----------------------------------------------------------------------
+  !**********************************************************************
+  !> Main subroutine for MO and DM projection between basis sets.
+  !>
+  !> This routine projects molecular orbitals (MO) and density matrices (DM)
+  !> from a primary basis set to an alternative (initial) basis set. It performs:
+  !>   - Overlap matrix computation and normalization,
+  !>   - Corresponding orbital projection,
+  !>   - Orbital orthogonalization,
+  !>   - Density matrix calculation (for both RHF and ROHF/UHF cases),
+  !>
+  !> Input Data:
+  !>   - OQP::VEC_MO_A, OQP::DM_A for the alpha
+  !>   - OQP::VEC_MO_B, OQP::DM_B for the beta (if applicable).
+  !>
+  !> Output Data:
+  !>   - OQP::VEC_MO_A_tmp, OQP::DM_A_tmp for the alpha spin channel.
+  !>   - OQP::VEC_MO_B_tmp, OQP::DM_B_tmp for the beta spin channel (if applicable).
+  !>
+  !> @param[in,out] infos Information structure containing basis sets, atomic data,
+  !>                        molecular properties, and control parameters.
+  !**********************************************************************
 
   subroutine proj_dm_newbas(infos)
     use precision, only: dp
@@ -193,10 +214,11 @@ contains
     call orthogonalize_orbitals(q, smat, mo_a, nproj, l0, nbf, nbf)
 
     if (infos%control%scftype >= 2) then
+      mo_b(1:nbf,1:nbf) = q(1:nbf,1:nbf)
       call corresponding_orbital_projection(mo_b_alt, sco, mo_b, ndoc, nact, nproj, nbf, nbf_alt, l0)
       call orthogonalize_orbitals(q, smat, mo_b, nproj, l0, nbf, nbf)
     else
-      Dmat_B = Dmat_A
+      mo_b = mo_a
     end if
 
   ! Calculate Density Matrix

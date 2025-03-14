@@ -1,3 +1,10 @@
+!> @file guess_json_mod.f90
+!> @brief Module to process stored SCF guess data in JSON format.
+!>
+!> This module provides routines to load the JSON formatted SCF guess,
+!> retrieve basis set and molecular orbital data, compute the initial
+!> density matrix for RHF or ROHF/UHF calculations, and broadcast the
+!> computed data in a parallel environment.
 module guess_json_mod
 
   implicit none
@@ -5,7 +12,7 @@ module guess_json_mod
   character(len=*), parameter :: module_name = "guess_json_mod"
 
 contains
-
+   !> @brief C binding for the guess_json routine.
   subroutine guess_json_C(c_handle) bind(C, name="guess_json")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -14,6 +21,13 @@ contains
     inf => oqp_handle_get_info(c_handle)
     call guess_json(inf)
   end subroutine guess_json_C
+
+  !> @brief Process SCF guess JSON data.
+  !>
+  !> This subroutine loads JSON data provided by Python via the tagarray interface.
+  !>
+  !> @param[in,out] infos Information object containing the basis set, atomic data,
+  !>                        control parameters, and JSON tag arrays required for processing.
 
   subroutine guess_json(infos)
     use precision, only: dp
