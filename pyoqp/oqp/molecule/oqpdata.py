@@ -205,7 +205,7 @@ class OQPData:
     """Wrapper for OQP data class"""
 
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
-    _guesses = {"huckel": 1, "hcore": 2, "db": 3}
+    _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf')
