@@ -66,7 +66,6 @@ contains
     use printing, only: print_module_info
     use constants, only: tol_int
     use int1, only: basis_overlap
-    use oqp_tagarray_driver
     use iso_c_binding, only: c_char
     use parallel, only: par_env_t
     use guess, only: get_ab_initio_density, corresponding_orbital_projection
