@@ -1,7 +1,4 @@
 module scf
-  use precision, only: dp
-
-  implicit none
 
   character(len=*), parameter :: module_name = "scf"
 
@@ -10,13 +7,30 @@ module scf
 
 contains
 
+  !==============================================================================
+  ! Main SCF Driver Subroutine
+  !==============================================================================
+  !
+  ! DESCRIPTION:
+  !   This subroutine performs self-consistent field (SCF) calculations for
+  !   Hartree-Fock (HF) and Density Functional Theory (DFT) methods using
+  !   Restricted (RHF), Unrestricted (UHF), or Restricted Open-Shell (ROHF)
+  !   reference wavefunctions. It implements several convergence acceleration
+  !   techniques including DIIS, SOSCF, MOM, and pFON.
+  !
+  ! INPUTS:
+  !   basis   - Basis set information
+  !   infos   - System information and calculation parameters
+  !   molGrid - Molecular grid for DFT calculations
+  !
+  ! OUTPUTS:
+  !   Updated infos structure containing converged energy and wavefunction
   subroutine scf_driver(basis, infos, molGrid)
-    ! Main driver for HF and DFT with RHF, ROHF, and UHF
-    ! DIIS is the main algorithm for SCF
     USE precision, only: dp
     use oqp_tagarray_driver
     use types, only: information
-    use int2_compute, only: int2_compute_t, int2_fock_data_t, int2_rhf_data_t, int2_urohf_data_t
+    use int2_compute, only: int2_compute_t, int2_fock_data_t, &
+                            int2_rhf_data_t, int2_urohf_data_t
     use dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use messages, only: show_message, WITH_ABORT
@@ -29,226 +43,351 @@ contains
     use constants, only: kB_HaK
     use basis_tools, only: basis_set
     use scf_converger, only: scf_conv_result, scf_conv, &
-            conv_cdiis, conv_ediis, conv_soscf
+                             conv_cdiis, conv_ediis, conv_soscf
 
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
 
-    type(basis_set), intent(in) :: basis
-    type(information), target, intent(inout) :: infos
-    type(dft_grid_t), intent(in) :: molGrid
-    integer :: i, ii, iter, nschwz, nbf, nbf_tri, nbf2, ok, maxit
-    real(kind=dp) :: ehf, ehf1, nenergy, etot, diffe, e_old, psinrm, &
-                scalefactor,vne, vnn, vee, vtot, virial, tkin
-    real(kind=dp), allocatable :: tempvec(:), lwrk(:), lwrk2(:)
-    real(kind=dp), allocatable, target :: smat_full(:,:), pdmat(:,:), pfock(:,:), rohf_bak(:)
-    real(kind=dp), allocatable, target :: dold(:,:), fold(:,:)
-    integer :: nfocks, diis_reset
-    ! For DIIS
-    real(kind=dp) :: diis_error
-    real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp
-    real(kind=dp), parameter :: ethr_ediis = 1.0_dp
-    integer :: diis_nfocks, diis_stat, maxdiis
-    character(len=6), dimension(5) :: diis_name
-    ! For SOSCF
-    logical :: use_soscf
-    ! Vshift
-    real(kind=dp) :: vshift, H_U_gap, H_U_gap_crit
-    logical :: vshift_last_iter
+    !==============================================================================
+    ! Input/Output Arguments
+    !==============================================================================
+    type(basis_set), intent(in) :: basis              ! Basis set information
+    type(information), target, intent(inout) :: infos ! System information & parameters
+    type(dft_grid_t), intent(in) :: molGrid           ! Molecular grid for DFT
 
-    type(scf_conv) :: conv
-    class(scf_conv_result), allocatable :: conv_res
-    character(16) :: scf_name = ""
-    real(kind=dp) :: eexc, totele, totkin
-    logical :: is_dft, diis_reset_condition
-    integer :: scf_type
-    ! MOM
-    logical :: do_mom, step_0_mom, do_mom_flag
-    real(kind=dp), allocatable, dimension(:,:) :: mo_a_for_mom, mo_b_for_mom, work
+    !==============================================================================
+    ! Matrix Dimensions and Basic Parameters
+    !==============================================================================
+    integer :: nbf      ! Number of basis functions
+    integer :: nbf_tri  ! Size of triangular matrices (nbf*(nbf+1)/2)
+    integer :: nbf2     ! Square matrix size (nbf*nbf)
+    integer :: nfocks   ! Number of Fock matrices (1 for RHF, 2 for UHF/ROHF)
+    integer :: nschwz   ! Number of skipped integrals (integral screening)
+    integer :: ok       ! Status flag for memory allocation
 
-    integer :: nelec, nelec_a, nelec_b
-    integer, parameter :: scf_rhf  = 1, &
-                          scf_uhf  = 2, &
-                          scf_rohf = 3
-    real(kind=dp), allocatable :: pfxc(:,:), qmat(:,:)
+    !==============================================================================
+    ! SCF Type Parameters
+    !==============================================================================
+    integer :: scf_type                 ! Type of SCF calculation
+    integer, parameter :: scf_rhf  = 1  ! Restricted Hartree-Fock
+    integer, parameter :: scf_uhf  = 2  ! Unrestricted Hartree-Fock
+    integer, parameter :: scf_rohf = 3  ! Restricted Open-Shell Hartree-Fock
+    character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
+    logical :: is_dft                   ! True if using DFT, false for HF
+    real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
 
-    type(int2_compute_t) :: int2_driver
-    class(int2_fock_data_t), allocatable :: int2_data
-    ! pFON
-    logical :: do_pfon
-    real(kind=dp) :: beta_pfon, start_temp, end_temp, temp_pfon
-    real(kind=dp) :: electron_sum_a, electron_sum_b, pfon_start_temp
-    real(kind=dp), allocatable :: occ_a(:), occ_b(:)
-    real(kind=dp) :: sum_occ_alpha, sum_occ_beta, cooling_rate
-    real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
-    real(kind=dp) :: last_cooled_temp = 0.0_dp
-    integer :: nsmear
-    ! tagarray
-     real(kind=dp), contiguous, pointer :: &
-       dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
-       smat(:), tmat(:), mo_a(:,:), &
-       mo_energy_b(:), mo_energy_a(:), mo_energy_a_for_mom(:)
-     character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
-       OQP_SM, OQP_TM, OQP_Hcore /)
-     character(len=*), parameter :: tags_alpha(4) = (/ character(len=80) :: &
-       OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A /)
-     character(len=*), parameter :: tags_beta(4) = (/ character(len=80) :: &
-       OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
+    !==============================================================================
+    ! Electron Counting Parameters
+    !==============================================================================
+    integer :: nelec    ! Total number of electrons
+    integer :: nelec_a  ! Number of alpha electrons
+    integer :: nelec_b  ! Number of beta electrons
 
-    ! Default values
-    ! MOM settings
-    ! Current MOM option works for both RHF and ROHF
-    do_mom = infos%control%mom
-    ! Vshift settings
-    ! Current VSHIFT only works for ROHF
-    vshift = infos%control%vshift
-    vshift_last_iter = .false.
-    H_U_gap_crit = 0.02_dp
+    !==============================================================================
+    ! Iteration Control Parameters
+    !==============================================================================
+    integer :: i, ii, iter  ! Loop counters and current iteration number
+    integer :: maxit        ! Maximum number of SCF iterations
 
-    ! pFON settings
-    do_pfon = .false.
-    do_pfon = infos%control%pfon
-    start_temp = infos%control%pfon_start_temp
-    cooling_rate = infos%control%pfon_cooling_rate
-    if (start_temp <= 0.0_dp) then
-        start_temp = 2000.0_dp
-    end if
-    temp_pfon = start_temp
-    if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
+    !==============================================================================
+    ! Energy Components
+    !==============================================================================
+    real(kind=dp) :: ehf      ! Electronic energy (HF part)
+    real(kind=dp) :: ehf1     ! One-electron energy
+    real(kind=dp) :: nenergy  ! Nuclear repulsion energy
+    real(kind=dp) :: etot     ! Total SCF energy
+    real(kind=dp) :: e_old    ! Energy from previous iteration
+    real(kind=dp) :: psinrm   ! Wavefunction normalization
+    real(kind=dp) :: vne      ! Nucleus-electron potential energy
+    real(kind=dp) :: vnn      ! Nucleus-nucleus potential energy
+    real(kind=dp) :: vee      ! Electron-electron potential energy
+    real(kind=dp) :: vtot     ! Total potential energy
+    real(kind=dp) :: virial   ! Virial ratio (V/T)
+    real(kind=dp) :: tkin     ! Kinetic energy
+    real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
+    real(kind=dp) :: totele   ! Total electron density for DFT
+    real(kind=dp) :: totkin   ! Total kinetic energy for DFT
 
-    beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+    !==============================================================================
+    ! DIIS Convergence Acceleration Parameters
+    !==============================================================================
+    integer :: diis_nfocks       ! Number of Fock matrices for DIIS
+    integer :: diis_reset        ! Frequency of DIIS reset
+    integer :: maxdiis           ! Maximum number of DIIS vectors
+    real(kind=dp) :: diis_error  ! DIIS error matrix norm
+    character(len=6), dimension(5) :: diis_name          ! Names of DIIS methods
+    real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! DIIS error threshold for C-DIIS
+    real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! DIIS error threshold for E-DIIS
+    logical :: diis_reset_condition                      ! Flag for DIIS reset condition
 
-    ! SOSCF
-    use_soscf = .false.
-    if (infos%control%soscf_enable) then
-      use_soscf = (iter >= infos%control%soscf_start) &
-            .and. (mod(iter, infos%control%soscf_freq) == 0) &
-            .and. (diis_error < infos%control%soscf_conv)
-    end if
+    !==============================================================================
+    ! SOSCF Convergence Acceleration Parameters
+    !==============================================================================
+    logical :: use_soscf            ! Flag to use SOSCF method
 
-    ! DIIS options
-    ! none IS NOT recommended!
-    ! c-DIIS: Default commutator DIIS
-    ! e-DIIS: Energy-Weighted DIIS
-    ! a-DIIS: Augmented DIIS
-    ! v-DIIS: Vshift with DIIS, which will be eventually become c-DIIS
-    ! MOM: Maximum Overlap Method for better convergency
+    !==============================================================================
+     ! Virtual Orbital Shift Parameters (for ROHF)
+    !==============================================================================
+    real(kind=dp) :: vshift        ! Virtual orbital energy shift
+    real(kind=dp) :: H_U_gap       ! HOMO-LUMO gap
+    real(kind=dp) :: H_U_gap_crit  ! HOMO-LUMO gap critical value
+    logical :: vshift_last_iter    ! Flag for last iteration with vshift
 
-    diis_error = 2.0_dp
-    diis_name = [character(len=6) :: "none", "c-DIIS","e-DIIS","a-DIIS","v-DIIS"]
-    ! Read calculation metadata from infos
-    is_dft = infos%control%hamilton >= 20
+    !==============================================================================
+    ! MOM (Maximum Overlap Method) Parameters
+    !==============================================================================
+    logical :: do_mom                ! Flag to enable MOM method
+    logical :: initial_mom_iter      ! Flag for first MOM iteration
+    logical :: mom_active            ! Flag indicating MOM is currently active
+    real(kind=dp), allocatable :: mo_a_prev(:,:)  ! Previous alpha MO coefficients
+    real(kind=dp), allocatable :: mo_e_a_prev(:)  ! Previous alpha orbital energies
+    real(kind=dp), allocatable :: mo_b_prev(:,:)  ! Previous beta MO coefficients (UHF only)
+    real(kind=dp), allocatable :: mo_e_b_prev(:)  ! Previous beta orbital energies (UHF only)
+    real(kind=dp), allocatable :: mom_work(:,:)   ! Work array for MOM calculations
+    real(kind=dp), allocatable :: mom_smo(:,:)    ! Overlap matrix for MOM
+
+    !==============================================================================
+    ! pFON (pseudo-Fractional Occupation Number) Parameters
+    !==============================================================================
+    logical :: do_pfon                  ! Flag to use pFON method
+    real(kind=dp) :: beta_pfon          ! Inverse temperature parameter for pFON
+    real(kind=dp) :: start_temp         ! Starting temperature for pFON
+    real(kind=dp) :: end_temp           ! Target ending temperature for pFON
+    real(kind=dp) :: temp_pfon          ! Current temperature for pFON
+    real(kind=dp) :: cooling_rate       ! Temperature cooling rate
+    real(kind=dp) :: last_cooled_temp   ! Last temperature at which cooling occurred
+    real(kind=dp) :: pfon_start_temp    ! Initial temperature from input
+    real(kind=dp) :: pfon_cooling_rate  ! Cooling rate from input
+    real(kind=dp) :: pfon_nsmear        ! Number of orbitals to smear near Fermi level
+    real(kind=dp) :: electron_sum_a     ! Sum of alpha electron occupations
+    real(kind=dp) :: electron_sum_b     ! Sum of beta electron occupations
+    real(kind=dp) :: sum_occ_alpha      ! Sum of alpha occupations
+    real(kind=dp) :: sum_occ_beta       ! Sum of beta occupations
+    real(kind=dp), allocatable :: occ_a(:), occ_b(:) ! Orbital occupations for alpha/beta
+    integer :: nsmear                   ! Integer number of orbitals to smear
+
+    !==============================================================================
+    ! Matrices and Vectors for SCF Calculation
+    !==============================================================================
+    real(kind=dp), allocatable, target :: smat_full(:,:)  ! Full overlap matrix
+    real(kind=dp), allocatable, target :: pdmat(:,:)  ! Density matrices in triangular format
+    real(kind=dp), allocatable, target :: pfock(:,:)  ! Fock matrices in triangular format
+    real(kind=dp), allocatable, target :: rohf_bak(:)  ! Backup for ROHF Fock
+    real(kind=dp), allocatable, target :: dold(:,:)  ! Old density for incremental builds
+    real(kind=dp), allocatable, target :: fold(:,:)  ! Old Fock for incremental builds
+    real(kind=dp), allocatable :: pfxc(:,:)  ! DFT exchange-correlation matrix
+    real(kind=dp), allocatable :: qmat(:,:)  ! Orthogonalization matrix
+
+    !==============================================================================
+    ! Tag Arrays for Accessing Data
+    !==============================================================================
+    real(kind=dp), contiguous, pointer :: smat(:), hcore(:), tmat(:), &
+                                          fock_a(:), fock_b(:), &
+                                          dmat_a(:), dmat_b(:), &
+                                          mo_energy_b(:), mo_energy_a(:), &
+                                          mo_a(:,:), mo_b(:,:)
+    character(len=*), parameter :: tags_general(3) = &
+      (/ character(len=80) :: OQP_SM, OQP_TM, OQP_Hcore /)
+    character(len=*), parameter :: tags_alpha(4) = &
+      (/ character(len=80) :: OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A /)
+    character(len=*), parameter :: tags_beta(4) = &
+      (/ character(len=80) :: OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
+
+    !==============================================================================
+    ! SCF Convergence Accelerator Objects
+    !==============================================================================
+    type(scf_conv) :: conv                           ! SCF convergence driver
+    class(scf_conv_result), allocatable :: conv_res  ! SCF convergence result
+    integer :: stat                                  ! Status flag for DIIS/SOSCF
+
+    !==============================================================================
+    ! Integral Evaluation Objects
+    !==============================================================================
+    type(int2_compute_t) :: int2_driver                ! Two-electron integral driver
+    class(int2_fock_data_t), allocatable :: int2_data  ! Two-electron integral data
+
+    !==============================================================================
+    ! Extract Calculation Parameters from Input
+    !==============================================================================
+    ! Set SCF type (RHF, UHF, or ROHF) and
+    ! configure parameters based on SCF type
     select case (infos%control%scftype)
     case (1)
       scf_type = scf_rhf
-    case (2)
-      scf_type = scf_uhf
-    case (3)
-      scf_type = scf_rohf
-    end select
-    ! Total number of electrons
-    nelec = infos%mol_prop%nelec
-    nelec_a = infos%mol_prop%nelec_a
-    nelec_b = infos%mol_prop%nelec_b
-    ! Matrix size
-    nbf = basis%nbf
-    nbf_tri = nbf*(nbf+1)/2
-    nbf2 = nbf*nbf
-    maxit = infos%control%maxit
-    maxdiis = infos%control%maxdiis
-    diis_reset = infos%control%diis_reset_mod
-    ! DFT
-    if (.not.is_dft) then
-        scalefactor = 1.0_dp
-    else
-        scalefactor = infos%dft%HFscale
-    end if
-    ! SCF Type
-    select case (scf_type)
-    case (scf_rhf)
       scf_name = "RHF"
       nfocks = 1
       diis_nfocks = 1
-    case (scf_uhf)
+    case (2)
+      scf_type = scf_uhf
       scf_name = "UHF"
       nfocks = 2
       diis_nfocks = 2
-    case (scf_rohf)
+    case (3)
+      scf_type = scf_rohf
       scf_name = "ROHF"
       nfocks = 2
       diis_nfocks = 1
     end select
 
-    ! Now we are allocating dynamic memories of tag arrays
-    ! Tag arrays
+    ! Get electron counts
+    nelec = infos%mol_prop%nelec
+    nelec_a = infos%mol_prop%nelec_a
+    nelec_b = infos%mol_prop%nelec_b
+
+    ! Get matrix dimensions
+    nbf = basis%nbf
+    nbf_tri = nbf*(nbf+1)/2
+    nbf2 = nbf*nbf
+
+    ! Get iteration parameters
+    maxit = infos%control%maxit
+
+    ! Determine calculation type (HF or DFT)
+    is_dft = infos%control%hamilton >= 20
+
+    ! Set HF exchange scaling factor for DFT
+    if (is_dft) then
+      scalefactor = infos%dft%HFscale
+    else
+      scalefactor = 1.0_dp
+    end if
+
+    !==============================================================================
+    ! Retrieve Tag Arrays and Allocate Memory
+    !==============================================================================
+    ! Get general tag arrays
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
     call tagarray_get_data(infos%dat, OQP_TM, tmat)
 
+    ! Get alpha-spin tag arrays
     call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
+    ! Get beta-spin tag arrays if needed
     if (nfocks > 1) then
       call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
-    endif
+    end if
 
-    allocate(smat_full(nbf,nbf), pdmat(nbf_tri,nfocks), pfock(nbf_tri,nfocks), &
-             qmat(nbf,nbf), &
+    ! Allocate main work arrays
+    ok = 0
+    allocate(smat_full(nbf, nbf), &
+             pdmat(nbf_tri, nfocks), &
+             pfock(nbf_tri, nfocks), &
+             rohf_bak(nbf_tri), &
+             qmat(nbf, nbf), &
              stat=ok, &
              source=0.0_dp)
-    ! Alloc work matrices for MOM
-    if (do_mom) then
-       step_0_mom = .true.
-       do_mom_flag = .false.
-       allocate(mo_a_for_mom(nbf,nbf), &
-                mo_b_for_mom(nbf,nbf), &
-                mo_energy_a_for_mom(nbf), &
-                work(nbf,nbf), &
-                source=0.0_dp)
-    end if
-    if(ok/=0) call show_message('Cannot allocate memory for SCF',WITH_ABORT)
-    ! Incremental Fock building for Direct SCF
+    if(ok/=0) call show_message('Cannot allocate memory for SCF', WITH_ABORT)
+
+    ! Allocate incremental Fock building arrays if enabled
     if (infos%control%scf_incremental /= 0) then
-      allocate( dold(nbf_tri,nfocks), fold(nbf_tri,nfocks), &
+      allocate(dold(nbf_tri, nfocks), &
+               fold(nbf_tri, nfocks), &
                stat=ok, &
                source=0.0_dp)
-      if(ok/=0) call show_message('Cannot allocate memory for SCF',WITH_ABORT)
-    end if
-    ! DFT
-    if (is_dft) then
-      allocate(pfxc(nbf_tri,nfocks), &
-               stat=ok, &
-               source=0.0_dp)
-      if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
-    end if
-    ! ROHF temporary arrays
-    if (scf_type == scf_rohf .or. is_dft) then
-      allocate(tempvec(nbf2), &
-               stat=ok, &
-               source=0.0_dp)
-      if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
-    end if
-    if (scf_type == scf_rohf) then
-      allocate(lwrk(nbf), lwrk2(nbf2), rohf_bak(nbf_tri), &
-               stat=ok, &
-               source=0.0_dp)
-      if(ok/=0) call show_message('Cannot allocate memory for ROHF temporaries',WITH_ABORT)
+      if(ok/=0) call show_message('Cannot allocate memory for SCF: 2',WITH_ABORT)
     end if
 
-    ! Allocating dynamic memories done
+    ! Allocate DFT arrays if needed
+    if (is_dft) then
+      allocate(pfxc(nbf_tri, nfocks), &
+               stat=ok, &
+               source=0.0_dp)
+      if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
+    end if
+
+    !==============================================================================
+    ! Initialize pFON Parameters
+    !==============================================================================
+    do_pfon = .false.
+    do_pfon = infos%control%pfon
+
+    if (do_pfon) then
+      ! Set temperature parameters
+      start_temp = infos%control%pfon_start_temp
+      cooling_rate = infos%control%pfon_cooling_rate
+
+      if (start_temp <= 0.0_dp) then
+        start_temp = 2000.0_dp
+      end if
+
+      temp_pfon = start_temp
+      if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
+      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+
+      ! Allocate and initialize occupation arrays
+      allocate(occ_a(nbf), source=0.0_dp, stat=ok)
+
+      if (nfocks > 1) then  ! For UHF and ROHF
+        allocate(occ_b(nbf), source=0.0_dp, stat=ok)
+      end if
+
+      if(ok/=0) call show_message('Cannot allocate memory for occupation arrays',WITH_ABORT)
+
+      ! Set initial occupation numbers based on SCF type
+      select case (scf_type)
+      case (scf_rhf)
+        occ_a(1:nelec/2) = 2.0_dp
+      case (scf_uhf)
+        occ_a(1:nelec_a) = 1.0_dp
+        occ_b(1:nelec_b) = 1.0_dp
+      case (scf_rohf)
+        occ_a(1:nelec_b) = 2.0_dp          ! Closed shells
+        occ_a(nelec_b+1:nelec_a) = 1.0_dp  ! Open shells
+        occ_b(1:nelec_b) = 2.0_dp          ! Closed shells only
+      end select
+    end if
+
+    !==============================================================================
+    ! Initialize MOM parameters
+    !==============================================================================
+    do_mom = infos%control%mom
+
+    if (do_mom) then
+      initial_mom_iter = .true.
+      mom_active = .false.
+
+      ! Allocate storage for previous iteration's orbitals
+      allocate(mo_a_prev(nbf,nbf), source=0.0_dp)
+      allocate(mo_e_a_prev(nbf), source=0.0_dp)
+
+      ! For UHF, we need separate storage for beta orbitals
+      if (scf_type == scf_uhf) then
+        allocate(mo_b_prev(nbf,nbf), source=0.0_dp)
+        allocate(mo_e_b_prev(nbf), source=0.0_dp)
+      end if
+
+      ! Allocate shared work arrays to avoid allocations in the MOM subroutine
+      allocate(mom_work(nbf,nbf), source=0.0_dp)
+      allocate(mom_smo(nbf,nbf), source=0.0_dp)
+    end if
+
+    !==============================================================================
+    ! Initialize Vshift Parameters (currently only works for ROHF)
+    !==============================================================================
+    vshift = infos%control%vshift
+    vshift_last_iter = .false.
+    H_U_gap_crit = 0.02_dp   ! Small gap threshold (in a.u.)
+
+    !==============================================================================
+    ! Initialize SCF Calculation
+    !==============================================================================
     call measure_time(print_total=1, log_unit=IW)
+
+    ! Prepare orthogonalization matrix (S^-1/2)
     call matrix_invsqrt(smat, qmat, nbf)
 
-    ! First Compute Nuclear-Nuclear energy
+    ! Compute Nuclear-Nuclear energy
     nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     ! During guess, the Hcore, Q nd Overlap matrices were formed.
@@ -256,30 +395,34 @@ contains
     ! Now we are going to calculate ERI(electron repulsion integrals) to form a new FOCK
     ! matrix.
 
-    ! Vshift settings
-    !  vshift = infos%control%vshift
-    !  vshift_last_iter=.false.
-    !  H_U_gap_crit=0.02_dp
-
-    ! Initialize ERI calculations
+    ! Initialize ERI calculations and screening
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
     call flush(IW)
 
-    ! The main Do loop of SCF
+    ! Initialize density matrices for integral evaluation
     select case (scf_type)
     case (scf_rhf)
-        pdmat(:,1) = dmat_a
-        allocate(int2_rhf_data_t :: int2_data)
-        int2_data = int2_rhf_data_t(nfocks=1, d=pdmat, scale_exchange=scalefactor)
+      pdmat(:,1) = dmat_a
+      allocate(int2_rhf_data_t :: int2_data)
+      int2_data = int2_rhf_data_t(nfocks=1, &
+                                  d=pdmat, &
+                                  scale_exchange=scalefactor)
     case (scf_uhf, scf_rohf)
-        pdmat(:,1) = dmat_a
-        pdmat(:,2) = dmat_b
-        allocate(int2_urohf_data_t :: int2_data)
-        int2_data = int2_urohf_data_t(nfocks=2, d=pdmat, scale_exchange=scalefactor)
+      pdmat(:,1) = dmat_a
+      pdmat(:,2) = dmat_b
+      allocate(int2_urohf_data_t :: int2_data)
+      int2_data = int2_urohf_data_t(nfocks=2, &
+                                    d=pdmat, &
+                                    scale_exchange=scalefactor)
     end select
+
+    ! Convert overlap matrix to full format for DIIS/SOSCF
     call unpack_matrix(smat, smat_full, nbf, 'U')
 
+    !==============================================================================
+    ! Configure SCF Convergence Accelerator (DIIS/SOSCF)
+    !==============================================================================
     ! Variable DIIS options:
     !   a) If we use VSHIFT option, the combination of e-DIIS and c-DIIS is used,
     !   since e-DIIS can better reduce total energy than c-DIIS.
@@ -287,48 +430,88 @@ contains
     !   b) If VSHIFT is not set, c-DIIS is default.
     !   c) If vdiis (diis_type=5) is chosen, the VSHIFT is initally turned on.
     !   d) if MOM=.true., MOM turns on if DIIS error < mom_switch
+
+    ! SOSCF options
+    use_soscf = .false.
+    if (infos%control%soscf_enable) use_soscf = .true.
+
+    ! DIIS options
+    maxdiis = infos%control%maxdiis
+    diis_error = 2.0_dp
+    diis_name = [character(len=6) :: "none", "c-DIIS", "e-DIIS", "a-DIIS", "v-DIIS"]
+    diis_reset = infos%control%diis_reset_mod
+
+    ! Initialize SCF Convergence Accelerator
     if (use_soscf) then
-      call conv%init(ldim=nbf, maxvec=maxdiis, &
-                 subconvergers=[conv_soscf], &
-                 thresholds=[huge(1.0_dp)], &
-                 overlap=smat_full, overlap_sqrt=qmat, &
-                 num_focks=diis_nfocks, verbose=3)
+      ! Set up SOSCF convergence accelerator
+      call conv%init(ldim=nbf, &
+                     maxvec=maxdiis, &
+                     subconvergers=[conv_cdiis, &
+                                    conv_soscf], &
+                     thresholds   =[0.01_dp, &
+                                    1.0_dp], &
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=diis_nfocks, &
+                     verbose=3)
 
       call set_soscf_parametres(infos, conv)
 
     else
+      ! Set up DIIS convergence accelerator
       if (infos%control%diis_type == 5) then
-         call conv%init(ldim=nbf, maxvec=maxdiis, &
-              subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
-              thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vdiis_cdiis_switch], &
-              overlap=smat_full, overlap_sqrt=qmat, &
-              num_focks=diis_nfocks, verbose=1)
-         if (infos%control%vshift == 0.0_dp) then
-            infos%control%vshift = 0.1_dp
-            vshift = 0.1_dp
-            call show_message("")
-            call show_message('Setting VSHIFT=0.1, since VDIIS is chosen without VSHIFT value.')
-         endif
+        ! v-DIIS setup: combination of E-DIIS and C-DIIS with vshift
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, &
+                                      conv_ediis, &
+                                      conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, &
+                                      ethr_ediis, &
+                                      infos%control%vdiis_cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=1)
+        if (infos%control%vshift == 0.0_dp) then
+          infos%control%vshift = 0.1_dp
+          vshift = 0.1_dp
+          write(IW, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
+        end if
       elseif (infos%control%vshift /= 0.0_dp) then
-         call conv%init(ldim=nbf, maxvec=maxdiis, &
-              subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
-              thresholds=[ethr_cdiis_big, ethr_ediis, infos%control%vshift_cdiis_switch], &
-              overlap=smat_full, overlap_sqrt=qmat, &
-              num_focks=diis_nfocks, verbose=1)
+        ! Custom vshift setup with E-DIIS and C-DIIS
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, &
+                                      conv_ediis, &
+                                      conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, &
+                                      ethr_ediis, &
+                                      infos%control%vshift_cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=1)
       else
-         ! Normally, c-DIIS works best. But one can choose others (e-DIIS and a-DIIS).
-         call conv%init(ldim=nbf, maxvec=maxdiis, &
-              subconvergers=[infos%control%diis_type], &
-              thresholds=[infos%control%diis_method_threshold], &
-              overlap=smat_full, overlap_sqrt=qmat, &
-              num_focks=diis_nfocks, verbose=1)
-      endif
-    endif
+        ! Standard DIIS setup from input
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[infos%control%diis_type], &
+                       thresholds   =[infos%control%diis_method_threshold], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=1)
+      end if
+    end if
 
+    ! Initialize DFT exchange-correlation energy
     eexc = 0.0_dp
     e_old = 0.0_dp
 
-    ! SCF Options
+    !==============================================================================
+    ! Print SCF Options
+    !==============================================================================
     write(IW,'(/5X,"SCF options"/ &
                &5X,18("-")/ &
                &5X,"SCF type = ",A,5x,"MaxIT = ",I5/, &
@@ -349,323 +532,486 @@ contains
                5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
                infos%control%pfon, infos%control%pfon_start_temp, &
                infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
+    if (infos%control%soscf_enable) then
+      write(IW,'(/5X,"SOSCF options"/ &
+                 &5X,18("-"))')
+      write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",I1)') &
+             & infos%control%soscf_enable, infos%control%soscf_type
+      write(IW,'(5X,"SOSCF start iteration = ",I5,5X,"SOSCF frequency = ",I5)') &
+             & infos%control%soscf_start, infos%control%soscf_freq
+      write(IW,'(5X,"SOSCF max micro-iterations = ",I5,1X,"SOSCF min micro-iterations = ",I5)') &
+             & infos%control%soscf_max, infos%control%soscf_min
+      write(IW,'(5X,"SOSCF convergence threshold = ",F10.8)') &
+             & infos%control%soscf_conv
+      write(IW,'(5X,"SOSCF gradient threshold = ",F10.8)') &
+             & infos%control%soscf_grad
+      write(IW,'(5X,"SOSCF level shift = ",F10.8)') &
+             & infos%control%soscf_lvl_shift
+      write(IW,'(5X,"SOSCF+DIIS and alternate OPTION NEEEEED")')
+    end if
 
-    ! Initial message
+    ! Initial message for SCF iterations
     if (infos%control%pfon) then
-        write(IW,fmt="&
-              &(/3x,'Direct SCF iterations begin.'/, &
-              &  3x,113('='),/ &
-              &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
-              &  3x,113('='))")
+      write(IW,fmt="&
+            &(/3x,'Direct SCF iterations begin.'/, &
+            &  3x,113('='),/ &
+            &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
+            &  3x,113('='))")
     else
-        write(IW,fmt="&
-              &(/3x,'Direct SCF iterations begin.'/, &
-              &  3x,93('='),/ &
-              &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
-              &  3x,93('='))")
-    endif
+      write(IW,fmt="&
+            &(/3x,'Direct SCF iterations begin.'/, &
+            &  3x,93('='),/ &
+            &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method'/ &
+            &  3x,93('='))")
+    end if
     call flush(IW)
 
-    do iter = 1, maxit  
-      ! The main SCF iteration loop
-
-      ! pFON Cooling
-      if (cooling_rate <= 0.0_dp) then
-          cooling_rate = 50.0_dp
-      end if
-
+    !==============================================================================
+    ! Begin Main SCF Iteration Loop
+    !==============================================================================
+    do iter = 1, maxit
+      !----------------------------------------------------------------------------
+      ! Update pFON Temperature (if enabled)
+      !----------------------------------------------------------------------------
       if (do_pfon) then
-          if (iter == maxit) then
-              temp_pfon = 0.0_dp
-          else if (abs(diis_error) < 10.0_dp * infos%control%conv) then
-              if (temp_pfon > 1.0_dp) then
-                  last_cooled_temp = temp_pfon
-              end if
-              temp_pfon = 1.0_dp
-          else
-              if (temp_pfon == 1.0_dp .and. last_cooled_temp > 1.0_dp) then
-                  temp_pfon = last_cooled_temp
-              end if
-              temp_pfon = temp_pfon - cooling_rate
-              if (temp_pfon < 1.0_dp) then
-                  temp_pfon = 1.0_dp
-              end if
-              last_cooled_temp = temp_pfon
-          end if
+        ! Ensure cooling rate has valid value
+        if (cooling_rate <= 0.0_dp) then
+          cooling_rate = 50.0_dp
+        end if
 
-          if (temp_pfon > 1.0e-12_dp) then
-              beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-          else
-              beta_pfon = 1.0e20_dp
+        ! Update temperature based on current convergence state
+        if (iter == maxit) then
+          ! Final iteration: set temperature to zero for pure integer occupations
+          temp_pfon = 0.0_dp
+        else if (abs(diis_error) < 10.0_dp * infos%control%conv) then
+          ! Near convergence: set to minimum temperature (1K)
+          if (temp_pfon > 1.0_dp) then
+            last_cooled_temp = temp_pfon
           end if
+          temp_pfon = 1.0_dp
+        else
+          ! Not converged yet: continue cooling temperature
+          if (temp_pfon == 1.0_dp .and. last_cooled_temp > 1.0_dp) then
+            temp_pfon = last_cooled_temp
+          end if
+          temp_pfon = temp_pfon - cooling_rate
+          if (temp_pfon < 1.0_dp) then
+            temp_pfon = 1.0_dp
+          end if
+          last_cooled_temp = temp_pfon
+        end if
+
+        ! Calculate beta = 1/(kB*T) for Fermi-Dirac distribution
+        if (temp_pfon > 1.0e-12_dp) then
+          beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
+        else
+          beta_pfon = 1.0e20_dp  ! Zero temperature
+        end if
       end if
 
+      !----------------------------------------------------------------------------
+      ! Initialize Fock Matrices for Current Iteration
+      !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
-      ! Compute difference density matrix for incremental Fock build,
-      ! which is the main advantage of direct SCF.
-      ! It will provide much better ERI screening.
-
+      !----------------------------------------------------------------------------
+      ! Compute Difference Density Matrix for Incremental Fock Build
+      !----------------------------------------------------------------------------
+      ! This is the main advantage of direct SCF - allows better ERI screening
       if (infos%control%scf_incremental /= 0) then
         pdmat = pdmat - dold
       end if
 
+      !----------------------------------------------------------------------------
+      ! Compute Two-Electron Contribution to Fock Matrix
+      !----------------------------------------------------------------------------
       call int2_driver%run(int2_data, &
-              cam=is_dft.and.infos%dft%cam_flag, &
-              alpha=infos%dft%cam_alpha, &
-              beta=infos%dft%cam_beta,&
-              mu=infos%dft%cam_mu)
+                           cam=is_dft.and.infos%dft%cam_flag, &
+                           alpha=infos%dft%cam_alpha, &
+                           beta=infos%dft%cam_beta,&
+                           mu=infos%dft%cam_mu)
       nschwz = int2_driver%skipped
 
-      ! Recover full Fock and density from difference matrices
+      !----------------------------------------------------------------------------
+      ! Recover Full Fock and Density from Difference Matrices (if incremental)
+      !----------------------------------------------------------------------------
       if (infos%control%scf_incremental /= 0) then
         pdmat = pdmat + dold
         int2_data%f(:,:,1) = int2_data%f(:,:,1) + fold
         fold = int2_data%f(:,:,1)
         dold = pdmat
       end if
-      ! Scaling
+
+      !----------------------------------------------------------------------------
+      ! Scale Two-Electron Terms in Fock Matrix
+      !----------------------------------------------------------------------------
+      ! Scale off-diagonal elements by 0.5, diagonal by 1.0
       pfock(:,:) = 0.5_dp * int2_data%f(:,:,1)
       ii = 0
       do i = 1, nbf
-         ii = ii + i
-         pfock(ii,1:nfocks) = 2.0_dp * pfock(ii,1:nfocks)
+        ii = ii + i
+        pfock(ii,1:nfocks) = 2.0_dp * pfock(ii,1:nfocks)
       end do
 
-      ! Adding the skeleton H core to Fock for getting the new orbitals
+      !----------------------------------------------------------------------------
+      ! Add One-Electron Core Hamiltonian to Fock Matrix
+      !----------------------------------------------------------------------------
       do i = 1, nfocks
         pfock(:,i) = pfock(:,i) + hcore
       end do
 
-      ! After this, we compute Energy.
+      !----------------------------------------------------------------------------
+      ! Compute HF Energy Components
+      !----------------------------------------------------------------------------
       ehf = 0.0_dp
       ehf1 = 0.0_dp
+
+      ! Compute one and two-electron energies
       do i = 1, nfocks
-        ehf1 = ehf1 + traceprod_sym_packed(pdmat(:,i),hcore,nbf)
-        ehf = ehf + traceprod_sym_packed(pdmat(:,i),pfock(:,i),nbf)
+        ehf1 = ehf1 + traceprod_sym_packed(pdmat(:,i), hcore, nbf)
+        ehf = ehf + traceprod_sym_packed(pdmat(:,i), pfock(:,i), nbf)
       end do
-      ehf = 0.5_dp*(ehf+ehf1)
+
+      ! Total HF energy = 0.5*(E1 + E2) (to avoid double-counting)
+      ehf = 0.5_dp * (ehf + ehf1)
       etot = ehf + nenergy
-      ! DFT contribution
+
+      !----------------------------------------------------------------------------
+      ! Compute DFT Exchange-Correlation Contribution (if DFT)
+      !----------------------------------------------------------------------------
       if (is_dft) then
         if (scf_type == scf_rhf) then
           call dftexcor(basis,molgrid,1,pfxc,pfxc,mo_a,mo_a,nbf,nbf_tri,eexc,totele,totkin,infos)
         else if (scf_type == scf_uhf) then
-           call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
+          call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
         else if (scf_type == scf_rohf) then
-           ! ROHF does not have MO_B. So we copy MO_A to MO_B.
-           mo_b = mo_a
-           call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
+          ! ROHF does not have MO_B. So we copy MO_A to MO_B.
+          mo_b = mo_a
+          call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
         end if
+
+        ! Add XC contribution to Fock and total energy
         pfock = pfock + pfxc
         etot = etot + eexc
       end if
 
-      ! Forming ROHF Fock by combining Alpha and Beta Focks.
+      !----------------------------------------------------------------------------
+      ! Form Special ROHF Fock Matrix (if ROHF calculation)
+      !----------------------------------------------------------------------------
       if (scf_type == scf_rohf) then
-         rohf_bak = pfock(:,1)
-         if (vshift_last_iter) vshift = 0.0_dp
-         call form_rohf_fock(pfock(:,1),pfock(:,2),tempvec, &
-           mo_a,smat,lwrk2,nelec_a,nelec_b,nbf,vshift)
-         pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+        rohf_bak = pfock(:,1)
+        if (vshift_last_iter) vshift = 0.0_dp
+        call form_rohf_fock(pfock(:,1),pfock(:,2), &
+                            mo_a, smat, nelec_a, nelec_b, nbf, vshift)
+        pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
       end if
 
+      !----------------------------------------------------------------------------
+      ! Pass Fock and Density to Convergence Accelerator
+      !----------------------------------------------------------------------------
       if (use_soscf) then
-        ! SOSCF: SCF Converger to get refined Fock matrix, MOs and its energies
-        call conv%add_data( &
-                f=pfock(:,1:diis_nfocks), &
-                dens=pdmat(:,1:diis_nfocks), &
-                e=Etot, &
-                mo_a=mo_a, &
-                mo_b=mo_b, &
-                mo_e_a=mo_energy_a, &
-                mo_e_b=mo_energy_b, &
-                nocca=nelec_a, &
-                noccb=nelec_b)
-
+        ! SOSCF: Pass MO coefficients and energies for orbital rotation
+        if (do_pfon) then
+          select case (scf_type)
+          case (scf_rhf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_e_a=mo_energy_a, &
+                     nocc_a=nelec_a, &
+                     nocc_b=nelec_b, &
+                     occ_a=occ_a)
+          case (scf_uhf, scf_rohf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b, &
+                     nocc_a=nelec_a, &
+                     nocc_b=nelec_b, &
+                     occ_a=occ_a, &
+                     occ_b=occ_b)
+          end select
+        else
+          select case (scf_type)
+          case (scf_rhf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_e_a=mo_energy_a, &
+                     nocc_a=nelec_a, &
+                     nocc_b=nelec_b)
+          case (scf_uhf, scf_rohf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b, &
+                     nocc_a=nelec_a, &
+                     nocc_b=nelec_b)
+          end select
+        end if
       else
-        ! DIIS: SCF Converger to get refined Fock matrix
+        ! DIIS: Only pass Fock and density matrices
         call conv%add_data( &
-                f=pfock(:,1:diis_nfocks), &
-                dens=pdmat(:,1:diis_nfocks), &
-                e=Etot)
+                 f=pfock(:,1:diis_nfocks), &
+                 dens=pdmat(:,1:diis_nfocks), &
+                 e=etot)
       end if
 
-      ! Run DIIS/SOSCF calculation, get DIIS/SOSCF error
+      !----------------------------------------------------------------------------
+      ! Run Convergence Accelerator (DIIS/SOSCF)
+      !----------------------------------------------------------------------------
       call conv%run(conv_res)
       diis_error = conv_res%get_error()
 
-      ! Checking the convergency
-      diffe = etot - e_old
+      !----------------------------------------------------------------------------
+      ! Print Current Energy
+      !----------------------------------------------------------------------------
+      ! Print iteration information
       if (infos%control%pfon) then
-         write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
-               iter, etot, diffe, nschwz, diis_error, vshift, &
-               trim(conv_res%active_converger_name), "Temp:", temp_pfon
-         write(IW,fmt="(100x,a,f9.2)") "Beta:", beta_pfon
+        write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
+              iter, etot, etot - e_old, nschwz, diis_error, vshift, &
+              trim(conv_res%active_converger_name), "Temp:", temp_pfon
+        write(IW,fmt="(100x,a,f9.2)") "Beta:", beta_pfon
       else
-         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-               iter, etot, diffe, nschwz, diis_error, vshift, &
-               trim(conv_res%active_converger_name)
-      endif
+        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
+              iter, etot, etot - e_old, nschwz, diis_error, vshift, &
+              trim(conv_res%active_converger_name)
+      end if
       call flush(IW)
 
-      ! VDIIS option
-      if ((infos%control%diis_type.eq.5) &
-         .and.(diis_error < infos%control%vdiis_vshift_switch)) then
-         vshift = 0.0_dp
-      elseif ((infos%control%diis_type.eq.5) &
-         .and.(diis_error.ge.infos%control%vdiis_vshift_switch)) then
-         vshift = infos%control%vshift
-      endif
+      !----------------------------------------------------------------------------
+      ! Update VDIIS Parameters (if using VDIIS)
+      !----------------------------------------------------------------------------
+      if ((infos%control%diis_type == 5) .and. &
+          (diis_error < infos%control%vdiis_vshift_switch)) then
+        vshift = 0.0_dp
+      else if ((infos%control%diis_type == 5) .and. &
+               (diis_error >= infos%control%vdiis_vshift_switch)) then
+        vshift = infos%control%vshift
+      end if
 
       e_old = etot
 
-      ! Exit if convergence criteria achieved
+      !----------------------------------------------------------------------------
+      ! Check for SCF Convergence
+      !----------------------------------------------------------------------------
       if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
-         exit
+        ! Fully converged - exit loop
+        exit
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
-         write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
-         vshift_last_iter = .true.
+        ! Converged but need one more iteration with vshift=0
+        write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
+        vshift_last_iter = .true.
       elseif (vshift_last_iter) then
-         ! Only for ROHF case
-         call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
-         exit
-      endif
+        ! Only for ROHF case the final iteration with vshift=0 complete - exit loop
+        call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
+        exit
+      end if
 
-      ! Update orbitals and Fock matrix based on the active converger
+      !----------------------------------------------------------------------------
+      ! Update Orbitals and Fock Matrix Based on Active Converger
+      !----------------------------------------------------------------------------
+      ! Vshift=0.0 and slow cases
+      ! Check if DIIS reset is needed
+      diis_reset_condition = (((iter/diis_reset) >= 1) &
+         .and. (modulo(iter,diis_reset) == 0) &
+         .and. (diis_error > infos%control%diis_reset_conv) &
+         .and. (infos%control%vshift == 0.0_dp) &
+         .and. (trim(conv_res%active_converger_name) /= 'SOSCF'))
+      if (diis_reset_condition) then
+        ! Resetting DIIS for difficult cases
+        write(IW,"(3x,64('-')/10x,'Resetting DIIS.')")
+        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=1)
+        ! After resetting DIIS, we need to skip SD
+        call conv%add_data(f=pfock(:,1:diis_nfocks), &
+                           dens=pdmat(:,1:diis_nfocks), &
+                           e=Etot)
+        call conv%run(conv_res)
+      else
+        ! Form the interpolated the Fock/density matrix
+        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
+      end if
+
+      !----------------------------------------------------------------------------
+      ! Calculate New Orbitals and Eigenvalues
+      !----------------------------------------------------------------------------
       if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
         ! SOSCF: Retrieve updated MOs and energies directly
         if (int2_driver%pe%rank == 0) then
-          call conv_res%get_mo_a(mo_a, diis_stat)
-          call conv_res%get_mo_e_a(mo_energy_a, diis_stat)
+          call conv_res%get_mo_a(mo_a, istat=stat)
+          call conv_res%get_mo_e_a(mo_energy_a, istat=stat)
           if (scf_type == scf_uhf .and. nelec_b /= 0) then
-            call conv_res%get_mo_b(mo_b, diis_stat)
-            call conv_res%get_mo_e_b(mo_energy_b, diis_stat)
+            call conv_res%get_mo_b(mo_b, stat)
+            call conv_res%get_mo_e_b(mo_energy_b, stat)
           elseif (scf_type == scf_rohf) then
             mo_b = mo_a
             mo_energy_b = mo_energy_a
           end if
-          if (diis_stat /= 0) then
+          if (stat /= 0) then
             call show_message('Error retrieving SOSCF results', WITH_ABORT)
-          endif
-        endif
-
+          end if
+        end if
       else
-        ! Reset DIIS for difficult case
-        ! VSHIFT=0 and slow cases
-        diis_reset_condition = (((iter/diis_reset) >= 1) &
-           .and. (modulo(iter,diis_reset) == 0) &
-           .and. (diis_error > infos%control%diis_reset_conv) &
-           .and. (infos%control%vshift == 0.0_dp) &
-           .and. (trim(conv_res%active_converger_name) /= 'SOSCF'))
-        if (diis_reset_condition) then
-           ! Resetting DIIS
-           write(IW,"(3x,64('-')/10x,'Resetting DIIS.')")
-           call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
-           call conv%init(ldim=nbf, maxvec=maxdiis, &
-             subconvergers=[conv_cdiis], &
-             thresholds=[ethr_cdiis_big], &
-             overlap=smat_full, overlap_sqrt=qmat, &
-             num_focks=diis_nfocks, verbose=1)
-           ! After resetting DIIS, we need to skip SD
-           call conv%add_data(f=pfock(:,1:diis_nfocks), &
-                dens=pdmat(:,1:diis_nfocks), e=Etot)
-           call conv%run(conv_res)
-        else
-           ! Form the interpolated the Fock/density matrix
-           call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=diis_stat)
-        endif
-      endif
+        if (int2_driver%pe%rank == 0) then
+           call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+           if (scf_type == scf_uhf .and. nelec_b /= 0) then
+              ! Only UHF has beta orbitals.
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+           end if
+        end if
+      end if
 
-      ! Calculate new orbitals and density
-      if (int2_driver%pe%rank == 0) then
-         call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
-         if (scf_type == scf_uhf .and. nelec_b /= 0) then
-            ! Only UHF has beta orbitals.
-            call get_ab_initio_orbital(pfock(:,2),mo_b,mo_energy_b,qmat)
-         end if
-      end if
-      if (scf_type == scf_uhf .and. nelec_b /= 0) then
-         call int2_driver%pe%bcast(mo_b, size(mo_b))
-         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
-      end if
+      ! Broadcast updated orbitals to all processes
       call int2_driver%pe%bcast(mo_a, size(mo_a))
       call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
+      if (scf_type == scf_uhf .and. nelec_b /= 0) then
+        call int2_driver%pe%bcast(mo_b, size(mo_b))
+        call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
+      end if
 
-      ! pFON section
-      do_pfon = infos%control%pfon
+      !----------------------------------------------------------------------------
+      ! Calculate pFON Occupations (if enabled)
+      !----------------------------------------------------------------------------
       if (do_pfon) then
-         if (.not. allocated(occ_a)) allocate(occ_a(nbf))
-         if (.not. allocated(occ_b)) allocate(occ_b(nbf))
-         nsmear = infos%control%pfon_nsmear
+        nsmear = infos%control%pfon_nsmear
 
-         select case (scf_type)
-         case (scf_rhf)
-            call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear)
+        select case (scf_type)
+        case (scf_rhf)
+          ! Calculate occupations for RHF (single set of doubly-occupied orbitals)
+          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear)
 
-         case (scf_uhf)
-            call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
-                                 is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
-            if (nelec_b > 0) then
-               call pfon_occupations(mo_energy_b, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
-                                     is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
-            end if
+        case (scf_uhf)
+          ! Calculate alpha occupations for UHF
+          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
+                                is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
+          if (nelec_b > 0) then
+            ! Calculate beta occupations for UHF
+            call pfon_occupations(mo_energy_b, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
+                                  is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
+          end if
 
-         case (scf_rohf)
-            call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
-                                  is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
-            if (nelec_b > 0) then
-               call pfon_occupations(mo_energy_a, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
-                                     is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
-            end if
-         end select
+        case (scf_rohf)
+          ! Calculate alpha occupations for ROHF
+          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
+                                is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
+          if (nelec_b > 0) then
+            ! Calculate beta occupations for ROHF (shared orbitals with alpha)
+            call pfon_occupations(mo_energy_a, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
+                                  is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
+          end if
+        end select
 
-         ! Alpha occupations
-         sum_occ_alpha = sum(occ_a(1:nbf))
+        ! Track total electron counts
+        sum_occ_alpha = sum(occ_a(1:nbf))
 
-         ! Beta occupations
-         sum_occ_beta = 0.0_dp
-         if (scf_type == scf_uhf .or. scf_type == scf_rohf) then
-            sum_occ_beta = sum(occ_b(1:nbf))
-         end if
+        ! Beta occupations
+        if (scf_type == scf_uhf .or. scf_type == scf_rohf) then
+          sum_occ_beta = sum(occ_b(1:nbf))
+        end if
       end if
 
-      ! MOM option works for RHF and ROHF
-      if (do_mom .and. diis_error < infos%control%mom_switch) do_mom_flag = .true.
-      if (do_mom .and. do_mom_flag .and. .not. step_0_mom) then
-         call mo_reorder(infos, mo_a_for_mom, mo_energy_a_for_mom, &
-                         mo_a, mo_energy_a, smat_full)
-      end if
+      !----------------------------------------------------------------------------
+      ! Apply MOM (Maximum Overlap Method) if enabled
+      !----------------------------------------------------------------------------
       if (do_mom) then
-         mo_a_for_mom = mo_a
-         mo_energy_a_for_mom = mo_energy_a
-      end if
-      step_0_mom = .false.
+        ! Check if MOM should be activated based on convergence
+        if (diis_error < infos%control%mom_switch) then
+          mom_active = .true.
+        end if
 
-      ! New density matrix in AO basis using MO
+        ! Apply MOM if active and not the first iteration
+        if (mom_active .and. .not. initial_mom_iter) then
+          ! Apply MOM for alpha spin channel
+          call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
+                         mo_a, mo_energy_a, smat_full, nelec_a, &
+                         "Alpha", mom_work, mom_smo)
+
+          ! Apply MOM for beta spin channel (UHF only)
+          if (scf_type == scf_uhf .and. nelec_b > 0) then
+            call apply_mom(infos, mo_b_prev, mo_e_b_prev, &
+                           mo_b, mo_energy_b, smat_full, nelec_b, &
+                           "Beta", mom_work, mom_smo)
+          end if
+        end if
+
+        ! Store current orbitals for next iteration
+        mo_a_prev = mo_a
+        mo_e_a_prev = mo_energy_a
+
+        if (scf_type == scf_uhf) then
+           mo_b_prev = mo_b
+           mo_e_b_prev = mo_energy_b
+        end if
+
+        initial_mom_iter = .false.
+      end if
+
+      !----------------------------------------------------------------------------
+      ! Build New Density Matrix from Updated Orbitals
+      !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-         if (.not. do_pfon) then
-            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-         else
-            call build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
-         end if
+        if (.not. do_pfon) then
+          ! Standard density build with integer occupations
+          call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        else
+          ! pFON density build with fractional occupations
+          call build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
+        end if
       end if
       call int2_driver%pe%bcast(pdmat, size(pdmat))
 
-      ! Checking the HOMO-LUMO gaps for predicting SCF convergency
+      !----------------------------------------------------------------------------
+      ! Check HOMO-LUMO Gap for Convergence Prediction
+      !----------------------------------------------------------------------------
       if ((iter > 10) .and. (vshift == 0.0_dp)) then
-         select case (scf_type)
-         case (scf_rhf)
-            H_U_gap = mo_energy_a(nelec/2) - mo_energy_a(nelec/2-1)
-         case (scf_uhf)
-            H_U_gap = mo_energy_a(nelec/2) - mo_energy_a(nelec/2-1)
-         case (scf_rohf)
-            H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
-         end select
-      endif
-    ! End of Iteration
+        select case (scf_type)
+        case (scf_rhf)
+          H_U_gap = mo_energy_a(nelec/2) - mo_energy_a(nelec/2-1)
+        case (scf_uhf)
+          H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
+        case (scf_rohf)
+          H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
+        end select
+
+        if (H_U_gap < H_U_gap_crit) then
+          ! Small gap detected, enable level shifting
+          vshift = 0.1_dp
+          write(IW,"(3x,64('-')/10x,&
+                   &'Small HOMO-LUMO gap detected (',&
+                   &F8.5,' au). Enabling level shift=',F6.4)") H_U_gap, vshift
+        end if
+      end if
+
+    ! End of Main SCF Iteration Loop
     end do
 
+    !==============================================================================
+    ! Post-SCF Processing and Final Output
+    !==============================================================================
+
+    !----------------------------------------------------------------------------
+    ! Report SCF Convergence Status
+    !----------------------------------------------------------------------------
     if (iter > maxit) then
       write(IW,"(3x,64('-')/10x,'SCF is not converged ....')")
       infos%mol_energy%SCF_converged = .false.
@@ -676,6 +1022,9 @@ contains
 
     write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), etot, iter
 
+    !----------------------------------------------------------------------------
+    ! Print DFT-Specific Information (if DFT)
+    !----------------------------------------------------------------------------
     if (is_dft) then
       write(IW,*)
       write(IW,"(' DFT: XC energy              = ',F20.10)") eexc
@@ -683,15 +1032,20 @@ contains
       write(IW,"(' DFT: number of electrons    = ',I9,/)") nelec
     end if
 
+    !----------------------------------------------------------------------------
+    ! Broadcast Final MOs and Energies to All Processes
+    !----------------------------------------------------------------------------
+    call int2_driver%pe%bcast(pdmat, size(pdmat))
+    call int2_driver%pe%bcast(mo_a, size(mo_a))
+    call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
     if (scf_type == scf_uhf .and. nelec_b /= 0) then
         call int2_driver%pe%bcast(mo_b, size(mo_b))
         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
     end if
 
-    call int2_driver%pe%bcast(mo_a, size(mo_a))
-    call int2_driver%pe%bcast(pdmat, size(pdmat))
-    call int2_driver%pe%bcast(mo_energy_a, size(mo_energy_a))
-
+    !----------------------------------------------------------------------------
+    ! Save Final Fock and Density Matrices
+    !----------------------------------------------------------------------------
     select case (scf_type)
     case (scf_rhf)
       fock_a = pfock(:,1)
@@ -710,10 +1064,14 @@ contains
       mo_energy_b = mo_energy_a
     end select
 
-    ! Print out the molecular orbitals
+    !----------------------------------------------------------------------------
+    ! Print Molecular Orbitals
+    !----------------------------------------------------------------------------
     call print_mo_range(basis, infos, mostart=1, moend=nbf)
 
-    ! Print out the results
+    !----------------------------------------------------------------------------
+    ! Calculate Final Energy Components
+    !----------------------------------------------------------------------------
     psinrm = 0.0_dp
     tkin = 0.0_dp
     do i = 1, diis_nfocks
@@ -721,15 +1079,21 @@ contains
       tkin = tkin + traceprod_sym_packed(pdmat(:,i),tmat,nbf)
     end do
 
-    ! Writing out final results
+    ! Calculate energy components
     vne = ehf1 - tkin
     vee = etot - ehf1 - nenergy
     vnn = nenergy
     vtot = vne + vnn + vee
     virial = - vtot/tkin
+
+    !----------------------------------------------------------------------------
+    ! Print Final Energy Components
+    !----------------------------------------------------------------------------
     call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
 
-    ! Save results to infos
+    !----------------------------------------------------------------------------
+    ! Save Results to infos Structure
+    !----------------------------------------------------------------------------
     infos%mol_energy%energy = etot
     infos%mol_energy%psinrm = psinrm
     infos%mol_energy%ehf1 = ehf1
@@ -742,10 +1106,23 @@ contains
     infos%mol_energy%virial = virial
     infos%mol_energy%energy = etot
 
-    ! Clean up
+    !----------------------------------------------------------------------------
+    ! Clean Up Resources
+    !----------------------------------------------------------------------------
     call int2_driver%clean()
-
     call measure_time(print_total=1, log_unit=IW)
+
+    !----------------------------------------------------------------------------
+    ! Clean up in the finalization section
+    !----------------------------------------------------------------------------
+    if (do_mom) then
+       if (allocated(mo_a_prev))   deallocate(mo_a_prev)
+       if (allocated(mo_e_a_prev)) deallocate(mo_e_a_prev)
+       if (allocated(mo_b_prev))   deallocate(mo_b_prev)
+       if (allocated(mo_e_b_prev)) deallocate(mo_e_b_prev)
+       if (allocated(mom_work))    deallocate(mom_work)
+       if (allocated(mom_smo))     deallocate(mom_smo)
+    end if
 
   end subroutine scf_driver
 
@@ -812,9 +1189,10 @@ contains
   !>
   !> @author Konstantin Komarov, 2023
   !>
-  subroutine form_rohf_fock(fock_a_ao, fock_b_ao, fock_mo, &
-                            MOs, overlap_tri, work, &
+  subroutine form_rohf_fock(fock_a_ao, fock_b_ao, &
+                            MOs, overlap_tri, &
                             nocca, noccb, nbf, vshift)
+    use precision, only: dp
     use mathlib, only: orthogonal_transform_sym, &
                        orthogonal_transform2, &
                        triangular_to_full, &
@@ -825,15 +1203,14 @@ contains
 
     real(kind=dp), intent(inout), dimension(:) :: fock_a_ao
     real(kind=dp), intent(inout), dimension(:) :: fock_b_ao
-    real(kind=dp), intent(out), dimension(:) :: fock_mo
     real(kind=dp), intent(in), dimension(:,:) :: MOs
     real(kind=dp), intent(in), dimension(:) :: overlap_tri
-    real(kind=dp), intent(out), dimension(:) :: work
     integer, intent(in) :: nocca, noccb, nbf
     real(kind=dp), intent(in) :: vshift
 
+    real(kind=dp), allocatable, dimension(:) :: fock_mo
     real(kind=dp), allocatable, dimension(:,:) :: &
-          overlap, work_matrix, fock, fock_a, fock_b
+          overlap, work_matrix, fock, fock_a, fock_b, work
     real(kind=dp) :: acc, aoo, avv, bcc, boo, bvv
     integer :: i, nbf_tri
 
@@ -844,7 +1221,9 @@ contains
     ! Allocate full matrices
     allocate(overlap(nbf, nbf), &
              work_matrix(nbf, nbf), &
+             work(nbf, nbf), &
              fock(nbf, nbf), &
+             fock_mo(nbf_tri), &
              fock_a(nbf, nbf), &
              fock_b(nbf, nbf), &
              source=0.0_dp)
@@ -888,10 +1267,10 @@ contains
       end do
     end associate
 
-    ! Pack fock to fock_mo, make it triangular
-    call pack_matrix(fock, fock_mo)
-
-    call triangular_to_full(fock_mo, nbf, 'u')
+!   ! Pack fock to fock_mo, make it triangular
+!   call pack_matrix(fock, fock_mo)
+!
+!   call triangular_to_full(fock_mo, nbf, 'u')
 
     ! Back-transform ROHF Fock matrix to AO basis
     call unpack_matrix(overlap_tri, overlap)
@@ -910,6 +1289,7 @@ contains
   !> @detail compute the transformation:
   !>   Fao = S*V * Fmo * (SV)^T
   subroutine mo_to_ao(fao, fmo, s, v, nmo, nbf)
+    use precision, only: dp
     use mathlib, only: pack_matrix, unpack_matrix
     use oqp_linalg
 
@@ -1006,103 +1386,212 @@ contains
 
  end subroutine fock_jk
 
- !>  Va, Ea: MO and MO energies of Previous Point
- !>  Vb, Eb: MO and MO energies of Current Point
- !>  The Vb and Eb are reordered based on the orders of Va and Ea.
- !>  Sq: Square Form of Overlap Matrix in AO
- subroutine mo_reorder(infos, Va, Ea, Vb, Eb, Sq)
-   use precision, only: dp
-   use io_constants, only: iw
-   use types, only: information
+  !==============================================================================
+  ! Maximum Overlap Method (MOM) Implementation
+  !==============================================================================
+  !
+  ! DESCRIPTION:
+  !   Maximum Overlap Method (MOM) for improving SCF convergence
+  !   by preserving orbital character between iterations.
+  !   Designed to handle RHF, UHF, and ROHF calculations.
+  !
+  !------------------------------------------------------------------------------
+  ! apply_mom subroutine: Reorders MO coefficients using Maximum Overlap Method
+  !------------------------------------------------------------------------------
+  ! This subroutine reorders current iteration's orbitals to maximize overlap with
+  ! previous iteration's orbitals, ensuring consistent electronic state throughout
+  ! the SCF convergence process.
+  !
+  ! INPUTS:
+  !   infos     - System information structure with molecular properties
+  !   v_prev    - Previous iteration's MO coefficients
+  !   e_prev    - Previous iteration's orbital energies
+  !   v_curr    - Current iteration's MO coefficients (will be reordered)
+  !   e_curr    - Current iteration's orbital energies (will be reordered)
+  !   s_ao      - Overlap matrix in AO basis
+  !   n_occ     - Number of occupied orbitals
+  !   spin_label- Identifier for spin channel ("Alpha", "Beta")
+  !   work      - Pre-allocated work array for intermediate calculations (nbf x nbf)
+  !   s_mo      - Pre-allocated array for overlap matrix (nbf x nbf)
+  !------------------------------------------------------------------------------
+  subroutine apply_mom(infos, v_prev, e_prev, v_curr, e_curr, s_ao, n_occ, &
+                      spin_label, work, s_mo)
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
 
-   implicit none
+    implicit none
 
-   type(information), intent(inout) :: infos
-   real(kind=dp), intent(inout), dimension(:,:) :: Va, Vb ! (nbf, nbf)
-   real(kind=dp), intent(inout), dimension(:) :: Ea, Eb    ! (nbf)
-   real(kind=dp), intent(in), dimension(:,:) :: Sq    ! (nbf, nbf)
+    ! Input/output parameters
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in),    dimension(:,:) :: v_prev
+    real(kind=dp), intent(in),    dimension(:)   :: e_prev
+    real(kind=dp), intent(inout), dimension(:,:) :: v_curr
+    real(kind=dp), intent(inout), dimension(:)   :: e_curr
+    real(kind=dp), intent(in),    dimension(:,:) :: s_ao
+    integer,       intent(in)                    :: n_occ
+    character(*),  intent(in)                    :: spin_label
+    real(kind=dp), intent(inout), dimension(:,:) :: work
+    real(kind=dp), intent(inout), dimension(:,:) :: s_mo
 
-   integer :: i, loc
-   real(kind=dp) :: tmp, tmp2, tmp_abs
-   real(kind=dp), allocatable, dimension(:,:) :: scr, smo
-   logical, allocatable, dimension(:) :: pr
-   integer, allocatable, dimension(:) :: locs
-   integer :: na, nbf
+    ! Local variables
+    integer :: i, j, k, ip1, nbf
+    integer :: max_idx
+    real(kind=dp) :: max_overlap, overlap
+    logical, allocatable :: reordered(:)
 
-   write(IW, fmt='(/," MOM is on: Reordering the New MO and MO energies....")')
+    nbf = size(v_curr, 1)
 
-   nbf = infos%basis%nbf
-   na = infos%mol_prop%nelec_a
+    write(IW, fmt='(/,"Applying MOM for ",A," spin channel")') trim(spin_label)
 
-   allocate(scr(nbf,nbf), &
-            smo(nbf,nbf), &
-            source=0.0_dp)
-   allocate(pr(nbf), source=.false.)
-   allocate(locs(nbf), source=0)
+    ! Allocate reordered flag array
+    allocate(reordered(nbf), source=.false.)
 
-   call dgemm('t', 'n', nbf, nbf, nbf, &
-               1.0_dp, Va, nbf, &
-                       Sq, nbf, &
-               0.0_dp, scr, nbf)
-   call dgemm('n', 'n', nbf, nbf, nbf, &
-               1.0_dp, scr, nbf, &
-                       Vb, nbf, &
-               0.0_dp, smo, nbf)
-   ! Now Smo is overlap matrix in MO, row and column corresponds to Old and New MOs.
-   do i = 1, nbf
-     smo(:,i) = smo(:,i) / norm2(smo(:,i))
-   end do
-   ! Finding out the location of maximum value in column i
-   do i = 1, nbf
-     loc = maxloc(abs(smo(:nbf,i)), dim=1)
-     locs(i) = loc
-     pr(loc) = .true.
-   enddo
-   ! Checking printouts
-   if (.not.all(pr)) then
-     write(IW, fmt='(/,"   Warning")')
-     write(IW, fmt='(" Some orbitals are missing in reordering")')
-     write(IW, advance='no', fmt='(" Their indices are:")')
-     do i = 1, nbf
-       if (.not.pr(i)) write(IW, advance='no', fmt='(I4,",")') i
-     end do
-     write(IW,*)
-     write(IW, fmt='(/,"   Error. Stop")')
-     write(IW, fmt='(" Some orbitals are missing in reordering")')
-     write(IW,*)
-   end if
+    ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * s_ao * v_curr
+    call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, v_prev, nbf, s_ao, nbf, 0.0_dp, work, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, work, nbf, v_curr, nbf, 0.0_dp, s_mo, nbf)
 
-   write(IW,fmt='(x,a)') 'Old MO Index ---> New MO Index'
-   do i = 1, nbf
-     tmp_abs = maxval(abs(smo(:nbf,i)), dim=1)
-     loc = maxloc(abs(smo(:nbf,i)), dim=1)
-     tmp = smo(loc,i)
-     tmp2 = smo(i,i)
+    ! Normalize columns to ensure proper comparison
+    do i = 1, nbf
+      s_mo(:,i) = s_mo(:,i) / max(norm2(s_mo(:,i)), 1.0e-10_dp)
+    end do
 
-     if ((loc.ne.i).and.(i.le.na+1)) then
-       write(IW, advance='no', &
-        fmt='(5x,i4,14x,i4)') i, loc
-       if (i == na-1) write(IW, advance='no',fmt='(2x,a)') ' HOMO'
-       if (i == na) write(IW, advance='no',fmt='(2x,a)') ' LUMO'
-       if (i /= loc .and. tmp_abs < 0.9d+00) then
-         write(IW, fmt='(2x,a)') &
-         ' rearranged, WARNING'
-       elseif (i == loc .and. tmp_abs < 0.9d+00) then
-         write(IW, fmt='(2x,a)')  &
-         ' WARNING'
-       elseif (i /= loc .and. tmp_abs > 0.9d+00) then
-         write(IW, fmt='(2x,a)') &
-         ' rearranged'
-       else
-         write(IW,*)
-       end if
-     endif
-   enddo
+    ! First, identify the best match for each orbital from the previous iteration
+    ! Focus particularly on occupied orbitals and the HOMO-LUMO region
+    ! Print information about important orbitals (HOMO, LUMO)
+    write(IW,fmt='(1X,"MOM reordering for ",A," orbitals:")') trim(spin_label)
+    write(IW,fmt='(1X,"Old Index → New Index   | Overlap |  Status")')
+    write(IW,fmt='(1X,"--------------------------------------------")')
 
-   ! Reordering MO and MO energies of Current point.
-   call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
+    ! First pass: check which orbitals need reordering
+    do i = 1, nbf
+      max_overlap = 0.0_dp
+      max_idx = i  ! Default to no change
 
- end subroutine mo_reorder
+      ! Find the orbital with maximum overlap
+      do j = 1, nbf
+        if (.not. reordered(j)) then
+          overlap = abs(s_mo(i,j))
+          if (overlap > max_overlap) then
+            max_overlap = overlap
+            max_idx = j
+          end if
+        end if
+      end do
+
+      ! Mark the orbital as reordered and print info for occupied orbitals
+      reordered(max_idx) = .true.
+
+      ! Print info for important orbitals or those being reordered
+      if ((i <= n_occ+1) .or. (i /= max_idx)) then
+        write(IW, fmt='(3X,I3,5X,"→",5X,I3,5X,"| ",F7.5," |")', advance='no') &
+          i, max_idx, max_overlap
+
+        ! Add label for HOMO/LUMO
+        if (i == n_occ)   write(IW, fmt='(1X,"HOMO")', advance='no')
+        if (i == n_occ+1) write(IW, fmt='(1X,"LUMO")', advance='no')
+
+        ! Add status message
+        if (i /= max_idx .and. max_overlap < 0.9_dp) then
+          write(IW, fmt='(1X,"Reordered (warning: low overlap)")')
+        else if (i /= max_idx) then
+          write(IW, fmt='(1X,"Reordered")')
+        else if (max_overlap < 0.9_dp) then
+          write(IW, fmt='(1X,"Unchanged (warning: low overlap)")')
+        else
+          write(IW, fmt='(1X,"Unchanged")')
+        end if
+      end if
+    end do
+
+    ! Check if all orbitals were successfully assigned
+    if (.not. all(reordered)) then
+      write(IW, fmt='(/,"WARNING: Some orbitals could not be properly reordered!")')
+      write(IW, fmt='("This may indicate a significant change in electronic structure.")')
+    end if
+
+    ! Apply the reordering
+    call reorder_orbitals(v_curr, e_curr, s_mo, nbf, &
+                          start_mo=1, &
+                          end_mo=n_occ+1)
+
+    deallocate(reordered)
+  end subroutine apply_mom
+
+  !------------------------------------------------------------------------------
+  ! reorder_orbitals subroutine: Internal helper routine for orbital reordering
+  !------------------------------------------------------------------------------
+  ! Given an overlap matrix between old and new orbitals, this routine
+  ! reorders the current set of orbitals to match the order of the previous set.
+  !
+  ! INPUTS:
+  !   v        - MO coefficient matrix to reorder
+  !   e        - Orbital energies to reorder
+  !   s_mo     - Overlap matrix between old and new MOs
+  !   nbf      - Number of basis functions
+  !   start_mo - First MO to consider for reordering
+  !   end_mo   - Last MO to consider for reordering
+  !------------------------------------------------------------------------------
+  subroutine reorder_orbitals(v, e, smo, nbf, start_mo, end_mo)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(inout) :: v(nbf,*)
+    real(kind=dp), intent(inout) :: e(*)
+    real(kind=dp), intent(in) :: smo(nbf,*)
+    integer, intent(in) :: nbf, start_mo, end_mo
+
+    integer :: i, j, k, ip1
+    integer, allocatable :: reorder_idx(:)
+    real(kind=dp) :: smax, tmp_e
+
+    ! Allocate array for reordering indices
+    allocate(reorder_idx(nbf), source=0)
+
+    ! Determine the reordering indices based on maximum overlap
+    do i = 1, nbf
+      smax = 0.0_dp
+      reorder_idx(i) = 0
+
+      ! Find maximum overlap
+      do j = 1, nbf
+        ! Skip already assigned orbitals
+        if (any(reorder_idx(1:i-1) == j)) cycle
+
+        if (abs(smo(i,j)) > smax) then
+          smax = abs(smo(i,j))
+          reorder_idx(i) = j
+        end if
+      end do
+
+      ! Ensure sign consistency
+      if (smo(i, reorder_idx(i)) < 0.0_dp) then
+        v(:, reorder_idx(i)) = -v(:, reorder_idx(i))
+      end if
+    end do
+
+    ! Apply reordering for the specified range
+    do i = start_mo, end_mo
+      j = reorder_idx(i)
+
+      ! Swap orbital coefficients
+      call dswap(nbf, v(1,i), 1, v(1,j), 1)
+
+      ! Swap orbital energies
+      tmp_e = e(i)
+      e(i) = e(j)
+      e(j) = tmp_e
+
+      ! Update reordering indices for remaining swaps
+      ip1 = i + 1
+      do k = ip1, end_mo
+        if (reorder_idx(k) == i) reorder_idx(k) = j
+      end do
+    end do
+
+    deallocate(reorder_idx)
+  end subroutine reorder_orbitals
 
   !> @brief      pFON Implementation in SCF Module
   !> Author: Alireza Lashkaripour
@@ -1141,7 +1630,7 @@ contains
     case(2) ! UHF
         if (.not. present(nelec_a) .or. .not. present(nelec_b)) then
             stop 'UHF requires nelec_a and nelec_b'
-        endif
+        end if
         ! UHF: completely independent alpha and beta
         if (is_beta_calc) then
             i_homo = max(1, nelec_b)
@@ -1149,12 +1638,12 @@ contains
         else
             i_homo = max(1, nelec_a)
             n_electrons = nelec_a
-        endif
+        end if
 
     case(3) ! ROHF
         if (.not. present(nelec_a) .or. .not. present(nelec_b)) then
             stop 'ROHF requires nelec_a and nelec_b'
-        endif
+        end if
         ! ROHF: same spatial orbitals, different occupations
         n_double = nelec_b
         n_single = nelec_a - nelec_b
@@ -1164,7 +1653,7 @@ contains
         else
             i_homo = n_double + n_single
             n_electrons = nelec_a
-        endif
+        end if
     end select
 
     i_lumo = i_homo + 1
@@ -1180,7 +1669,7 @@ contains
                 occ(i) = 2.0_dp / (1.0_dp + exp(tmp))
             else  ! UHF or ROHF
                 occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
-            endif
+            end if
         end do
     else
         i_low = max(1, i_homo - nsmear)
@@ -1205,7 +1694,7 @@ contains
                 do i = n_double + n_single + 1, nbf
                     occ(i) = 0.0_dp
                 end do
-            endif
+            end if
 
             ! Apply smearing only around the Fermi level
             do i = i_low, i_high
@@ -1219,7 +1708,7 @@ contains
                     occ(i) = 2.0_dp
                 else
                     occ(i) = 1.0_dp
-                endif
+                end if
             end do
 
             do i = i_high + 1, nbf
@@ -1232,16 +1721,16 @@ contains
                     occ(i) = 2.0_dp / (1.0_dp + exp(tmp))
                 else
                     occ(i) = 1.0_dp / (1.0_dp + exp(tmp))
-                endif
+                end if
             end do
-        endif
-    endif
+        end if
+    end if
 
     ! Normalize occupations
     sum_occ = sum(occ(1:nbf))
     if (sum_occ < 1.0e-14_dp) then
         sum_occ = 1.0_dp
-    endif
+    end if
     occ(1:nbf) = occ(1:nbf) * (real(n_electrons,dp) / sum_occ)
 
   end subroutine pfon_occupations
@@ -1315,7 +1804,7 @@ contains
                         occ_factor = 1.0_dp
                     else
                         occ_factor = occ_a(i)  ! Virtual orbitals
-                    endif
+                    end if
 
                     do mu = 1, nbf
                         do nu = 1, nbf
@@ -1333,7 +1822,7 @@ contains
                         occ_factor = occ_b(i)
                     else
                         occ_factor = 0.0_dp
-                    endif
+                    end if
 
                     do mu = 1, nbf
                         do nu = 1, nbf
