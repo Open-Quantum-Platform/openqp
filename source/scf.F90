@@ -1,9 +1,35 @@
 module scf
+  use precision, only: dp
 
   character(len=*), parameter :: module_name = "scf"
 
   public :: scf_driver
   public :: fock_jk
+
+  !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
+  !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
+  !>         including temperature control, occupation computation, and density building.
+  type :: pfon_t
+    private
+    logical :: active = .false.                   ! Whether pFON is enabled
+    real(kind=dp) :: temp                         ! Current temperature
+    real(kind=dp) :: beta                         ! Inverse temperature (1/(kB * temp))
+    real(kind=dp) :: last_cooled_temp = 0.0_dp    ! Last temperature at which cooling occurred
+    real(kind=dp) :: cooling_rate = 50.0_dp       ! Temperature cooling rate
+    integer :: nsmear = 0                         ! Number of smearing steps
+    real(kind=dp), pointer :: occ_a(:) => null()  ! Alpha occupations
+    real(kind=dp), pointer :: occ_b(:) => null()  ! Beta occupations
+    integer :: scf_type = 1  ! SCF calculation type (1=RHF, 2=UHF, 3=ROHF)
+    integer :: nelec = 0     ! Total number of electrons
+    integer :: nelec_a = 0   ! Number of alpha electrons
+    integer :: nelec_b = 0   ! Number of beta electrons
+    integer :: nbf = 0       ! Number of basis functions
+  contains
+    procedure :: init => pfon_init
+    procedure :: adjust_temperature => pfon_adjust_temperature
+    procedure :: compute_occupations => pfon_compute_occupations
+    procedure :: build_density => pfon_build_density
+  end type pfon_t
 
 contains
 
@@ -40,7 +66,6 @@ contains
     use mathlib, only: traceprod_sym_packed, matrix_invsqrt
     use mathlib, only: unpack_matrix
     use io_constants, only: IW
-    use constants, only: kB_HaK
     use basis_tools, only: basis_set
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf
@@ -137,9 +162,9 @@ contains
     !==============================================================================
     ! MOM (Maximum Overlap Method) Parameters
     !==============================================================================
-    logical :: do_mom                ! Flag to enable MOM method
-    logical :: initial_mom_iter      ! Flag for first MOM iteration
-    logical :: mom_active            ! Flag indicating MOM is currently active
+    logical :: do_mom            ! Flag to enable MOM method
+    logical :: initial_mom_iter  ! Flag for first MOM iteration
+    logical :: mom_active        ! Flag indicating MOM is currently active
     real(kind=dp), allocatable :: mo_a_prev(:,:)  ! Previous alpha MO coefficients
     real(kind=dp), allocatable :: mo_e_a_prev(:)  ! Previous alpha orbital energies
     real(kind=dp), allocatable :: mo_b_prev(:,:)  ! Previous beta MO coefficients (UHF only)
@@ -150,22 +175,9 @@ contains
     !==============================================================================
     ! pFON (pseudo-Fractional Occupation Number) Parameters
     !==============================================================================
-    logical :: do_pfon                  ! Flag to use pFON method
-    real(kind=dp) :: beta_pfon          ! Inverse temperature parameter for pFON
-    real(kind=dp) :: start_temp         ! Starting temperature for pFON
-    real(kind=dp) :: end_temp           ! Target ending temperature for pFON
-    real(kind=dp) :: temp_pfon          ! Current temperature for pFON
-    real(kind=dp) :: cooling_rate       ! Temperature cooling rate
-    real(kind=dp) :: last_cooled_temp   ! Last temperature at which cooling occurred
-    real(kind=dp) :: pfon_start_temp    ! Initial temperature from input
-    real(kind=dp) :: pfon_cooling_rate  ! Cooling rate from input
-    real(kind=dp) :: pfon_nsmear        ! Number of orbitals to smear near Fermi level
-    real(kind=dp) :: electron_sum_a     ! Sum of alpha electron occupations
-    real(kind=dp) :: electron_sum_b     ! Sum of beta electron occupations
-    real(kind=dp) :: sum_occ_alpha      ! Sum of alpha occupations
-    real(kind=dp) :: sum_occ_beta       ! Sum of beta occupations
+    logical :: do_pfon    ! Flag to use pFON method
+    type(pfon_t) :: pfon  ! pFON handler object
     real(kind=dp), allocatable :: occ_a(:), occ_b(:) ! Orbital occupations for alpha/beta
-    integer :: nsmear                   ! Integer number of orbitals to smear
 
     !==============================================================================
     ! Matrices and Vectors for SCF Calculation
@@ -313,17 +325,6 @@ contains
     do_pfon = infos%control%pfon
 
     if (do_pfon) then
-      ! Set temperature parameters
-      start_temp = infos%control%pfon_start_temp
-      cooling_rate = infos%control%pfon_cooling_rate
-
-      if (start_temp <= 0.0_dp) then
-        start_temp = 2000.0_dp
-      end if
-
-      temp_pfon = start_temp
-      if (temp_pfon < 1.0_dp) temp_pfon = 1.0_dp
-      beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
 
       ! Allocate and initialize occupation arrays
       allocate(occ_a(nbf), source=0.0_dp, stat=ok)
@@ -346,6 +347,13 @@ contains
         occ_a(nelec_b+1:nelec_a) = 1.0_dp  ! Open shells
         occ_b(1:nelec_b) = 2.0_dp          ! Closed shells only
       end select
+
+      ! Initialize pFON object
+      if (nfocks > 1) then
+        call pfon%init(infos%control, nbf, nelec, nelec_a, nelec_b, scf_type, occ_a, occ_b)
+      else
+        call pfon%init(infos%control, nbf, nelec, nelec_a, nelec_b, scf_type, occ_a)
+      end if
     end if
 
     !==============================================================================
@@ -574,39 +582,7 @@ contains
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
       if (do_pfon) then
-        ! Ensure cooling rate has valid value
-        if (cooling_rate <= 0.0_dp) then
-          cooling_rate = 50.0_dp
-        end if
-
-        ! Update temperature based on current convergence state
-        if (iter == maxit) then
-          ! Final iteration: set temperature to zero for pure integer occupations
-          temp_pfon = 0.0_dp
-        else if (abs(diis_error) < 10.0_dp * infos%control%conv) then
-          ! Near convergence: set to minimum temperature (1K)
-          if (temp_pfon > 1.0_dp) then
-            last_cooled_temp = temp_pfon
-          end if
-          temp_pfon = 1.0_dp
-        else
-          ! Not converged yet: continue cooling temperature
-          if (temp_pfon == 1.0_dp .and. last_cooled_temp > 1.0_dp) then
-            temp_pfon = last_cooled_temp
-          end if
-          temp_pfon = temp_pfon - cooling_rate
-          if (temp_pfon < 1.0_dp) then
-            temp_pfon = 1.0_dp
-          end if
-          last_cooled_temp = temp_pfon
-        end if
-
-        ! Calculate beta = 1/(kB*T) for Fermi-Dirac distribution
-        if (temp_pfon > 1.0e-12_dp) then
-          beta_pfon = 1.0_dp / (kB_HaK * temp_pfon)
-        else
-          beta_pfon = 1.0e20_dp  ! Zero temperature
-        end if
+        call pfon%adjust_temperature(iter, maxit, diis_error, infos%control%conv)
       end if
 
       !----------------------------------------------------------------------------
@@ -681,13 +657,16 @@ contains
       !----------------------------------------------------------------------------
       if (is_dft) then
         if (scf_type == scf_rhf) then
-          call dftexcor(basis,molgrid,1,pfxc,pfxc,mo_a,mo_a,nbf,nbf_tri,eexc,totele,totkin,infos)
+          call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+                        nbf, nbf_tri, eexc, totele, totkin, infos)
         else if (scf_type == scf_uhf) then
-          call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
+          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                        nbf, nbf_tri, eexc, totele, totkin, infos)
         else if (scf_type == scf_rohf) then
           ! ROHF does not have MO_B. So we copy MO_A to MO_B.
           mo_b = mo_a
-          call dftexcor(basis,molgrid,2,pfxc(:,1),pfxc(:,2),mo_a,mo_b,nbf,nbf_tri,eexc,totele,totkin,infos)
+          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                        nbf, nbf_tri, eexc, totele, totkin, infos)
         end if
 
         ! Add XC contribution to Fock and total energy
@@ -696,14 +675,48 @@ contains
       end if
 
       !----------------------------------------------------------------------------
-      ! Form Special ROHF Fock Matrix (if ROHF calculation)
+      ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
       if (scf_type == scf_rohf) then
+        ! Store the original alpha Fock matrix before ROHF transformation
+        ! This is needed to preserve it for energy evaluation and printing
         rohf_bak = pfock(:,1)
+
+        ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
+
+        ! Apply the Guest-Saunders ROHF Fock transformation
+        ! This creates a modified Fock matrix with proper coupling between
+        ! closed-shell, open-shell, and virtual orbital spaces
         call form_rohf_fock(pfock(:,1),pfock(:,2), &
-                            mo_a, smat, nelec_a, nelec_b, nbf, vshift)
+                            mo_a, smat_full, nelec_a, nelec_b, nbf, vshift)
+
+        ! Combine alpha and beta densities for ROHF
+        ! This is needed because ROHF uses a single set of MOs for both spins,
+        ! so we need the total density for the next iteration
         pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+      end if
+
+      !----------------------------------------------------------------------------
+      ! Apply Vshift for RHF/UHF (if enabled)
+      !----------------------------------------------------------------------------
+      if (vshift > 0.0_dp .and. scf_type /= scf_rohf) then
+        ! Turn off level shifting for the final iteration if requested
+        if (vshift_last_iter) vshift = 0.0_dp
+
+        ! Apply level shifting based on SCF type
+        select case (scf_type)
+        case (scf_rhf)
+          ! RHF: One Fock matrix with doubly occupied orbitals
+          call level_shift_fock(pfock(:,1), mo_a, smat_full, nelec/2, nbf, vshift)
+
+        case (scf_uhf)
+          ! UHF: Two Fock matrices with separate alpha and beta occupations
+          call level_shift_fock(pfock(:,1), mo_a, smat_full, nelec_a, nbf, vshift)
+          if (nelec_b > 0) then
+            call level_shift_fock(pfock(:,2), mo_b, smat_full, nelec_b, nbf, vshift)
+          end if
+        end select
       end if
 
       !----------------------------------------------------------------------------
@@ -782,8 +795,8 @@ contains
       if (infos%control%pfon) then
         write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
               iter, etot, etot - e_old, nschwz, diis_error, vshift, &
-              trim(conv_res%active_converger_name), "Temp:", temp_pfon
-        write(IW,fmt="(100x,a,f9.2)") "Beta:", beta_pfon
+              trim(conv_res%active_converger_name), "Temp:", pfon%temp
+        write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       else
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
               iter, etot, etot - e_old, nschwz, diis_error, vshift, &
@@ -893,40 +906,10 @@ contains
       ! Calculate pFON Occupations (if enabled)
       !----------------------------------------------------------------------------
       if (do_pfon) then
-        nsmear = infos%control%pfon_nsmear
-
-        select case (scf_type)
-        case (scf_rhf)
-          ! Calculate occupations for RHF (single set of doubly-occupied orbitals)
-          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear)
-
-        case (scf_uhf)
-          ! Calculate alpha occupations for UHF
-          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
-                                is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
-          if (nelec_b > 0) then
-            ! Calculate beta occupations for UHF
-            call pfon_occupations(mo_energy_b, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
-                                  is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
-          end if
-
-        case (scf_rohf)
-          ! Calculate alpha occupations for ROHF
-          call pfon_occupations(mo_energy_a, nbf, nelec, occ_a, beta_pfon, scf_type, nsmear, &
-                                is_beta=.false., nelec_a=nelec_a, nelec_b=nelec_b)
-          if (nelec_b > 0) then
-            ! Calculate beta occupations for ROHF (shared orbitals with alpha)
-            call pfon_occupations(mo_energy_a, nbf, nelec, occ_b, beta_pfon, scf_type, nsmear, &
-                                  is_beta=.true., nelec_a=nelec_a, nelec_b=nelec_b)
-          end if
-        end select
-
-        ! Track total electron counts
-        sum_occ_alpha = sum(occ_a(1:nbf))
-
-        ! Beta occupations
-        if (scf_type == scf_uhf .or. scf_type == scf_rohf) then
-          sum_occ_beta = sum(occ_b(1:nbf))
+        if (scf_type == scf_uhf) then
+          call pfon%compute_occupations(mo_energy_a, mo_energy_b)
+        else
+          call pfon%compute_occupations(mo_energy_a)
         end if
       end if
 
@@ -970,12 +953,16 @@ contains
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-        if (.not. do_pfon) then
+        if (do_pfon) then
+          ! pFON density build with fractional occupations
+          if (scf_type == scf_uhf) then
+            call pfon%build_density(pdmat, mo_a, mo_b)
+          else
+            call pfon%build_density(pdmat, mo_a)
+          end if
+        else
           ! Standard density build with integer occupations
           call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-        else
-          ! pFON density build with fractional occupations
-          call build_pfon_density(pdmat, mo_a, mo_b, occ_a, occ_b, scf_type, nbf, nelec_a, nelec_b)
         end if
       end if
       call int2_driver%pe%bcast(pdmat, size(pdmat))
@@ -983,12 +970,17 @@ contains
       !----------------------------------------------------------------------------
       ! Check HOMO-LUMO Gap for Convergence Prediction
       !----------------------------------------------------------------------------
-      if ((iter > 10) .and. (vshift == 0.0_dp)) then
+      if ((iter > 10)) then
+        ! Calculate HOMO-LUMO gap
         select case (scf_type)
         case (scf_rhf)
           H_U_gap = mo_energy_a(nelec/2) - mo_energy_a(nelec/2-1)
         case (scf_uhf)
           H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
+          if (nelec_b > 0) then
+            H_U_gap = min(H_U_gap, &
+                          mo_energy_b(nelec_b+1) - mo_energy_b(nelec_b))
+          end if
         case (scf_rohf)
           H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
         end select
@@ -998,7 +990,7 @@ contains
           vshift = 0.1_dp
           write(IW,"(3x,64('-')/10x,&
                    &'Small HOMO-LUMO gap detected (',&
-                   &F8.5,' au). Enabling level shift=',F6.4)") H_U_gap, vshift
+                   &F8.5,' au). Apply level vshift=',F6.4)") H_U_gap, vshift
         end if
       end if
 
@@ -1190,12 +1182,11 @@ contains
   !> @author Konstantin Komarov, 2023
   !>
   subroutine form_rohf_fock(fock_a_ao, fock_b_ao, &
-                            MOs, overlap_tri, &
+                            MOs, overlap, &
                             nocca, noccb, nbf, vshift)
     use precision, only: dp
     use mathlib, only: orthogonal_transform_sym, &
                        orthogonal_transform2, &
-                       triangular_to_full, &
                        unpack_matrix, &
                        pack_matrix
 
@@ -1204,13 +1195,13 @@ contains
     real(kind=dp), intent(inout), dimension(:) :: fock_a_ao
     real(kind=dp), intent(inout), dimension(:) :: fock_b_ao
     real(kind=dp), intent(in), dimension(:,:) :: MOs
-    real(kind=dp), intent(in), dimension(:) :: overlap_tri
+    real(kind=dp), intent(in), dimension(:,:) :: overlap
     integer, intent(in) :: nocca, noccb, nbf
     real(kind=dp), intent(in) :: vshift
 
     real(kind=dp), allocatable, dimension(:) :: fock_mo
     real(kind=dp), allocatable, dimension(:,:) :: &
-          overlap, work_matrix, fock, fock_a, fock_b, work
+          work_matrix, fock, fock_a, fock_b, work, work2
     real(kind=dp) :: acc, aoo, avv, bcc, boo, bvv
     integer :: i, nbf_tri
 
@@ -1219,9 +1210,9 @@ contains
     nbf_tri = nbf * (nbf + 1) / 2
 
     ! Allocate full matrices
-    allocate(overlap(nbf, nbf), &
-             work_matrix(nbf, nbf), &
+    allocate(work_matrix(nbf, nbf), &
              work(nbf, nbf), &
+             work2(nbf, nbf), &
              fock(nbf, nbf), &
              fock_mo(nbf_tri), &
              fock_a(nbf, nbf), &
@@ -1267,19 +1258,13 @@ contains
       end do
     end associate
 
-!   ! Pack fock to fock_mo, make it triangular
-!   call pack_matrix(fock, fock_mo)
-!
-!   call triangular_to_full(fock_mo, nbf, 'u')
-
     ! Back-transform ROHF Fock matrix to AO basis
-    call unpack_matrix(overlap_tri, overlap)
     call dsymm('l', 'u', nbf, nbf, &
                1.0_dp, overlap, nbf, &
                        MOs, nbf, &
                0.0_dp, work, nbf)
     call orthogonal_transform2('t', nbf, nbf, work, nbf, fock, nbf, &
-                               work_matrix, nbf, overlap)
+                               work_matrix, nbf, work2)
     call pack_matrix(work_matrix, fock_a_ao)
 
   end subroutine form_rohf_fock
@@ -1838,67 +1823,220 @@ contains
 
     end subroutine build_pfon_density
 
-!> @brief      This routine reorders orbitals to maximum overlap.
- subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
+  !==============================================================================
+  ! Correct Level Shifting Subroutine
+  !==============================================================================
+  !
+  ! DESCRIPTION:
+  !   This subroutine applies level shifting to a Fock matrix.
+  !   It directly modifies the diagonal elements of the Fock matrix in MO basis,
+  !   then transforms back to AO basis.
+  !
+  ! INPUTS:
+  !   fock_ao    - Fock matrix in AO basis (triangular format)
+  !   mo_coefs   - MO coefficients
+  !   smat       - Overlap matrix (triangular format)
+  !   nocc       - Number of occupied orbitals
+  !   nbf        - Number of basis functions
+  !   vshift     - Level shift parameter value
+  !
+  ! OUTPUTS:
+  !   fock_ao    - Updated Fock matrix after level shifting
+  !
+  subroutine level_shift_fock(fock_ao, mo_coefs, smat_full, nocc, nbf, vshift)
     use precision, only: dp
+    use mathlib, only: orthogonal_transform_sym, &
+                       orthogonal_transform2, &
+                       unpack_matrix, &
+                       pack_matrix
+
 
     implicit none
 
-    real(kind=dp), intent(inout), dimension(nbf,*) :: V
-    real(kind=dp), intent(in), dimension(*) :: E
-    real(kind=dp), intent(in), dimension(l0,*) :: Smo
-    integer :: l0, nbf, lr1, lr2
+    integer, intent(in) :: nocc, nbf
+    real(kind=dp), intent(inout) :: fock_ao(:)
+    real(kind=dp), intent(in) :: mo_coefs(:,:)
+    real(kind=dp), intent(in) :: smat_full(:,:)
+    real(kind=dp), intent(in) :: vshift
 
-    integer, allocatable, dimension(:) :: iwrk, iwrk2
-    real(kind=dp), allocatable, dimension(:) :: wrk
-    integer :: i, j, k, ip1
-    real(kind=dp) :: ss, smax
+    ! Local variables
+    real(kind=dp), allocatable :: fock_mo_full(:,:), fock_mo(:), work(:,:), work2(:,:), &
+                                  work_matrix(:,:)
+    integer :: i, nbf_tri
 
-    allocate(iwrk(l0), iwrk2(l0), source=0)
-    allocate(wrk(l0), source=0.0_dp)
+    nbf_tri = nbf*(nbf+1)/2
 
-    do i = 1, l0
-      smax = 0.0_dp
-      iwrk(i) = 0
-      do j = 1, l0
-        do k = 1, i
-          if(iwrk(k)==j) cycle
-        end do
-        ss = abs(smo(i,j))
-        if(ss > smax) then
-          smax = ss
-          iwrk(i) = j
-        end if
-      end do
-      if(smo(i, iwrk(i)) < 0.0_dp) then
-        do j = 1, nbf
-          v(j,iwrk(i)) = -v(j,iwrk(i))
-        end do
+    ! Allocate work arrays
+    allocate(fock_mo_full(nbf, nbf), &
+             fock_mo(nbf_tri), &
+             work(nbf, nbf), &
+             work2(nbf, nbf), &
+             work_matrix(nbf, nbf), &
+             source=0.0_dp)
+
+    ! Transform Fock from AO to MO basis: F_MO = C^T * F_AO * C
+      call orthogonal_transform_sym(nbf, nbf, fock_ao, mo_coefs, nbf, fock_mo)
+
+    ! Unpack triangular matrices to full format
+    call unpack_matrix(fock_mo, fock_mo_full)
+
+    ! Apply level shift to virtual orbitals in F_MO
+    do i = nocc + 1, nbf
+      fock_mo_full(i, i) = fock_mo_full(i, i) + vshift
+    end do
+
+    ! Back-transform ROHF Fock matrix to AO basis
+    call dsymm('l', 'u', nbf, nbf, &
+               1.0_dp, smat_full, nbf, &
+                       mo_coefs, nbf, &
+               0.0_dp, work, nbf)
+    call orthogonal_transform2('t', nbf, nbf, work, nbf, fock_mo_full, nbf, &
+                               work_matrix, nbf, work2)
+
+    ! Pack the result back to triangular form
+    call pack_matrix(work_matrix, fock_ao)
+
+    deallocate(fock_mo_full, fock_mo, work, work2, work_matrix)
+  end subroutine level_shift_fock
+
+  !> @brief Initialize pFON parameters
+  !> @param[in] control Control structure containing pFON settings
+  !> @param[in] nbf Number of basis functions
+  !> @param[in] nelec Total number of electrons
+  !> @param[in] nelec_a Number of alpha electrons
+  !> @param[in] nelec_b Number of beta electrons
+  !> @param[in] scf_type SCF type (1=RHF, 2=UHF, 3=ROHF)
+  !> @param[inout] occ_a Pointer to alpha occupations array
+  !> @param[inout] occ_b Pointer to beta occupations array (only for UHF/ROHF)
+  subroutine pfon_init(this, control, nbf, nelec, nelec_a, nelec_b, scf_type, occ_a, occ_b)
+    use constants, only: kB_HaK
+    use types, only: control_parameters
+    class(pfon_t), intent(inout) :: this
+    type(control_parameters), intent(in) :: control
+    integer, intent(in) :: nbf, nelec, nelec_a, nelec_b, scf_type
+    real(dp), target, intent(inout) :: occ_a(:)
+    real(dp), target, optional, intent(inout) :: occ_b(:)
+
+    this%active = control%pfon
+    if (.not. this%active) return
+
+    this%nbf = nbf
+    this%nelec = nelec
+    this%nelec_a = nelec_a
+    this%nelec_b = nelec_b
+    this%scf_type = scf_type
+
+    ! Set temperature parameters
+    this%temp = control%pfon_start_temp
+    if (this%temp <= 0.0_dp) this%temp = 2000.0_dp  ! Default temperature
+    this%beta = 1.0_dp / (kB_HaK * this%temp)
+    this%cooling_rate = control%pfon_cooling_rate
+    if (this%cooling_rate <= 0.0_dp) this%cooling_rate = 50.0_dp
+
+    ! Set number of orbitals to smear
+    this%nsmear = int(control%pfon_nsmear)
+
+    ! Set pointers to occupation arrays
+    this%occ_a => occ_a
+    if (present(occ_b)) this%occ_b => occ_b
+
+  end subroutine pfon_init
+
+  !> @brief Adjust pFON temperature based on convergence status
+  !> @param[in] iter Current SCF iteration
+  !> @param[in] maxit Maximum number of SCF iterations
+  !> @param[in] diis_error Current DIIS error
+  !> @param[in] conv Convergence threshold
+  subroutine pfon_adjust_temperature(this, iter, maxit, diis_error, conv)
+    use constants, only: kB_HaK
+    class(pfon_t), intent(inout) :: this
+    integer, intent(in) :: iter, maxit
+    real(dp), intent(in) :: diis_error, conv
+
+    if (.not. this%active) return
+
+    if (iter == maxit) then
+      ! Final iteration: set temperature to zero for pure integer occupations
+      this%temp = 0.0_dp
+    else if (abs(diis_error) < 10.0_dp * conv) then
+      ! Near convergence: set to minimum temperature (1K)
+      if (this%temp > 1.0_dp) then
+        this%last_cooled_temp = this%temp
       end if
-    end do
+      this%temp = 1.0_dp
+    else
+      ! Not converged yet: continue cooling temperature
+      if (this%temp == 1.0_dp .and. this%last_cooled_temp > 1.0_dp) then
+        this%temp = this%last_cooled_temp
+      end if
+      this%temp = this%temp - this%cooling_rate
+      if (this%temp < 1.0_dp) then
+        this%temp = 1.0_dp
+      end if
+      this%last_cooled_temp = this%temp
+    end if
 
-    iwrk2 = iwrk
+    ! Calculate beta = 1/(kB*T) for Fermi-Dirac distribution
+    if (this%temp > 1.0e-12_dp) then
+      this%beta = 1.0_dp / (kB_HaK * this%temp)
+    else
+      this%beta = 1.0e20_dp  ! Zero temperature
+    end if
+  end subroutine pfon_adjust_temperature
 
-    do i = lr1, lr2
-       j = iwrk(i)
-       call dswap(nbf,v(1,i),1,v(1,j),1)
-       ip1 = i+1
-       do k = ip1, lr2
-          if(iwrk(k)==i) iwrk(k) = j
-       end do
-    end do
+  !> @brief Compute fractional occupation numbers using pFON method
+  !> @param[in] mo_energy_a Alpha orbital energies
+  !> @param[in] mo_energy_b Beta orbital energies (only for UHF)
+  subroutine pfon_compute_occupations(this, mo_energy_a, mo_energy_b)
+    class(pfon_t), intent(inout) :: this
+    real(dp), intent(in) :: mo_energy_a(:)
+    real(dp), intent(in), optional :: mo_energy_b(:)
 
-    iwrk = iwrk2
-    do i = lr1, lr2
-       j = iwrk(i)
-       call dswap(1,e(i),1,e(j),1)
-       ip1 = i+1
-       do k = ip1, lr2
-          if(iwrk(k)==i) iwrk(k) = j
-       end do
-    end do
-    return
- end subroutine
+    if (.not. this%active) return
+
+    ! Calculate alpha occupations
+    call pfon_occupations(mo_energy_a, this%nbf, this%nelec, this%occ_a, &
+                          this%beta, this%scf_type, this%nsmear, &
+                          is_beta=.false., nelec_a=this%nelec_a, nelec_b=this%nelec_b)
+
+    ! Calculate beta occupations if needed
+    if (this%scf_type > 1 .and. associated(this%occ_b)) then
+      if (this%scf_type == 2 .and. present(mo_energy_b)) then
+        ! UHF case - use separate beta orbital energies
+        call pfon_occupations(mo_energy_b, this%nbf, this%nelec, this%occ_b, &
+                            this%beta, this%scf_type, this%nsmear, &
+                            is_beta=.true., nelec_a=this%nelec_a, nelec_b=this%nelec_b)
+      else
+        ! ROHF case - use same orbital energies for alpha and beta
+        call pfon_occupations(mo_energy_a, this%nbf, this%nelec, this%occ_b, &
+                            this%beta, this%scf_type, this%nsmear, &
+                            is_beta=.true., nelec_a=this%nelec_a, nelec_b=this%nelec_b)
+      end if
+    end if
+  end subroutine pfon_compute_occupations
+
+  !> @brief Build density matrices using fractional occupation numbers
+  !> @param[out] pdmat Density matrices (triangular format)
+  !> @param[in] mo_a Alpha MO coefficients
+  !> @param[in] mo_b Beta MO coefficients (UHF only)
+  subroutine pfon_build_density(this, pdmat, mo_a, mo_b)
+    class(pfon_t), intent(inout) :: this
+    real(dp), intent(out) :: pdmat(:,:)
+    real(dp), intent(in) :: mo_a(:,:)
+    real(dp), intent(in), optional :: mo_b(:,:)
+
+    if (.not. this%active) return
+
+    ! Call the existing build_pfon_density function with appropriate parameters
+    if (present(mo_b) .and. this%scf_type == 2) then
+      ! UHF case with separate beta orbitals
+      call build_pfon_density(pdmat, mo_a, mo_b, this%occ_a, this%occ_b, &
+                              this%scf_type, this%nbf, this%nelec_a, this%nelec_b)
+    else
+      ! RHF or ROHF case
+      call build_pfon_density(pdmat, mo_a, mo_a, this%occ_a, this%occ_b, &
+                              this%scf_type, this%nbf, this%nelec_a, this%nelec_b)
+    end if
+  end subroutine pfon_build_density
 
 end module scf
-
