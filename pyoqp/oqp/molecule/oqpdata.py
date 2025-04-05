@@ -87,18 +87,15 @@ OQP_CONFIG_SCHEMA = {
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'soscf_type': {'type': int, 'default': '0'},
-        'soscf_start': {'type': int, 'default': '1'},
-        'soscf_freq': {'type': int, 'default': '1'},
+        'soscf_start': {'type': int, 'default': '-1'},
+        'soscf_freq': {'type': int, 'default': '2'},
         'soscf_max': {'type': int, 'default': '5'},
         'soscf_min': {'type': int, 'default': '1'},
         'soscf_conv': {'type': float, 'default': '1.0e-3'},
         'soscf_grad': {'type': float, 'default': '1.0e-3'},
         'soscf_lvl_shift': {'type': float, 'default': '0.2'},
-        'soscf_diis_weight': {'type': float, 'default': '0.5'},
         'soscf_diis_alternate': {'type': bool, 'default': 'False'},
-        'soscf_coupled_uhf': {'type': bool, 'default': 'False'},
         'soscf_lineq': {'type': bool, 'default': 'False'},
-        'soscf_enable': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
@@ -260,11 +257,8 @@ class OQPData:
             "soscf_conv": "set_scf_soscf_conv",
             "soscf_grad": "set_scf_soscf_grad",
             "soscf_lvl_shift": "set_scf_soscf_lvl_shift",
-            "soscf_diis_weight": "set_scf_soscf_diis_weight",
             "soscf_diis_alternate": "set_scf_soscf_diis_alternate",
-            "soscf_coupled_uhf": "set_scf_soscf_coupled_uhf",
             "soscf_lineq": "set_scf_soscf_lineq",
-            "soscf_enable": "set_scf_soscf_enable",
             "verbose": "set_scf_verbose",
         },
         "dftgrid": {
@@ -552,10 +546,6 @@ class OQPData:
         """Set level shifting parameter for SOSCF"""
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
 
-    def set_scf_soscf_diis_weight(self, soscf_diis_weight):
-        """Set weight for SOSCF in SOSCF+DIIS combination mode"""
-        self._data.control.soscf_diis_weight = soscf_diis_weight
-
     def set_scf_soscf_diis_alternate(self, soscf_diis_alternate):
         """
         Set whether to alternate between SOSCF and DIIS instead
@@ -563,20 +553,12 @@ class OQPData:
         """
         self._data.control.soscf_diis_alternate = soscf_diis_alternate
 
-    def set_scf_soscf_coupled_uhf(self, soscf_coupled_uhf):
-        """Set whether to use coupled (alpha-beta) update for UHF"""
-        self._data.control.soscf_coupled_uhf = soscf_coupled_uhf
-
     def set_scf_soscf_lineq(self, soscf_lineq):
         """
         Set whether to use linear equations for SOSCF (True)
         or BFGS update (False)
         """
         self._data.control.soscf_lineq = soscf_lineq
-
-    def set_scf_soscf_enable(self, soscf_enable):
-        """Enable SOSCF in convergence sequence"""
-        self._data.control.soscf_enable = soscf_enable
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""

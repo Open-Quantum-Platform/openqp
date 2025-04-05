@@ -460,7 +460,6 @@ contains
 
     ! SOSCF options
     use_soscf = .false.
-    if (infos%control%soscf_enable) use_soscf = .true.
 
     ! DIIS options
     maxdiis = infos%control%maxdiis
@@ -469,22 +468,8 @@ contains
     diis_reset = infos%control%diis_reset_mod
 
     ! Initialize SCF Convergence Accelerator
-    if (use_soscf) then
-      ! Set up SOSCF convergence accelerator
-      call conv%init(ldim=nbf, &
-                     maxvec=maxdiis, &
-                     subconvergers=[conv_cdiis, &
-                                    conv_soscf], &
-                     thresholds   =[0.01_dp, &
-                                    1.0_dp], &
-                     overlap=smat_full, &
-                     overlap_sqrt=qmat, &
-                     num_focks=diis_nfocks, &
-                     verbose=infos%control%verbose)
-
-      call set_soscf_parametres(infos, conv)
-
-    else
+    select case (infos%control%soscf_type)
+    case (0) ! Pure DIIS Accelerators
       ! Set up DIIS convergence accelerator
       if (infos%control%diis_type == 5) then
         ! v-DIIS setup: combination of E-DIIS and C-DIIS with vshift
@@ -530,8 +515,55 @@ contains
                        num_focks=diis_nfocks, &
                        verbose=infos%control%verbose)
       end if
-    end if
 
+    case (1) ! Pure SOSCF Accelerator
+      use_soscf = .true.
+      ! Pure SOSCF strategy
+      call conv%init(ldim=nbf, &
+                     maxvec=maxdiis, &
+                     subconvergers=[conv_soscf], &
+                     thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=diis_nfocks, &
+                     verbose=infos%control%verbose)
+    case (2) ! DIIS+SOSCF Accelerator
+      use_soscf = .true.
+      if (infos%control%diis_type == 5) then
+        ! V-DIIS + SOSCF hybrid strategy
+        call conv%init(ldim=nbf, &
+                      maxvec=maxdiis, &
+                      subconvergers=[conv_cdiis, &
+                                     conv_ediis, &
+                                     conv_cdiis, &
+                                     conv_soscf], &
+                      thresholds   =[ethr_cdiis_big, &
+                                     ethr_ediis, &
+                                     infos%control%vdiis_cdiis_switch, &
+                                     infos%control%soscf_conv], &
+                      overlap=smat_full, &
+                      overlap_sqrt=qmat, &
+                      num_focks=diis_nfocks, &
+                      verbose=infos%control%verbose)
+        if (infos%control%vshift == 0.0_dp) then
+          infos%control%vshift = 0.1_dp
+          vshift = 0.1_dp
+          write(IW, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
+        end if
+      else
+        ! Regular DIIS + SOSCF hybrid strategy
+        call conv%init(ldim=nbf, &
+                      maxvec=maxdiis, &
+                      subconvergers=[infos%control%diis_type, &
+                                     conv_soscf], &
+                      thresholds   =[infos%control%diis_method_threshold, &
+                                     infos%control%soscf_conv], &
+                      overlap=smat_full, &
+                      overlap_sqrt=qmat, &
+                      num_focks=diis_nfocks, &
+                      verbose=infos%control%verbose)
+      end if
+    end select
     ! Initialize DFT exchange-correlation energy
     eexc = 0.0_dp
     e_old = 0.0_dp
@@ -559,11 +591,11 @@ contains
                5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
                infos%control%pfon, infos%control%pfon_start_temp, &
                infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
-    if (infos%control%soscf_enable) then
+    if (use_soscf) then
       write(IW,'(/5X,"SOSCF options"/ &
                  &5X,18("-"))')
       write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",I1)') &
-             & infos%control%soscf_enable, infos%control%soscf_type
+             & use_soscf, infos%control%soscf_type
       write(IW,'(5X,"SOSCF start iteration = ",I5,5X,"SOSCF frequency = ",I5)') &
              & infos%control%soscf_start, infos%control%soscf_freq
       write(IW,'(5X,"SOSCF max micro-iterations = ",I5,1X,"SOSCF min micro-iterations = ",I5)') &
@@ -1212,11 +1244,14 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (soscf_converger)
+          sc%soscf_start = infos%control%soscf_start
+          sc%soscf_freq = infos%control%soscf_freq
+          sc%soscf_diis_alternate = infos%control%soscf_diis_alternate
+          sc%soscf_conv = infos%control%soscf_conv
           sc%max_iter = infos%control%soscf_max
           sc%min_iter = infos%control%soscf_min
           sc%grad_thresh = infos%control%soscf_grad
           sc%level_shift = infos%control%soscf_lvl_shift
-          sc%coupled_uhf = infos%control%soscf_coupled_uhf
           sc%use_lineq = infos%control%soscf_lineq
       end select
     end do

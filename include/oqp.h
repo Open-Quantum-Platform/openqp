@@ -137,11 +137,8 @@ struct control_parameters {
     double    soscf_conv;
     double    soscf_grad;
     double    soscf_lvl_shift;
-    double    soscf_diis_weight;
     bool      soscf_diis_alternate;
-    bool      soscf_coupled_uhf;
     bool      soscf_lineq;
-    bool      soscf_enable;
     int64_t   verbose;
 };
 
