@@ -149,7 +149,7 @@ class OQPTester:
         except Exception as err:
             self.log(f"Error in test {project_name}: {str(err)}")
             result["status"] = "ERROR"
-            result["message"] = f"PyOQP error: {type(err).__name__}"
+            result["message"] = f"PyOQP error: {type(err).__name__} - {str(err)}"
 
         result["execution_time"] = time.perf_counter() - start_time
         return result
@@ -177,13 +177,35 @@ class OQPTester:
                 result = self.run_single_test(input_file)
                 self.results.append(result)
         else:
-            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-                future_to_file = {
-                    executor.submit(self.run_single_test, input_file): input_file
-                    for input_file in input_files
-                }
-                for future in as_completed(future_to_file):
-                    self.results.append(future.result())
+            for input_file in input_files:
+                try:
+                    # Create a separate process pool for each test
+                    with ProcessPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(self.run_single_test, input_file)
+                        try:
+                            self.results.append(future.result(timeout=300))  # 5 minute timeout per test
+                        except Exception as e:
+                            # Handle case where a test process crashes
+                            self.log(f"Process failed for test {os.path.basename(input_file)}: {str(e)}")
+                            self.results.append({
+                                "project": os.path.splitext(os.path.basename(input_file))[0],
+                                "input_file": input_file,
+                                "log_file": os.path.join(self.output_dir, f"{os.path.splitext(os.path.basename(input_file))[0]}.log"),
+                                "status": "ERROR",
+                                "message": f"Process error: {type(e).__name__} - {str(e)}",
+                                "execution_time": 0
+                            })
+                except Exception as e:
+                    # Handle any other exceptions that might occur
+                    self.log(f"Failed to create process for test {os.path.basename(input_file)}: {str(e)}")
+                    self.results.append({
+                        "project": os.path.splitext(os.path.basename(input_file))[0],
+                        "input_file": input_file,
+                        "log_file": os.path.join(self.output_dir, f"{os.path.splitext(os.path.basename(input_file))[0]}.log"),
+                        "status": "ERROR",
+                        "message": f"Setup error: {type(e).__name__} - {str(e)}",
+                        "execution_time": 0
+                    })
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
@@ -193,6 +215,8 @@ class OQPTester:
             test_dir = self.base_test_dir
         elif test_path == 'other':
             test_dir = os.path.join(self.base_test_dir, 'other')
+        elif test_path == 'SCF':
+            test_dir = os.path.join(self.base_test_dir, 'SCF')
         elif os.path.isdir(test_path):
             test_dir = test_path
         elif os.path.isfile(test_path) and test_path.endswith('.inp'):

@@ -142,6 +142,7 @@ struct control_parameters {
     bool      soscf_coupled_uhf;
     bool      soscf_lineq;
     bool      soscf_enable;
+    int64_t   verbose;
 };
 
 struct mpi_communicator {

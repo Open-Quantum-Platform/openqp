@@ -136,9 +136,10 @@ module types
     real(c_double) :: soscf_lvl_shift = 0.2_dp !< Level shifting parameter for SOSCF
     real(c_double) :: soscf_diis_weight = 0.5_dp      !< Weight for SOSCF in SOSCF+DIIS combination
     logical(c_bool) :: soscf_diis_alternate = .false. !< Alternate between SOSCF and DIIS instead of combining
-    logical(c_bool) :: soscf_coupled_uhf = .false.    !< Use coupled update for UHF (F. Neese's approach)
     logical(c_bool) :: soscf_lineq = .false.   !< Use linear equations for SOSCF (true) or BFGS update (false)
+    logical(c_bool) :: soscf_coupled_uhf = .false.    !< Use coupled update for UHF (F. Neese's approach)
     logical(c_bool) :: soscf_enable = .false.  !< Master switch to enable SOSCF
+    integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

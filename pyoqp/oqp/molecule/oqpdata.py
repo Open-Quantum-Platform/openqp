@@ -99,6 +99,7 @@ OQP_CONFIG_SCHEMA = {
         'soscf_coupled_uhf': {'type': bool, 'default': 'False'},
         'soscf_lineq': {'type': bool, 'default': 'False'},
         'soscf_enable': {'type': bool, 'default': 'False'},
+        'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
@@ -264,6 +265,7 @@ class OQPData:
             "soscf_coupled_uhf": "set_scf_soscf_coupled_uhf",
             "soscf_lineq": "set_scf_soscf_lineq",
             "soscf_enable": "set_scf_soscf_enable",
+            "verbose": "set_scf_verbose",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -575,6 +577,10 @@ class OQPData:
     def set_scf_soscf_enable(self, soscf_enable):
         """Enable SOSCF in convergence sequence"""
         self._data.control.soscf_enable = soscf_enable
+
+    def set_scf_verbose(self, verbose):
+        """Controls output verbosity"""
+        self._data.control.verbose = verbose
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
