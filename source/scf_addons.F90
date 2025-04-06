@@ -291,7 +291,8 @@ contains
 
     nbf = size(v_curr, 1)
 
-    write(IW, fmt='(/,"Applying MOM for ",A," spin channel")') trim(spin_label)
+    if (infos%control%verbose>1) &
+      write(IW, fmt='(/,"Applying MOM for ",A," spin channel")') trim(spin_label)
 
     ! Allocate reordered flag array
     allocate(reordered(nbf), source=.false.)
@@ -308,9 +309,11 @@ contains
     ! First, identify the best match for each orbital from the previous iteration
     ! Focus particularly on occupied orbitals and the HOMO-LUMO region
     ! Print information about important orbitals (HOMO, LUMO)
-    write(IW,fmt='(1X,"MOM reordering for ",A," orbitals:")') trim(spin_label)
-    write(IW,fmt='(1X,"Old Index → New Index   | Overlap |  Status")')
-    write(IW,fmt='(1X,"--------------------------------------------")')
+    if (infos%control%verbose>1) then
+      write(IW,fmt='(1X,"MOM reordering for ",A," orbitals:")') trim(spin_label)
+      write(IW,fmt='(1X,"Old Index → New Index   | Overlap |  Status")')
+      write(IW,fmt='(1X,"--------------------------------------------")')
+    end if
 
     ! First pass: check which orbitals need reordering
     do i = 1, nbf
@@ -332,9 +335,10 @@ contains
       reordered(max_idx) = .true.
 
       ! Print info for important orbitals or those being reordered
-      if ((i <= n_occ+1) .or. (i /= max_idx)) then
-        write(IW, fmt='(3X,I3,5X,"→",5X,I3,5X,"| ",F7.5," |")', advance='no') &
-          i, max_idx, max_overlap
+      if (((i <= n_occ+1) .or. (i /= max_idx)).and. infos%control%verbose>1) then
+        if (infos%control%verbose>1) &
+          write(IW, fmt='(3X,I3,5X,"→",5X,I3,5X,"| ",F7.5," |")', advance='no') &
+            i, max_idx, max_overlap
 
         ! Add label for HOMO/LUMO
         if (i == n_occ)   write(IW, fmt='(1X,"HOMO")', advance='no')
