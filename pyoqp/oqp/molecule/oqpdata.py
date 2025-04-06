@@ -524,7 +524,6 @@ class OQPData:
                 0: SOSCF disabled
                 1: SOSCF only
                 2: SOSCF+DIIS combined mode
-                3: DIIS then SOSCF
         """
         self._data.control.soscf_type = soscf_type
 

@@ -127,7 +127,7 @@ module types
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     ! SOSCF parameters
-    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS, 3=DIIS then SOSCF
+    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     integer(c_int64_t) :: soscf_start = -1      !< First SCF iteration to apply SOSCF
     integer(c_int64_t) :: soscf_freq = 2       !< Frequency of SOSCF application
     integer(c_int64_t) :: soscf_max = 5        !< Maximum SOSCF micro-iterations
