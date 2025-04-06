@@ -1,3 +1,351 @@
+!===============================================================================
+! MODULE: scf_converger
+!===============================================================================
+!
+! DESCRIPTION:
+!   The scf_converger module implements a framework for managing convergence
+!   in Self-Consistent Field (SCF) calculations. It provides a main driver
+!   type `scf_conv` to coordinate multiple convergence methods, including
+!   variants of Direct Inversion in the Iterative Subspace (DIIS) and
+!   Second-Order SCF (SOSCF), storing iteration data in a ring buffer structure.
+!
+! MEMBERS:
+!   - conv_none  [INTEGER]: Constant (1) for no convergence method.
+!   - conv_cdiis [INTEGER]: Constant (2) for Commutator DIIS.
+!   - conv_ediis [INTEGER]: Constant (3) for Energy DIIS.
+!   - conv_adiis [INTEGER]: Constant (4) for Approximate DIIS.
+!   - conv_soscf [INTEGER]: Constant (5) for Second-Order SCF.
+!   - conv_state_not_initialized [INTEGER]: Constant (0) for uninitialized state.
+!   - conv_state_initialized     [INTEGER]: Constant (1) for initialized state.
+!   - conv_name_maxlen           [INTEGER]: Constant (32) for maximum length of converger names.
+!
+! DEPENDENCIES:
+!   - precision: Provides `dp` for double precision real numbers.
+!   - io_constants: Provides `iw` for output unit.
+!   - messages: Provides `show_message` and `with_abort` for error handling.
+!   - mathlib: Provides functions for matrix operations:
+!     `traceprod_sym_packed`: Calculates trace of product of two packed symmetric matrices.
+!     `orb_to_dens`: Converts orbitals to density matrix.
+!     `antisymmetrize_matrix`: Makes matrix antisymmetric (A = A - A^T).
+!     `unpack_matrix`: Converts packed triangular to full square matrix.
+!     `pack_matrix`: Converts full square to packed triangular matrix.
+!
+! NOTES:
+!   - The module defines public types: `scf_conv`, `scf_conv_result`, and `soscf_converger`.
+!   - All other entities are private unless explicitly made public.
+!   - The code supports handling of Fock matrices for RHF/ROHF (1 matrix) and UHF (2 matrices).
+!   - ROHF Fock matrix has already gone through the Guest-Saunders transformation.
+!
+! HISTORY:
+!   - [pre-2022] Initial Development - Vladimir Mironov
+!     Established the core framework for SCF convergence management,
+!     including the main driver `scf_conv` and initial DIIS methods.
+!   - [2025] Ring Buffer - Konstantin Komarov
+!     Implemented the ring buffer structure via the `converger_data` type,
+!     improving memory efficiency for storing SCF iteration history.
+!   - [2025] SOSCF Converger - Konstantin Komarov
+!     Added the Second-Order SCF (SOSCF) method through the `soscf_converger` type,
+!     enabling convergence using orbital optimization techniques.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv - MAIN DRIVER TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv` type is the main driver for SCF convergence. It manages a
+!   ring buffer of iteration data via `converger_data`, maintains an array of
+!   subconvergers, and selects a convergence method based on the current error
+!   and predefined thresholds.
+!
+! MEMBERS:
+!   step          [INTEGER]: Current SCF iteration step.
+!   overlap       [REAL(dp), POINTER]: Pointer to the full-format overlap matrix (S).
+!   overlap_sqrt  [REAL(dp), POINTER]: Pointer to the full-format S^(1/2) matrix.
+!   dat           [TYPE(converger_data)]: Stores SCF iteration history in a ring buffer.
+!   sconv         [TYPE(subconverger_), ALLOCATABLE]: Array of subconverger instances.
+!   thresholds    [REAL(dp), ALLOCATABLE]: Error thresholds for selecting subconvergers.
+!   iter_space_size [INTEGER]: Size of the subconverger problem space, default is 10.
+!   verbose       [INTEGER]: Verbosity level, default is 0.
+!   state         [INTEGER]: Current state (0 = not initialized, 1 = initialized), default is 0.
+!   current_error [REAL(dp)]: Maximum absolute value of the current DIIS error, default is 1.0e99_dp.
+!
+! METHODS:
+!   init          - Initializes the driver with iteration parameters and subconvergers.
+!   clean         - Deallocates resources and resets the driver.
+!   add_data      - Adds data from a new SCF iteration to the ring buffer.
+!   select_method - Selects the active subconverger based on the current error (private).
+!   run           - Executes the selected subconverger and returns a result.
+!   compute_error - Computes the current DIIS error (private).
+!
+! USAGE EXAMPLE IS BELOW.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: subconverger - ABSTRACT BASE TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `subconverger` type is an abstract base type defining the interface
+!   for all convergence methods used by `scf_conv`. Each subtype must implement
+!   the deferred procedures `run` and `setup`.
+!
+! MEMBERS:
+!   last_setup [INTEGER]: Number of SCF iterations since last setup, default is 1024.
+!   iter       [INTEGER]: Number of iterations passed, default is 0.
+!   conv_name  [CHARACTER(len=32)]: Name of the converger, default is an empty string.
+!   dat        [TYPE(converger_data), POINTER]: Pointer to SCF data.
+!
+! METHODS:
+!   init  - Initializes the subconverger (implemented as `subconverger_init`).
+!   clean - Deallocates resources (implemented as `subconverger_clean`).
+!   run   - Executes the convergence method, returns a `scf_conv_result` (deferred).
+!   setup - Prepares the subconverger with new data (deferred).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: noconv_converger - DUMMY CONVERGER
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `noconv_converger` type extends `subconverger` and implements a dummy
+!   convergence method that returns the latest iteration data without modification.
+!
+! METHODS:
+!   init  - Initializes with the parent `scf_conv` instance.
+!   run   - Returns the latest Fock matrix data in a `scf_conv_result`.
+!   setup - Does nothing (empty implementation).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: cdiis_converger - COMMUTATOR DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `cdiis_converger` type extends `subconverger` and implements the
+!   Commutator DIIS (C-DIIS) method, solving a constrained minimization problem
+!   min { Ax, \sum_i x_i = 1 } where A_{ij} = Tr([F_i D_i S_i], [F_j D_j S_j]).
+!
+! MEMBERS:
+!   maxdiis [INTEGER]: Maximum number of DIIS vectors.
+!   a       [REAL(dp), ALLOCATABLE]: C-DIIS A-matrix for error overlaps.
+!   verbose [INTEGER]: Verbosity level, default is 0.
+!   old_dim [INTEGER]: Dimension of A-matrix from the previous step, default is 0.
+!
+! METHODS:
+!   init  - Initializes the C-DIIS instance.
+!   clean - Deallocates the A-matrix.
+!   run   - Solves the DIIS equations and returns a `scf_conv_interp_result`.
+!   setup - Updates the A-matrix with new error data.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: ediis_converger - ENERGY DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `ediis_converger` type extends `cdiis_converger` and implements the
+!   Energy DIIS (E-DIIS) method, optimizing the function
+!   E_E-DIIS = \sum_i c_i E_i - 0.5 \sum_{i,j} c_i c_j Tr((D_i-D_j)(F_i-F_j))
+!   with constraints \sum_i c_i = 1, c_i \geq 0.
+!
+! MEMBERS:
+!   b    [REAL(dp), ALLOCATABLE]: Energy history from previous iterations.
+!   xlog [REAL(dp), ALLOCATABLE]: History of interpolation coefficients.
+!   t    [TYPE(ediis_opt_data)]: Optimization data structure for NLOpt.
+!   fun  [PROCEDURE(eadiis_f), POINTER]: Pointer to the objective function.
+!
+! METHODS:
+!   init  - Initializes the E-DIIS instance.
+!   clean - Deallocates additional arrays (b, xlog).
+!   setup - Prepares the optimization problem with energy and matrix data.
+!   run   - Solves the optimization problem and returns a `scf_conv_interp_result`.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: adiis_converger - APPROXIMATE DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `adiis_converger` type extends `ediis_converger` and implements the
+!   Approximate DIIS (A-DIIS) method, optimizing the function
+!   E_A-DIIS = \sum_i c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr((D_i-D_n)(F_j-F_n))
+!   with constraints \sum_i c_i = 1, c_i \geq 0.
+!
+! METHODS:
+!   init  - Initializes the A-DIIS instance (inherits from `ediis_converger`).
+!   setup - Prepares the modified optimization problem specific to A-DIIS.
+!
+! NOTES:
+!   - Inherits all members and most methods from `ediis_converger`.
+!   - Only `setup` is overridden to adjust the objective function.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: soscf_converger - SECOND-ORDER SCF
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `soscf_converger` type extends `subconverger` and implements the
+!   Second-Order SCF (SOSCF) method, using orbital gradients and an L-BFGS
+!   approximation of the Hessian for convergence.
+!
+! MEMBERS:
+!   verbose         [INTEGER]: Verbosity level, default is 0.
+!   nfocks          [INTEGER]: Number of Fock matrices (1 for RHF, 2 for UHF), default is 0.
+!   nbf             [INTEGER]: Number of basis functions, default is 0.
+!   nbf_tri         [INTEGER]: Triangular size of basis functions (nbf*(nbf+1)/2), default is 0.
+!   scf_type        [INTEGER]: SCF type (1=RHF, 2=UHF, 3=ROHF), default is 0.
+!   nocc_a          [INTEGER]: Number of occupied alpha orbitals, default is 0.
+!   nocc_b          [INTEGER]: Number of occupied beta orbitals, default is 0.
+!   nvec            [INTEGER]: Size of the gradient vector, default is 0.
+!   overlap         [REAL(dp), POINTER]: Pointer to overlap matrix, null by default.
+!   overlap_invsqrt [REAL(dp), POINTER]: Pointer to inverse square root of overlap, null by default.
+!   max_iter        [INTEGER]: Maximum micro-iterations, default is 10.
+!   min_iter        [INTEGER]: Minimum micro-iterations, default is 1.
+!   soscf_conv      [REAL(dp)]: Convergence threshold, default is 1.0e-3_dp.
+!   hess_thresh     [REAL(dp)]: Orbital Hessian threshold, default is 1.0e-10_dp.
+!   grad_thresh     [REAL(dp)]: Gradient threshold, default is 1.0e-5_dp.
+!   level_shift     [REAL(dp)]: Level shifting parameter, default is 0.2_dp.
+!   s_history       [REAL(dp), ALLOCATABLE]: L-BFGS step history (nvec, m_max).
+!   rho_history     [REAL(dp), ALLOCATABLE]: L-BFGS curvature reciprocals (m_max).
+!   y_history       [REAL(dp), ALLOCATABLE]: L-BFGS gradient difference history (nvec, m_max).
+!   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
+!   step            [REAL(dp), ALLOCATABLE]: Current step (nvec).
+!   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
+!   x_prev          [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
+!   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
+!   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   mo_a            [REAL(dp), ALLOCATABLE]: Alpha MO coefficients (nbf, nbf).
+!   mo_b            [REAL(dp), ALLOCATABLE]: Beta MO coefficients (nbf, nbf).
+!   dens_a          [REAL(dp), ALLOCATABLE]: Alpha density matrix (nbf_tri).
+!   dens_b          [REAL(dp), ALLOCATABLE]: Beta density matrix (nbf_tri).
+!   m_max           [INTEGER]: Maximum number of stored history steps, default is 0.
+!   m_history       [INTEGER]: Current number of stored history steps, default is 0.
+!   first_macro     [LOGICAL]: Flag for first macro-iteration, default is .true.
+!
+! METHODS:
+!   init           - Initializes the SOSCF instance.
+!   clean          - Deallocates arrays and resets pointers.
+!   setup          - Prepares data for SOSCF iterations.
+!   run            - Executes SOSCF micro-iterations and returns a `scf_conv_soscf_result`.
+!   init_hess_inv  - Computes the initial inverse Hessian diagonal.
+!   calc_orb_grad  - Calculates the orbital gradient.
+!   make_rohf_grad - Forms the ROHF gradient from alpha and beta gradients.
+!   lbfgs_step     - Computes the orbital rotation step using L-BFGS.
+!   line_search    - Performs a line search to optimize the step size.
+!   rotate_orbs    - Applies the orbital rotation.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_result - BASE RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_result` type is a base type for returning results from
+!   convergence methods executed by `scf_conv`. It provides default
+!   implementations that do nothing, overridden by subtypes.
+!
+! MEMBERS:
+!   ierr           [INTEGER]: Error status (0 = success, nonzero = failure), default is 5.
+!   error          [REAL(dp)]: Current DIIS error magnitude, default is 1.0e99_dp.
+!   dat            [TYPE(converger_data), POINTER]: Pointer to SCF data, null by default.
+!   active_converger_name [CHARACTER(len=32)]: Name of the active converger, default is empty.
+!
+! METHODS:
+!   get_error    - Returns the current error value.
+!   get_fock     - Placeholder returning no data (overridden by subtypes).
+!   get_density  - Placeholder returning no data (overridden by subtypes).
+!   get_mo_a     - Placeholder returning no data (overridden by subtypes).
+!   get_mo_b     - Placeholder returning no data (overridden by subtypes).
+!   get_mo_e_a   - Placeholder returning no data (overridden by subtypes).
+!   get_mo_e_b   - Placeholder returning no data (overridden by subtypes).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_interp_result - INTERPOLATION RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_interp_result` type extends `scf_conv_result` and provides
+!   results for interpolation-based methods (e.g., DIIS), computing updated
+!   Fock or density matrices as F_n = \sum_i F_i * c_i or D_n = \sum_i D_i * c_i.
+!
+! MEMBERS:
+!   coeffs [REAL(dp), ALLOCATABLE]: Interpolation coefficients c_i.
+!   pstart [INTEGER]: Start index of the interpolation range.
+!   pend   [INTEGER]: End index of the interpolation range.
+!
+! METHODS:
+!   get_fock    - Returns the interpolated Fock matrix.
+!   get_density - Returns the interpolated density matrix.
+!   interpolate - Computes the interpolated matrix (Fock or density, private).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_soscf_result - SOSCF RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_soscf_result` type extends `scf_conv_result` and provides
+!   results specific to the SOSCF method, returning the latest MO coefficients,
+!   and MO energies.
+!
+! METHODS:
+!   get_mo_a    - Returns the updated alpha MO coefficients.
+!   get_mo_b    - Returns the updated beta MO coefficients.
+!   get_mo_e_a  - Returns the updated alpha MO energies.
+!   get_mo_e_b  - Returns the updated beta MO energies.
+!
+!===============================================================================
+
+!===============================================================================
+! EXAMPLE USAGE
+!===============================================================================
+!
+!   use scf_converger
+!   type(scf_conv) :: conv
+!   class(scf_conv_result), allocatable :: res
+!   ! Initialize converger
+!   call conv%init(ldim=nbf,
+!                  maxvec=15, &
+!                  subconvergers=[conv_cdiis, conv_ediis], &
+!                  thresholds=[2.0_dp, 1.0_dp], &
+!                  overlap=s_mat,
+!                  overlap_sqrt=s_sqrt, &
+!                  num_focks=1,
+!                  verbose=1)
+!   ! In SCF loop:
+!   do iter = 1, max_iter
+!     ! Build Fock matrix...
+!
+!     ! Add data to converger
+!     call conv%add_data(f=fock, dens=density, e=energy)
+!
+!     ! Run convergence step and get new Fock matrix
+!     call conv%run(conv_res)
+!     call conv_res%get_fock(matrix=fock, istat=stat)
+!
+!     ! Check convergence
+!     diis_error = conv_res%get_error()
+!     if (diis_error < thresh) exit
+!   end do
+!   ! Clean converger
+!   call conv%clean()
+!===============================================================================
+! EXAMPLE USAGE
+!===============================================================================
 module scf_converger
 
   use precision, only: dp
@@ -115,7 +463,6 @@ module scf_converger
   !> @brief SCF converger results for SOSCF method
   type, extends(scf_conv_result) :: scf_conv_soscf_result
   contains
-    procedure, pass :: get_fock    => conv_result_soscf_get_fock
     procedure, pass :: get_mo_a    => conv_result_soscf_get_mo_a
     procedure, pass :: get_mo_b    => conv_result_soscf_get_mo_b
     procedure, pass :: get_mo_e_a  => conv_result_soscf_get_mo_e_a
@@ -771,25 +1118,6 @@ contains
 !==============================================================================
 ! SOSCF Result Methods
 !==============================================================================
-
-  !> @brief Get Fock matrix from SOSCF result
-  subroutine conv_result_soscf_get_fock(self, matrix, istat)
-    class(scf_conv_soscf_result), intent(in) :: self
-    integer, intent(out) :: istat
-    real(kind=dp), intent(inout) :: matrix(:,:)
-
-    integer :: i
-
-    if (self%ierr /= 0) then
-      istat = self%ierr
-      return
-    end if
-
-    do i = 1, self%dat%num_focks
-      matrix(:,i) = self%dat%get_fock(-1, i)
-    end do
-
-  end subroutine conv_result_soscf_get_fock
 
   !> @brief Get alpha MO coefficients from SOSCF result
   subroutine conv_result_soscf_get_mo_a(self, matrix, istat)
