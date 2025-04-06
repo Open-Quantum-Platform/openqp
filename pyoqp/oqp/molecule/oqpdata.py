@@ -47,6 +47,7 @@ OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': ''},
+        'library': {'type': string, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
         'runtype': {'type': string, 'default': 'energy'},
@@ -84,6 +85,8 @@ OQP_CONFIG_SCHEMA = {
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
         'init_scf': {'type': string, 'default': 'no'},
+        'init_basis': {'type': string, 'default': ''},
+        'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'soscf_type': {'type': int, 'default': '0'},
@@ -194,9 +197,12 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
-    'basis_set':{
-        'library': {'type': str, 'default': ''},
-        },
+    'json':{
+            'scf_type': {'type': string, 'default': ''},
+            'basis': {'type': string, 'default': ''},
+            'library': {'type': string, 'default': ''},
+            'do_init': {'type': string, 'default': 'no'},
+            },
     'tests': {
         'exception': {'type': bool, 'default': False},
     },
@@ -248,6 +254,7 @@ class OQPData:
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
+            "active_basis": "set_scf_active_basis",
             "soscf_type": "set_scf_soscf_type",
             "soscf_start": "set_scf_soscf_start",
             "soscf_freq": "set_scf_soscf_freq",
@@ -497,6 +504,11 @@ class OQPData:
     def set_scf_pfon_nsmear(self, pfon_nsmear):
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
+
+    def set_scf_active_basis(self, active_basis):
+        """Select basis set: 0 => info%basis
+                             1 => info%alt_basis"""
+        self._data.control.active_basis = active_basis
 
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""

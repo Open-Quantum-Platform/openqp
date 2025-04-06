@@ -111,9 +111,6 @@ class DLFindMin(DLFinder):
         # update coordinates
         self.mol.update_system(coordinates)
 
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
-
         # compute energy
         energies = self.sp.energy(do_init_scf=do_init_scf)
 
@@ -190,9 +187,6 @@ class DLFindMECI(DLFinder):
 
         # update coordinates
         self.mol.update_system(coordinates)
-
-        # compute 1e integral
-        oqp.library.ints_1e(self.mol)
 
         # compute energy
         energies = self.sp.energy(do_init_scf=do_init_scf)

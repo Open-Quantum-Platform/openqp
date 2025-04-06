@@ -7,6 +7,13 @@ from oqp.utils.file_utils import try_basis
 from oqp.utils.file_utils import dump_log
 
 
+def update_guess(mol):
+    if mol.config['json']['scf_type'] == 'rhf':
+        mol.data["OQP::VEC_MO_B"] = copy.deepcopy(mol.data["OQP::VEC_MO_A"])
+        mol.data["OQP::E_MO_B"] = copy.deepcopy(mol.data["OQP::E_MO_A"])
+        mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
+    oqp.guess_json(mol)
+
 def guess(mol):
     """Set up initial guess density"""
 
@@ -28,13 +35,7 @@ def guess(mol):
     elif guess_type == 'json':
         guess_file = mol.config["guess"]["file"]
         if mol.config['scf']['type'] != 'rhf':
-            try:
-                mol.data["OQP::VEC_MO_B"]
-            except AttributeError:
-                mol.data["OQP::VEC_MO_B"] = copy.deepcopy(mol.data["OQP::VEC_MO_A"])
-                mol.data["OQP::E_MO_B"] = copy.deepcopy(mol.data["OQP::E_MO_A"])
-                mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
-                oqp.guess_json(mol)
+            update_guess(mol)
         alpha = 'reloaded'
         beta = 'reloaded'
 
