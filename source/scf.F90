@@ -529,6 +529,8 @@ contains
                      overlap_sqrt=qmat, &
                      num_focks=diis_nfocks, &
                      verbose=infos%control%verbose)
+      ! Configure the SOSCF converger with SOSCF input parameters
+      call set_soscf_parametres(infos, conv)
     case (2) ! DIIS+SOSCF Accelerator
       use_soscf = .true.
       if (infos%control%diis_type == 5) then
@@ -565,7 +567,11 @@ contains
                        num_focks=diis_nfocks, &
                        verbose=infos%control%verbose)
       end if
+
+      ! Configure the SOSCF converger with SOSCF input parameters
+      call set_soscf_parametres(infos, conv)
     end select
+
 
     ! Initialize DFT exchange-correlation energy
     eexc = 0.0_dp
@@ -1260,12 +1266,10 @@ contains
           sc%soscf_start = infos%control%soscf_start
           sc%soscf_freq = infos%control%soscf_freq
           sc%soscf_diis_alternate = infos%control%soscf_diis_alternate
-          sc%soscf_conv = infos%control%soscf_conv
           sc%max_iter = infos%control%soscf_max
           sc%min_iter = infos%control%soscf_min
           sc%grad_thresh = infos%control%soscf_grad
           sc%level_shift = infos%control%soscf_lvl_shift
-          sc%use_lineq = infos%control%soscf_lineq
       end select
     end do
 

@@ -135,7 +135,6 @@ module types
     real(c_double) :: soscf_grad = 1.0e-3_dp   !< Orbital gradient threshold for SOSCF convergence
     real(c_double) :: soscf_lvl_shift = 0.2_dp !< Level shifting parameter for SOSCF
     logical(c_bool) :: soscf_diis_alternate = .false. !< Alternate between SOSCF and DIIS instead of combining
-    logical(c_bool) :: soscf_lineq = .false.   !< Use linear equations for SOSCF (true) or BFGS update (false)
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
   end type control_parameters
 

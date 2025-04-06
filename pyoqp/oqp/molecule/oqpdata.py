@@ -95,7 +95,6 @@ OQP_CONFIG_SCHEMA = {
         'soscf_grad': {'type': float, 'default': '1.0e-3'},
         'soscf_lvl_shift': {'type': float, 'default': '0.2'},
         'soscf_diis_alternate': {'type': bool, 'default': 'False'},
-        'soscf_lineq': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
@@ -258,7 +257,6 @@ class OQPData:
             "soscf_grad": "set_scf_soscf_grad",
             "soscf_lvl_shift": "set_scf_soscf_lvl_shift",
             "soscf_diis_alternate": "set_scf_soscf_diis_alternate",
-            "soscf_lineq": "set_scf_soscf_lineq",
             "verbose": "set_scf_verbose",
         },
         "dftgrid": {
@@ -552,13 +550,6 @@ class OQPData:
         of combining them
         """
         self._data.control.soscf_diis_alternate = soscf_diis_alternate
-
-    def set_scf_soscf_lineq(self, soscf_lineq):
-        """
-        Set whether to use linear equations for SOSCF (True)
-        or BFGS update (False)
-        """
-        self._data.control.soscf_lineq = soscf_lineq
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""
