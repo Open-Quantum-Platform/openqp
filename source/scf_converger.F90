@@ -353,6 +353,8 @@ module scf_converger
   use mathlib, only: traceprod_sym_packed, orb_to_dens
   use messages, only: show_message, with_abort
   use mathlib, only: antisymmetrize_matrix, unpack_matrix, pack_matrix
+  use scf_addons, only: pfon_t
+
   implicit none
 
   private
@@ -385,9 +387,10 @@ module scf_converger
     real(kind=dp), allocatable :: mo_b(:,:)       !< MO coefficients beta (nbf, nbf)
     real(kind=dp), allocatable :: mo_e_a(:)       !< MO energies alpha (nbf)
     real(kind=dp), allocatable :: mo_e_b(:)       !< MO energies beta (nbf)
+    real(kind=dp)              :: energy = 0.0_dp !< SCF energy
+    type(pfon_t), pointer      :: pfon_obj => null() !< Pseudo-Fractional Occupation Number (pFON) type
     real(kind=dp), pointer     :: occ_a(:) => null() !< Alpha orbital occupations (nbf)
     real(kind=dp), pointer     :: occ_b(:) => null() !< Beta orbital occupations (nbf)
-    real(kind=dp)              :: energy = 0.0_dp !< SCF energy
   contains
     procedure, private, pass :: init  => scf_data_init
     procedure, private, pass :: clean => scf_data_clean
@@ -416,8 +419,7 @@ module scf_converger
     procedure, private, pass :: get_mo_b     => conv_data_get_mo_b
     procedure, private, pass :: get_mo_e_a   => conv_data_get_mo_e_a
     procedure, private, pass :: get_mo_e_b   => conv_data_get_mo_e_b
-    procedure, private, pass :: get_occ_a    => conv_data_get_occ_a
-    procedure, private, pass :: get_occ_b    => conv_data_get_occ_b
+    procedure, private, pass :: get_pfon     => conv_data_get_pfon
     procedure, private, pass :: get_density  => conv_data_get_density
     procedure, private, pass :: get_err      => conv_data_get_err
     procedure, private, pass :: get_energy   => conv_data_get_energy
@@ -785,14 +787,14 @@ contains
   !> @param[in] mo_e_a Alpha MO energies (optional)
   !> @param[in] mo_e_b Beta MO energies (optional)
   subroutine conv_data_put(self, fock, dens, energy, mo_a, mo_b, &
-                           mo_e_a, mo_e_b, occ_a, occ_b)
+                           mo_e_a, mo_e_b, pfon_obj)
     class(converger_data), intent(inout) :: self
     real(kind=dp), intent(in), optional :: fock(:,:)
     real(kind=dp), intent(in), optional :: dens(:,:)
     real(kind=dp), intent(in), optional :: energy
     real(kind=dp), intent(in), optional :: mo_a(:,:), mo_b(:,:)
     real(kind=dp), intent(in), optional :: mo_e_a(:), mo_e_b(:)
-    real(kind=dp), intent(in), optional, target :: occ_a(:), occ_b(:)
+    type(pfon_t), optional, target, intent(in) :: pfon_obj
 
     integer :: slot, nbf
 
@@ -825,15 +827,8 @@ contains
       end if
       self%buffer(slot)%mo_e_b = mo_e_b
     end if
-    if (present(occ_a)) then
-      self%buffer(slot)%occ_a => occ_a
-    else
-      self%buffer(slot)%occ_a => null()
-    end if
-    if (present(occ_b)) then
-      self%buffer(slot)%occ_b => occ_b
-    else
-      self%buffer(slot)%occ_b => null()
+    if (present(pfon_obj)) then
+      self%buffer(slot)%pfon_obj => pfon_obj
     end if
   end subroutine conv_data_put
 
@@ -903,6 +898,19 @@ contains
     res => self%buffer(slot)%mo_e_b
   end function conv_data_get_mo_e_b
 
+  !> @brief Get pfon object for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the pfon object
+  function conv_data_get_pfon(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    type(pfon_t), pointer :: res
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%pfon_obj
+  end function conv_data_get_pfon
+
   !> @brief Get density matrix for a specific iteration and matrix ID
   !> @param[in] n Slot ID (1 = oldest, -1 = latest)
   !> @param[in] matrix_id Density matrix index (1 = alpha, 2 = beta)
@@ -958,32 +966,6 @@ contains
       slot = modulo(self%slot - num_saved + n - 1, self%num_slots) + 1
     end if
   end function
-
-  !> @brief Get alpha orbital occupations for a specific iteration
-  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
-  !> @return Alpha orbital occupations
-  function conv_data_get_occ_a(self, n) result(res)
-    class(converger_data), intent(in), target :: self
-    integer, intent(in) :: n
-    real(kind=dp), pointer :: res(:)
-    integer :: slot
-
-    slot = self%get_slot(n)
-    res => self%buffer(slot)%occ_a
-  end function conv_data_get_occ_a
-
-  !> @brief Get beta orbital occupations for a specific iteration
-  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
-  !> @return Beta orbital occupations
-  function conv_data_get_occ_b(self, n) result(res)
-    class(converger_data), intent(in), target :: self
-    integer, intent(in) :: n
-    real(kind=dp), pointer :: res(:)
-    integer :: slot
-
-    slot = self%get_slot(n)
-    res => self%buffer(slot)%occ_b
-  end function conv_data_get_occ_b
 
 !==============================================================================
 ! scf_conv_result Methods
@@ -1288,7 +1270,7 @@ contains
   !> @param[in] dens Density matrix/matrices
   !> @param[in] e SCF energy (optional)
   subroutine scf_conv_add_data(self, f, dens, e, mo_a, mo_b, mo_e_a, mo_e_b, &
-                               occ_a, occ_b)
+                               pfon)
     class(scf_conv), intent(inout) :: self
     real(kind=dp), intent(in), optional :: f(:,:)    ! Fock matrices
     real(kind=dp), intent(in), optional :: dens(:,:) ! Density matrices
@@ -1297,8 +1279,7 @@ contains
     real(kind=dp), intent(in), optional :: mo_b(:,:) ! Beta MO coefficients
     real(kind=dp), intent(in), optional :: mo_e_a(:) ! Alpha MO energies
     real(kind=dp), intent(in), optional :: mo_e_b(:) ! Beta MO energies
-    real(kind=dp), intent(in), optional :: occ_a(:)  ! Alpha orbital occupations
-    real(kind=dp), intent(in), optional :: occ_b(:)  ! Beta orbital occupations
+    type(pfon_t), pointer, intent(in), optional :: pfon ! Pseudo-Fractional Occupation Number (pFON) object
     integer :: i
 
     call self%dat%next_slot()
@@ -1311,8 +1292,7 @@ contains
     if (present(mo_b)) call self%dat%put(mo_b=mo_b)
     if (present(mo_e_a)) call self%dat%put(mo_e_a=mo_e_a)
     if (present(mo_e_b)) call self%dat%put(mo_e_b=mo_e_b)
-    if (present(occ_a)) call self%dat%put(occ_a=occ_a)
-    if (present(occ_b)) call self%dat%put(occ_b=occ_b)
+    if (present(pfon)) call self%dat%put(pfon_obj=pfon)
 
     ! Compute the current error
     self%current_error = self%compute_error()
@@ -2286,9 +2266,11 @@ contains
     class(scf_conv_result), allocatable, intent(out) :: res
 
     ! Local variables
+    type(pfon_t), pointer :: pfon => null()
+    real(kind=dp), pointer :: occ_a(:) => null()
+    real(kind=dp), pointer :: occ_b(:) => null()
     real(kind=dp), pointer :: fock_ao_a(:), fock_ao_b(:)
     real(kind=dp), pointer :: mo_e_a(:), mo_e_b(:)
-    real(kind=dp), pointer :: occ_a(:), occ_b(:)
     real(kind=dp) :: grad_norm, alpha, sy
     integer :: iter, istat
     integer :: i
@@ -2307,21 +2289,32 @@ contains
     istat = 0
 
     ! --- Step 1: Extract current data from converger_data ---
-    occ_a  => self%dat%get_occ_a(-1)
     mo_e_a => self%dat%get_mo_e_a(-1)
     fock_ao_a => self%dat%get_fock(-1, 1)
     self%mo_a = self%dat%get_mo_a(-1)
     self%dens_a = self%dat%get_density(-1, 1)
     if (self%scf_type > 1) then
-      occ_b  => self%dat%get_occ_b(-1)
       mo_e_b => self%dat%get_mo_e_b(-1)
       fock_ao_b => self%dat%get_fock(-1, 2)
       self%mo_b = self%dat%get_mo_b(-1)
       self%dens_b = self%dat%get_density(-1, 2)
-     end if
+    end if
+
+    pfon => self%dat%get_pfon(-1)
+    if (associated(pfon)) then
+      ! Get occupation arrays directly from pfon
+      occ_a => pfon%occ_a
+      if (self%scf_type > 1) then
+        occ_b => pfon%occ_b
+      end if
+    else
+      ! Allocate local occupation arrays
+      allocate(occ_a(self%nbf), source=0.0_dp)
+      if (self%scf_type > 1) then
+        allocate(occ_b(self%nbf), source=0.0_dp)
+      end if
 
       ! Set initial occupation numbers based on SCF type
-     allocate(occ_a(self%nbf), occ_b(self%nbf), source=0.0_dp)
       select case (self%scf_type)
       case (1)
         occ_a(1:self%nocc_a) = 2.0_dp
@@ -2329,10 +2322,11 @@ contains
         occ_a(1:self%nocc_a) = 1.0_dp
         occ_b(1:self%nocc_b) = 1.0_dp
       case (3)
-        occ_a(1:self%nocc_b) = 2.0_dp          ! Closed shells
+        occ_a(1:self%nocc_b) = 2.0_dp              ! Closed shells
         occ_a(self%nocc_b+1:self%nocc_a) = 1.0_dp  ! Open shells
-        occ_b(1:self%nocc_b) = 2.0_dp          ! Closed shells only
+        occ_b(1:self%nocc_b) = 2.0_dp              ! Closed shells only
       end select
+    end if
 
     ! --- Step 2: Initialize LBFGS history ---
     if (self%first_macro) then
@@ -2376,9 +2370,9 @@ contains
         ' dot_product(grad, step)=', dot_product(self%grad_prev, self%step)
 
       alpha = 1.0_dp
-      call self%line_search(alpha,  self%grad_prev, self%step, &
+      call self%line_search(alpha, self%grad_prev, self%step, &
                             fock_ao_a, fock_ao_b, occ_a, occ_b, &
-                            self%mo_a, self%mo_b)
+                            self%mo_a, self%mo_b, pfon)
 
       ! Compute new gradient
       call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
@@ -2772,95 +2766,83 @@ contains
     implicit none
     class(soscf_converger) :: self
     real(kind=dp), intent(in) :: step(:)
-    real(kind=dp), intent(out) :: mo_a(:,:), mo_b(:,:)
-    real(kind=dp), allocatable :: rot_matrix(:,:), skew_matrix(:,:), temp_matrix(:,:)
-    integer :: num_bf, num_occ_a, num_occ_b, num_virt_a, num_virt_b, idx, orb_i, orb_a
+    real(kind=dp), intent(out) :: mo_a(:,:)
+    real(kind=dp), intent(out), optional :: mo_b(:,:)
 
-    num_bf = self%nbf
-    num_occ_a = self%nocc_a
-    num_occ_b = self%nocc_b
-    num_virt_a = num_bf - num_occ_a
-    num_virt_b = num_bf - num_occ_b
+    real(kind=dp), allocatable :: skew_matrix(:,:)
+    integer :: i, idx, a
 
-    allocate(rot_matrix(num_bf, num_bf), &
-             skew_matrix(num_bf, num_bf), &
-             temp_matrix(num_bf, num_bf), &
+    allocate(skew_matrix(self%nbf, self%nbf), &
              source=0.0_dp)
 
-    select case (self%scf_type)
-    case (1, 3)  ! RHF, ROHF
-      skew_matrix = 0.0_dp
-      idx = 0
-      do orb_a = num_occ_a + 1, num_bf
-        do orb_i = 1, num_occ_a
-          idx = idx + 1
-          skew_matrix(orb_i, orb_a) = -step(idx)
-          skew_matrix(orb_a, orb_i) = step(idx)
-        end do
+    idx = 0
+    do a = self%nocc_a + 1, self%nbf
+      do i = 1, self%nocc_a
+        idx = idx + 1
+        skew_matrix(a, i) = step(idx)
+        skew_matrix(i, a) = -step(idx)
       end do
-      call exp_scaling(skew_matrix, rot_matrix, num_bf)
-      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_a,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
-      mo_a = temp_matrix
-
-    case (2)  ! UHF
-      skew_matrix = 0.0_dp
-      idx = 0
-      do orb_a = num_occ_a + 1, num_bf
-        do orb_i = 1, num_occ_a
-          idx = idx + 1
-          skew_matrix(orb_i, orb_a) = -step(idx)
-          skew_matrix(orb_a, orb_i) = step(idx)
-          end do
-      end do
-      call exp_scaling(skew_matrix, rot_matrix, num_bf)
-      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_a,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
-      mo_a = temp_matrix
-
-      skew_matrix = 0.0_dp
-      do orb_a = num_occ_b + 1, num_bf
-        do orb_i = 1, num_occ_b
-          idx = idx + 1
-          skew_matrix(orb_i, orb_a) = -step(idx)
-          skew_matrix(orb_a, orb_i) = step(idx)
-        end do
-      end do
-      call exp_scaling(skew_matrix, rot_matrix, num_bf)
-      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_b,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
-      mo_b = temp_matrix
-    end select
-
-    write(iw, '(A,E20.10)') 'DEBUG: Alpha MO change norm = ', &
+    end do
+    call exp_scaling(skew_matrix, self%work_1, self%nbf)
+    call dgemm('N', 'N', self%nbf, self%nbf, self%nbf, &
+               1.0_dp, mo_a, self%nbf, &
+                       self%work_1, self%nbf, &
+               0.0_dp, self%work_2, self%nbf)
+    mo_a = self%work_2
+    write(iw, '(A,E20.10)') 'DEBUG: rotate_orbs: Alpha MO change norm = ', &
         sqrt(sum((self%mo_a - self%dat%get_mo_a(-1))**2))
-    if (self%scf_type == 2) then
-      write(iw, '(A,E20.10)') 'DEBUG: Beta MO change norm = ', &
+    call check_orthogonality(mo_a, self%overlap, self%nbf, 'Alpha')
+
+    if (present(mo_b)) then
+      skew_matrix = 0.0_dp
+      do a = self%nocc_b + 1, self%nbf
+        do i = 1, self%nocc_b
+          idx = idx + 1
+          skew_matrix(a, i) = step(idx)
+          skew_matrix(i, a) = -step(idx)
+        end do
+      end do
+      call exp_scaling(skew_matrix, self%work_1, self%nbf)
+      call dgemm('N', 'N', self%nbf, self%nbf, self%nbf, &
+                 1.0_dp, mo_b, self%nbf, &
+                         self%work_1, self%nbf, &
+                 0.0_dp, self%work_2, self%nbf)
+      mo_b = self%work_2
+      write(iw, '(A,E20.10)') 'DEBUG: rotate_orbs: Beta MO change norm = ', &
           sqrt(sum((self%mo_b - self%dat%get_mo_b(-1))**2))
+      call check_orthogonality(mo_b, self%overlap, self%nbf, 'Beta')
     end if
 
-    call check_orthogonality(mo_a, self%overlap, num_bf, 'Alpha')
-    if (self%scf_type == 2) then
-      call check_orthogonality(mo_b, self%overlap, num_bf, 'Beta')
-    end if
-
-    deallocate(rot_matrix, skew_matrix, temp_matrix)
+    deallocate(skew_matrix)
 
   contains
 
     subroutine check_orthogonality(mo, overlap, n, spin_label)
       use precision, only: dp
       implicit none
+      real(kind=dp), intent(in) :: mo(:,:), overlap(:,:)
       integer, intent(in) :: n
-      real(dp), intent(in) :: mo(n,n), overlap(n,n)
       character(len=*), intent(in) :: spin_label
-      real(dp) :: deviation, identity(n,n)
-      integer :: i
 
-      call dgemm('T','N',n,n,n,1.0_dp,mo,n,overlap,n,0.0_dp,self%work_1,n)
-      call dgemm('N','N',n,n,n,1.0_dp,self%work_1,n,mo,n,0.0_dp,self%work_2,n)
+      real(kind=dp) :: deviation, identity(n, n)
+      integer :: i
 
       identity = 0.0_dp
       forall(i=1:n) identity(i,i) = 1.0_dp
+
+      call dgemm('T', 'N', n, n, n, &
+                 1.0_dp, mo, n, &
+                         overlap, n, &
+                 0.0_dp, self%work_1, n)
+      call dgemm('N', 'N', n, n, n, &
+                 1.0_dp, self%work_1, n, &
+                         mo, n, &
+                 0.0_dp, self%work_2, n)
+
       deviation = maxval(abs(self%work_2 - identity))
-      write(iw, '(A,A,A,E15.7)') 'DEBUG: Orthogonality check for ', spin_label, ' orbitals: Max deviation = ', deviation
+      write(iw, '(A,A,A,E15.7)') 'DEBUG: rotate_orbs: Orthogonality check for ',&
+                                 spin_label, ' orbitals: max(abs(diff)) = ', deviation
+
     end subroutine check_orthogonality
 
   end subroutine rotate_orbs
@@ -3025,32 +3007,31 @@ contains
   !> @param[in]    interp_type Optional: Interpolation method (0=backtracking, 1=quadratic, 2=cubic; default=2)
   subroutine line_search(self, alpha, grad, step, &
                          fock_a, fock_b, occ_a, occ_b, &
-                         mo_a, mo_b, interp_type)
-    use mathlib, only: traceprod_sym_packed, orb_to_dens, unpack_matrix
-    use messages, only: show_message, with_abort
-    implicit none
-
-    class(soscf_converger)             :: self
-    real(kind=dp), intent(inout)       :: alpha
-    real(kind=dp), intent(in)          :: grad(:)
-    real(kind=dp), intent(in)          :: step(:)
+                         mo_a, mo_b, pfon, interp_type)
+    class(soscf_converger) :: self
+    real(kind=dp), intent(inout) :: alpha
+    real(kind=dp), intent(in) :: grad(:)
+    real(kind=dp), intent(in) :: step(:)
     real(kind=dp), pointer, intent(in) :: fock_a(:)
     real(kind=dp), pointer, intent(in) :: fock_b(:)
+    real(kind=dp), intent(inout) :: mo_a(:,:)
+    real(kind=dp), intent(inout) :: mo_b(:,:)
     real(kind=dp), pointer, intent(in) :: occ_a(:)
     real(kind=dp), pointer, intent(in) :: occ_b(:)
-    real(kind=dp), intent(inout)       :: mo_a(:,:)
-    real(kind=dp), intent(inout)       :: mo_b(:,:)
-    integer, optional, intent(in)      :: interp_type
+    real(kind=dp), pointer :: mo_e_a(:)
+    real(kind=dp), pointer :: mo_e_b(:)
+    type(pfon_t), pointer :: pfon
+    integer, optional, intent(in) :: interp_type
 
     ! Local variables
     real(kind=dp) :: e0, e_new, dphi0, alpha_try, alpha_prev, e_prev
-    real(kind=dp) :: alpha_best, e_best              ! Best alpha value found
-    real(kind=dp) :: dphi_new                        ! New directional derivative for Wolfe condition
-    real(kind=dp) :: a, b, c, disc                   ! For polynomial interpolation
+    real(kind=dp) :: alpha_best, e_best ! Best alpha value found
+    real(kind=dp) :: dphi_new           ! New directional derivative for Wolfe condition
+    real(kind=dp) :: a, b, c, disc      ! For polynomial interpolation
 
     ! Line search parameters
-    real(kind=dp), parameter :: c1 = 1.0e-4_dp       ! Armijo condition parameter
-    real(kind=dp), parameter :: c2 = 0.9_dp          ! Wolfe condition parameter
+    real(kind=dp), parameter :: c1 = 1.0e-4_dp ! Armijo condition parameter
+    real(kind=dp), parameter :: c2 = 0.9_dp    ! Wolfe condition parameter
     real(kind=dp), parameter :: min_alpha = 1.0e-6_dp ! Minimum step size
     real(kind=dp), parameter :: max_alpha = 2.0_dp    ! Maximum step size
     real(kind=dp), parameter :: threshold = 1.0e-10_dp ! Small number threshold
@@ -3062,14 +3043,16 @@ contains
     interp = 2  ! Default to cubic interpolation
     if (present(interp_type)) interp = min(max(interp_type, 0), 2)
 
-    ! Increase max iterations for better convergence
+    ! Maximum line search iterations
     max_iter = 15
 
     associate (nbf => self%nbf, &
                nocc_a => self%nocc_a, &
-               nocc_b => self%nocc_b)
+               nocc_b => self%nocc_b, &
+               mo_e_a => self%dat%buffer(self%dat%slot)%mo_e_a, &
+               mo_e_b => self%dat%buffer(self%dat%slot)%mo_e_b)
 
-      ! Calculate initial energy and gradient dot product
+      ! Calculate initial energy
       e0 = traceprod_sym_packed(self%dens_a, fock_a, nbf)
       if (self%scf_type > 1) &  ! UHF
         e0 = e0 + traceprod_sym_packed(self%dens_b, fock_b, nbf)
@@ -3077,13 +3060,13 @@ contains
 !     write(iw, '(A,E20.10)') 'DEBUG: Init Alpha energy = ', traceprod_sym_packed(self%dens_a, fock_a, nbf)
 !     write(iw, '(A,E20.10)') 'DEBUG: Init Beta energy = ', traceprod_sym_packed(self%dens_b, fock_b, nbf)
 
-      ! Calculate directional derivative: dphi0 = grad·step (should be negative for descent)
+      ! Calculate directional derivative (should be negative for descent)
       dphi0 = dot_product(grad, step)
 
       ! Initialize search parameters
       alpha_try = min(max(alpha, 0.1_dp), 1.0_dp)  ! Initial step size
-      alpha_prev = 0.0_dp                         ! Previous step size
-      e_prev = e0                                 ! Previous energy
+      alpha_prev = 0.0_dp  ! Previous step size
+      e_prev = e0  ! Previous energy
 
       ! Initialize best solution tracking
       alpha_best = alpha_try
@@ -3104,24 +3087,38 @@ contains
 
         ! Apply orbital rotation with current step size
         if (self%scf_type == 1) then
-          call self%rotate_orbs(step * alpha_try, mo_a, mo_b)
-          call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
+          call self%rotate_orbs(step * alpha_try, mo_a)
+
+          if (associated(pfon)) then
+            call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
+            call pfon%compute_occupations(mo_e_a)
+            call pfon%build_density(self%dens_a, mo_a, self%work_1, self%work_2)
+          else
+            call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
+          end if
         else
           call self%rotate_orbs(step * alpha_try, mo_a, mo_b)
-          call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
-          call orb_to_dens(self%dens_b, mo_b, occ_b, nocc_b, nbf, nbf)
+          if (associated(pfon)) then
+            call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
+            call compute_mo_energies(self, fock_b, mo_b, mo_e_b, self%work_1, self%work_2)
+            call pfon%compute_occupations(mo_e_a, mo_e_b)
+            call pfon%build_density(self%dens_a, mo_a, self%work_1, self%work_2, self%dens_b, mo_b)
+          else
+            call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
+            call orb_to_dens(self%dens_b, mo_b, occ_b, nocc_b, nbf, nbf)
+          end if
         end if
 
-        ! Debug output for MO matrices in Fock basis
-        call unpack_matrix(fock_a, self%work_1)
-        call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
-        call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_a, nbf, 0.0_dp, self%work_1, nbf)
-        write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
-
-        call unpack_matrix(fock_b, self%work_1)
-        call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
-        call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_b, nbf, 0.0_dp, self%work_1, nbf)
-        write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
+!       ! Debug output for MO matrices in Fock basis
+!       call unpack_matrix(fock_a, self%work_1)
+!       call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+!       call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_a, nbf, 0.0_dp, self%work_1, nbf)
+!       write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
+!
+!       call unpack_matrix(fock_b, self%work_1)
+!       call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+!       call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_b, nbf, 0.0_dp, self%work_1, nbf)
+!       write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
 
         ! Debug check of density matrix trace
         call unpack_matrix(self%dens_a, self%work_1)
