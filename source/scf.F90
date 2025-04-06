@@ -429,13 +429,36 @@ contains
     !==============================================================================
     ! Configure SCF Convergence Accelerator (DIIS/SOSCF)
     !==============================================================================
-    ! Variable DIIS options:
-    !   a) If we use VSHIFT option, the combination of e-DIIS and c-DIIS is used,
-    !   since e-DIIS can better reduce total energy than c-DIIS.
-    !   Once sufficiently converged, c-DIIS is used to finalize the SCF.
-    !   b) If VSHIFT is not set, c-DIIS is default.
-    !   c) If vdiis (diis_type=5) is chosen, the VSHIFT is initally turned on.
-    !   d) if MOM=.true., MOM turns on if DIIS error < mom_switch
+    ! Configuration is determined by soscf_type, diis_type, and vshift:
+    !
+    ! soscf_type = 0 (Pure DIIS):
+    !   ├── diis_type = 5 (V-DIIS):
+    !   │   ├── vshift unset (0.0): Sets vshift = 0.1
+    !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
+    !   │       Thresholds: [2.0, 1.0, vdiis_cdiis_switch]
+    !   ├── vshift set (non-zero):
+    !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
+    !   │       Thresholds: [2.0, 1.0, vshift_cdiis_switch]
+    !   └── Otherwise:
+    !       └── Uses: diis_type method (1=C-DIIS, 2=E-DIIS, 3=A-DIIS)
+    !           Threshold: diis_method_threshold
+    !
+    ! soscf_type = 1 (Pure SOSCF):
+    !   └── Uses: SOSCF
+    !       Starts: From first iteration
+    !
+    ! soscf_type = 2 (DIIS + SOSCF):
+    !   ├── diis_type = 5 (V-DIIS):
+    !   │   ├── vshift unset (0.0): Sets vshift = 0.1
+    !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS, SOSCF]
+    !   │       Thresholds: [2.0, 1.0, vdiis_cdiis_switch, soscf_conv]
+    !   └── Otherwise:
+    !       └── Uses: [diis_type method, SOSCF]
+    !           Thresholds: [diis_method_threshold, soscf_conv]
+    !
+    ! Additional Note:
+    ! - MOM activates if mom = .true. and DIIS error < mom_switch, handled outside this block.
+    !==============================================================================
 
     ! SOSCF options
     use_soscf = .false.

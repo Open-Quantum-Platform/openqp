@@ -1,3 +1,215 @@
+!===============================================================================
+! MODULE: scf_addons
+!===============================================================================
+!
+! DESCRIPTION:
+!   The scf_addons module provides specialized functionality to enhance SCF
+!   convergence for challenging electronic systems. It implements three major
+!   techniques:
+!       - pseudo-Fractional Occupation Numbers (pFON),
+!       - Maximum Overlap Method (MOM), and
+!       - level shifting.
+!   These methods help with systems exhibiting near-degeneracies, state flipping,
+!   or convergence difficulties.
+!
+! MEMBERS:
+!   - pfon_t [TYPE]: Encapsulates pFON functionality for managing fractional
+!                    occupations based on temperature-dependent Fermi-Dirac
+!                    distributions.
+!
+! DEPENDENCIES:
+!   - precision: Provides `dp` for double precision real numbers.
+!   - io_constants: Provides `iw` for output unit.
+!   - mathlib: For matrix operations including pack_matrix, unpack_matrix.
+!   - messages: For error handling.
+!
+! PUBLIC INTERFACES:
+!   - pfon_t: Type for managing pseudo-Fractional Occupation Numbers.
+!   - apply_mom: Implements Maximum Overlap Method for orbital tracking.
+!   - level_shift_fock: Applies level shifting to the Fock matrix.
+!
+! NOTES:
+!   - The module's functionality is designed to be used within SCF iterations.
+!   - Methods work with RHF, UHF, and ROHF wavefunctions.
+!   - The pFON implementation follows the approach described in:
+!     https://doi.org/10.1063/1.478177
+!
+! HISTORY:
+!   - [2025] Initial Module Creation - Konstantin Komarov
+!     Established this module by extracting and refactoring auxiliary SCF
+!     functionality from the main `scf`` module for better code organization
+!     and maintainability. Implemented the `pfon_t`` type as a proper object
+!     to encapsulate the pFON functionality.
+!   - [January 2025] pFON Implementation - Alireza Lashkaripour
+!     Developed the pseudo-Fractional Occupation Number (pFON) method
+!     functionality that was later integrated into this module.
+!   - [2023-2025] Advanced Convergence Methods - Konstantin Komarov
+!     Implemented the Maximum Overlap Method (MOM) and level shifting
+!     techniques to improve convergence for challenging electronic systems.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: pfon_t - PSEUDO-FRACTIONAL OCCUPATION NUMBERS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `pfon_t` type encapsulates functionality for managing fractional
+!   occupation numbers in SCF calculations using a temperature-dependent
+!   Fermi-Dirac distribution. This technique smooths convergence for systems
+!   with near-degeneracies by allowing partial orbital occupations.
+!
+! MEMBERS:
+!   active         [LOGICAL]: Whether pFON is currently enabled.
+!   temp           [REAL(dp)]: Current temperature for Fermi-Dirac distribution.
+!   beta           [REAL(dp)]: Inverse temperature parameter (1/(kB*T)).
+!   last_cooled_temp [REAL(dp)]: Last temperature at which cooling occurred.
+!   cooling_rate   [REAL(dp)]: Rate of temperature decrease per iteration.
+!   nsmear         [INTEGER]: Number of orbitals to smear around the Fermi level.
+!   occ_a          [REAL(dp), POINTER]: Alpha orbital occupations array.
+!   occ_b          [REAL(dp), POINTER]: Beta orbital occupations array.
+!   scf_type       [INTEGER]: SCF calculation type (1=RHF, 2=UHF, 3=ROHF).
+!   nelec          [INTEGER]: Total number of electrons.
+!   nelec_a        [INTEGER]: Number of alpha electrons.
+!   nelec_b        [INTEGER]: Number of beta electrons.
+!   nbf            [INTEGER]: Number of basis functions.
+!
+! METHODS:
+!   init                 - Initializes pFON parameters based on control settings.
+!   adjust_temperature   - Dynamically adjusts temperature during iterations.
+!   compute_occupations  - Wrapper for helper `pfon_occupations` function.
+!                          Calculates fractional occupations from orbital energies.
+!   build_density        - Wrapper for helper `build_pfon_density` function.
+!                          Constructs density matrices using fractional occupations.
+!
+! HELPER FUNCTIONS:
+!   pfon_occupations     - Standalone function that computes fractional occupations
+!   build_pfon_density   - Constructs density matrices from MO coefficients and
+!                          fractional occupations.
+!
+! ALGORITHM:
+!   1. Start with high temperature (typically 2000K) to allow significant
+!      fractional occupation and smooth energy surface
+!   2. Gradually decrease temperature during iterations (cooling_rate parameter)
+!   3. Compute Fermi level as average of HOMO and LUMO energies
+!   4. Calculate occupations using Fermi-Dirac distribution:
+!      n_i = 2/(1+exp((ε_i-εF)/kT)) for RHF
+!      n_i = 1/(1+exp((ε_i-εF)/kT)) for UHF/ROHF
+!   5. Normalize occupations to preserve total electron count
+!   6. Use occupations to build weighted density matrices
+!   7. Set temperature to 1K for final iteration to obtain integer occupations
+!
+! USAGE NOTES:
+!   - Temperature gradually decreases during SCF iterations to facilitate convergence
+!   - Final iteration typically uses T=0K to obtain integer occupations
+!   - Works with all SCF types (RHF, UHF, ROHF) with appropriate occupation patterns
+!   - Particularly effective for systems with small HOMO-LUMO gaps or
+!     near-degenerate orbital energies
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: pfon_t - PSEUDO-FRACTIONAL OCCUPATION NUMBERS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `pfon_t` type encapsulates functionality for managing fractional
+!   occupation numbers in SCF calculations using a temperature-dependent
+!   Fermi-Dirac distribution. This technique smooths convergence for systems
+!   with near-degeneracies by allowing partial orbital occupations.
+!
+! MEMBERS:
+!   active         [LOGICAL]: Whether pFON is currently enabled.
+!   temp           [REAL(dp)]: Current temperature for Fermi-Dirac distribution.
+!   beta           [REAL(dp)]: Inverse temperature parameter (1/(kB*T)).
+!   last_cooled_temp [REAL(dp)]: Last temperature at which cooling occurred.
+!   cooling_rate   [REAL(dp)]: Rate of temperature decrease per iteration.
+!   nsmear         [INTEGER]: Number of orbitals to smear around the Fermi level.
+!   occ_a          [REAL(dp), POINTER]: Alpha orbital occupations array.
+!   occ_b          [REAL(dp), POINTER]: Beta orbital occupations array.
+!   scf_type       [INTEGER]: SCF calculation type (1=RHF, 2=UHF, 3=ROHF).
+!   nelec          [INTEGER]: Total number of electrons.
+!   nelec_a        [INTEGER]: Number of alpha electrons.
+!   nelec_b        [INTEGER]: Number of beta electrons.
+!   nbf            [INTEGER]: Number of basis functions.
+!
+! METHODS:
+!   init                 - Initializes pFON parameters based on control settings.
+!   adjust_temperature   - Dynamically adjusts temperature during iterations.
+!   compute_occupations  - Calculates fractional occupations from orbital energies.
+!   build_density        - Constructs density matrices using fractional occupations.
+!
+! NOTES:
+!   - Works with RHF, UHF, ROHF with appropriate occupation patterns.
+!   - Works with Second-Order SCF convergence method.
+!
+!===============================================================================
+
+!===============================================================================
+! SUBROUTINE: apply_mom - MAXIMUM OVERLAP METHOD
+!===============================================================================
+!
+! DESCRIPTION:
+!   Implements the Maximum Overlap Method (MOM) to maintain consistent orbital
+!   ordering between SCF iterations. This helps prevent oscillations and state
+!   flipping during convergence, especially for open-shell systems or cases
+!   with near-degeneracies.
+!
+! PARAMETERS:
+!   infos         [TYPE(information)]: System information.
+!   v_prev        [REAL(dp)]: Previous iteration's MO coefficients.
+!   e_prev        [REAL(dp)]: Previous iteration's orbital energies.
+!   v_curr        [REAL(dp)]: Current iteration's MO coefficients (reordered on output).
+!   e_curr        [REAL(dp)]: Current iteration's orbital energies (reordered on output).
+!   s_ao          [REAL(dp)]: Overlap matrix in AO basis.
+!   n_occ         [INTEGER]: Number of occupied orbitals.
+!   spin_label    [CHARACTER(*)]: Identifier for spin channel ("Alpha" or "Beta").
+!   work          [REAL(dp)]: Work array for intermediate calculations.
+!   s_mo          [REAL(dp)]: Work array for MO overlap matrix.
+!
+! ALGORITHM:
+!   1. Computes overlap between previous and current MOs: S_MO = V_prev^T * S * V_curr
+!   2. For each orbital (occupied+1), finds maximum overlap match
+!   3. Reorders current orbitals to maximize consistency with previous iteration
+!   4. Ensures proper tracking of HOMO/LUMO and other important orbitals
+!
+! HELPER ROUTINES:
+!   reorder_orbitals - Internal subroutine that performs the actual orbital swapping
+!
+!===============================================================================
+
+!===============================================================================
+! SUBROUTINE: level_shift_fock - VIRTUAL ORBITAL SHIFTING
+!===============================================================================
+!
+! DESCRIPTION:
+!   Applies level shifting to the virtual orbitals in the Fock matrix to increase
+!   the HOMO-LUMO gap and improve SCF convergence. This technique is particularly
+!   useful for systems with small HOMO-LUMO gaps or near-degeneracies.
+!
+! PARAMETERS:
+!   fock_ao       [REAL(dp)]: Fock matrix in AO basis (triangular format).
+!   mo_coefs      [REAL(dp)]: MO coefficients.
+!   smat_full     [REAL(dp)]: Full overlap matrix.
+!   nocc          [INTEGER]: Number of occupied orbitals.
+!   nbf           [INTEGER]: Number of basis functions.
+!   vshift        [REAL(dp)]: Level shift parameter value.
+!   work1, work2  [REAL(dp)]: Work arrays for intermediate calculations.
+!
+! ALGORITHM:
+!   1. Transforms Fock from AO to MO basis: F_MO = C^T * F_AO * C
+!   2. Adds shift to diagonal elements corresponding to virtual orbitals
+!   3. Transforms modified Fock back to AO basis for use in SCF
+!
+! USAGE NOTES:
+!   - Typically applied in early iterations and gradually reduced
+!   - Often combined with DIIS for optimal convergence
+!
+! NOTES:
+!   - Works with RHF and UHF calculations. The ROHF case is handled through
+!   the `form_rohf_fock` function in the `scf` module.
+!
+!===============================================================================
 module scf_addons
   use precision, only: dp
 
@@ -722,6 +934,5 @@ contains
                               work1, work2, pdmat_b, mo_b, this%occ_b, this%nelec_a, this%nelec_b)
     end select
   end subroutine pfon_build_density
-
 
 end module scf_addons

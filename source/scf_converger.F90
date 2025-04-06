@@ -29,12 +29,22 @@
 !     `antisymmetrize_matrix`: Makes matrix antisymmetric (A = A - A^T).
 !     `unpack_matrix`: Converts packed triangular to full square matrix.
 !     `pack_matrix`: Converts full square to packed triangular matrix.
+!   - `scf_addons`: Provides Pseudo-Fractional Occupation Number (pFON) functionality.
+! 
+! DATA MANAGEMENT:
+!   The module uses a ring buffer system implemented in the `converger_data` type
+!   for efficiently storing SCF iteration history. This designimproves memory efficiency
+!   and data locality compared to traditional vector growth approaches.
+!   The buffer system supports both forward and backward indices for intuitive access
+!   (1 = oldest, -1 = latest).
 !
 ! NOTES:
 !   - The module defines public types: `scf_conv`, `scf_conv_result`, and `soscf_converger`.
 !   - All other entities are private unless explicitly made public.
 !   - The code supports handling of Fock matrices for RHF/ROHF (1 matrix) and UHF (2 matrices).
 !   - ROHF Fock matrix has already gone through the Guest-Saunders transformation.
+!   - The module supports integration with the pFON (pseudo-Fractional Occupation Number)
+!     methodology.
 !
 ! HISTORY:
 !   - [pre-2022] Initial Development - Vladimir Mironov
@@ -80,6 +90,53 @@
 !   compute_error - Computes the current DIIS error (private).
 !
 ! USAGE EXAMPLE IS BELOW.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: converger_data - DATA MANAGEMENT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `converger_data` type implements a ring buffer for efficient storage
+!   of SCF iteration history. It manages data locality and memory usage by
+!   maintaining a fixed-size circular buffer rather than continuously growing
+!   arrays, improving performance for calculations with many iterations.
+!
+! MEMBERS:
+!   slot          [INTEGER]: Current slot in the ring buffer (1-based index).
+!   num_saved     [INTEGER]: Number of occupied slots in the buffer.
+!   num_slots     [INTEGER]: Total capacity of the buffer.
+!   num_focks     [INTEGER]: Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF).
+!   ldim          [INTEGER]: Size of square matrices (nbf).
+!   nelec_a       [INTEGER]: Number of alpha electrons.
+!   nelec_b       [INTEGER]: Number of beta electrons.
+!   buffer        [TYPE(scf_data_t), ALLOCATABLE]: Array of SCF data containers.
+!
+! METHODS:
+!   init         - Initializes the ring buffer with specified dimensions.
+!   clean        - Deallocates buffer resources.
+!   next_slot    - Advances to the next slot in the buffer (private).
+!   discard_last - Removes the most recent iteration data (private).
+!   put          - Stores new SCF data in the current slot (private).
+!   get_fock     - Retrieves Fock matrix for specific iteration (private).
+!   get_mo_a     - Retrieves alpha MO coefficients (private).
+!   get_mo_b     - Retrieves beta MO coefficients (private).
+!   get_mo_e_a   - Retrieves alpha MO energies (private).
+!   get_mo_e_b   - Retrieves beta MO energies (private).
+!   get_pfon     - Retrieves pFON object pointer (private).
+!   get_density  - Retrieves density matrix (private).
+!   get_err      - Retrieves error matrix (private).
+!   get_energy   - Retrieves SCF energy (private).
+!   get_slot     - Computes slot index from iteration number (private).
+!
+! USAGE NOTES:
+!   - Data access supports both positive indices (1 = oldest) and 
+!     negative indices (-1 = latest) for intuitive programming.
+!   - Each slot contains complete SCF iteration data including Fock matrices,
+!     density matrices, MO coefficients, energies, and error matrices.
+!   - Integration with pFON allows storage of fractional occupation data
+!     when dealing with challenging electronic structures.
 !
 !===============================================================================
 
