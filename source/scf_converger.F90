@@ -37,11 +37,9 @@ module scf_converger
     real(kind=dp), allocatable :: mo_b(:,:)       !< MO coefficients beta (nbf, nbf)
     real(kind=dp), allocatable :: mo_e_a(:)       !< MO energies alpha (nbf)
     real(kind=dp), allocatable :: mo_e_b(:)       !< MO energies beta (nbf)
-    real(kind=dp), allocatable :: occ_a(:)        !< Alpha orbital occupations (nbf)
-    real(kind=dp), allocatable :: occ_b(:)        !< Beta orbital occupations (nbf)
+    real(kind=dp), pointer     :: occ_a(:) => null() !< Alpha orbital occupations (nbf)
+    real(kind=dp), pointer     :: occ_b(:) => null() !< Beta orbital occupations (nbf)
     real(kind=dp)              :: energy = 0.0_dp !< SCF energy
-    integer                    :: nocc_a = 0      !< Number of occupied alpha orbitals
-    integer                    :: nocc_b = 0      !< Number of occupied beta orbitals
   contains
     procedure, private, pass :: init  => scf_data_init
     procedure, private, pass :: clean => scf_data_clean
@@ -56,6 +54,8 @@ module scf_converger
     integer                   :: num_slots = 0    !< Total number of slots in buffer
     integer                   :: num_focks = 0    !< Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
     integer                   :: ldim = 0         !< Size of square matrices (nbf)
+    integer                   :: nelec_a = 0      !< Number of occupied alpha orbitals
+    integer                   :: nelec_b = 0      !< Number of occupied beta orbitals
     type(scf_data_t), allocatable :: buffer(:)    !< Ring buffer of SCF data
   contains
     procedure, private, pass :: init         => conv_data_init
@@ -74,8 +74,6 @@ module scf_converger
     procedure, private, pass :: get_err      => conv_data_get_err
     procedure, private, pass :: get_energy   => conv_data_get_energy
     procedure, private, pass :: get_slot     => conv_data_get_slot
-    procedure, private, pass :: get_nocc_a   => conv_data_get_nocc_a
-    procedure, private, pass :: get_nocc_b   => conv_data_get_nocc_b
   end type converger_data
 
   !> @brief Base type for SCF converger results
@@ -285,7 +283,7 @@ module scf_converger
     integer :: min_iter = 1                   !< Minimum micro-iterations
     real(kind=dp) :: soscf_conv = 1.0e-3_dp
     real(kind=dp) :: hess_thresh = 1.0e-10_dp !< Orbital Hessian threshold
-    real(kind=dp) :: grad_thresh = 1.0e-3_dp  !< Gradient threshold
+    real(kind=dp) :: grad_thresh = 1.0e-5_dp  !< Gradient threshold
     real(kind=dp) :: level_shift = 0.2_dp     !< Level shifting parameter
     logical :: use_lineq = .false.            !< Use linear equations (vs BFGS)
 
@@ -293,6 +291,8 @@ module scf_converger
     real(kind=dp), allocatable :: s_history(:,:)  !< Step history (nvec, m_max)
     real(kind=dp), allocatable :: rho_history(:)  !< Curvature reciprocals (m_max)
     real(kind=dp), allocatable :: y_history(:,:)  !< Gradient difference history (nvec, m_max)
+    real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
+    real(kind=dp), allocatable :: step(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
     real(kind=dp), allocatable :: x_prev(:)       !< Previous rotation parameters (nvec)
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
@@ -300,8 +300,8 @@ module scf_converger
     real(kind=dp), allocatable :: work_2(:,:)     !< Work matrix (nbf, nbf)
     real(kind=dp), allocatable :: mo_a(:,:)       !< MOs matrix (nbf, nbf)
     real(kind=dp), allocatable :: mo_b(:,:)       !< MOs matrix (nbf, nbf)
-    real(kind=dp), allocatable :: dens_a(:)        !< MOs matrix (nbf_tri)
-    real(kind=dp), allocatable :: dens_b(:)        !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_a(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_b(:)       !< MOs matrix (nbf_tri)
     integer :: m_max = 0                          !< Maximum number of stored history steps
     integer :: m_history = 0                      !< Number of stored history steps
     logical :: first_macro = .true.               !< Flag for first macro-iteration
@@ -310,6 +310,12 @@ module scf_converger
     procedure, pass :: clean => soscf_clean
     procedure, pass :: setup => soscf_setup
     procedure, pass :: run   => soscf_run
+    procedure, private, pass :: init_hess_inv => init_hess_inv
+    procedure, private, pass :: calc_orb_grad => calc_orb_grad
+    procedure, private, pass :: make_rohf_grad => make_rohf_grad
+    procedure, private, pass :: lbfgs_step => lbfgs_step
+    procedure, private, pass :: rotate_orbs => rotate_orbs
+    procedure, private, pass :: line_search => line_search
   end type soscf_converger
 
 contains
@@ -339,12 +345,10 @@ contains
     ! Note: MO coefficients mo_a, mo_b and energies mo_e_a, mo_e_b
     ! Note: are allocated on demand in conv_data_put
 
-    self%focks     = 0.0_dp
     self%densities = 0.0_dp
+    self%focks     = 0.0_dp
     self%errs      = 0.0_dp
     self%energy    = 0.0_dp
-    self%nocc_a     = 0
-    self%nocc_b     = 0
   end subroutine scf_data_init
 
   !> @brief Clean up an scf_data_t instance
@@ -354,9 +358,9 @@ contains
     if (allocated(self%focks))     deallocate(self%focks)
     if (allocated(self%densities)) deallocate(self%densities)
     if (allocated(self%errs))      deallocate(self%errs)
+    self%occ_a => null()
+    self%occ_b => null()
     self%energy = 0.0_dp
-    self%nocc_a  = 0
-    self%nocc_b  = 0
   end subroutine scf_data_clean
 
 !==============================================================================
@@ -369,10 +373,11 @@ contains
   !> @param[in] nfocks Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
   !> @param[in] nslots Maximum number of SCF iterations to store
   !> @param[out] istat Success status (0 for success, nonzero for error)
-  subroutine conv_data_init(self, ldim, nfocks, nslots, istat)
+  subroutine conv_data_init(self, ldim, nfocks, nslots, istat, nelec_a, nelec_b)
     class(converger_data), intent(inout) :: self
     integer, intent(in) :: ldim, nfocks, nslots
     integer, intent(out) :: istat
+    integer, intent(in), optional :: nelec_a, nelec_b
     integer :: i
 
     istat = 0
@@ -382,6 +387,8 @@ contains
     self%num_slots = nslots
     self%num_saved = 0
     self%slot      = 0
+    if (present(nelec_a)) self%nelec_a = nelec_a
+    if (present(nelec_b)) self%nelec_b = nelec_b
     allocate(self%buffer(nslots), stat=istat)
     do i = 1, nslots
       call self%buffer(i)%init(ldim, nfocks, istat)
@@ -430,19 +437,15 @@ contains
   !> @param[in] mo_b Beta MO coefficients (optional)
   !> @param[in] mo_e_a Alpha MO energies (optional)
   !> @param[in] mo_e_b Beta MO energies (optional)
-  !> @param[in] nocc_a Number of occupied alpha orbitals (optional)
-  !> @param[in] nocc_b Number of occupied beta orbitals (optional)
   subroutine conv_data_put(self, fock, dens, energy, mo_a, mo_b, &
-                           mo_e_a, mo_e_b, occ_a, occ_b, &
-                           nocc_a, nocc_b)
+                           mo_e_a, mo_e_b, occ_a, occ_b)
     class(converger_data), intent(inout) :: self
     real(kind=dp), intent(in), optional :: fock(:,:)
     real(kind=dp), intent(in), optional :: dens(:,:)
     real(kind=dp), intent(in), optional :: energy
     real(kind=dp), intent(in), optional :: mo_a(:,:), mo_b(:,:)
     real(kind=dp), intent(in), optional :: mo_e_a(:), mo_e_b(:)
-    real(kind=dp), intent(in), optional :: occ_a(:), occ_b(:)
-    integer, intent(in), optional :: nocc_a, nocc_b
+    real(kind=dp), intent(in), optional, target :: occ_a(:), occ_b(:)
 
     integer :: slot, nbf
 
@@ -451,8 +454,6 @@ contains
     if (present(fock)) self%buffer(slot)%focks = fock
     if (present(dens)) self%buffer(slot)%densities = dens
     if (present(energy)) self%buffer(slot)%energy = energy
-    if (present(nocc_a)) self%buffer(slot)%nocc_a = nocc_a
-    if (present(nocc_b)) self%buffer(slot)%nocc_b = nocc_b
     if (present(mo_a)) then
       if (.not. allocated(self%buffer(slot)%mo_a)) then
         allocate(self%buffer(slot)%mo_a(nbf, nbf))
@@ -478,16 +479,14 @@ contains
       self%buffer(slot)%mo_e_b = mo_e_b
     end if
     if (present(occ_a)) then
-      if (.not. allocated(self%buffer(slot)%occ_a)) then
-        allocate(self%buffer(slot)%occ_a(size(occ_a)))
-      end if
-      self%buffer(slot)%occ_a = occ_a
+      self%buffer(slot)%occ_a => occ_a
+    else
+      self%buffer(slot)%occ_a => null()
     end if
     if (present(occ_b)) then
-      if (.not. allocated(self%buffer(slot)%occ_b)) then
-        allocate(self%buffer(slot)%occ_b(size(occ_b)))
-      end if
-      self%buffer(slot)%occ_b = occ_b
+      self%buffer(slot)%occ_b => occ_b
+    else
+      self%buffer(slot)%occ_b => null()
     end if
   end subroutine conv_data_put
 
@@ -638,30 +637,6 @@ contains
     slot = self%get_slot(n)
     res => self%buffer(slot)%occ_b
   end function conv_data_get_occ_b
-
-  !> @brief Get number of occupied alpha orbitals for a specific iteration
-  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
-  !> @return Number of occupied alpha orbitals
-  function conv_data_get_nocc_a(self, n) result(res)
-    class(converger_data), intent(in) :: self
-    integer, intent(in) :: n
-    integer :: res, slot
-
-    slot = self%get_slot(n)
-    res = self%buffer(slot)%nocc_a
-  end function conv_data_get_nocc_a
-
-  !> @brief Get number of occupied beta orbitals for a specific iteration
-  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
-  !> @return Number of occupied beta orbitals
-  function conv_data_get_nocc_b(self, n) result(res)
-    class(converger_data), intent(in) :: self
-    integer, intent(in) :: n
-    integer :: res, slot
-
-    slot = self%get_slot(n)
-    res = self%buffer(slot)%nocc_b
-  end function conv_data_get_nocc_b
 
 !==============================================================================
 ! scf_conv_result Methods
@@ -904,10 +879,12 @@ contains
   !> @param[in] overlap_sqrt S^(1/2) matrix in full format
   !> @param[in] num_focks 1 if R/ROHF, 2 if UHF
   !> @param[in] verbose Verbosity level
-  subroutine scf_conv_init(self, ldim, maxvec, subconvergers, thresholds, &
+  subroutine scf_conv_init(self, ldim, nelec_a, nelec_b, maxvec, subconvergers, thresholds, &
                           overlap, overlap_sqrt, num_focks, verbose)
     class(scf_conv), intent(inout) :: self
     integer, intent(in) :: ldim
+    integer, optional, intent(in) :: nelec_a
+    integer, optional, intent(in) :: nelec_b
     integer, optional, intent(in) :: maxvec
     integer, optional, intent(in) :: subconvergers(:)
     real(kind=dp), optional, intent(in) :: thresholds(:)
@@ -943,7 +920,11 @@ contains
 
     self%step = 0
 
-    call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
+    if (present(nelec_a) .and. present(nelec_b)) then
+      call self%dat%init(ldim, nfocks, self%iter_space_size, istat, nelec_a, nelec_b)
+    else
+      call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
+    end if
     if (istat /= 0) then
       self%state = conv_state_not_initialized
       return
@@ -979,7 +960,7 @@ contains
   !> @param[in] dens Density matrix/matrices
   !> @param[in] e SCF energy (optional)
   subroutine scf_conv_add_data(self, f, dens, e, mo_a, mo_b, mo_e_a, mo_e_b, &
-                               occ_a, occ_b, nocc_a, nocc_b)
+                               occ_a, occ_b)
     class(scf_conv), intent(inout) :: self
     real(kind=dp), intent(in), optional :: f(:,:)    ! Fock matrices
     real(kind=dp), intent(in), optional :: dens(:,:) ! Density matrices
@@ -990,8 +971,6 @@ contains
     real(kind=dp), intent(in), optional :: mo_e_b(:) ! Beta MO energies
     real(kind=dp), intent(in), optional :: occ_a(:)  ! Alpha orbital occupations
     real(kind=dp), intent(in), optional :: occ_b(:)  ! Beta orbital occupations
-    integer, intent(in), optional :: nocc_a          ! Number of occupied alpha orbitals
-    integer, intent(in), optional :: nocc_b          ! Number of occupied beta orbitals
     integer :: i
 
     call self%dat%next_slot()
@@ -1006,8 +985,6 @@ contains
     if (present(mo_e_b)) call self%dat%put(mo_e_b=mo_e_b)
     if (present(occ_a)) call self%dat%put(occ_a=occ_a)
     if (present(occ_b)) call self%dat%put(occ_b=occ_b)
-    if (present(nocc_a)) call self%dat%put(nocc_a=nocc_a)
-    if (present(nocc_b)) call self%dat%put(nocc_b=nocc_b)
 
     ! Compute the current error
     self%current_error = self%compute_error()
@@ -1856,7 +1833,7 @@ contains
     class(soscf_converger), intent(inout) :: self
     type(scf_conv), target, intent(in) :: params
 
-    integer :: nvec, m_max, istat, nocc_a, nocc_b
+    integer :: nvec, m_max, istat, nvir_a, nvir_b
 
     ! Initialize base class
     call self%subconverger_init(params)
@@ -1864,6 +1841,8 @@ contains
     self%nfocks    = params%dat%num_focks
     self%verbose   = params%verbose
     self%nbf       = params%dat%ldim
+    self%nocc_a    = params%dat%nelec_a
+    self%nocc_b    = params%dat%nelec_b
     self%nbf_tri   = self%nbf * (self%nbf + 1) / 2
     self%m_max     = params%dat%num_slots
     self%m_history = 0
@@ -1872,7 +1851,30 @@ contains
     self%overlap_invsqrt => params%overlap_sqrt
     self%first_macro = .true.
 
+    nvir_a = self%nbf - self%nocc_a
+    nvir_b = self%nbf - self%nocc_b
+
+    ! Determine SCF type based on nfocks and occupancy
+    if (self%nfocks == 1 .and. self%nocc_a == self%nocc_b) then
+      self%scf_type = 1  ! RHF
+    else if (self%nfocks == 2) then
+      self%scf_type = 2  ! UHF
+    else if (self%nfocks == 1 .and. self%nocc_a > self%nocc_b) then
+      self%scf_type = 3  ! ROHF
+    end if
+
+    ! Calculate gradient vector size (nvec)
+    select case (self%scf_type)
+    case (1)  ! RHF
+      self%nvec = self%nocc_a * nvir_a
+    case (2)  ! UHF
+      self%nvec = self%nocc_a * nvir_a + self%nocc_b * nvir_b
+    case (3)  ! ROHF
+      self%nvec = self%nocc_b * nvir_b + (self%nocc_a - self%nocc_b) * nvir_a
+    end select
+
     ! Allocate working matrices
+    istat = 0
     if (.not. allocated(self%rho_history)) &
       allocate(self%rho_history(self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%work_1)) &
@@ -1880,86 +1882,1088 @@ contains
     if (.not. allocated(self%work_2)) &
       allocate(self%work_2(self%nbf, self%nbf), stat=istat, source=0.0_dp)
 
+    ! Allocate L-BFGS history arrays
+    if (.not. allocated(self%s_history)) &
+      allocate(self%s_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%grad)) &
+      allocate(self%grad(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%step)) &
+      allocate(self%step(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%grad_prev)) &
+      allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%y_history)) &
+      allocate(self%y_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x_prev)) &
+      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%h_inv)) &
+      allocate(self%h_inv(self%nvec), stat=istat, source=0.0_dp)
+
+    ! Allocate SOSCF arrays
+    if (.not. allocated(self%mo_a)) &
+      allocate(self%mo_a(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%dens_a)) &
+      allocate(self%dens_a(self%nbf_tri), stat=istat, source=0.0_dp)
+    if (self%scf_type > 1) then
+      if (.not. allocated(self%mo_b)) &
+        allocate(self%mo_b(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+      if (.not. allocated(self%dens_b)) &
+        allocate(self%dens_b(self%nbf_tri), stat=istat, source=0.0_dp)
+    end if
+
+    if (istat /= 0) then
+      write(iw, '(A)') 'ERROR: Failed to allocate arrays in soscf_init'
+      stop
+    end if
+
   end subroutine soscf_init
 
   !> @brief Clean up SOSCF converger
   !> @param[inout] self The SOSCF converger instance
   subroutine soscf_clean(self)
     class(soscf_converger), intent(inout) :: self
-    if (allocated(self%s_history)) deallocate(self%s_history)
     if (allocated(self%rho_history)) deallocate(self%rho_history)
-    if (allocated(self%y_history)) deallocate(self%y_history)
-    if (allocated(self%grad_prev))    deallocate(self%grad_prev)
-    if (allocated(self%x_prev))    deallocate(self%x_prev)
-    if (allocated(self%h_inv))     deallocate(self%h_inv)
     if (allocated(self%work_1)) deallocate(self%work_1)
     if (allocated(self%work_2)) deallocate(self%work_2)
+    if (allocated(self%s_history)) deallocate(self%s_history)
+    if (allocated(self%y_history)) deallocate(self%y_history)
+    if (allocated(self%grad)) deallocate(self%grad)
+    if (allocated(self%grad_prev)) deallocate(self%grad_prev)
+    if (allocated(self%x_prev)) deallocate(self%x_prev)
+    if (allocated(self%h_inv)) deallocate(self%h_inv)
     if (allocated(self%mo_a)) deallocate(self%mo_a)
-    if (allocated(self%mo_b)) deallocate(self%mo_b)
     if (allocated(self%dens_a)) deallocate(self%dens_a)
+    if (allocated(self%mo_b)) deallocate(self%mo_b)
     if (allocated(self%dens_b)) deallocate(self%dens_b)
     call self%subconverger_clean()
   end subroutine soscf_clean
 
   !> @brief Setup SOSCF for the current iteration
   !> @param[inout] self The SOSCF converger instance
-subroutine soscf_setup(self)
+  subroutine soscf_setup(self)
 
-  class(soscf_converger), intent(inout) :: self
+    class(soscf_converger), intent(inout) :: self
 
-  ! Data verification on each setup call
-  self%last_setup = 0
-end subroutine soscf_setup
+    ! Data verification on each setup call
+    self%last_setup = 0
+  end subroutine soscf_setup
 
   !> @brief Run the SOSCF convergence step
   !> @param[inout] self The SOSCF converger instance
   !> @param[out] res Convergence result
-subroutine soscf_run(self, res)
-  use mathlib, only: unpack_matrix
-  use oqp_linalg
+  subroutine soscf_run(self, res)
+    use mathlib, only: unpack_matrix
+    use oqp_linalg
 
-  class(soscf_converger), target, intent(inout) :: self
-  class(scf_conv_result), allocatable, intent(out) :: res
+    class(soscf_converger), target, intent(inout) :: self
+    class(scf_conv_result), allocatable, intent(out) :: res
 
-  real(kind=dp) :: soscf_error
+    ! Local variables
+    real(kind=dp), pointer :: fock_ao_a(:), fock_ao_b(:)
+    real(kind=dp), pointer :: mo_e_a(:), mo_e_b(:)
+    real(kind=dp), pointer :: occ_a(:), occ_b(:)
+    real(kind=dp) :: grad_norm, alpha, sy
+    integer :: iter, istat
+    integer :: i
 
-  ! Allocate result as SOSCF-specific type
-  allocate(scf_conv_soscf_result :: res)
-  res%dat => self%dat
-  res%active_converger_name = self%conv_name
+    ! Allocate result object
+    allocate(scf_conv_soscf_result :: res)
+    res%dat => self%dat
+    res%active_converger_name = self%conv_name
 
-  res%ierr = 0
+    if (self%last_setup /= 0) then
+      if (self%verbose > 0) write(iw, '(A)') 'SOSCF: Setup not called, returning'
+      return
+    end if
 
-  ! Main micro-iteration loop
-! write(iw,*) "check max_iter=",self%max_iter
+    res%ierr = 0
+    istat = 0
 
-  soscf_error = 1.0e-2_dp  ! Dummy
-  res%error = soscf_error
+    ! --- Step 1: Extract current data from converger_data ---
+    occ_a  => self%dat%get_occ_a(-1)
+    mo_e_a => self%dat%get_mo_e_a(-1)
+    fock_ao_a => self%dat%get_fock(-1, 1)
+    self%mo_a = self%dat%get_mo_a(-1)
+    self%dens_a = self%dat%get_density(-1, 1)
+    if (self%scf_type > 1) then
+      occ_b  => self%dat%get_occ_b(-1)
+      mo_e_b => self%dat%get_mo_e_b(-1)
+      fock_ao_b => self%dat%get_fock(-1, 2)
+      self%mo_b = self%dat%get_mo_b(-1)
+      self%dens_b = self%dat%get_density(-1, 2)
+     end if
 
-end subroutine soscf_run
+      ! Set initial occupation numbers based on SCF type
+     allocate(occ_a(self%nbf), occ_b(self%nbf), source=0.0_dp)
+      select case (self%scf_type)
+      case (1)
+        occ_a(1:self%nocc_a) = 2.0_dp
+      case (2)
+        occ_a(1:self%nocc_a) = 1.0_dp
+        occ_b(1:self%nocc_b) = 1.0_dp
+      case (3)
+        occ_a(1:self%nocc_b) = 2.0_dp          ! Closed shells
+        occ_a(self%nocc_b+1:self%nocc_a) = 1.0_dp  ! Open shells
+        occ_b(1:self%nocc_b) = 2.0_dp          ! Closed shells only
+      end select
 
-  !> @brief Compute the orbital gradient for SOSCF
-  !> @param[inout] self The SOSCF converger instance
-  !> @param[out] gradient The computed gradient vector
-subroutine soscf_compute_gradient(self, gradient)
-  use mathlib, only: unpack_matrix, orthogonal_transform_sym
+    ! --- Step 2: Initialize LBFGS history ---
+    if (self%first_macro) then
+      self%s_history = 0.0_dp
+      self%y_history = 0.0_dp
+      self%grad_prev = 0.0_dp
+      self%grad = 0.0_dp
+      self%step = 0.0_dp
+      self%x_prev = 0.0_dp
+      self%m_history = 0
+      call self%init_hess_inv(mo_e_a, mo_e_b)
+      self%first_macro = .false.
+      write(iw, '(A)') 'DEBUG: soscf_run: Initialize LBFGS history'
+    end if
 
-  class(soscf_converger), intent(inout) :: self
-  real(kind=dp), intent(out) :: gradient(:)
+    call self%calc_orb_grad(self%grad_prev, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
+    grad_norm = sqrt(dot_product(self%grad_prev, self%grad_prev))
+    write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:1:calc_orb_grad: iter=', 0, ' grad_norm=', grad_norm
 
-end subroutine soscf_compute_gradient
+    write(iw, '(A,E20.10)') 'DEBUG soscf_run: init: grad_thresh=', self%grad_thresh
+    ! --- Step 3: Micro-iteration loop ---
+    do iter = 1, self%max_iter
 
-  !> @brief Update the inverse Hessian and compute displacement using BFGS
-  !> @param[inout] self The SOSCF converger instance
-  !> @param[in] gradient Current orbital gradient
-  !> @param[out] displacement New displacement vector
-subroutine soscf_update_hessian(self, gradient, displacement)
+      ! Check convergence
+      if (iter > self%min_iter .and. grad_norm < self%grad_thresh) then
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
+        exit
+      end if
 
-  class(soscf_converger), intent(inout) :: self
-  real(kind=dp), intent(in) :: gradient(:)
-  real(kind=dp), intent(out) :: displacement(:)
+      ! Compute search direction using LBFGS
+      call self%lbfgs_step(self%step, self%grad_prev)
+      write(iw, '(A,E20.10)') 'DEBUG: Cos(theta) step vs -grad = ', &
+       -dot_product(self%step, self%grad_prev) &
+       / (sqrt(dot_product(self%step, self%step) &
+         * dot_product(self%grad_prev, self%grad_prev)))
+      write(iw, '(A,I3,A,E20.10)') &
+        'DEBUG soscf_run:2:lbfgs_step: iter=',iter, &
+        ' dot_product(step, step)=', dot_product(self%step, self%step)
+      write(iw, '(A,I3,A,E20.10)') &
+        'DEBUG soscf_run:2:lbfgs_step: iter=',iter, &
+        ' dot_product(grad, step)=', dot_product(self%grad_prev, self%step)
 
+      alpha = 1.0_dp
+      call self%line_search(alpha,  self%grad_prev, self%step, &
+                            fock_ao_a, fock_ao_b, occ_a, occ_b, &
+                            self%mo_a, self%mo_b)
 
-end subroutine soscf_update_hessian
+      ! Compute new gradient
+      call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
+      grad_norm = sqrt(dot_product(self%grad, self%grad))
+      write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:5:calc_orb_grad: iter=', iter, ' grad_norm=', grad_norm
+
+      ! Update LBFGS history
+      write(iw, '(A,I3)') 'DEBUG soscf_run:6:Update LBFGS history: iter=', iter
+      if (self%m_history < self%m_max) then
+        self%m_history = self%m_history + 1
+      else
+        self%s_history(:, 1:self%m_max-1) = self%s_history(:, 2:self%m_max)
+        self%y_history(:, 1:self%m_max-1) = self%y_history(:, 2:self%m_max)
+        self%rho_history(1:self%m_max-1) = self%rho_history(2:self%m_max)
+      end if
+      self%s_history(:, self%m_history) = alpha * self%step
+      self%y_history(:, self%m_history) = self%grad - self%grad_prev
+      sy = dot_product(self%s_history(:, self%m_history), self%y_history(:, self%m_history))
+      if (sy > 1.0e-12_dp) then
+        self%rho_history(self%m_history) = 1.0_dp / sy
+      else
+        self%rho_history(self%m_history) = 0.0_dp
+      end if
+      self%x_prev = alpha * self%step
+      self%grad_prev = self%grad
+
+    end do
+
+    ! --- Step 4: Update result and converger_data ---
+    res%ierr = 0
+    res%error = grad_norm
+    if (iter > self%max_iter) then
+      if (self%verbose > 0) then
+        write(iw, '(A,I3,A)') 'SOSCF did not converge within ', self%max_iter, ' micro-iterations'
+      end if
+      res%ierr = 4  ! Max iterations exceeded
+    end if
+
+    ! Update MO coefficients and compute MO energies
+    self%dat%buffer(self%dat%slot)%mo_a = self%mo_a
+    if (self%scf_type == 2) self%dat%buffer(self%dat%slot)%mo_b = self%mo_b
+    call compute_mo_energies(self, fock_ao_a, self%mo_a, &
+                             self%dat%buffer(self%dat%slot)%mo_e_a, self%work_1, self%work_2)
+    if (self%scf_type == 2) then
+      call compute_mo_energies(self, fock_ao_b, self%mo_b, &
+                               self%dat%buffer(self%dat%slot)%mo_e_b, self%work_1, self%work_2)
+    end if
+
+  end subroutine soscf_run
+
+  !> @brief Computes the initial diagonal inverse Hessian for SOSCF
+  !> @details Approximates the inverse Hessian diagonal using orbital energy differences,
+  !>          adjusted for SCF type:
+  !>          - RHF: h_inv = 0.25 / (ε_a - ε_i) for closed-shell.
+  !>          - UHF: h_inv combines alpha and beta energy differences.
+  !>          - ROHF: h_inv varies by orbital region (closed-virtual, open-virtual).
+  !>          Includes level-shifting for stability.
+  !> @param[out] self%h_inv Diagonal inverse Hessian (size depends on scf_type)
+  !> @param[in] mo_e_a Alpha orbital energies (size: nbf)
+  !> @param[in] mo_e_b Beta orbital energies (size: nbf, ignored for RHF/ROHF)
+  subroutine init_hess_inv(self, mo_e_a, mo_e_b)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), pointer, intent(in) :: mo_e_a(:)
+    real(kind=dp), pointer, intent(in) :: mo_e_b(:)
+
+    real(kind=dp) :: diff, scale
+    integer :: i, a, k
+
+    associate (nbf       => self%nbf, &
+               nocc_a    => self%nocc_a, &
+               nocc_b    => self%nocc_b, &
+               scf_type  => self%scf_type, &
+               lvl_shift => self%level_shift, &
+               thresh    => self%hess_thresh)
+      select case (scf_type)
+      case (1) ! RHF: Closed-shell system
+        ! Single set of orbitals, nocc_a = nocc_b, 4 * (ε_a - ε_i) scaling
+        k = 0
+        do a = nocc_a + 1, nbf
+          do i = 1, nocc_a
+            k = k + 1
+            diff = mo_e_a(a) - mo_e_a(i)
+            if (abs(diff) < thresh) then
+              diff = merge(thresh + lvl_shift, &
+                          -thresh - lvl_shift, &
+                           diff >= 0.0_dp)
+            end if
+            self%h_inv(k) = 0.25_dp / diff  ! 1 / (4 * (ε_a - ε_i))
+          end do
+        end do
+
+      case (2) ! UHF: Unrestricted, separate alpha and beta orbitals
+        ! Alpha occupied -> alpha virtual, beta occupied -> beta virtual
+        k = 0
+        ! Alpha rotations
+        do a = nocc_a + 1, nbf
+          do i = 1, nocc_a
+            k = k + 1
+            diff = mo_e_a(a) - mo_e_a(i)
+            if (abs(diff) < thresh) then
+              diff = merge(thresh + lvl_shift, &
+                          -thresh - lvl_shift, &
+                           diff >= 0.0_dp)
+            end if
+            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+          end do
+        end do
+        ! Beta rotations
+        do a = nocc_b + 1, nbf
+          do i = 1, nocc_b
+            k = k + 1
+            diff = mo_e_b(a) - mo_e_b(i)
+            if (abs(diff) < thresh) then
+              diff = merge(thresh + lvl_shift, &
+                          -thresh - lvl_shift, &
+                           diff >= 0.0_dp)
+            end if
+            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+          end do
+        end do
+
+      case (3) ! ROHF: Restricted open-shell
+        ! Regions: closed (j <= nocc_b)
+        !          open (nocc_b < j <= nocc_a)
+        !          virtual (j > nocc_a)
+        k = 0
+        do a = nocc_a + 1, nbf
+          do i = 1, nocc_a
+            k = k + 1
+            diff = mo_e_a(a) - mo_e_a(i)  ! Single set of energies
+            if (abs(diff) < thresh) then
+              diff = merge(thresh + lvl_shift, &
+                          -thresh - lvl_shift, &
+                           diff >= 0.0_dp)
+            end if
+            ! Scaling depends on orbital type
+            if (i <= nocc_b) then
+              scale = 0.25_dp  ! Closed-virtual: like RHF
+            else
+              scale = 0.5_dp   ! Open-virtual: like UHF (singly occupied)
+            end if
+            self%h_inv(k) = scale / diff
+          end do
+        end do
+      end select
+    end associate
+  end subroutine init_hess_inv
+
+  !> @brief Computes orbital gradient.
+  !> @details Calculates the gradient for occupied-virtual orbital rotations:
+  !>          - RHF: g(i,a) = 4 * F(i,a), single gradient.
+  !>          - UHF: g_a(i,a) = 2 * F_a(i,a), g_b(i,a) = 2 * F_b(i,a), separate gradients.
+  !>          - ROHF: g(c,v) = 4 * F(c,v) for closed, g(o,v) = 2 * F(o,v) for open, single gradient.
+  !> @param[out] grad_a Alpha gradient for RHF, ROHF, and UHF
+  !> @param[out] grad_b Beta gradient for UHF (optional, size: nocc_b * (nbf - nocc_b))
+  !> @param[in] fock_a Packed alpha/single Fock matrix (size: nbf*(nbf+1)/2)
+  !> @param[in] fock_b Packed beta Fock matrix for UHF (optional, size: nbf*(nbf+1)/2)
+  subroutine calc_orb_grad(self, grad, fock_a, fock_b, mo_a, mo_b)
+    implicit none
+    class(soscf_converger)             :: self
+    real(kind=dp), intent(out)         :: grad(:)
+    real(kind=dp), pointer, intent(in) :: fock_a(:)
+    real(kind=dp), pointer, intent(in) :: fock_b(:)
+    real(kind=dp), intent(in)          :: mo_a(:,:)
+    real(kind=dp), intent(in)          :: mo_b(:,:)
+
+    integer :: i, a, k, nvir_a, nvir_b
+
+    if (.not. ASSOCIATED(fock_a)) &
+      call show_message('Failed to use Fock array in calc_orb_grad', &
+                        with_abort)
+
+    associate (nbf    => self%nbf, &
+               nocc_a => self%nocc_a, &
+               nocc_b => self%nocc_b)
+
+      nvir_a = nbf - nocc_a
+      nvir_b = nbf - nocc_b
+      grad = 0.0_dp
+
+      select case (self%scf_type)
+      case (1)  ! RHF
+        ! Unpack AO-basis Fock matrix
+        self%work_1 = 0.0_dp
+        call unpack_matrix(fock_a, self%work_1)
+        ! Convert AO Fock to MO Fock.
+        ! self%work_2 = F_ao * C_virt
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        ! self%work_1 = C_occ^T * self%work_2
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        k = 0
+        do a = 1, nvir_a
+          do i = 1, nocc_a
+            k = k + 1
+            grad(k) = 4.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+      case (2)  ! UHF
+        if (.not. associated(fock_b)) &
+          call show_message('Failed to use Fock arrays in calc_orb_grad', &
+                            with_abort)
+        ! Alpha
+        call unpack_matrix(fock_a, self%work_1)
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        k = 0
+        do a = 1, nvir_a
+          do i = 1, nocc_a
+            k = k + 1
+            grad(k) = 2.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+        ! Beta
+        self%work_1 = 0.0_dp
+        call unpack_matrix(fock_b, self%work_1)
+        call dgemm('N', 'N', nbf, nvir_b, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_b(:, nocc_b+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_b, nvir_b, nbf, &
+                   1.0_dp, mo_b(:, 1:nocc_b), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_b, 1:nvir_b), nocc_b)
+        do a = 1, nvir_b
+          do i = 1, nocc_b
+            k = k + 1
+            grad(k) = 2.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+      case (3)  ! ROHF
+        self%work_1 = 0.0_dp
+        call unpack_matrix(fock_a, self%work_1)
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        k = 0
+        do a = 1, nvir_a
+          do i = 1, nocc_a
+            k = k + 1
+            if (i <= nocc_b) then
+              grad(k) = 4.0_dp * self%work_1(i, a)  ! Closed-shell
+            else
+              grad(k) = 2.0_dp * self%work_1(i, a)  ! Open-shell
+            end if
+          end do
+        end do
+      end select
+    end associate
+  end subroutine calc_orb_grad
+
+  !> @brief Forms the ROHF gradient from UHF alpha and beta gradients.
+  !> @details Combines alpha and beta gradients for ROHF optimization:
+  !>          - Closed-shell: uses beta gradient
+  !>          - Open-shell: averages alpha and beta
+  !>          - Virtual: uses alpha gradient
+  !> @param[out] grad_rohf ROHF gradient (size: nocc_b*(nbf-nocc_b) + (nocc_a-nocc_b)*(nbf-nocc_a))
+  !> @param[in]  grad_a    Alpha gradient (size: nocc_a * (nbf - nocc_a))
+  !> @param[in]  grad_b    Beta gradient (size: nocc_b * (nbf - nocc_b))
+  !> @param[in]  nbf       Number of molecular orbitals
+  !> @param[in]  nocc_a    Number of alpha electrons
+  !> @param[in]  nocc_b     Number of beta electrons
+  subroutine make_rohf_grad(self, grad_rohf, grad_a, grad_b)
+    implicit none
+    class(soscf_converger), intent(in) :: self
+    real(dp), intent(out) :: grad_rohf(:)
+    real(dp), intent(in)  :: grad_a(:)
+    real(dp), intent(in)  :: grad_b(:)
+
+    real(dp), parameter :: threshold = 1.0e-12_dp
+    integer  :: nbf, nocc_a, nocc_b, i, j, k, ka, kb, n
+
+    nbf = self%nbf
+    nocc_a = self%nocc_a
+    nocc_b = self%nocc_b
+
+    k  = 0
+    ka = 0
+    kb = 0
+    do j = 1, nocc_a
+      if (j <= nocc_b) then
+        n = nocc_b + 1  ! Closed-shell: i starts after beta occupied
+      else
+        n = nocc_a + 1  ! Open-shell: i starts after alpha occupied
+      end if
+      do i = n, nbf
+        k = k + 1
+        if (j <= nocc_b) then
+          kb = kb + 1
+          if (i <= nocc_a) then
+            grad_rohf(k) = grad_b(kb)  ! Closed-shell region
+          else
+            ka = ka + 1
+            grad_rohf(k) = 0.5_dp * (grad_b(kb) + grad_a(ka))  ! Open-shell region
+            if (abs(grad_rohf(k)) < threshold) grad_rohf(k) = 0.0_dp
+          end if
+        else
+          ka = ka + 1
+          grad_rohf(k) = grad_a(ka)  ! Virtual region
+        end if
+      end do
+    end do
+  end subroutine make_rohf_grad
+
+  !> @brief Computes the orbital rotation step using L-BFGS for RHF, UHF, or ROHF.
+  !> @details Performs the two-loop L-BFGS algorithm to compute step = -H * grad.
+  !>          Handles RHF, UHF, and ROHF by
+  !>          adjusting scaling based on gradient/Hessian conventions.
+  !>          For UHF, grad and step concatenate alpha and beta components.
+  !> @param[out] step Orbital rotation step (size: nvec)
+  !> @param[in]  grad Orbital gradient (size: nvec)
+  subroutine lbfgs_step(self, step, grad)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), intent(out) :: step(:)
+    real(kind=dp), intent(in)  :: grad(:)
+
+    real(kind=dp) :: alpha(self%m_history)
+    real(kind=dp) :: q(self%nvec)
+    real(kind=dp) :: r(self%nvec)
+    real(kind=dp) :: beta, sy, yy, ss, scale
+    real(kind=dp), parameter :: threshold = 1.0e-12_dp
+    real(kind=dp), parameter :: curv_eps = 1.0e-6_dp    ! Threshold for curvature quality
+    real(kind=dp), parameter :: coeff_limit = 10.0_dp   ! Limit for alpha and beta coefficients
+    integer  :: i
+
+    if (self%m_history > 0) then
+      ss = dot_product(self%s_history(:, self%m_history), &
+                       self%s_history(:, self%m_history))
+      sy = dot_product(self%s_history(:, self%m_history), &
+                       self%y_history(:, self%m_history))
+      yy = dot_product(self%y_history(:, self%m_history), &
+                       self%y_history(:, self%m_history))
+
+      ! Gradient factor is 4, h_inv - 0.25/diff
+      scale = merge(min(sy / yy, 1.0_dp), 0.05_dp, sy >= curv_eps * sqrt(ss * yy))
+    else
+      scale = 1.0_dp  ! Apply full step for first iteration
+      step = -scale * self%h_inv * grad
+      where (isnan(step)) step = 0.0_dp
+      return
+    end if
+
+    ! First loop: Compute q using precomputed rho
+    q = grad
+    do i = self%m_history, 1, -1
+      if (self%rho_history(i) > threshold) then  ! Use precomputed rho, check validity
+        alpha(i) = self%rho_history(i) * dot_product(self%s_history(:, i), q)
+        alpha(i) = min(max(alpha(i), -coeff_limit), coeff_limit)  ! Limit alpha
+        q = q - alpha(i) * self%y_history(:, i)
+      end if
+    end do
+
+    ! Apply initial Hessian approximation
+    r = scale * self%h_inv * q  ! Element-wise multiplication
+
+    ! Second loop: Refine step
+    do i = 1, self%m_history
+      if (self%rho_history(i) > threshold) then
+        beta = self%rho_history(i) * dot_product(self%y_history(:, i), r)
+        beta = min(max(beta, -coeff_limit), coeff_limit)  ! Limit beta
+        r = r + self%s_history(:, i) * (alpha(i) - beta)
+      end if
+    end do
+
+    step = -r  ! Negative for energy minimization
+    where (isnan(step)) step = 0.0_dp  ! Handle NaNs
+  end subroutine lbfgs_step
+
+  subroutine rotate_orbs(self, step, mo_a, mo_b)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), intent(in) :: step(:)
+    real(kind=dp), intent(out) :: mo_a(:,:), mo_b(:,:)
+    real(kind=dp), allocatable :: rot_matrix(:,:), skew_matrix(:,:), temp_matrix(:,:)
+    integer :: num_bf, num_occ_a, num_occ_b, num_virt_a, num_virt_b, idx, orb_i, orb_a
+
+    num_bf = self%nbf
+    num_occ_a = self%nocc_a
+    num_occ_b = self%nocc_b
+    num_virt_a = num_bf - num_occ_a
+    num_virt_b = num_bf - num_occ_b
+
+    allocate(rot_matrix(num_bf, num_bf), &
+             skew_matrix(num_bf, num_bf), &
+             temp_matrix(num_bf, num_bf), &
+             source=0.0_dp)
+
+    select case (self%scf_type)
+    case (1, 3)  ! RHF, ROHF
+      skew_matrix = 0.0_dp
+      idx = 0
+      do orb_a = num_occ_a + 1, num_bf
+        do orb_i = 1, num_occ_a
+          idx = idx + 1
+          skew_matrix(orb_i, orb_a) = -step(idx)
+          skew_matrix(orb_a, orb_i) = step(idx)
+        end do
+      end do
+      call exp_scaling(skew_matrix, rot_matrix, num_bf)
+      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_a,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
+      mo_a = temp_matrix
+
+    case (2)  ! UHF
+      skew_matrix = 0.0_dp
+      idx = 0
+      do orb_a = num_occ_a + 1, num_bf
+        do orb_i = 1, num_occ_a
+          idx = idx + 1
+          skew_matrix(orb_i, orb_a) = -step(idx)
+          skew_matrix(orb_a, orb_i) = step(idx)
+          end do
+      end do
+      call exp_scaling(skew_matrix, rot_matrix, num_bf)
+      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_a,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
+      mo_a = temp_matrix
+
+      skew_matrix = 0.0_dp
+      do orb_a = num_occ_b + 1, num_bf
+        do orb_i = 1, num_occ_b
+          idx = idx + 1
+          skew_matrix(orb_i, orb_a) = -step(idx)
+          skew_matrix(orb_a, orb_i) = step(idx)
+        end do
+      end do
+      call exp_scaling(skew_matrix, rot_matrix, num_bf)
+      call dgemm('N','N',num_bf,num_bf,num_bf,1.0_dp,mo_b,num_bf,rot_matrix,num_bf,0.0_dp,temp_matrix,num_bf)
+      mo_b = temp_matrix
+    end select
+
+    write(iw, '(A,E20.10)') 'DEBUG: Alpha MO change norm = ', &
+        sqrt(sum((self%mo_a - self%dat%get_mo_a(-1))**2))
+    if (self%scf_type == 2) then
+      write(iw, '(A,E20.10)') 'DEBUG: Beta MO change norm = ', &
+          sqrt(sum((self%mo_b - self%dat%get_mo_b(-1))**2))
+    end if
+
+    call check_orthogonality(mo_a, self%overlap, num_bf, 'Alpha')
+    if (self%scf_type == 2) then
+      call check_orthogonality(mo_b, self%overlap, num_bf, 'Beta')
+    end if
+
+    deallocate(rot_matrix, skew_matrix, temp_matrix)
+
+  contains
+
+    subroutine check_orthogonality(mo, overlap, n, spin_label)
+      use precision, only: dp
+      implicit none
+      integer, intent(in) :: n
+      real(dp), intent(in) :: mo(n,n), overlap(n,n)
+      character(len=*), intent(in) :: spin_label
+      real(dp) :: deviation, identity(n,n)
+      integer :: i
+
+      call dgemm('T','N',n,n,n,1.0_dp,mo,n,overlap,n,0.0_dp,self%work_1,n)
+      call dgemm('N','N',n,n,n,1.0_dp,self%work_1,n,mo,n,0.0_dp,self%work_2,n)
+
+      identity = 0.0_dp
+      forall(i=1:n) identity(i,i) = 1.0_dp
+      deviation = maxval(abs(self%work_2 - identity))
+      write(iw, '(A,A,A,E15.7)') 'DEBUG: Orthogonality check for ', spin_label, ' orbitals: Max deviation = ', deviation
+    end subroutine check_orthogonality
+
+  end subroutine rotate_orbs
+
+  !> @brief Computes the matrix exponential of a skew-symmetric matrix
+  !>        using the scaling and squaring method
+  !>        with a Taylor series approximation.
+  !> @details The algorithm:
+  !>          1. Scale the input matrix by a power of 2 to reduce its norm
+  !>          2. Compute a truncated Taylor series approximation of the exponential
+  !>             for the scaled matrix (using terms up to A^5/5!)
+  !>          3. Repeatedly square the result to recover
+  !>             the exponential of the original matrix
+  !>          This method is numerically stable and efficient for computing
+  !>          rotation matrices from skew-symmetric matrices.
+  !> @note - For very small input matrices (norm < 1.0e-12), returns the identity matrix
+  !>       - Uses a 5-term Taylor series expansion for the matrix exponential
+  !>       - The scaling factor is chosen based on the matrix norm to ensure accuracy
+  !> @param[in] skew_mat Skew-symmetric matrix
+  !> @param[out] rot_mat Rotation matrix (exponential of skew_mat)
+  !> @param[in] dim Dimension of the matrices
+  subroutine exp_scaling(skew_mat, rot_mat, ldim)
+    use precision, only: dp
+    implicit none
+
+    ! Arguments
+    real(dp), intent(in) :: skew_mat(:,:)
+    real(dp), intent(out) :: rot_mat(:,:)
+    integer, intent(in) :: ldim
+
+    ! Local variables
+    real(dp) :: scaled_mat(ldim,ldim)  ! Scaled input matrix
+    real(dp) :: temp(ldim,ldim)        ! Temporary matrix for calculations
+    real(dp) :: norm_skew              ! Norm of the input matrix
+    integer  :: scale_factor           ! Scaling factor (power of 2)
+    integer  :: i, j                   ! Loop indices
+
+    ! Initialize result matrix to identity
+    rot_mat = 0.0_dp
+    forall(i=1:ldim) rot_mat(i,i) = 1.0_dp
+
+    ! Compute the matrix norm (maximum absolute element)
+    norm_skew = maxval(abs(skew_mat))
+
+    ! Handle special case for near-zero matrices
+    if (norm_skew < 1.0e-12_dp) then
+      ! For very small matrices, return the identity matrix
+      return
+    end if
+
+    ! Determine optimal scaling factor as ceiling(log_2(norm))
+    scale_factor = ceiling(log(max(1.0_dp, norm_skew)) / log(2.0_dp))
+
+    ! Scale the matrix by dividing by 2^scale_factor
+    scaled_mat = skew_mat / (2.0_dp ** scale_factor)
+
+    !---------------------------------------------------------------------------
+    ! Compute Taylor series approximation for exp(scaled_mat)
+    ! Using the formula: I + A + A^2/2! + A^3/3! + A^4/4! + A^5/5!
+    !---------------------------------------------------------------------------
+    ! First term: A
+    temp = scaled_mat
+    rot_mat = rot_mat + temp
+
+    ! Second term: A^2/2!
+    call dgemm('N', 'N', ldim, ldim, ldim, &
+               1.0_dp, scaled_mat, ldim, &
+                       scaled_mat, ldim, &
+               0.0_dp, temp, ldim)
+    rot_mat = rot_mat + 0.5_dp * temp
+
+    ! Third term: A^3/3!
+    call dgemm('N', 'N', ldim, ldim, ldim, &
+               1.0_dp, scaled_mat, ldim, &
+                       temp, ldim, &
+               0.0_dp, scaled_mat, ldim)
+    rot_mat = rot_mat + (1.0_dp / 6.0_dp) * scaled_mat
+
+    ! Fourth term: A^4/4!
+    call dgemm('N', 'N', ldim, ldim, ldim, &
+               1.0_dp, scaled_mat, ldim, &
+                       temp, ldim, &
+               0.0_dp, scaled_mat, ldim)
+    rot_mat = rot_mat + (1.0_dp / 24.0_dp) * scaled_mat
+
+    ! Fifth term: A^5/5!
+    call dgemm('N', 'N', ldim, ldim, ldim, &
+               1.0_dp, scaled_mat, ldim, &
+                       temp, ldim, &
+               0.0_dp, scaled_mat, ldim)
+    rot_mat = rot_mat + (1.0_dp / 120.0_dp) * scaled_mat
+
+    !---------------------------------------------------------------------------
+    ! Recover exp(A) by squaring scale_factor times
+    ! Using the identity: exp(A) = [exp(A/2^n)]^(2^n)
+    !---------------------------------------------------------------------------
+    do i = 1, scale_factor
+      call dgemm('N', 'N', ldim, ldim, ldim, &
+                 1.0_dp, rot_mat, ldim, &
+                         rot_mat, ldim, &
+                 0.0_dp, temp, ldim)
+      rot_mat = temp
+    end do
+
+  end subroutine exp_scaling
+
+  !> @brief Computes MO energies from the Fock matrix and updated MO coefficients.
+  !> @details Projects the Fock matrix onto the MO basis: F_mo = C^T * F * C,
+  !>          taking diagonal elements as approximate MO energies for monitoring.
+  !> @param[in] self The SOSCF converger object (for nbf).
+  !> @param[in] fock Packed Fock matrix (nbf_tri).
+  !> @param[in] mo_coeffs MO coefficients (nbf, nbf).
+  !> @param[out] mo_energies MO energies (nbf).
+  subroutine compute_mo_energies(self, fock, mo_coeffs, mo_energies, work_1, work_2)
+    use mathlib, only: unpack_matrix
+    implicit none
+    class(soscf_converger), intent(in) :: self
+    real(kind=dp), intent(in) :: fock(:)
+    real(kind=dp), intent(in) :: mo_coeffs(:, :)
+    real(kind=dp), intent(out) :: mo_energies(:)
+    real(kind=dp), intent(inout) :: work_1(:, :)
+    real(kind=dp), intent(inout) :: work_2(:, :)
+
+    real(kind=dp), allocatable :: f_full(:, :), temp(:, :), f_mo(:, :)
+    integer :: nbf, i
+
+    nbf = self%nbf
+
+    call unpack_matrix(fock, work_1)
+    call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_coeffs, nbf, work_1, nbf, 0.0_dp, work_2, nbf)
+    call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, work_2, nbf, mo_coeffs, nbf, 0.0_dp, work_1, nbf)
+
+    do i = 1, nbf
+      mo_energies(i) = work_1(i, i)
+    end do
+
+  end subroutine compute_mo_energies
+
+  !> @brief Performs line search with improved convergence and safety criteria
+  !> @details
+  !>   Implements a robust line search algorithm combining backtracking with polynomial
+  !>   interpolation to find the optimal step size alpha that reduces energy along the
+  !>   LBFGS search direction. Uses Armijo-Wolfe conditions for convergence.
+  !>
+  !>   The algorithm:
+  !>   1. Computes initial gradient and energy
+  !>   2. Tries decreasing step sizes (alpha) until sufficient decrease is achieved
+  !>   3. Uses quadratic/cubic interpolation to estimate optimal step size
+  !>   4. Tracks the best solution found in case early termination is needed
+  !>   5. Returns the step size that achieves the greatest energy decrease
+  !>
+  !> @param[inout] self       SOSCF converger instance
+  !> @param[inout] alpha      Step size (input: initial guess, output: optimized value)
+  !> @param[in]    grad       Orbital gradient in orthogonal basis
+  !> @param[in]    step       LBFGS search direction
+  !> @param[in]    fock_a     Alpha Fock matrix (packed triangular)
+  !> @param[in]    fock_b     Beta Fock matrix (packed triangular, UHF only)
+  !> @param[in]    occ_a      Alpha orbital occupations
+  !> @param[in]    occ_b      Beta orbital occupations (UHF only)
+  !> @param[inout] mo_a       Alpha molecular orbital coefficients (updated during trials)
+  !> @param[inout] mo_b       Beta molecular orbital coefficients (updated during trials)
+  !> @param[in]    interp_type Optional: Interpolation method (0=backtracking, 1=quadratic, 2=cubic; default=2)
+  subroutine line_search(self, alpha, grad, step, &
+                         fock_a, fock_b, occ_a, occ_b, &
+                         mo_a, mo_b, interp_type)
+    use mathlib, only: traceprod_sym_packed, orb_to_dens, unpack_matrix
+    use messages, only: show_message, with_abort
+    implicit none
+
+    class(soscf_converger)             :: self
+    real(kind=dp), intent(inout)       :: alpha
+    real(kind=dp), intent(in)          :: grad(:)
+    real(kind=dp), intent(in)          :: step(:)
+    real(kind=dp), pointer, intent(in) :: fock_a(:)
+    real(kind=dp), pointer, intent(in) :: fock_b(:)
+    real(kind=dp), pointer, intent(in) :: occ_a(:)
+    real(kind=dp), pointer, intent(in) :: occ_b(:)
+    real(kind=dp), intent(inout)       :: mo_a(:,:)
+    real(kind=dp), intent(inout)       :: mo_b(:,:)
+    integer, optional, intent(in)      :: interp_type
+
+    ! Local variables
+    real(kind=dp) :: e0, e_new, dphi0, alpha_try, alpha_prev, e_prev
+    real(kind=dp) :: alpha_best, e_best              ! Best alpha value found
+    real(kind=dp) :: dphi_new                        ! New directional derivative for Wolfe condition
+    real(kind=dp) :: a, b, c, disc                   ! For polynomial interpolation
+
+    ! Line search parameters
+    real(kind=dp), parameter :: c1 = 1.0e-4_dp       ! Armijo condition parameter
+    real(kind=dp), parameter :: c2 = 0.9_dp          ! Wolfe condition parameter
+    real(kind=dp), parameter :: min_alpha = 1.0e-6_dp ! Minimum step size
+    real(kind=dp), parameter :: max_alpha = 2.0_dp    ! Maximum step size
+    real(kind=dp), parameter :: threshold = 1.0e-10_dp ! Small number threshold
+
+    integer :: i, j, interp, istat, max_iter
+    logical :: found_better, wolfe_satisfied, armijo_satisfied
+
+    ! Set interpolation method
+    interp = 2  ! Default to cubic interpolation
+    if (present(interp_type)) interp = min(max(interp_type, 0), 2)
+
+    ! Increase max iterations for better convergence
+    max_iter = 15
+
+    associate (nbf => self%nbf, &
+               nocc_a => self%nocc_a, &
+               nocc_b => self%nocc_b)
+
+      ! Calculate initial energy and gradient dot product
+      e0 = traceprod_sym_packed(self%dens_a, fock_a, nbf)
+      if (self%scf_type > 1) &  ! UHF
+        e0 = e0 + traceprod_sym_packed(self%dens_b, fock_b, nbf)
+
+!     write(iw, '(A,E20.10)') 'DEBUG: Init Alpha energy = ', traceprod_sym_packed(self%dens_a, fock_a, nbf)
+!     write(iw, '(A,E20.10)') 'DEBUG: Init Beta energy = ', traceprod_sym_packed(self%dens_b, fock_b, nbf)
+
+      ! Calculate directional derivative: dphi0 = grad·step (should be negative for descent)
+      dphi0 = dot_product(grad, step)
+
+      ! Initialize search parameters
+      alpha_try = min(max(alpha, 0.1_dp), 1.0_dp)  ! Initial step size
+      alpha_prev = 0.0_dp                         ! Previous step size
+      e_prev = e0                                 ! Previous energy
+
+      ! Initialize best solution tracking
+      alpha_best = alpha_try
+      e_best = e0
+      found_better = .false.
+
+      write(iw, '(A,E20.10)') 'DEBUG line_search: init: dot_product(grad, step)=', dphi0
+      write(iw, '(A,E20.10)') 'DEBUG line_search: init: e0=', e0
+      write(iw, '(A,E20.10)') 'DEBUG line_search: init: alpha_try=', alpha_try
+
+      ! Line search loop
+      do i = 1, max_iter
+        ! Debug output of first elements of MO matrix
+!       write(iw, '(A,I3)') 'DEBUG line_search: loop: first 3x3 MO_a: Iter=', i
+!       do j = 1, min(3, nbf)
+!         write(iw, '(3E20.10)') self%mo_a(j, 1:min(3, nbf))
+!       end do
+
+        ! Apply orbital rotation with current step size
+        if (self%scf_type == 1) then
+          call self%rotate_orbs(step * alpha_try, mo_a, mo_b)
+          call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
+        else
+          call self%rotate_orbs(step * alpha_try, mo_a, mo_b)
+          call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
+          call orb_to_dens(self%dens_b, mo_b, occ_b, nocc_b, nbf, nbf)
+        end if
+
+        ! Debug output for MO matrices in Fock basis
+        call unpack_matrix(fock_a, self%work_1)
+        call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+        call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_a, nbf, 0.0_dp, self%work_1, nbf)
+        write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
+
+        call unpack_matrix(fock_b, self%work_1)
+        call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+        call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_b, nbf, 0.0_dp, self%work_1, nbf)
+        write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
+
+        ! Debug check of density matrix trace
+        call unpack_matrix(self%dens_a, self%work_1)
+        call dgemm('N', 'N', nbf, nbf, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           self%overlap, nbf, &
+                   0.0_dp, self%work_2, nbf)
+        write(iw, '(A,E20.10)') &
+          'DEBUG orb_to_dens Alpha: Tr(D*S) after update:', &
+          sum([(self%work_2(i,i), i=1,nbf)])
+
+        call unpack_matrix(self%dens_b, self%work_1)
+        call dgemm('N', 'N', nbf, nbf, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           self%overlap, nbf, &
+                   0.0_dp, self%work_2, nbf)
+        write(iw, '(A,E20.10)') &
+          'DEBUG orb_to_dens Beta: Tr(D*S) after update:', &
+          sum([(self%work_2(i,i), i=1,nbf)])
+
+        ! Calculate new energy
+        e_new = traceprod_sym_packed(self%dens_a, fock_a, nbf)
+        if (self%scf_type > 1) &  ! UHF
+          e_new = e_new + traceprod_sym_packed(self%dens_b, fock_b, nbf)
+
+!       write(iw, '(A,E20.10)') 'DEBUG: Loop Alpha energy = ', traceprod_sym_packed(self%dens_a, fock_a, nbf)
+!       write(iw, '(A,E20.10)') 'DEBUG: Loop Beta energy = ', traceprod_sym_packed(self%dens_b, fock_b, nbf)
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, ' e_new=', e_new
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, ' condition=', &
+          e_new - (e0 + c1 * alpha_try * dphi0)
+
+        ! Calculate gradient at new point for Wolfe condition
+        call self%calc_orb_grad(self%grad, fock_a, fock_b, mo_a, mo_b)
+        dphi_new = dot_product(self%grad, step)
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, ' dphi_new=', dphi_new
+
+        ! Check Armijo condition (sufficient decrease)
+        armijo_satisfied = (e_new <= e0 + c1 * alpha_try * dphi0)
+
+        ! Check Wolfe condition (curvature)
+        wolfe_satisfied = (abs(dphi_new) <= c2 * abs(dphi0))
+
+        write(iw, '(A,I3,A,L1,A,L1)') 'DEBUG line_search: loop: iter=', i, &
+                                       ' Armijo=', armijo_satisfied, &
+                                       ' Wolfe=', wolfe_satisfied
+
+        ! Track best solution found
+        if (e_new < e_best) then
+          e_best = e_new
+          alpha_best = alpha_try
+          found_better = .true.
+        end if
+
+        ! Check convergence criteria
+        if (armijo_satisfied) then
+          alpha = alpha_try
+          write(iw, '(A,E20.10)') 'DEBUG line_search: exit: alpha=', alpha
+          write(iw, '(A,I3,A)') 'DEBUG line_search: loop: iter=', i, ' converged - Armijo satisfied'
+          exit
+        end if
+
+        ! Interpolation for next step size
+        if (i == 1 .and. interp >= 1) then
+          ! Quadratic interpolation: phi(alpha) = a*alpha^2 + dphi0*alpha + e0
+          a = (e_new - e0 - dphi0 * alpha_try) / (alpha_try**2)
+          if (a > 0.0_dp) then  ! Ensure minimum exists
+            alpha_try = -dphi0 / (2.0_dp * a)
+            ! Safeguard to avoid too small or large steps
+            alpha_try = min(max(alpha_try, 0.2_dp * alpha_try), 0.8_dp * alpha_try)
+          else
+            alpha_try = alpha_try * 0.5_dp  ! Fallback to backtracking
+          end if
+        else if (i > 1 .and. interp == 2) then
+          ! Cubic interpolation: phi(alpha) = a*alpha^3 + b*alpha^2 + dphi0*alpha + e0
+          associate (a1 => alpha_prev, &
+                     a2 => alpha_try, &
+                     p1 => e_prev, &
+                     p2 => e_new)
+            if (abs(a2 - a1) > threshold) then
+              ! Compute cubic coefficients
+              block
+                real(kind=dp) :: den, r1, r2
+                den = (a1 - a2) * a1 * a2
+                if (abs(den) > threshold) then
+                  a = ((p2 - e0 - dphi0*a2)*a1**2 - (p1 - e0 - dphi0*a1)*a2**2) / (den**2)
+                  b = ((p1 - e0 - dphi0*a1)*a2 - (p2 - e0 - dphi0*a2)*a1) / den
+                else
+                  a = 0.0_dp
+                  b = 0.0_dp
+                end if
+
+                ! Solve derivative: 3a*alpha^2 + 2b*alpha + dphi0 = 0
+                disc = b**2 - 3.0_dp * a * dphi0
+                if (abs(a) > threshold .and. disc > -threshold) then
+                  ! Ensure discriminant is treated as non-negative within tolerance
+                  disc = max(disc, 0.0_dp)
+                  r1 = (-b + sqrt(disc)) / (3.0_dp * a)  ! First root
+                  r2 = (-b - sqrt(disc)) / (3.0_dp * a)  ! Second root
+
+                  ! Select the root that positive and within bounds
+                  if (r1 > 0.0_dp .and. r1 <= a2) then
+                    alpha_try = r1
+                  else if (r2 > 0.0_dp .and. r2 <= a2) then
+                    alpha_try = r2
+                  else
+                    alpha_try = a2 * 0.5_dp  ! Fallback if no valid root
+                  end if
+                else if (abs(b) > threshold) then
+                  ! Fall back to quadratic: 2b*alpha + dphi0 = 0
+                  alpha_try = -dphi0 / (2.0_dp * b)
+                  if (alpha_try <= 0.0_dp .or. alpha_try > a2) alpha_try = a2 * 0.5_dp
+                else
+                  ! Flat or linear: backtrack
+                  alpha_try = a2 * 0.5_dp
+                end if
+              end block
+              alpha_try = min(max(alpha_try, min_alpha), max_alpha)
+            else
+              alpha_try = a2 * 0.5_dp
+            end if
+          end associate
+        else
+          alpha_try = alpha_try * 0.5_dp  ! Simple backtracking
+        end if
+
+        ! Enforce min/max step size bounds
+        alpha_try = min(max(alpha_try, min_alpha), max_alpha)
+
+        write(iw, '(A,I3,A,E20.10)') &
+          'DEBUG line_search: loop: iter=', i, &
+          ' alpha_try=', alpha_try
+        write(iw, '(A,I3,A,E20.10)') &
+          'DEBUG line_search: loop: iter=', i, &
+          ' E_prev=', e_prev
+        write(iw, '(A,I3,A,E20.10)') &
+          'DEBUG line_search: loop: iter=', i, &
+          ' E_new=', e_new
+
+        ! Check for minimum step size
+        if (alpha_try < min_alpha) then
+          write(iw, '(A,I3,A)') 'DEBUG line_search: loop: iter=', i, ' alpha < min_alpha'
+          if (found_better) then
+            alpha = alpha_best
+            write(iw, '(A,E20.10,A,E20.10)') 'DEBUG line_search: Using best alpha=', &
+              alpha_best, ' with energy=', e_best
+          else
+            alpha = alpha_prev
+          end if
+          exit
+        end if
+
+        ! Store current values for next iteration
+        alpha_prev = alpha_try
+        e_prev = e_new
+
+      end do  ! End of line search loop
+
+      ! Final handling for max iterations exit
+      if (i > max_iter) then
+        write(iw, '(A,I3,A)') 'DEBUG line_search: Maximum iterations (', max_iter, ') reached'
+        if (found_better) then
+          alpha = alpha_best
+          write(iw, '(A,E20.10,A,E20.10)') 'DEBUG line_search: Using best alpha=', &
+            alpha_best, ' with energy=', e_best
+        else
+          alpha = alpha_prev  ! Use last attempt if no better solution found
+        end if
+      end if
+
+    end associate
+  end subroutine line_search
 
 end module scf_converger

@@ -194,7 +194,7 @@ contains
     logical :: do_pfon       ! Flag to use pFON method
     logical :: do_pfon_final ! Flag to trigger extra iteration at 1K
     type(pfon_t) :: pfon     ! pFON handler object
-    real(kind=dp), allocatable :: occ_a(:), occ_b(:) ! Orbital occupations for alpha/beta
+    real(kind=dp), allocatable, target :: occ_a(:), occ_b(:) ! Orbital occupations for alpha/beta
 
     !==============================================================================
     ! Matrices and Vectors for SCF Calculation
@@ -519,7 +519,7 @@ contains
     case (1) ! Pure SOSCF Accelerator
       use_soscf = .true.
       ! Pure SOSCF strategy
-      call conv%init(ldim=nbf, &
+      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
                      maxvec=maxdiis, &
                      subconvergers=[conv_soscf], &
                      thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
@@ -531,20 +531,20 @@ contains
       use_soscf = .true.
       if (infos%control%diis_type == 5) then
         ! V-DIIS + SOSCF hybrid strategy
-        call conv%init(ldim=nbf, &
-                      maxvec=maxdiis, &
-                      subconvergers=[conv_cdiis, &
-                                     conv_ediis, &
-                                     conv_cdiis, &
-                                     conv_soscf], &
-                      thresholds   =[ethr_cdiis_big, &
-                                     ethr_ediis, &
-                                     infos%control%vdiis_cdiis_switch, &
-                                     infos%control%soscf_conv], &
-                      overlap=smat_full, &
-                      overlap_sqrt=qmat, &
-                      num_focks=diis_nfocks, &
-                      verbose=infos%control%verbose)
+        call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, &
+                                      conv_ediis, &
+                                      conv_cdiis, &
+                                      conv_soscf], &
+                       thresholds   =[ethr_cdiis_big, &
+                                      ethr_ediis, &
+                                      infos%control%vdiis_cdiis_switch, &
+                                      infos%control%soscf_conv], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=infos%control%verbose)
         if (infos%control%vshift == 0.0_dp) then
           infos%control%vshift = 0.1_dp
           vshift = 0.1_dp
@@ -552,18 +552,19 @@ contains
         end if
       else
         ! Regular DIIS + SOSCF hybrid strategy
-        call conv%init(ldim=nbf, &
-                      maxvec=maxdiis, &
-                      subconvergers=[infos%control%diis_type, &
-                                     conv_soscf], &
-                      thresholds   =[infos%control%diis_method_threshold, &
-                                     infos%control%soscf_conv], &
-                      overlap=smat_full, &
-                      overlap_sqrt=qmat, &
-                      num_focks=diis_nfocks, &
-                      verbose=infos%control%verbose)
+        call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                       maxvec=maxdiis, &
+                       subconvergers=[infos%control%diis_type, &
+                                      conv_soscf], &
+                       thresholds   =[infos%control%diis_method_threshold, &
+                                      infos%control%soscf_conv], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=infos%control%verbose)
       end if
     end select
+
     ! Initialize DFT exchange-correlation energy
     eexc = 0.0_dp
     e_old = 0.0_dp
@@ -786,6 +787,9 @@ contains
       !----------------------------------------------------------------------------
       if (use_soscf) then
         ! SOSCF: Pass MO coefficients and energies for orbital rotation
+        ! Note: Fock matrix is fixed in SOSCF;
+        !       rebuilt in next iteration,
+        !       Fock is not retrieved here.
         if (do_pfon) then
           select case (scf_type)
           case (scf_rhf)
@@ -795,8 +799,6 @@ contains
                      e=etot, &
                      mo_a=mo_a, &
                      mo_e_a=mo_energy_a, &
-                     nocc_a=nelec_a, &
-                     nocc_b=nelec_b, &
                      occ_a=occ_a)
           case (scf_uhf, scf_rohf)
             call conv%add_data( &
@@ -807,8 +809,6 @@ contains
                      mo_b=mo_b, &
                      mo_e_a=mo_energy_a, &
                      mo_e_b=mo_energy_b, &
-                     nocc_a=nelec_a, &
-                     nocc_b=nelec_b, &
                      occ_a=occ_a, &
                      occ_b=occ_b)
           end select
@@ -820,9 +820,7 @@ contains
                      dens=pdmat(:,1:diis_nfocks), &
                      e=etot, &
                      mo_a=mo_a, &
-                     mo_e_a=mo_energy_a, &
-                     nocc_a=nelec_a, &
-                     nocc_b=nelec_b)
+                     mo_e_a=mo_energy_a)
           case (scf_uhf, scf_rohf)
             call conv%add_data( &
                      f=pfock(:,1:diis_nfocks), &
@@ -831,9 +829,7 @@ contains
                      mo_a=mo_a, &
                      mo_b=mo_b, &
                      mo_e_a=mo_energy_a, &
-                     mo_e_b=mo_energy_b, &
-                     nocc_a=nelec_a, &
-                     nocc_b=nelec_b)
+                     mo_e_b=mo_energy_b)
           end select
         end if
       else
@@ -899,20 +895,21 @@ contains
         vshift_last_iter = .true.
       elseif (vshift_last_iter) then
         ! Only for ROHF case the final iteration with vshift=0 complete - exit loop
-        call get_ab_initio_orbital(pfock(:,1),mo_a,mo_energy_a,qmat)
+        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
         exit
       end if
 
       !----------------------------------------------------------------------------
-      ! Update Orbitals and Fock Matrix Based on Active Converger
+      ! Reset DIIS
       !----------------------------------------------------------------------------
       ! Vshift=0.0 and slow cases
       ! Check if DIIS reset is needed
-      diis_reset_condition = (((iter/diis_reset) >= 1) &
-         .and. (modulo(iter,diis_reset) == 0) &
-         .and. (diis_error > infos%control%diis_reset_conv) &
-         .and. (infos%control%vshift == 0.0_dp) &
-         .and. (trim(conv_res%active_converger_name) /= 'SOSCF'))
+      diis_reset_condition = (((iter/diis_reset) >= 1) .and. &
+                              (modulo(iter,diis_reset) == 0) .and. &
+                              (diis_error > infos%control%diis_reset_conv) .and. &
+                              (infos%control%vshift == 0.0_dp) .and. &
+                              (infos%control%soscf_type /= 1))
+
       if (diis_reset_condition) then
         ! Resetting DIIS for difficult cases
         write(IW,"(3x,64('-')/10x,'Resetting DIIS.')")
@@ -930,20 +927,23 @@ contains
                            dens=pdmat(:,1:diis_nfocks), &
                            e=Etot)
         call conv%run(conv_res)
-      else
-        ! Form the interpolated the Fock/density matrix
-        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
       end if
 
       !----------------------------------------------------------------------------
-      ! Calculate New Orbitals and Eigenvalues
+      ! Update Fock or Orbitals and Eigenvalues Based on Active Converger
       !----------------------------------------------------------------------------
       if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
         ! SOSCF: Retrieve updated MOs and energies directly
+        ! Note: Fock matrix is fixed in SOSCF;
+        !       rebuilt in next iteration,
+        !       Fock is not retrieved here.
         if (int2_driver%pe%rank == 0) then
+          ! Retrieve updated Alpha Orbitals
           call conv_res%get_mo_a(mo_a, istat=stat)
+          ! Retrieve updated Energies of Alpha Orbitals
           call conv_res%get_mo_e_a(mo_energy_a, istat=stat)
           if (scf_type == scf_uhf .and. nelec_b /= 0) then
+            ! Retrieve updated Beta Orbitals and its Energies
             call conv_res%get_mo_b(mo_b, stat)
             call conv_res%get_mo_e_b(mo_energy_b, stat)
           elseif (scf_type == scf_rohf) then
@@ -955,7 +955,11 @@ contains
           end if
         end if
       else
+        ! DIIS: Retrieve updated Fock directly
+        ! Form the interpolated the Fock/Density matrix
+        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
         if (int2_driver%pe%rank == 0) then
+           ! Compute New Alpha Orbitals
            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
            if (scf_type == scf_uhf .and. nelec_b /= 0) then
               ! Only UHF has beta orbitals.
