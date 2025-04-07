@@ -1307,14 +1307,14 @@ contains
     real(kind=dp), intent(inout), dimension(:) :: fock_b_ao
     real(kind=dp), intent(in), dimension(:,:) :: mo_a
     real(kind=dp), intent(in), dimension(:,:) :: smat_full
-    real(kind=dp), intent(inout), target :: work1(:,:)
-    real(kind=dp), intent(inout), target :: work2(:,:)
+    real(kind=dp), intent(inout), dimension(:,:) :: work1
+    real(kind=dp), intent(inout), dimension(:,:) :: work2
     integer, intent(in) :: nocca, noccb, nbf
     real(kind=dp), intent(in) :: vshift
 
     real(kind=dp), allocatable, dimension(:) :: fock_mo
     real(kind=dp), allocatable, dimension(:,:) :: &
-          work_matrix, fock
+          work_matrix, fock, fock_a, fock_b
     real(kind=dp) :: acc, aoo, avv, bcc, boo, bvv
     integer :: i, nbf_tri
 
@@ -1324,23 +1324,26 @@ contains
 
     ! Allocate full matrices
     allocate(work_matrix(nbf, nbf), &
-             fock_mo(nbf_tri), &
              fock(nbf, nbf), &
+             fock_mo(nbf_tri), &
+             fock_a(nbf, nbf), &
+             fock_b(nbf, nbf), &
              source=0.0_dp)
 
     ! Transform alpha and beta Fock matrices to MO basis
     call orthogonal_transform_sym(nbf, nbf, fock_a_ao, mo_a, nbf, fock_mo)
-    ! Unpack triangular matrices to full matrices
-    call unpack_matrix(fock_mo, work1)
+    fock_a_ao(:nbf_tri) = fock_mo(:nbf_tri)
 
     call orthogonal_transform_sym(nbf, nbf, fock_b_ao, mo_a, nbf, fock_mo)
-    call unpack_matrix(fock_mo, work2)
+    fock_b_ao(:nbf_tri) = fock_mo(:nbf_tri)
+
+    ! Unpack triangular matrices to full matrices
+    call unpack_matrix(fock_a_ao, fock_a)
+    call unpack_matrix(fock_b_ao, fock_b)
 
     ! Construct ROHF Fock matrix in MO basis using Guest-Saunders method
     associate ( na => nocca &
               , nb => noccb &
-              , fock_a => work1 &
-              , fock_b => work2 &
       )
       fock(1:nb, 1:nb) = acc * fock_a(1:nb, 1:nb) &
                        + bcc * fock_b(1:nb, 1:nb)
@@ -1375,7 +1378,7 @@ contains
                                work_matrix, nbf, work2)
     call pack_matrix(work_matrix, fock_a_ao)
 
-    deallocate(work_matrix, fock_mo, fock)
+    deallocate(work_matrix, fock, fock_mo, fock_a, fock_b)
 
   end subroutine form_rohf_fock
 
