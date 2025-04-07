@@ -129,6 +129,17 @@ struct control_parameters {
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
+    // SOSCF parameters
+    int64_t   soscf_type;
+    int64_t   soscf_start;
+    int64_t   soscf_freq;
+    int64_t   soscf_max;
+    int64_t   soscf_min;
+    double    soscf_conv;
+    double    soscf_grad;
+    double    soscf_lvl_shift;
+    bool      soscf_diis_alternate;
+    int64_t   verbose;
 };
 
 struct mpi_communicator {
