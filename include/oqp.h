@@ -95,6 +95,8 @@ struct dft_parameters {
     double spc_coco;
     double spc_ovov;
     double spc_coov;
+    int* ixcore;
+    int64_t ixcore_len;
 };
 
 struct control_parameters {

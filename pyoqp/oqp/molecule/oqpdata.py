@@ -89,6 +89,7 @@ OQP_CONFIG_SCHEMA = {
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
+        'swapmo': {'type' : string, 'default' : ''},
     },
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
@@ -123,6 +124,7 @@ OQP_CONFIG_SCHEMA = {
         'spc_ovov': {'type': float, 'default': '-1.0'},
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
+        'ixcore': {'type' : string, 'default' : '-1'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -278,6 +280,7 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
+            "ixcore" : "set_tdhf_ixcore",
         },
     }
     _typemap = [np.void,
@@ -364,6 +367,11 @@ class OQPData:
 
         if key in dir(self._data.mpiinfo):
             setattr(self._data.mpiinfo, key, value)
+
+        #cjin
+        if key in dir(self._data.tddft):
+#            print("value",value)
+            setattr(self._data.tddft, key, value)
 
         if key in dir(self._data.elshell):
             setattr(self._data.elshell, key, value)
@@ -566,6 +574,13 @@ class OQPData:
     def set_tdhf_spc_coov(self, spc_coov):
         """Set CO-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation"""
         self._data.tddft.spc_coov = spc_coov
+
+    def set_tdhf_ixcore(self,ixcore):
+        """ This enables a method to extract core excitation by shifting MO energies and Fock matrix (MO) except list in ixcores """
+#        ixcore_array = np.array([int(x.strip()) for x in ixcore.split(',')], dtype=np.int32)
+#        self._data.tddft.ixcore = ffi.cast("int*", ffi.from_buffer(ixcore_array))
+#        self._data.tddft.ixcore_len = ixcore_array.size
+
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""

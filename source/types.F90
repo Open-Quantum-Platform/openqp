@@ -148,6 +148,8 @@ module types
     real(c_double) :: spc_coco = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_ovov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
+    type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
+    integer(c_int64_t) :: ixcore_len = 1   !< length of ixcore
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator

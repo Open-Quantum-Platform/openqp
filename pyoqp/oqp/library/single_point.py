@@ -186,6 +186,10 @@ class SinglePoint(Calculator):
         oqp.library.set_basis(self.mol)
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
+#        print("hi cjin in_prep_guess, print VEC_MO_A")
+#        a = self.mol.data["OQP::VEC_MO_A"]
+#        print(a)
+
     def _project_basis(self):
         oqp.library.project_basis(self.mol)
 
@@ -236,7 +240,8 @@ class SinglePoint(Calculator):
             raise ValueError(f'Unknown initial scf method {self.init_scf}')
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
-        self._prep_guess()
+#        self._prep_guess()
+#        print("hi cjin prep_guess")
         if self.mol.config['guess']['type'] != 'json':
             init_calc(self.mol)
         # save initially converge orbitals
@@ -265,6 +270,7 @@ class SinglePoint(Calculator):
 #        oqp.library.update_guess(self.mol)
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps done, switching back to normal SCF', section='scf')
+
 
     def pack_molden_name(self, cal_type, scf_type, functional):
         """Add information to molden file name"""
@@ -302,11 +308,30 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True):
         # check method
+        from oqp import ffi
         if self.method not in ['hf', 'tdhf']:
             raise ValueError(f'Unknown method type {self.method}')
 
         # compute reference
         ref_energy = self.reference(do_init_scf=do_init_scf)
+
+        # IXCORE for XAS (X-ray absorption spectroscopy)
+        ixcore= self.mol.config["tdhf"]["ixcore"]
+        ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
+        self.mol.data['ixcore'] = ffi.cast("int*", ffi.from_buffer(ixcore_array))
+        self.mol.data['ixcore_len'] = ixcore_array.size
+
+        ixcores = [int(x.strip()) for x in self.mol.config['tdhf']['ixcore'].split(',')]
+        ixcore = sorted(ixcore)
+        # Shift MO energies only here. 
+        # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
+        if ixcores != [-1]:  # if not default
+            noccB = self.mol.data['nelec_B']
+            tmp = self.mol.data["OQP::E_MO_A"]
+            for i in range(noccB+1):  #
+                if i not in ixcores:
+                    tmp[i-1] = -100000
+
 
         # compute excitations
         if self.method == 'tdhf':
@@ -323,7 +348,35 @@ class SinglePoint(Calculator):
             # do initial scf iteration to help convergence
             self._init_convergence()
         else:
-            self._prep_guess()
+            self._prep_guess()  #cjin here
+
+        # swap MO energy and coefficient depending on user's request
+        swapmo= self.mol.config["scf"]["swapmo"]
+        if swapmo:   # if not default (empty)
+            swapmo_array = [int(x.strip()) for x in swapmo.split(',')]
+
+            # Initial MO energy and coefficient
+            og_val = self.mol.data["OQP::E_MO_A"]
+            og_vec = self.mol.data["OQP::VEC_MO_A"]
+#            print("hi jin initial MO energy")
+#            print(og_val)
+#
+#            print("hi cjin swap_mo", swapmo)
+#            print("hi cjin swap_mo_array", swapmo_array)
+#
+#            print("hi jin initial MO_A")
+#            print(self.mol.data["OQP::VEC_MO_A"])
+            # It only takes pairs. If not pair, that will be ignored
+            for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
+                og_val[[i-1, j-1]] = og_val[[j-1, i-1]]
+                og_vec[[i-1, j-1]] = og_vec[[j-1, i-1]]
+
+#            print("hi jin swapped MO energy")
+#            print(og_val)
+#            print("hi jin swapped MO_A")
+#            print(og_vec)
+
+
 
         scf_flag = False
         for itr in range(self.forced_attempt):
@@ -432,6 +485,7 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+            print("hi cjin tdhf gradient")
 
         self.mol.grads = grads
 
@@ -448,6 +502,7 @@ class Gradient(Calculator):
     def tddft_grad(self):
         if self.td not in ['rpa', 'tda', 'sf', 'mrsf']:
             raise ValueError(f'Unknown tdhf type {self.td}')
+            print(f'hi cjin self.td {self.td}')
 
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
@@ -461,6 +516,7 @@ class Gradient(Calculator):
             dump_log(self.mol, title='PyOQP: Gradient of Root %s' % i)
             self.mol.data.set_tdhf_target(i)
             self.zvec_func[self.td](self.mol)
+            print("hi cjin zvec_func")
 
             # check convergence
             z_flag = self.mol.mol_energy.Z_Vector_converged

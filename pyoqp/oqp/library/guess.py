@@ -96,4 +96,4 @@ def guess(mol):
         'guess_beta': beta,
     }
 
-    dump_log(mol, title='   PyQOP: Orbital Guess', section='guess', info=guess_info)
+    dump_log(mol, title='   PyOQP: Orbital Guess', section='guess', info=guess_info)
