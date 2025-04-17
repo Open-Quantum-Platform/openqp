@@ -318,19 +318,20 @@ class SinglePoint(Calculator):
         # IXCORE for XAS (X-ray absorption spectroscopy)
         ixcore= self.mol.config["tdhf"]["ixcore"]
         ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
-        self.mol.data['ixcore'] = ffi.cast("int*", ffi.from_buffer(ixcore_array))
-        self.mol.data['ixcore_len'] = ixcore_array.size
-
-        ixcores = [int(x.strip()) for x in self.mol.config['tdhf']['ixcore'].split(',')]
-        ixcore = sorted(ixcore)
-        # Shift MO energies only here. 
+        # Shift eigenvalues only here. 
         # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
         if ixcores != [-1]:  # if not default
+            # Pass pointer for eigen
+            self.mol.data['ixcore'] = ffi.cast("int*", ffi.from_buffer(ixcore_array))
+            self.mol.data['ixcore_len'] = ixcore_array.size
+
+            ixcores = [int(x.strip()) for x in self.mol.config['tdhf']['ixcore'].split(',')]
+            ixcore = sorted(ixcore)
             noccB = self.mol.data['nelec_B']
             tmp = self.mol.data["OQP::E_MO_A"]
-            for i in range(noccB+1):  #
+            for i in range(noccB+1):  # up to HOMO-1
                 if i not in ixcores:
-                    tmp[i-1] = -100000
+                    tmp[i-1] = -100000  # shift the MO energy down
 
 
         # compute excitations
@@ -350,7 +351,8 @@ class SinglePoint(Calculator):
         else:
             self._prep_guess()  #cjin here
 
-        # swap MO energy and coefficient depending on user's request
+
+        # swap MO energy and AO coefficient depending on user's request
         swapmo= self.mol.config["scf"]["swapmo"]
         if swapmo:   # if not default (empty)
             swapmo_array = [int(x.strip()) for x in swapmo.split(',')]
@@ -358,24 +360,10 @@ class SinglePoint(Calculator):
             # Initial MO energy and coefficient
             og_val = self.mol.data["OQP::E_MO_A"]
             og_vec = self.mol.data["OQP::VEC_MO_A"]
-#            print("hi jin initial MO energy")
-#            print(og_val)
-#
-#            print("hi cjin swap_mo", swapmo)
-#            print("hi cjin swap_mo_array", swapmo_array)
-#
-#            print("hi jin initial MO_A")
-#            print(self.mol.data["OQP::VEC_MO_A"])
-            # It only takes pairs. If not pair, that will be ignored
+            # It only takes pairs. If it is not pair, it will be ignored.
             for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
                 og_val[[i-1, j-1]] = og_val[[j-1, i-1]]
                 og_vec[[i-1, j-1]] = og_vec[[j-1, i-1]]
-
-#            print("hi jin swapped MO energy")
-#            print(og_val)
-#            print("hi jin swapped MO_A")
-#            print(og_vec)
-
 
 
         scf_flag = False
