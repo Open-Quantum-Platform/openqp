@@ -84,17 +84,21 @@ contains
      real(kind=dp) :: pfon_cooling_rate, pfon_nsmear
      real(kind=dp) :: last_cooled_temp = 0.0_dp 
      integer :: nsmear 
+!    rstctmo
+     logical :: do_rstctmo
+     real(kind=dp), allocatable, dimension(:,:) :: mo_a_for_rstctmo, mo_b_for_rstctmo
   ! tagarray
      real(kind=dp), contiguous, pointer :: &
        dmat_a(:), dmat_b(:), fock_a(:), fock_b(:), hcore(:), mo_b(:,:), &
        smat(:), tmat(:), mo_a(:,:), &
-       mo_energy_b(:), mo_energy_a(:), mo_energy_a_for_mom(:)
+       mo_energy_b(:), mo_energy_a(:), mo_energy_a_for_mom(:), mo_energy_a_for_rstctmo(:)
      character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
        OQP_SM, OQP_TM, OQP_Hcore /)
      character(len=*), parameter :: tags_alpha(4) = (/ character(len=80) :: &
        OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A /)
      character(len=*), parameter :: tags_beta(4) = (/ character(len=80) :: &
        OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
+
 
   !  Default values
 
@@ -106,6 +110,9 @@ contains
      vshift = infos%control%vshift
      vshift_last_iter=.false.
      H_U_gap_crit=0.02_dp
+
+  !  rstctmo
+     do_rstctmo = infos%control%rstctmo
 
   !  pFON settings
      do_pfon = .false. 
@@ -208,6 +215,15 @@ contains
                  work(nbf,nbf), &
                  source=0.0_dp)
      end if
+  !  For rstctmo
+     if (do_rstctmo) then
+        allocate(mo_a_for_rstctmo(nbf,nbf), &
+                 mo_b_for_rstctmo(nbf,nbf), &
+                 mo_energy_a_for_rstctmo(nbf), &
+                 work(nbf,nbf), &
+                 source=0.0_dp)
+     end if
+
      if(ok/=0) call show_message('Cannot allocate memory for SCF',WITH_ABORT)
   !  Incremental Fock building for Direct SCF
      if (infos%control%scf_incremental /= 0) then
@@ -237,6 +253,7 @@ contains
        if(ok/=0) call show_message('Cannot allocate memory for ROHF temporaries',WITH_ABORT)
      end if
 
+     if(do_mom .and. do_rstctmo) call show_message('Use either MOM or rstctmo',WITH_ABORT)
   !  Allocating dynamic memories done
 
      call measure_time(print_total=1, log_unit=iw)
@@ -333,6 +350,7 @@ contains
                 5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
                 infos%control%pfon, infos%control%pfon_start_temp, &
                 infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
+     write(iw, '(5X,"rstctmo = ",L5)') infos%control%rstctmo
      !  Initial message
      if (infos%control%pfon) then
            write(IW,fmt="&
@@ -352,8 +370,12 @@ contains
 
   !     The main SCF iteration loop
 
-
-
+  !   If we need to restrict MO after reading json, we need to do it from the first iteration.
+      if (do_rstctmo) then
+        mo_energy_a_for_rstctmo = mo_energy_a
+        mo_a_for_rstctmo = mo_a 
+      end if
+      
 
 !     pFON Cooling
       if (cooling_rate <= 0.0_dp) then
@@ -447,6 +469,7 @@ contains
           etot = etot + eexc
         end if
 
+
   !     Forming ROHF Fock by combing Alpha and Beta Focks.
         if (scf_type == scf_rohf) then
            rohf_bak = pfock(:,1)
@@ -456,6 +479,7 @@ contains
            pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
         end if
 
+        
   !     SCF Converger to get refined Fock Matrix
         call conv%add_data(f=pfock(:,1:diis_nfocks), &
                 dens=pdmat(:,1:diis_nfocks), e=Etot)
@@ -592,6 +616,14 @@ contains
            mo_energy_a_for_mom = mo_energy_a
         end if
         step_0_mom = .false.
+
+
+
+  !     Restrict MO (same as MOM keyword)
+        if (do_rstctmo) then
+            call mo_reorder(infos, mo_a_for_rstctmo, mo_energy_a_for_rstctmo, &
+                           mo_a, mo_energy_a, smat_full)
+        end if
 
   !     New density matrix in AO basis using MO.
         if (int2_driver%pe%rank == 0) then
@@ -1034,6 +1066,8 @@ contains
 
  end subroutine mo_reorder
 
+
+
 !> @brief      pFON Implementation in SCF Module
 !> Author: Alireza Lashkaripour
 !> Date: January 2025
@@ -1338,6 +1372,7 @@ contains
           if(iwrk(k)==i) iwrk(k) = j
        end do
     end do
+
     return
  end subroutine
 

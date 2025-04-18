@@ -90,6 +90,7 @@ OQP_CONFIG_SCHEMA = {
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'swapmo': {'type' : string, 'default' : ''},
+        'rstctmo': {'type': bool, 'default': 'False'},
     },
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
@@ -247,6 +248,7 @@ class OQPData:
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
+            "rstctmo" : "set_scf_rstctmo",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -368,9 +370,7 @@ class OQPData:
         if key in dir(self._data.mpiinfo):
             setattr(self._data.mpiinfo, key, value)
 
-        #cjin
         if key in dir(self._data.tddft):
-#            print("value",value)
             setattr(self._data.tddft, key, value)
 
         if key in dir(self._data.elshell):
@@ -492,6 +492,10 @@ class OQPData:
     def set_scf_pfon_nsmear(self, pfon_nsmear): 
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
+
+    def set_scf_rstctmo(self, rstctmo): 
+        """restrict MO """
+        self._data.control.rstctmo = rstctmo
 
     def set_scf_active_basis(self, active_basis):
         """Select basis set: 0 => info%basis

@@ -44,8 +44,6 @@ contains
       unpack_matrix
     use oqp_linalg
     use printing, only: print_module_info
-    !cjin
-!    use, intrinsic :: iso_c_binding, only: c_int
     use iso_c_binding, only: c_f_pointer, c_int
 
     implicit none
@@ -74,14 +72,13 @@ contains
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
     real(kind=dp), allocatable, target :: fmrq1(:,:,:)
     real(kind=dp), allocatable :: dip(:,:,:), bvec_mo_tmp(:), eex(:)
-    !cjin
     integer(c_int) , pointer :: ixcore_ptr(:) 
 
     integer :: nocca, nvira, noccb, nvirb
     integer :: nbf, nbf2, xvec_dim
     integer :: mxvec, ist, jst, iend, nvec, novec
     integer :: iter, nv, iv, ivec
-    integer :: diag_index ! cjin
+    integer :: diag_index 
     integer :: mxiter
     logical :: tamm_dancoff
     integer :: imax
@@ -92,8 +89,6 @@ contains
     logical :: roref = .false.
     logical :: debug_mode
 
-    !cjin
-    !integer :: ixcore_str
 
 
     type(int2_compute_t) :: int2_driver
@@ -202,9 +197,6 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
 
-    print *, "hi cjin print ixcore_ptr", ixcore_ptr
-!    print *, "hi cjin tdhf_mrsf_energy.F90 fock A", fock_a
-!    print *, "hi cjin ixcore", ixcore_str
   ! Allocate temporary matrices for diagonalization
     allocate (fa(nbf,nbf), &
               fb(nbf,nbf), &
@@ -323,23 +315,21 @@ contains
     if (roref) then
   !   Alapha
       call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
-!cjin      print *, "hi cjin tdhf_mrsf_energy.F90 fock A_new before unpack", scr
+
+      ! shift Fock in MO basis here except MOs listed in ixcores
       Do iter = 1, noccb
           if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
               diag_index = (iter + 1) * iter / 2
               scr(diag_index) = -1.0d6
           end if
       End Do      
-!cjin      print *, "hi cjin tdhf_mrsf_energy.F90 fock A_new before unpack after change", scr
+
       call unpack_matrix(scr,fa)
-!cjin      print *, "hi cjin tdhf_mrsf_energy.F90 fock A_new after unpack", fa
-!cjin      print *, size(fa)
 
   !   Beta
       call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, scr)
       call unpack_matrix(scr,fb)
     end if
-    print *, "hi cjin tdhf_mrsf_energy.F90 fock A_new after unpack", fa
 
   ! Construct TD trial vector
     if (mrst==1 .or. mrst==3) then

@@ -95,7 +95,7 @@ struct dft_parameters {
     double spc_coco;
     double spc_ovov;
     double spc_coov;
-    int* ixcore;
+    int32_t* ixcore;
     int64_t ixcore_len;
 };
 
@@ -131,6 +131,7 @@ struct control_parameters {
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
+    bool      rstctmo;
 };
 
 struct mpi_communicator {
