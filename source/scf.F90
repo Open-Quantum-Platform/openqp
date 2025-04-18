@@ -180,6 +180,7 @@ contains
        diis_nfocks = 1
      end select
 
+     if(do_mom .and. do_rstctmo) call show_message('* Error: Use either MOM or RSTCTMO',WITH_ABORT)
   !  Now we are allocating dynamic memories of tag arrays
   !  Tag arrays
      call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
@@ -253,7 +254,6 @@ contains
        if(ok/=0) call show_message('Cannot allocate memory for ROHF temporaries',WITH_ABORT)
      end if
 
-     if(do_mom .and. do_rstctmo) call show_message('Use either MOM or rstctmo',WITH_ABORT)
   !  Allocating dynamic memories done
 
      call measure_time(print_total=1, log_unit=iw)
