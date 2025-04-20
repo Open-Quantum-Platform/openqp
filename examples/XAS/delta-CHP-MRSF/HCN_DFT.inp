@@ -1,0 +1,15 @@
+[input]
+basis=6-31g*
+functional=bhhlyp
+method=hf
+runtype=energy
+system=HCN.xyz
+
+
+[scf]
+type=rhf
+multiplicity=1
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
