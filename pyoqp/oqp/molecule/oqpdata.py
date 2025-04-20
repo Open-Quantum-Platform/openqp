@@ -61,6 +61,7 @@ OQP_CONFIG_SCHEMA = {
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
+        'swapmo': {'type' : string, 'default' : ''},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
@@ -89,7 +90,6 @@ OQP_CONFIG_SCHEMA = {
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
-        'swapmo': {'type' : string, 'default' : ''},
         'rstctmo': {'type': bool, 'default': 'False'},
     },
     'dftgrid': {

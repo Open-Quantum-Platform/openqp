@@ -115,8 +115,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP guess file:                   %s
    PyOQP guess alpha:                  %s
    PyOQP guess beta:                   %s
+   PyOQP guess swapmo:                 %s
 
-""" % (info['guess_type'], info['guess_file'], info['guess_alpha'], info['guess_beta'])
+""" % (info['guess_type'], info['guess_file'], info['guess_alpha'], info['guess_beta'], info['guess_swapmo'])
 
     if section == 'basis_overlap':
         coord = mol.config['input']['system2']

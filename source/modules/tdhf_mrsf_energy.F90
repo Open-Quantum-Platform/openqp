@@ -281,6 +281,7 @@ contains
       write(*,'(5x,"Number of virtual beta orbitals:  ",1x,I0)') nvirb
       write(*,'(5x,"Maximum vectors:                  ",1x,I0)') mxvec
       write(*,'(5x,"Initial vectors:                  ",1x,I0)') nvec
+      write(*,'(5x,"Ixcore (MO index):                ",1x,I0)') ixcore_ptr
       write(*, '(/7x,"Fitting parameters for MRSF-TDDFT")')
       if (.not.infos%dft%cam_flag) then
         write(*, '(10x,"Exact HF exchange:")')

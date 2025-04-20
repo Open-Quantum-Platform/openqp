@@ -349,7 +349,7 @@ class SinglePoint(Calculator):
 
 
         # swap MO energy and AO coefficient depending on user's request
-        swapmo= self.mol.config["scf"]["swapmo"]
+        swapmo= self.mol.config["guess"]["swapmo"]
         if swapmo:   # if not default (empty)
             swapmo_array = [int(x.strip()) for x in swapmo.split(',')]
 
