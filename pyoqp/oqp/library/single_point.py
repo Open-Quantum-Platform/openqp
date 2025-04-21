@@ -237,7 +237,7 @@ class SinglePoint(Calculator):
             raise ValueError(f'Unknown initial scf method {self.init_scf}')
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
-#        self._prep_guess()
+        self._prep_guess()
         if self.mol.config['guess']['type'] != 'json':
             init_calc(self.mol)
         # save initially converge orbitals
@@ -266,7 +266,6 @@ class SinglePoint(Calculator):
 #        oqp.library.update_guess(self.mol)
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps done, switching back to normal SCF', section='scf')
-
 
     def pack_molden_name(self, cal_type, scf_type, functional):
         """Add information to molden file name"""
@@ -302,33 +301,41 @@ class SinglePoint(Calculator):
                 i += 1
         return final_filename
 
+    # IXCORE for XAS (X-ray absorption spectroscopy)
+    # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
+    def ixcore_shift(self):
+        from oqp import ffi
+        ixcore= self.mol.config["tdhf"]["ixcore"]
+        
+        if ixcore == "-1":  # if default
+            # Pass pointer 
+            ixcore_array = np.array([-1], dtype=np.int32)
+            self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
+            self.mol.data['ixcore_len'] = ixcore_array.size
+            return
+
+        # Pass pointer to Fortran via C
+        ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
+        self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
+        self.mol.data['ixcore_len'] = ixcore_array.size
+
+        # shift MO energies 
+        noccB = self.mol.data['nelec_B']
+        tmp = self.mol.data["OQP::E_MO_A"]
+        for i in range(noccB+1):  # up to HOMO-1
+            if i not in ixcore_array:
+                tmp[i-1] = -100000  # shift the MO energy down
+
     def energy(self, do_init_scf=True):
         # check method
-        from oqp import ffi
         if self.method not in ['hf', 'tdhf']:
             raise ValueError(f'Unknown method type {self.method}')
 
         # compute reference
         ref_energy = self.reference(do_init_scf=do_init_scf)
 
-
-        # IXCORE for XAS (X-ray absorption spectroscopy)
-        ixcore= self.mol.config["tdhf"]["ixcore"]
-        ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
-        ixcores = [int(x.strip()) for x in self.mol.config['tdhf']['ixcore'].split(',')]
-        # Shift eigenvalues only here. 
-        # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
-        if ixcores != [-1]:  # if not default
-            # Pass pointer 
-            self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
-            self.mol.data['ixcore_len'] = ixcore_array.size
-
-            noccB = self.mol.data['nelec_B']
-            tmp = self.mol.data["OQP::E_MO_A"]
-            for i in range(noccB+1):  # up to HOMO-1
-                if i not in ixcores:
-                    tmp[i-1] = -100000  # shift the MO energy down
-
+        # ixcore
+        self.ixcore_shift()
 
         # compute excitations
         if self.method == 'tdhf':

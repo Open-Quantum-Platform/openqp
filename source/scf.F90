@@ -1066,8 +1066,6 @@ contains
 
  end subroutine mo_reorder
 
-
-
 !> @brief      pFON Implementation in SCF Module
 !> Author: Alireza Lashkaripour
 !> Date: January 2025

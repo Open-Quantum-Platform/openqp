@@ -90,7 +90,6 @@ contains
     logical :: debug_mode
 
 
-
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
     type(int2_td_data_t), target :: int2_data_q
@@ -318,12 +317,14 @@ contains
       call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
 
       ! shift Fock in MO basis here except MOs listed in ixcores
-      Do iter = 1, noccb
-          if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
-              diag_index = (iter + 1) * iter / 2
-              scr(diag_index) = -1.0d6
-          end if
-      End Do      
+      if (.not. (infos%tddft%ixcore_len == 1 .and. ixcore_ptr(1) == -1)) then    
+        Do iter = 1, noccb
+            if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
+                diag_index = (iter + 1) * iter / 2
+                scr(diag_index) = -1.0d6
+            end if
+        End Do      
+      end if
 
       call unpack_matrix(scr,fa)
 

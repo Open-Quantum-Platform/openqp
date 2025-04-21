@@ -282,7 +282,7 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
-            "ixcore" : "set_tdhf_ixcore",
+#            "ixcore" : "set_tdhf_ixcore",
         },
     }
     _typemap = [np.void,
@@ -320,6 +320,8 @@ class OQPData:
         if key in dir(self._data.mol_energy):
             return getattr(self._data.mol_energy, key)
 
+        if key in dir(self._data.tddft):
+            return getattr(self._data.tddft, key)
         if key in dir(self._data.mpiinfo):
             return getattr(self._data.mpiinfo, key)
         if key in dir(self._data.control):
@@ -385,7 +387,7 @@ class OQPData:
             try:
                 _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)
             except Exception as e:
-                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e
+                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e            
         else:
             _value = np.array(value)
 
@@ -586,10 +588,6 @@ class OQPData:
 
     def set_tdhf_ixcore(self,ixcore):
         """ This enables a method to extract core excitation by shifting MO energies and Fock matrix (MO) except list in ixcores """
-#        ixcore_array = np.array([int(x.strip()) for x in ixcore.split(',')], dtype=np.int32)
-#        self._data.tddft.ixcore = ffi.cast("int*", ffi.from_buffer(ixcore_array))
-#        self._data.tddft.ixcore_len = ixcore_array.size
-
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
