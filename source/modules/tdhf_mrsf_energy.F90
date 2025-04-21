@@ -89,7 +89,6 @@ contains
     logical :: roref = .false.
     logical :: debug_mode
 
-
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
     type(int2_td_data_t), target :: int2_data_q

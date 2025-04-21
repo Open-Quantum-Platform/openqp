@@ -186,7 +186,6 @@ class SinglePoint(Calculator):
         oqp.library.set_basis(self.mol)
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
-
     def _project_basis(self):
         oqp.library.project_basis(self.mol)
 
@@ -345,16 +344,7 @@ class SinglePoint(Calculator):
 
         return energies
 
-    def reference(self, do_init_scf=True):
-        dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
-
-        if self.init_scf != 'no' and do_init_scf:
-            # do initial scf iteration to help convergence
-            self._init_convergence()
-        else:
-            self._prep_guess()
-
-
+    def swapmo(self):
         # swap MO energy and AO coefficient depending on user's request
         swapmo= self.mol.config["guess"]["swapmo"]
         if swapmo:   # if not default (empty)
@@ -368,6 +358,16 @@ class SinglePoint(Calculator):
                 og_val[[i-1, j-1]] = og_val[[j-1, i-1]]
                 og_vec[[i-1, j-1]] = og_vec[[j-1, i-1]]
 
+    def reference(self, do_init_scf=True):
+        dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
+
+        if self.init_scf != 'no' and do_init_scf:
+            # do initial scf iteration to help convergence
+            self._init_convergence()
+        else:
+            self._prep_guess()
+
+        self.swapmo()
 
         scf_flag = False
         for itr in range(self.forced_attempt):

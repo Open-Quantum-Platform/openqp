@@ -99,7 +99,6 @@ contains
      character(len=*), parameter :: tags_beta(4) = (/ character(len=80) :: &
        OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
 
-
   !  Default values
 
   !  MOM settings
@@ -375,7 +374,6 @@ contains
         mo_energy_a_for_rstctmo = mo_energy_a
         mo_a_for_rstctmo = mo_a 
       end if
-      
 
 !     pFON Cooling
       if (cooling_rate <= 0.0_dp) then
@@ -469,7 +467,6 @@ contains
           etot = etot + eexc
         end if
 
-
   !     Forming ROHF Fock by combing Alpha and Beta Focks.
         if (scf_type == scf_rohf) then
            rohf_bak = pfock(:,1)
@@ -479,7 +476,6 @@ contains
            pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
         end if
 
-        
   !     SCF Converger to get refined Fock Matrix
         call conv%add_data(f=pfock(:,1:diis_nfocks), &
                 dens=pdmat(:,1:diis_nfocks), e=Etot)
@@ -616,8 +612,6 @@ contains
            mo_energy_a_for_mom = mo_energy_a
         end if
         step_0_mom = .false.
-
-
 
   !     Restrict MO (same as MOM keyword)
         if (do_rstctmo) then
@@ -1370,7 +1364,6 @@ contains
           if(iwrk(k)==i) iwrk(k) = j
        end do
     end do
-
     return
  end subroutine
 
