@@ -61,6 +61,7 @@ OQP_CONFIG_SCHEMA = {
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
+        'swapmo': {'type' : string, 'default' : ''},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
@@ -89,6 +90,7 @@ OQP_CONFIG_SCHEMA = {
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
+        'rstctmo': {'type': bool, 'default': 'False'},
     },
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
@@ -123,6 +125,7 @@ OQP_CONFIG_SCHEMA = {
         'spc_ovov': {'type': float, 'default': '-1.0'},
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
+        'ixcore': {'type' : string, 'default' : '-1'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -245,6 +248,7 @@ class OQPData:
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
+            "rstctmo" : "set_scf_rstctmo",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -278,6 +282,7 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
+#            "ixcore" : "set_tdhf_ixcore",
         },
     }
     _typemap = [np.void,
@@ -315,6 +320,8 @@ class OQPData:
         if key in dir(self._data.mol_energy):
             return getattr(self._data.mol_energy, key)
 
+        if key in dir(self._data.tddft):
+            return getattr(self._data.tddft, key)
         if key in dir(self._data.mpiinfo):
             return getattr(self._data.mpiinfo, key)
         if key in dir(self._data.control):
@@ -365,6 +372,9 @@ class OQPData:
         if key in dir(self._data.mpiinfo):
             setattr(self._data.mpiinfo, key, value)
 
+        if key in dir(self._data.tddft):
+            setattr(self._data.tddft, key, value)
+
         if key in dir(self._data.elshell):
             setattr(self._data.elshell, key, value)
             return
@@ -373,6 +383,11 @@ class OQPData:
             _value = value
         elif isinstance(value, str):
             _value = np.frombuffer(np.bytes_(value), dtype=np.dtype('S1'))
+        elif isinstance(value, ffi.CData):
+            try:
+                _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)
+            except Exception as e:
+                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e            
         else:
             _value = np.array(value)
 
@@ -484,6 +499,10 @@ class OQPData:
     def set_scf_pfon_nsmear(self, pfon_nsmear): 
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
+
+    def set_scf_rstctmo(self, rstctmo): 
+        """restrict MO """
+        self._data.control.rstctmo = rstctmo
 
     def set_scf_active_basis(self, active_basis):
         """Select basis set: 0 => info%basis

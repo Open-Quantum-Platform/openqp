@@ -19,6 +19,7 @@ def guess(mol):
 
     guess_type = mol.config["guess"]["type"]
     guess_file = 'compute orbitals'
+    swapmo= mol.config["guess"]["swapmo"]
 
     if guess_type == "huckel":
         hubas = try_basis("MINI_huckel", fallback=None)
@@ -94,6 +95,7 @@ def guess(mol):
         'guess_file': guess_file,
         'guess_alpha': alpha,
         'guess_beta': beta,
+        'guess_swapmo': swapmo,
     }
 
-    dump_log(mol, title='   PyQOP: Orbital Guess', section='guess', info=guess_info)
+    dump_log(mol, title='   PyOQP: Orbital Guess', section='guess', info=guess_info)
