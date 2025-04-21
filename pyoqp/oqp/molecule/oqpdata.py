@@ -381,6 +381,11 @@ class OQPData:
             _value = value
         elif isinstance(value, str):
             _value = np.frombuffer(np.bytes_(value), dtype=np.dtype('S1'))
+        elif isinstance(value, ffi.CData):
+            try:
+                _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)
+            except Exception as e:
+                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e
         else:
             _value = np.array(value)
 
