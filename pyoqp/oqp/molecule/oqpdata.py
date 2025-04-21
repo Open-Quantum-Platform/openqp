@@ -586,9 +586,6 @@ class OQPData:
         """Set CO-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation"""
         self._data.tddft.spc_coov = spc_coov
 
-    def set_tdhf_ixcore(self,ixcore):
-        """ This enables a method to extract core excitation by shifting MO energies and Fock matrix (MO) except list in ixcores """
-
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
         self._data.control.conf_print_threshold = conf_threshold
