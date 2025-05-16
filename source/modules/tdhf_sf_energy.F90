@@ -98,8 +98,12 @@ contains
       OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B, OQP_SM /)
 
     mol_mult = infos%mol_prop%mult
-    if (mol_mult/=3) call show_message('SF-TDDFT are available for ROHF/UHF ref. with ONLY triplet multiplicity(mult=3)',with_abort)
-
+    if (.not. (mol_mult == 3 .or. mol_mult == 4)) then
+      call show_message( &
+        'SF-TDDFT only supports mult=3 (triplet) or mult=4 (quartet) references', &
+        with_abort)
+    end if 
+    
     scf_type = infos%control%scftype
     if (scf_type==3) roref = .true.
 
@@ -378,7 +382,7 @@ contains
 
     do ist = 1, nstates
       call sfdmat(bvec_mo(:,ist),abxc,mo_a,ta,tb,nocca,noccb)
-      spin_square(ist) = get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,noccb)
+      spin_square(ist) = get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,noccb,nocca)
     end do
 
     call get_transitions(trans, nocca, noccb, nbf)
