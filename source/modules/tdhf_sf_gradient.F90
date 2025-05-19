@@ -84,11 +84,11 @@ contains
       OQP_DM_A, OQP_DM_B, OQP_td_abxc, OQP_td_p /)
 
     mol_mult = infos%mol_prop%mult
-    if (.not. (mol_mult == 3 .or. mol_mult == 4)) then
-      call show_message( &
-        'SF-TDDFT only supports mult=3 (triplet) or mult=4 (quartet) references', &
-        with_abort)
-    end if 
+!    if (.not. (mol_mult == 3 .or. mol_mult == 4)) then
+!      call show_message( &
+!        'SF-TDDFT only supports mult=3 (triplet) or mult=4 (quartet) references', &
+!        with_abort)
+!    end if 
 
     scf_type = infos%control%scftype
     if (scf_type==3) roref = .true.
