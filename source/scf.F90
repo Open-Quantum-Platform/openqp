@@ -522,7 +522,7 @@ contains
       use_soscf = .true.
       ! Pure SOSCF strategy
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                     maxvec=maxdiis, &
+                     maxvec=infos%control%maxit, &
                      subconvergers=[conv_soscf], &
                      thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
                      overlap=smat_full, &
@@ -1071,7 +1071,7 @@ contains
 
         if (H_U_gap < H_U_gap_crit) then
           ! Small gap detected, enable level shifting
-          vshift = 0.1_dp
+          !vshift = 0.1_dp
           write(IW,"(3x,64('-')/10x,&
                    &'Small HOMO-LUMO gap detected (',&
                    &F8.5,' au). Apply level vshift=',F6.4)") H_U_gap, vshift

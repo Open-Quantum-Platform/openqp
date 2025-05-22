@@ -694,6 +694,7 @@ module scf_converger
     real(kind=dp), allocatable :: s_history(:,:)  !< Step history (nvec, m_max)
     real(kind=dp), allocatable :: rho_history(:)  !< Curvature reciprocals (m_max)
     real(kind=dp), allocatable :: y_history(:,:)  !< Gradient difference history (nvec, m_max)
+    real(kind=dp), allocatable :: upd_history(:,:)! h_inv*dgrad history (nvec, m_max)
     real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
     real(kind=dp), allocatable :: step(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
@@ -717,6 +718,8 @@ module scf_converger
     procedure, private, pass :: calc_orb_grad => calc_orb_grad
     procedure, private, pass :: lbfgs_step => lbfgs_step
     procedure, private, pass :: rotate_orbs => rotate_orbs
+    procedure, private, pass :: bfgs_step => bfgs_step
+    procedure, private, pass :: rotate_orbs_so => rotate_orbs_so
     procedure, private, pass :: line_search => line_search
   end type soscf_converger
 
@@ -2254,6 +2257,8 @@ contains
       allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%y_history)) &
       allocate(self%y_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%upd_history)) &
+      allocate(self%upd_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%x_prev)) &
       allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%h_inv)) &
@@ -2287,6 +2292,7 @@ contains
     if (allocated(self%work_2)) deallocate(self%work_2)
     if (allocated(self%s_history)) deallocate(self%s_history)
     if (allocated(self%y_history)) deallocate(self%y_history)
+    if (allocated(self%upd_history)) deallocate(self%upd_history)
     if (allocated(self%grad)) deallocate(self%grad)
     if (allocated(self%grad_prev)) deallocate(self%grad_prev)
     if (allocated(self%x_prev)) deallocate(self%x_prev)
@@ -2385,12 +2391,14 @@ contains
     if (self%first_macro) then
       self%s_history = 0.0_dp
       self%y_history = 0.0_dp
+      self%upd_history = 0.0_dp
       self%grad_prev = 0.0_dp
       self%grad = 0.0_dp
       self%step = 0.0_dp
       self%x_prev = 0.0_dp
       self%m_history = 0
-      call self%init_hess_inv(mo_e_a, mo_e_b)
+      if (self%m_history == 0) &
+        call self%init_hess_inv(mo_e_a, mo_e_b)
       self%first_macro = .false.
       if (self%verbose>1) then
         write(iw, '(A,I3)')     'DEBUG: soscf_run: Input: soscf_start=', self%soscf_start
@@ -2403,81 +2411,61 @@ contains
       end if
     end if
 
-    if (self%verbose > 0) write(iw, '(A)') 'SOSCF: Setup not called, returning'
-
-    call self%calc_orb_grad(self%grad_prev, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
-    grad_norm = sqrt(dot_product(self%grad_prev, self%grad_prev))
+    call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
+    grad_norm = sqrt(dot_product(self%grad, self%grad))
     if (self%verbose>1) &
       write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:1:calc_orb_grad: iter=', 0, ' grad_norm=', grad_norm
 
     if (self%verbose>1) &
       write(iw, '(A,E20.10)') 'DEBUG soscf_run: init: grad_thresh=', self%grad_thresh
-    ! --- Step 3: Micro-iteration loop ---
-    do iter = 1, self%max_iter
-
-      ! Check convergence
-      if (iter > self%min_iter .and. grad_norm < self%grad_thresh) then
-        if (self%verbose>1) &
-          write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
-        exit
-      end if
-
-      ! Compute search direction using LBFGS
-      call self%lbfgs_step(self%step, self%grad_prev)
-      if (self%verbose>1) then
-        write(iw, '(A,E20.10)') 'DEBUG: Cos(theta) step vs -grad = ', &
-         -dot_product(self%step, self%grad_prev) &
-         / (sqrt(dot_product(self%step, self%step) &
-           * dot_product(self%grad_prev, self%grad_prev)))
-        write(iw, '(A,I3,A,E20.10)') &
-          'DEBUG soscf_run:2:lbfgs_step: iter=',iter, &
-          ' dot_product(step, step)=', dot_product(self%step, self%step)
-        write(iw, '(A,I3,A,E20.10)') &
-          'DEBUG soscf_run:2:lbfgs_step: iter=',iter, &
-          ' dot_product(grad, step)=', dot_product(self%grad_prev, self%step)
-      end if
-
-      alpha = 1.0_dp
-      call self%line_search(alpha, self%grad_prev, self%step, &
-                            fock_ao_a, fock_ao_b, occ_a, occ_b, &
-                            self%mo_a, self%mo_b, pfon)
-
-      ! Compute new gradient
-      call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
-      grad_norm = sqrt(dot_product(self%grad, self%grad))
+    ! Check convergence
+    if (iter > self%min_iter .and. grad_norm < self%grad_thresh) then
       if (self%verbose>1) &
-        write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:5:calc_orb_grad: iter=', iter, ' grad_norm=', grad_norm
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
+    end if
 
-      ! Update LBFGS history
-      if (self%verbose>1) &
-        write(iw, '(A,I3)') 'DEBUG soscf_run:6:Update LBFGS history: iter=', iter
-      if (self%m_history < self%m_max) then
-        self%m_history = self%m_history + 1
+    ! Compute search direction using J. Phys. Chem. 1992, 96, 9768-9774
+    call self%bfgs_step(self%step)
+    if (self%scf_type == 1) then
+!       call self%rotate_orbs(self%step, self%mo_a)
+      call self%rotate_orbs_so(self%step, self%mo_a)
+      if (associated(pfon)) then
+        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
+        call pfon%compute_occupations(mo_e_a)
+        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2)
       else
-        self%s_history(:, 1:self%m_max-1) = self%s_history(:, 2:self%m_max)
-        self%y_history(:, 1:self%m_max-1) = self%y_history(:, 2:self%m_max)
-        self%rho_history(1:self%m_max-1) = self%rho_history(2:self%m_max)
+        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
       end if
-      self%s_history(:, self%m_history) = alpha * self%step
-      self%y_history(:, self%m_history) = self%grad - self%grad_prev
-      sy = dot_product(self%s_history(:, self%m_history), self%y_history(:, self%m_history))
-      if (sy > 1.0e-12_dp) then
-        self%rho_history(self%m_history) = 1.0_dp / sy
+    elseif(self%scf_type == 2) then
+      call self%rotate_orbs_so(self%step, self%mo_a, self%mo_b)
+      if (associated(pfon)) then
+        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
+        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
+        call pfon%compute_occupations(mo_e_a, mo_e_b)
+        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
       else
-        self%rho_history(self%m_history) = 0.0_dp
+        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
+        call orb_to_dens(self%dens_b, self%mo_b, occ_b, self%nocc_b, self%nbf, self%nbf)
       end if
-      self%x_prev = alpha * self%step
-      self%grad_prev = self%grad
-
-    end do
+    elseif(self%scf_type == 3) then
+      call self%rotate_orbs_so(self%step, self%mo_a)
+      self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
+      if (associated(pfon)) then
+        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
+        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
+        call pfon%compute_occupations(mo_e_a, mo_e_b)
+        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
+      else
+        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
+        call orb_to_dens(self%dens_b, self%mo_b, occ_b, self%nocc_b, self%nbf, self%nbf)
+      end if
+    end if
+    self%m_history = self%m_history + 1
+    self%grad_prev = self%grad
 
     ! --- Step 4: Update result and converger_data ---
     res%ierr = 0
-    res%error = grad_norm
-    if (iter > self%max_iter) then
-      write(iw, '(A,I3,A)') 'SOSCF did not converge within ', self%max_iter, ' micro-iterations'
-      res%ierr = 4  ! Max iterations exceeded
-    end if
+    res%error = grad_norm/self%nvec
 
     ! Update MO coefficients and compute MO energies
     self%dat%buffer(self%dat%slot)%mo_a = self%mo_a
@@ -2711,6 +2699,160 @@ contains
       end select
     end associate
   end subroutine calc_orb_grad
+
+
+
+  subroutine bfgs_step(self, step)!, grad)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), intent(out) :: step(:)
+
+    real(kind=dp) :: displn(self%nvec)
+    real(kind=dp) :: dgrad(self%nvec)
+    real(kind=dp) :: updti(self%nvec)
+    real(kind=dp) :: alpha, beta, t, t1, t2, t3, t4, scale, norm_disp
+    real(kind=dp) :: s1, s2, s3, s4, s5, s6
+    integer :: i, j
+
+    ! Initialize displacement and preconditioned gradient difference
+    if (self%m_history < 1) then
+      scale = 1.0_dp
+      step = -scale * self%h_inv * self%grad
+      where (isnan(step)) step = 0.0_dp
+    else
+      displn = self%h_inv * self%grad
+      dgrad = self%grad-self%grad_prev
+      updti = self%h_inv * dgrad
+      if (self%m_history > 1) then
+        do i = 1, self%m_history-1
+          s1 = dot_product(self%s_history(:,i), self%y_history(:,i))
+          s2 = dot_product(self%y_history(:,i), self%upd_history(:,i))
+          s3 = dot_product(self%s_history(:,i), self%grad)
+          s4 = dot_product(self%upd_history(:,i), self%grad)
+          s5 = dot_product(self%s_history(:,i), dgrad)
+          s6 = dot_product(self%upd_history(:,i), dgrad)
+
+          s1 = 1.0d0 / s1
+          s2 = 1.0d0 / s2
+          t = 1.0d0 + s1 / s2
+          t2 = s1 * s3
+          t4 = s1 * s5
+          t1 = t * t2 - s1 * s4
+          t3 = t * t4 - s1 * s6
+          displn = displn + t1 * self%s_history(:,i) - t2 * self%upd_history(:,i)
+          updti  = updti  + t3 * self%s_history(:,i) - t4 * self%upd_history(:,i)
+        end do
+      end if
+
+      ! Final correction using current dgrad and updti
+      s1 = dot_product(step, dgrad)
+      s2 = dot_product(dgrad, updti)
+      s3 = dot_product(step, self%grad)
+      s4 = dot_product(updti, self%grad)
+
+      s1 = 1.0_dp / s1
+      s2 = 1.0_dp /s2
+      t = 1.0_dp + s1 / s2
+      t2 = s1 * s3
+      t1 = t * t2 - s1 * s4
+      displn = displn + t1 * step - t2 * updti
+      self%s_history(:, self%m_history) = self%step
+      self%y_history(:, self%m_history) = dgrad
+      self%upd_history(:, self%m_history) = updti
+      step = -displn
+    end if
+    norm_disp = sqrt(dot_product(step, step)/self%nvec)
+    if (norm_disp > 0.1)  then
+       step = step*0.1/norm_disp
+    end if
+  end subroutine bfgs_step
+
+  subroutine rotate_orbs_so(self, step, mo_a, mo_b)
+     implicit none
+
+     class(soscf_converger) :: self
+     real(kind=dp), intent(in)        :: step(:)
+     real(kind=dp), intent(out)       :: mo_a(:,:)
+     real(kind=dp), intent(out), optional :: mo_b(:,:)
+
+     integer            :: nbf, i, j, idx, occ, virt, istart
+     real(kind=dp), allocatable :: K(:,:), G(:,:), tmp(:,:)
+
+     nbf = self%nbf
+     allocate(K(nbf,nbf), G(nbf,nbf), tmp(nbf,nbf), source=0.0_dp)
+
+  !build K from step
+  !   idx = 0
+  !   do occ = 1, self%nocc_a
+  !     if (occ <= self%nocc_b ) then
+  !       istart = self%nocc_b+1
+  !     else
+  !       istart = self%nocc_a +1
+  !     end if
+  !     do virt= istart, nbf
+  !       idx = idx +1
+  !         K(virt,occ) =  step(idx)
+  !         K(occ,virt) = -step(idx)
+  !     end do
+  !   end do
+     idx = 0
+     do virt = self%nocc_a+1, nbf
+        do occ = 1, self%nocc_a
+           idx         = idx + 1
+           K(virt,occ) =  step(idx)
+           K(occ,virt) = -step(idx)
+        end do
+     end do
+
+  !2. G = I + K
+     G = 0.0_dp
+     do i = 1, nbf
+        G(i,i) = 1.0_dp
+     end do
+     G = G + K
+
+  !Gram–Schmidt (with DOT_PRODUCT)
+     do i = 1, nbf
+        call dscal(nbf, 1.0_dp / sqrt(dot_product(G(:,i), G(:,i))), G(1,i), 1)
+        if (i == nbf) cycle
+        do j = i+1, nbf
+           call daxpy(nbf, -dot_product(G(:,i), G(:,j)), G(1,i), 1, G(1,j), 1)
+        end do
+     end do
+
+  !rotate α
+     call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, G, nbf, 0.0_dp, &
+                self%work_2, nbf)
+     mo_a = self%work_2
+  ! optional β
+     if (present(mo_b)) then
+        K = 0.0_dp
+        do virt = self%nocc_b+1, nbf
+           do occ = 1, self%nocc_b
+              idx         = idx + 1
+              K(virt,occ) =  step(idx)
+              K(occ,virt) = -step(idx)
+           end do
+        end do
+        G = 0.0_dp
+        do i = 1, nbf
+           G(i,i) = 1.0_dp
+        end do
+        G = G + K
+        do i = 1, nbf
+           call dscal(nbf, 1.0_dp / sqrt(dot_product(G(:,i), G(:,i))), G(1,i), 1)
+           if (i == nbf) cycle
+           do j = i+1, nbf
+              call daxpy(nbf, -dot_product(G(:,i), G(:,j)), G(1,i), 1, G(1,j), 1)
+           end do
+        end do
+        call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, G, nbf, 0.0_dp, &
+                   self%work_2, nbf)
+        mo_b = self%work_2
+     end if
+
+     deallocate(K, G, tmp)
+  end subroutine rotate_orbs_so
 
   !> @brief Computes the orbital rotation step using L-BFGS for RHF, UHF, or ROHF.
   !> @details Performs the two-loop L-BFGS algorithm to compute step = -H * grad.
