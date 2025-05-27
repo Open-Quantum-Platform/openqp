@@ -178,7 +178,7 @@ contains
     real(kind=dp), allocatable, target :: smat_full(:,:)  ! Full overlap matrix
     real(kind=dp), allocatable, target :: pdmat(:,:)  ! Density matrices in triangular format
     real(kind=dp), allocatable, target :: pfock(:,:)  ! Fock matrices in triangular format
-    real(kind=dp), allocatable, target :: rohf_bak(:)  ! Backup for ROHF Fock
+    real(kind=dp), allocatable, target :: rohf_bak(:,:)  ! Backup for ROHF Fock
     real(kind=dp), allocatable, target :: dold(:,:)  ! Old density for incremental builds
     real(kind=dp), allocatable, target :: fold(:,:)  ! Old Fock for incremental builds
     real(kind=dp), allocatable :: pfxc(:,:)  ! DFT exchange-correlation matrix
@@ -234,7 +234,7 @@ contains
       scf_type = scf_rohf
       scf_name = "ROHF"
       nfocks = 2
-      diis_nfocks = 1
+      diis_nfocks = 2
     end select
 
     ! Get electron counts
@@ -290,7 +290,7 @@ contains
     allocate(smat_full(nbf, nbf), &
              pdmat(nbf_tri, nfocks), &
              pfock(nbf_tri, nfocks), &
-             rohf_bak(nbf_tri), &
+             rohf_bak(nbf_tri, nfocks), &
              qmat(nbf, nbf), &
              work1(nbf,nbf), &
              work2(nbf,nbf), &
@@ -748,7 +748,8 @@ contains
       if (scf_type == scf_rohf) then
         ! Store the original alpha Fock matrix before ROHF transformation
         ! This is needed to preserve it for energy evaluation and printing
-        rohf_bak = pfock(:,1)
+        rohf_bak(:,1) = pfock(:,1)
+        rohf_bak(:,2) = pfock(:,2)
 
         ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
@@ -828,7 +829,16 @@ contains
                      e=etot, &
                      mo_a=mo_a, &
                      mo_e_a=mo_energy_a)
-          case (scf_uhf, scf_rohf)
+          case (scf_rohf)
+            call conv%add_data( &
+                     f=rohf_bak(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b)
+          case (scf_uhf)
             call conv%add_data( &
                      f=pfock(:,1:diis_nfocks), &
                      dens=pdmat(:,1:diis_nfocks), &
@@ -1137,7 +1147,7 @@ contains
       dmat_a = pdmat(:,1)
       dmat_b = pdmat(:,2)
     case (scf_rohf)
-      fock_a = rohf_bak
+      fock_a = rohf_bak(:,1)
       call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
       dmat_a = pdmat(:,1) - pdmat(:,2)
       dmat_b = pdmat(:,2)

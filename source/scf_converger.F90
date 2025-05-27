@@ -702,6 +702,7 @@ module scf_converger
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
     real(kind=dp), allocatable :: work_1(:,:)     !< Work matrix (nbf, nbf)
     real(kind=dp), allocatable :: work_2(:,:)     !< Work matrix (nbf, nbf)
+    real(kind=dp), allocatable :: work_3(:,:)     !< Work matrix (nbf, nbf)
     real(kind=dp), allocatable :: mo_a(:,:)       !< MOs matrix (nbf, nbf)
     real(kind=dp), allocatable :: mo_b(:,:)       !< MOs matrix (nbf, nbf)
     real(kind=dp), allocatable :: dens_a(:)       !< MOs matrix (nbf_tri)
@@ -2221,10 +2222,10 @@ contains
     ! Determine SCF type based on nfocks and occupancy
     if (self%nfocks == 1 .and. self%nocc_a == self%nocc_b) then
       self%scf_type = 1  ! RHF
+    else if (self%nfocks == 2 .and. self%nocc_a > self%nocc_b) then
+      self%scf_type = 3  ! ROHF
     else if (self%nfocks == 2) then
       self%scf_type = 2  ! UHF
-    else if (self%nfocks == 1 .and. self%nocc_a > self%nocc_b) then
-      self%scf_type = 3  ! ROHF
     end if
 
     ! Calculate gradient vector size (nvec)
@@ -2245,7 +2246,8 @@ contains
       allocate(self%work_1(self%nbf, self%nbf), stat=istat, source=0.0_dp)
     if (.not. allocated(self%work_2)) &
       allocate(self%work_2(self%nbf, self%nbf), stat=istat, source=0.0_dp)
-
+    if (.not. allocated(self%work_3)) &
+      allocate(self%work_3(self%nbf, self%nbf), stat=istat, source=0.0_dp)
     ! Allocate L-BFGS history arrays
     if (.not. allocated(self%s_history)) &
       allocate(self%s_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
@@ -2290,6 +2292,7 @@ contains
     if (allocated(self%rho_history)) deallocate(self%rho_history)
     if (allocated(self%work_1)) deallocate(self%work_1)
     if (allocated(self%work_2)) deallocate(self%work_2)
+    if (allocated(self%work_3)) deallocate(self%work_3)
     if (allocated(self%s_history)) deallocate(self%s_history)
     if (allocated(self%y_history)) deallocate(self%y_history)
     if (allocated(self%upd_history)) deallocate(self%upd_history)
@@ -2496,7 +2499,7 @@ contains
     real(kind=dp), pointer, intent(in) :: mo_e_b(:)
 
     real(kind=dp) :: diff, scale
-    integer :: i, a, k
+    integer :: i, a, k, istart
 
     associate (nbf       => self%nbf, &
                nocc_a    => self%nocc_a, &
@@ -2508,16 +2511,21 @@ contains
       case (1) ! RHF: Closed-shell system
         ! Single set of orbitals, nocc_a = nocc_b, 4 * (ε_a - ε_i) scaling
         k = 0
-        do a = nocc_a + 1, nbf
-          do i = 1, nocc_a
-            k = k + 1
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nocc_b+1
+            scale = 0.25_dp  ! Closed-virtual: like RHF
+          else
+            istart = nocc_a +1
+            scale = 0.25_dp   ! Open-virtual: like UHF (singly occupied)
+          end if
+          do a= istart, nbf
+            k = k +1
             diff = mo_e_a(a) - mo_e_a(i)
             if (abs(diff) < thresh) then
-              diff = merge(thresh + lvl_shift, &
-                          -thresh - lvl_shift, &
-                           diff >= 0.0_dp)
+               diff = sign(thresh + lvl_shift, diff)
             end if
-            self%h_inv(k) = 0.25_dp / diff  ! 1 / (4 * (ε_a - ε_i))
+            self%h_inv(k) = scale /diff
           end do
         end do
 
@@ -2556,22 +2564,23 @@ contains
         !          open (nocc_b < j <= nocc_a)
         !          virtual (j > nocc_a)
         k = 0
-        do a = nocc_a + 1, nbf
-          do i = 1, nocc_a
-            k = k + 1
-            diff = mo_e_a(a) - mo_e_a(i)  ! Single set of energies
-            if (abs(diff) < thresh) then
-              diff = merge(thresh + lvl_shift, &
-                          -thresh - lvl_shift, &
-                           diff >= 0.0_dp)
-            end if
-            ! Scaling depends on orbital type
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nocc_b+1
+            scale = 0.25_dp  ! Closed-virtual: like RHF
+          else
+            istart = nocc_a +1
+            scale = 0.50_dp   ! Open-virtual: like UHF (singly occupied)
+          end if
+          do a= istart, nbf
+            k = k +1
             if (i <= nocc_b) then
-              scale = 0.25_dp  ! Closed-virtual: like RHF
-            else
-              scale = 0.5_dp   ! Open-virtual: like UHF (singly occupied)
+              diff = mo_e_a(a) - mo_e_a(i)
+              if (abs(diff) < thresh) then
+                 diff = sign(thresh + lvl_shift, diff)
+              end if
             end if
-            self%h_inv(k) = scale / diff
+            self%h_inv(k) = scale /diff
           end do
         end do
       end select
@@ -2596,7 +2605,7 @@ contains
     real(kind=dp), intent(in)          :: mo_a(:,:)
     real(kind=dp), intent(in)          :: mo_b(:,:)
 
-    integer :: i, a, k, nvir_a, nvir_b
+    integer :: i, a, k, nvir_a, nvir_b, istart
 
     if (.not. ASSOCIATED(fock_a)) &
       call show_message('Failed to use Fock array in calc_orb_grad', &
@@ -2627,9 +2636,14 @@ contains
                            self%work_2, nbf, &
                    0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
         k = 0
-        do a = 1, nvir_a
-          do i = 1, nocc_a
-            k = k + 1
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nbf - nocc_b
+          else
+            istart = nbf - nocc_a
+          end if
+          do a= 1, istart
+            k = k +1
             grad(k) = 4.0_dp * self%work_1(i, a)
           end do
         end do
@@ -2648,6 +2662,7 @@ contains
                    1.0_dp, mo_a(:, 1:nocc_a), nbf, &
                            self%work_2, nbf, &
                    0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+
         k = 0
         do a = 1, nvir_a
           do i = 1, nocc_a
@@ -2676,7 +2691,9 @@ contains
 
       case (3)  ! ROHF
         self%work_1 = 0.0_dp
+        self%work_3 = 0.0_dp
         call unpack_matrix(fock_a, self%work_1)
+        call unpack_matrix(fock_b, self%work_3)
         call dgemm('N', 'N', nbf, nvir_a, nbf, &
                    1.0_dp, self%work_1, nbf, &
                            mo_a(:, nocc_a+1:), nbf, &
@@ -2685,14 +2702,32 @@ contains
                    1.0_dp, mo_a(:, 1:nocc_a), nbf, &
                            self%work_2, nbf, &
                    0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        self%work_2 = 0.0_dp
+        call dgemm('N', 'N', nbf, nvir_b, nbf, &
+                   1.0_dp, self%work_3, nbf, &
+                           mo_a(:, nocc_b+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_b, nvir_b, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_b), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_3(1:nocc_b, 1:nvir_b), nocc_b)
         k = 0
-        do a = 1, nvir_a
-          do i = 1, nocc_a
-            k = k + 1
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nbf - nocc_b
+          else
+            istart = nbf - nocc_a
+          end if
+          do a= 1, istart
+            k = k +1
             if (i <= nocc_b) then
-              grad(k) = 4.0_dp * self%work_1(i, a)  ! Closed-shell
+              if (a <= (nocc_a - nocc_b)) then
+                grad(k) = 2.0_dp * self%work_3(i,a)
+              else
+                grad(k) = 2.0_dp * (self%work_3(i,a) + self%work_1(i, a - nocc_a + nocc_b))
+              end if
             else
-              grad(k) = 2.0_dp * self%work_1(i, a)  ! Open-shell
+              grad(k) = 2.0_dp * self%work_1(i, a)
             end if
           end do
         end do
@@ -2782,27 +2817,27 @@ contains
      allocate(K(nbf,nbf), G(nbf,nbf), tmp(nbf,nbf), source=0.0_dp)
 
   !build K from step
-  !   idx = 0
-  !   do occ = 1, self%nocc_a
-  !     if (occ <= self%nocc_b ) then
-  !       istart = self%nocc_b+1
-  !     else
-  !       istart = self%nocc_a +1
-  !     end if
-  !     do virt= istart, nbf
-  !       idx = idx +1
-  !         K(virt,occ) =  step(idx)
-  !         K(occ,virt) = -step(idx)
-  !     end do
-  !   end do
      idx = 0
-     do virt = self%nocc_a+1, nbf
-        do occ = 1, self%nocc_a
-           idx         = idx + 1
+     do occ = 1, self%nocc_a
+       if (occ <= self%nocc_b ) then
+         istart = self%nocc_b+1
+       else
+         istart = self%nocc_a +1
+       end if
+       do virt= istart, nbf
+         idx = idx +1
            K(virt,occ) =  step(idx)
            K(occ,virt) = -step(idx)
-        end do
+       end do
      end do
+!     idx = 0
+!     do virt = self%nocc_a+1, nbf
+!        do occ = 1, self%nocc_a
+!           idx         = idx + 1
+!           K(virt,occ) =  step(idx)
+!           K(occ,virt) = -step(idx)
+!        end do
+!     end do
 
   !2. G = I + K
      G = 0.0_dp
