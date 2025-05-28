@@ -570,6 +570,7 @@ module scf_converger
     integer :: verbose = 0                        !< Verbosity level
     integer :: state = 0                          !< Current state (0 = not initialized, 1 = initialized)
     real(kind=dp) :: current_error = 1.0e99_dp    !< Maximum absolute value of current DIIS error
+    integer :: scf_type = 0
   contains
     procedure, pass :: init     => scf_conv_init
     procedure, pass :: clean    => scf_conv_clean
@@ -1247,7 +1248,7 @@ contains
   !> @param[in] num_focks 1 if R/ROHF, 2 if UHF
   !> @param[in] verbose Verbosity level
   subroutine scf_conv_init(self, ldim, nelec_a, nelec_b, maxvec, subconvergers, thresholds, &
-                          overlap, overlap_sqrt, num_focks, verbose)
+                          overlap, overlap_sqrt, num_focks, scf_type ,verbose)
     class(scf_conv), intent(inout) :: self
     integer, intent(in) :: ldim
     integer, optional, intent(in) :: nelec_a
@@ -1259,6 +1260,7 @@ contains
     integer, optional, intent(in) :: num_focks
     integer, optional, intent(in) :: verbose
     integer :: nfocks, istat, i
+    integer, optional, intent(in) :: scf_type
 
     if (self%state /= conv_state_not_initialized) call self%clean()
 
@@ -1278,6 +1280,8 @@ contains
 
     nfocks = 1
     if (present(num_focks)) nfocks = num_focks
+
+    if (present(scf_type)) self%scf_type = scf_type
 
     self%verbose = 0
     if (present(verbose)) self%verbose = verbose
@@ -2215,18 +2219,20 @@ contains
     self%overlap   => params%overlap
     self%overlap_invsqrt => params%overlap_sqrt
     self%first_macro = .true.
+    self%scf_type = params%scf_type
 
     nvir_a = self%nbf - self%nocc_a
     nvir_b = self%nbf - self%nocc_b
 
-    ! Determine SCF type based on nfocks and occupancy
-    if (self%nfocks == 1 .and. self%nocc_a == self%nocc_b) then
-      self%scf_type = 1  ! RHF
-    else if (self%nfocks == 2 .and. self%nocc_a > self%nocc_b) then
-      self%scf_type = 3  ! ROHF
-    else if (self%nfocks == 2) then
-      self%scf_type = 2  ! UHF
-    end if
+!    ! Determine SCF type based on nfocks and occupancy
+!    if (self%nfocks == 1 .and. self%nocc_a == self%nocc_b) then
+!      self%scf_type = 1  ! RHF
+!    else if (self%nfocks == 2 .and. self%nocc_a > self%nocc_b) then
+!      self%scf_type = 3  ! ROHF
+!    else if (self%nfocks == 2) then
+!      self%scf_type = 2  ! UHF
+!    end if
+     print *, "self%scf_type",self%scf_type
 
     ! Calculate gradient vector size (nvec)
     select case (self%scf_type)
@@ -2430,8 +2436,8 @@ contains
     ! Compute search direction using J. Phys. Chem. 1992, 96, 9768-9774
     call self%bfgs_step(self%step)
     if (self%scf_type == 1) then
-!       call self%rotate_orbs(self%step, self%mo_a)
-      call self%rotate_orbs_so(self%step, self%mo_a)
+       call self%rotate_orbs(self%step, self%mo_a)
+!      call self%rotate_orbs_so(self%step, self%mo_a)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
         call pfon%compute_occupations(mo_e_a)
@@ -2533,31 +2539,55 @@ contains
         ! Alpha occupied -> alpha virtual, beta occupied -> beta virtual
         k = 0
         ! Alpha rotations
-        do a = nocc_a + 1, nbf
-          do i = 1, nocc_a
-            k = k + 1
+        do i = 1, nocc_a
+          do a= nocc_a+1, nbf
+            k = k +1
             diff = mo_e_a(a) - mo_e_a(i)
             if (abs(diff) < thresh) then
-              diff = merge(thresh + lvl_shift, &
-                          -thresh - lvl_shift, &
-                           diff >= 0.0_dp)
+               diff = sign(thresh + lvl_shift, diff)
             end if
-            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+            self%h_inv(k) = 0.5_dp /diff
           end do
         end do
         ! Beta rotations
-        do a = nocc_b + 1, nbf
-          do i = 1, nocc_b
-            k = k + 1
-            diff = mo_e_b(a) - mo_e_b(i)
+        do i = 1, nocc_b
+          do a= nocc_b+1, nbf
+            k = k +1
+            diff = mo_e_a(a) - mo_e_a(i)
             if (abs(diff) < thresh) then
-              diff = merge(thresh + lvl_shift, &
-                          -thresh - lvl_shift, &
-                           diff >= 0.0_dp)
+               diff = sign(thresh + lvl_shift, diff)
             end if
-            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+            self%h_inv(k) = 0.5_dp /diff
           end do
         end do
+
+!        k = 0
+!        ! Alpha rotations
+!        do a = nocc_a + 1, nbf
+!          do i = 1, nocc_a
+!            k = k + 1
+!            diff = mo_e_a(a) - mo_e_a(i)
+!            if (abs(diff) < thresh) then
+!              diff = merge(thresh + lvl_shift, &
+!                          -thresh - lvl_shift, &
+!                           diff >= 0.0_dp)
+!            end if
+!            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+!          end do
+!        end do
+        ! Beta rotations
+!        do a = nocc_b + 1, nbf
+!          do i = 1, nocc_b
+!            k = k + 1
+!            diff = mo_e_b(a) - mo_e_b(i)
+!            if (abs(diff) < thresh) then
+!              diff = merge(thresh + lvl_shift, &
+!                          -thresh - lvl_shift, &
+!                           diff >= 0.0_dp)
+!            end if
+!            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
+!          end do
+!        end do
 
       case (3) ! ROHF: Restricted open-shell
         ! Regions: closed (j <= nocc_b)
@@ -2662,11 +2692,10 @@ contains
                    1.0_dp, mo_a(:, 1:nocc_a), nbf, &
                            self%work_2, nbf, &
                    0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
-
         k = 0
-        do a = 1, nvir_a
-          do i = 1, nocc_a
-            k = k + 1
+        do i = 1, nocc_a
+          do a= 1, nvir_a
+            k = k +1
             grad(k) = 2.0_dp * self%work_1(i, a)
           end do
         end do
@@ -2682,9 +2711,9 @@ contains
                    1.0_dp, mo_b(:, 1:nocc_b), nbf, &
                            self%work_2, nbf, &
                    0.0_dp, self%work_1(1:nocc_b, 1:nvir_b), nocc_b)
-        do a = 1, nvir_b
-          do i = 1, nocc_b
-            k = k + 1
+        do i = 1, nocc_b
+          do a= 1, nvir_b
+            k = k +1
             grad(k) = 2.0_dp * self%work_1(i, a)
           end do
         end do
@@ -2734,8 +2763,6 @@ contains
       end select
     end associate
   end subroutine calc_orb_grad
-
-
 
   subroutine bfgs_step(self, step)!, grad)
     implicit none
@@ -2812,17 +2839,30 @@ contains
 
      integer            :: nbf, i, j, idx, occ, virt, istart
      real(kind=dp), allocatable :: K(:,:), G(:,:), tmp(:,:)
+     integer            :: nocc_a, nocc_b
 
      nbf = self%nbf
      allocate(K(nbf,nbf), G(nbf,nbf), tmp(nbf,nbf), source=0.0_dp)
 
   !build K from step
+     select case (self%scf_type)
+       case (1)
+         nocc_a = self%nocc_a
+         nocc_b = self%nocc_a
+       case (3)
+         nocc_a = self%nocc_a
+         nocc_b = self%nocc_b
+       case (2)
+         nocc_a = self%nocc_a
+         nocc_b = self%nocc_a
+     end select
+
      idx = 0
-     do occ = 1, self%nocc_a
-       if (occ <= self%nocc_b ) then
-         istart = self%nocc_b+1
+     do occ = 1, nocc_a
+       if (occ <= nocc_b ) then
+         istart = nocc_b+1
        else
-         istart = self%nocc_a +1
+         istart = nocc_a +1
        end if
        do virt= istart, nbf
          idx = idx +1
@@ -2830,14 +2870,6 @@ contains
            K(occ,virt) = -step(idx)
        end do
      end do
-!     idx = 0
-!     do virt = self%nocc_a+1, nbf
-!        do occ = 1, self%nocc_a
-!           idx         = idx + 1
-!           K(virt,occ) =  step(idx)
-!           K(occ,virt) = -step(idx)
-!        end do
-!     end do
 
   !2. G = I + K
      G = 0.0_dp
@@ -2861,14 +2893,24 @@ contains
      mo_a = self%work_2
   ! optional β
      if (present(mo_b)) then
+        if (self%scf_type == 2) then
+          nocc_a = self%nocc_b
+          nocc_b = self%nocc_b
+        end if
         K = 0.0_dp
-        do virt = self%nocc_b+1, nbf
-           do occ = 1, self%nocc_b
-              idx         = idx + 1
+        do occ = 1, nocc_a
+          if (occ <= nocc_b ) then
+            istart = nocc_b+1
+          else
+            istart = nocc_a +1
+          end if
+          do virt= istart, nbf
+            idx = idx +1
               K(virt,occ) =  step(idx)
               K(occ,virt) = -step(idx)
-           end do
+          end do
         end do
+
         G = 0.0_dp
         do i = 1, nbf
            G(i,i) = 1.0_dp
@@ -3103,45 +3145,45 @@ contains
       temp = scaled_mat
       rot_mat = rot_mat + temp
 
-      ! Second term: A^2/2!
-      call dgemm('N', 'N', ldim, ldim, ldim, &
-                 1.0_dp, scaled_mat, ldim, &
-                         scaled_mat, ldim, &
-                 0.0_dp, temp, ldim)
-      rot_mat = rot_mat + 0.5_dp * temp
-
-      ! Third term: A^3/3!
-      call dgemm('N', 'N', ldim, ldim, ldim, &
-                 1.0_dp, scaled_mat, ldim, &
-                         temp, ldim, &
-                 0.0_dp, scaled_mat, ldim)
-      rot_mat = rot_mat + (1.0_dp / 6.0_dp) * scaled_mat
-
-      ! Fourth term: A^4/4!
-      call dgemm('N', 'N', ldim, ldim, ldim, &
-                 1.0_dp, scaled_mat, ldim, &
-                         temp, ldim, &
-                 0.0_dp, scaled_mat, ldim)
-      rot_mat = rot_mat + (1.0_dp / 24.0_dp) * scaled_mat
-
-      ! Fifth term: A^5/5!
-      call dgemm('N', 'N', ldim, ldim, ldim, &
-                 1.0_dp, scaled_mat, ldim, &
-                         temp, ldim, &
-                 0.0_dp, scaled_mat, ldim)
-      rot_mat = rot_mat + (1.0_dp / 120.0_dp) * scaled_mat
+!      ! Second term: A^2/2!
+!      call dgemm('N', 'N', ldim, ldim, ldim, &
+!                 1.0_dp, scaled_mat, ldim, &
+!                         scaled_mat, ldim, &
+!                 0.0_dp, temp, ldim)
+!      rot_mat = rot_mat + 0.5_dp * temp
+!
+!      ! Third term: A^3/3!
+!      call dgemm('N', 'N', ldim, ldim, ldim, &
+!                 1.0_dp, scaled_mat, ldim, &
+!                         temp, ldim, &
+!                 0.0_dp, scaled_mat, ldim)
+!      rot_mat = rot_mat + (1.0_dp / 6.0_dp) * scaled_mat
+!
+!      ! Fourth term: A^4/4!
+!      call dgemm('N', 'N', ldim, ldim, ldim, &
+!                 1.0_dp, scaled_mat, ldim, &
+!                         temp, ldim, &
+!                 0.0_dp, scaled_mat, ldim)
+!      rot_mat = rot_mat + (1.0_dp / 24.0_dp) * scaled_mat
+!
+!      ! Fifth term: A^5/5!
+!      call dgemm('N', 'N', ldim, ldim, ldim, &
+!                 1.0_dp, scaled_mat, ldim, &
+!                         temp, ldim, &
+!                 0.0_dp, scaled_mat, ldim)
+!      rot_mat = rot_mat + (1.0_dp / 120.0_dp) * scaled_mat
 
       !---------------------------------------------------------------------------
       ! Recover exp(A) by squaring scale_factor times
       ! Using the identity: exp(A) = [exp(A/2^n)]^(2^n)
       !---------------------------------------------------------------------------
-      do i = 1, scale_factor
-        call dgemm('N', 'N', ldim, ldim, ldim, &
-                   1.0_dp, rot_mat, ldim, &
-                           rot_mat, ldim, &
-                   0.0_dp, temp, ldim)
-        rot_mat = temp
-      end do
+!      do i = 1, scale_factor
+!        call dgemm('N', 'N', ldim, ldim, ldim, &
+!                   1.0_dp, rot_mat, ldim, &
+!                           rot_mat, ldim, &
+!                   0.0_dp, temp, ldim)
+!        rot_mat = temp
+!      end do
 
     end subroutine exp_scaling
 

@@ -132,6 +132,7 @@ contains
     ! DIIS Convergence Acceleration Parameters
     !==============================================================================
     integer :: diis_nfocks       ! Number of Fock matrices for DIIS
+    integer :: soscf_nfocks      ! Number of Fock matrices for SOSCF
     integer :: diis_reset        ! Frequency of DIIS reset
     integer :: maxdiis           ! Maximum number of DIIS vectors
     real(kind=dp) :: diis_error  ! DIIS error matrix norm
@@ -225,16 +226,19 @@ contains
       scf_name = "RHF"
       nfocks = 1
       diis_nfocks = 1
+      soscf_nfocks = 1
     case (2)
       scf_type = scf_uhf
       scf_name = "UHF"
       nfocks = 2
       diis_nfocks = 2
+      soscf_nfocks = 2
     case (3)
       scf_type = scf_rohf
       scf_name = "ROHF"
       nfocks = 2
-      diis_nfocks = 2
+      diis_nfocks = 1 
+      soscf_nfocks = 2
     end select
 
     ! Get electron counts
@@ -527,7 +531,8 @@ contains
                      thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
                      overlap=smat_full, &
                      overlap_sqrt=qmat, &
-                     num_focks=diis_nfocks, &
+                     num_focks=soscf_nfocks, &
+                     scf_type=infos%control%scftype, &
                      verbose=infos%control%verbose)
       ! Configure the SOSCF converger with SOSCF input parameters
       call set_soscf_parametres(infos, conv)
@@ -809,7 +814,17 @@ contains
                      mo_a=mo_a, &
                      mo_e_a=mo_energy_a, &
                      pfon=pfon)
-          case (scf_uhf, scf_rohf)
+          case (scf_rohf)
+            call conv%add_data( &
+                     f=pfock(:,1:soscf_nfocks), &
+                     dens=pdmat(:,1:soscf_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b, &
+                     pfon=pfon)
+          case (scf_uhf)
             call conv%add_data( &
                      f=pfock(:,1:diis_nfocks), &
                      dens=pdmat(:,1:diis_nfocks), &
@@ -831,8 +846,8 @@ contains
                      mo_e_a=mo_energy_a)
           case (scf_rohf)
             call conv%add_data( &
-                     f=rohf_bak(:,1:diis_nfocks), &
-                     dens=pdmat(:,1:diis_nfocks), &
+                     f=rohf_bak(:,1:soscf_nfocks), &
+                     dens=pdmat(:,1:soscf_nfocks), &
                      e=etot, &
                      mo_a=mo_a, &
                      mo_b=mo_b, &
