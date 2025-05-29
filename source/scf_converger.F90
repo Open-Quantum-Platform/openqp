@@ -718,10 +718,8 @@ module scf_converger
     procedure, pass :: run   => soscf_run
     procedure, private, pass :: init_hess_inv => init_hess_inv
     procedure, private, pass :: calc_orb_grad => calc_orb_grad
-    procedure, private, pass :: lbfgs_step => lbfgs_step
-    procedure, private, pass :: rotate_orbs => rotate_orbs
     procedure, private, pass :: bfgs_step => bfgs_step
-    procedure, private, pass :: rotate_orbs_so => rotate_orbs_so
+    procedure, private, pass :: rotate_orbs => rotate_orbs
     procedure, private, pass :: line_search => line_search
   end type soscf_converger
 
@@ -2224,16 +2222,6 @@ contains
     nvir_a = self%nbf - self%nocc_a
     nvir_b = self%nbf - self%nocc_b
 
-!    ! Determine SCF type based on nfocks and occupancy
-!    if (self%nfocks == 1 .and. self%nocc_a == self%nocc_b) then
-!      self%scf_type = 1  ! RHF
-!    else if (self%nfocks == 2 .and. self%nocc_a > self%nocc_b) then
-!      self%scf_type = 3  ! ROHF
-!    else if (self%nfocks == 2) then
-!      self%scf_type = 2  ! UHF
-!    end if
-     print *, "self%scf_type",self%scf_type
-
     ! Calculate gradient vector size (nvec)
     select case (self%scf_type)
     case (1)  ! RHF
@@ -2436,8 +2424,7 @@ contains
     ! Compute search direction using J. Phys. Chem. 1992, 96, 9768-9774
     call self%bfgs_step(self%step)
     if (self%scf_type == 1) then
-       call self%rotate_orbs(self%step, self%mo_a)
-!      call self%rotate_orbs_so(self%step, self%mo_a)
+       call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
         call pfon%compute_occupations(mo_e_a)
@@ -2446,7 +2433,9 @@ contains
         call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
       end if
     elseif(self%scf_type == 2) then
-      call self%rotate_orbs_so(self%step, self%mo_a, self%mo_b)
+      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
+      call self%rotate_orbs(self%step(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
+              , self%nocc_b, self%nocc_b, self%mo_b)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
         call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
@@ -2457,7 +2446,7 @@ contains
         call orb_to_dens(self%dens_b, self%mo_b, occ_b, self%nocc_b, self%nbf, self%nbf)
       end if
     elseif(self%scf_type == 3) then
-      call self%rotate_orbs_so(self%step, self%mo_a)
+      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_b, self%mo_a)
       self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
@@ -2561,33 +2550,6 @@ contains
           end do
         end do
 
-!        k = 0
-!        ! Alpha rotations
-!        do a = nocc_a + 1, nbf
-!          do i = 1, nocc_a
-!            k = k + 1
-!            diff = mo_e_a(a) - mo_e_a(i)
-!            if (abs(diff) < thresh) then
-!              diff = merge(thresh + lvl_shift, &
-!                          -thresh - lvl_shift, &
-!                           diff >= 0.0_dp)
-!            end if
-!            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
-!          end do
-!        end do
-        ! Beta rotations
-!        do a = nocc_b + 1, nbf
-!          do i = 1, nocc_b
-!            k = k + 1
-!            diff = mo_e_b(a) - mo_e_b(i)
-!            if (abs(diff) < thresh) then
-!              diff = merge(thresh + lvl_shift, &
-!                          -thresh - lvl_shift, &
-!                           diff >= 0.0_dp)
-!            end if
-!            self%h_inv(k) = 0.5_dp / diff  ! 1 / (2 * (ε_a - ε_i))
-!          end do
-!        end do
 
       case (3) ! ROHF: Restricted open-shell
         ! Regions: closed (j <= nocc_b)
@@ -2621,7 +2583,9 @@ contains
   !> @details Calculates the gradient for occupied-virtual orbital rotations:
   !>          - RHF: g(i,a) = 4 * F(i,a), single gradient.
   !>          - UHF: g_a(i,a) = 2 * F_a(i,a), g_b(i,a) = 2 * F_b(i,a), separate gradients.
-  !>          - ROHF: g(c,v) = 4 * F(c,v) for closed, g(o,v) = 2 * F(o,v) for open, single gradient.
+  !>          - ROHF: g(c,v) = 2 * F_b(c,v) for doubly occ -> singly occ,
+  !>                  g(o,v) = 2 * (F_a(o,v) + F_b(o,v)) doubly occ ->virt,
+  !>                  g(o,v) = 2 * F_a(o,v) for singly occ -> virt
   !> @param[out] grad_a Alpha gradient for RHF, ROHF, and UHF
   !> @param[out] grad_b Beta gradient for UHF (optional, size: nocc_b * (nbf - nocc_b))
   !> @param[in] fock_a Packed alpha/single Fock matrix (size: nbf*(nbf+1)/2)
@@ -2764,7 +2728,7 @@ contains
     end associate
   end subroutine calc_orb_grad
 
-  subroutine bfgs_step(self, step)!, grad)
+  subroutine bfgs_step(self, step)
     implicit none
     class(soscf_converger) :: self
     real(kind=dp), intent(out) :: step(:)
@@ -2829,363 +2793,84 @@ contains
     end if
   end subroutine bfgs_step
 
-  subroutine rotate_orbs_so(self, step, mo_a, mo_b)
-     implicit none
-
-     class(soscf_converger) :: self
-     real(kind=dp), intent(in)        :: step(:)
-     real(kind=dp), intent(out)       :: mo_a(:,:)
-     real(kind=dp), intent(out), optional :: mo_b(:,:)
-
-     integer            :: nbf, i, j, idx, occ, virt, istart
-     real(kind=dp), allocatable :: K(:,:), G(:,:), tmp(:,:)
-     integer            :: nocc_a, nocc_b
-
-     nbf = self%nbf
-     allocate(K(nbf,nbf), G(nbf,nbf), tmp(nbf,nbf), source=0.0_dp)
-
-  !build K from step
-     select case (self%scf_type)
-       case (1)
-         nocc_a = self%nocc_a
-         nocc_b = self%nocc_a
-       case (3)
-         nocc_a = self%nocc_a
-         nocc_b = self%nocc_b
-       case (2)
-         nocc_a = self%nocc_a
-         nocc_b = self%nocc_a
-     end select
-
-     idx = 0
-     do occ = 1, nocc_a
-       if (occ <= nocc_b ) then
-         istart = nocc_b+1
-       else
-         istart = nocc_a +1
-       end if
-       do virt= istart, nbf
-         idx = idx +1
-           K(virt,occ) =  step(idx)
-           K(occ,virt) = -step(idx)
-       end do
-     end do
-
-  !2. G = I + K
-     G = 0.0_dp
-     do i = 1, nbf
-        G(i,i) = 1.0_dp
-     end do
-     G = G + K
-
-  !Gram–Schmidt (with DOT_PRODUCT)
-     do i = 1, nbf
-        call dscal(nbf, 1.0_dp / sqrt(dot_product(G(:,i), G(:,i))), G(1,i), 1)
-        if (i == nbf) cycle
-        do j = i+1, nbf
-           call daxpy(nbf, -dot_product(G(:,i), G(:,j)), G(1,i), 1, G(1,j), 1)
-        end do
-     end do
-
-  !rotate α
-     call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, G, nbf, 0.0_dp, &
-                self%work_2, nbf)
-     mo_a = self%work_2
-  ! optional β
-     if (present(mo_b)) then
-        if (self%scf_type == 2) then
-          nocc_a = self%nocc_b
-          nocc_b = self%nocc_b
-        end if
-        K = 0.0_dp
-        do occ = 1, nocc_a
-          if (occ <= nocc_b ) then
-            istart = nocc_b+1
-          else
-            istart = nocc_a +1
-          end if
-          do virt= istart, nbf
-            idx = idx +1
-              K(virt,occ) =  step(idx)
-              K(occ,virt) = -step(idx)
-          end do
-        end do
-
-        G = 0.0_dp
-        do i = 1, nbf
-           G(i,i) = 1.0_dp
-        end do
-        G = G + K
-        do i = 1, nbf
-           call dscal(nbf, 1.0_dp / sqrt(dot_product(G(:,i), G(:,i))), G(1,i), 1)
-           if (i == nbf) cycle
-           do j = i+1, nbf
-              call daxpy(nbf, -dot_product(G(:,i), G(:,j)), G(1,i), 1, G(1,j), 1)
-           end do
-        end do
-        call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, G, nbf, 0.0_dp, &
-                   self%work_2, nbf)
-        mo_b = self%work_2
-     end if
-
-     deallocate(K, G, tmp)
-  end subroutine rotate_orbs_so
-
-  !> @brief Computes the orbital rotation step using L-BFGS for RHF, UHF, or ROHF.
-  !> @details Performs the two-loop L-BFGS algorithm to compute step = -H * grad.
-  !>          Handles RHF, UHF, and ROHF by
-  !>          adjusting scaling based on gradient/Hessian conventions.
-  !>          For UHF, grad and step concatenate alpha and beta components.
-  !> @param[out] step Orbital rotation step (size: nvec)
-  !> @param[in]  grad Orbital gradient (size: nvec)
-  subroutine lbfgs_step(self, step, grad)
+  subroutine rotate_orbs(self, step, nocc_a, nocc_b, mo)
     implicit none
+
     class(soscf_converger) :: self
-    real(kind=dp), intent(out) :: step(:)
-    real(kind=dp), intent(in)  :: grad(:)
+    real(kind=dp), intent(in)        :: step(:)
+    integer, intent(in)              :: nocc_a, nocc_b
+    real(kind=dp), intent(inout)     :: mo(:,:)
 
-    real(kind=dp) :: alpha(self%m_history)
-    real(kind=dp) :: q(self%nvec)
-    real(kind=dp) :: r(self%nvec)
-    real(kind=dp) :: beta, sy, yy, ss, scale
-    real(kind=dp), parameter :: threshold = 1.0e-12_dp
-    real(kind=dp), parameter :: curv_eps = 1.0e-6_dp    ! Threshold for curvature quality
-    real(kind=dp), parameter :: coeff_limit = 10.0_dp   ! Limit for alpha and beta coefficients
-    integer  :: i
+    integer            :: nbf, i, idx
+    logical :: second_term
 
-    if (self%m_history > 0) then
-      ss = dot_product(self%s_history(:, self%m_history), &
-                       self%s_history(:, self%m_history))
-      sy = dot_product(self%s_history(:, self%m_history), &
-                       self%y_history(:, self%m_history))
-      yy = dot_product(self%y_history(:, self%m_history), &
-                       self%y_history(:, self%m_history))
-
-      ! Gradient factor is 4, h_inv - 0.25/diff
-      scale = merge(min(sy / yy, 1.0_dp), 0.05_dp, sy >= curv_eps * sqrt(ss * yy))
-    else
-      scale = 1.0_dp  ! Apply full step for first iteration
-      step = -scale * self%h_inv * grad
-      where (isnan(step)) step = 0.0_dp
-      return
-    end if
-
-    ! First loop: Compute q using precomputed rho
-    q = grad
-    do i = self%m_history, 1, -1
-      if (self%rho_history(i) > threshold) then  ! Use precomputed rho, check validity
-        alpha(i) = self%rho_history(i) * dot_product(self%s_history(:, i), q)
-        alpha(i) = min(max(alpha(i), -coeff_limit), coeff_limit)  ! Limit alpha
-        q = q - alpha(i) * self%y_history(:, i)
-      end if
-    end do
-
-    ! Apply initial Hessian approximation
-    r = scale * self%h_inv * q  ! Element-wise multiplication
-
-    ! Second loop: Refine step
-    do i = 1, self%m_history
-      if (self%rho_history(i) > threshold) then
-        beta = self%rho_history(i) * dot_product(self%y_history(:, i), r)
-        beta = min(max(beta, -coeff_limit), coeff_limit)  ! Limit beta
-        r = r + self%s_history(:, i) * (alpha(i) - beta)
-      end if
-    end do
-
-    step = -r  ! Negative for energy minimization
-    where (isnan(step)) step = 0.0_dp  ! Handle NaNs
-  end subroutine lbfgs_step
-
-  subroutine rotate_orbs(self, step, mo_a, mo_b)
-    implicit none
-    class(soscf_converger) :: self
-    real(kind=dp), intent(in) :: step(:)
-    real(kind=dp), intent(out) :: mo_a(:,:)
-    real(kind=dp), intent(out), optional :: mo_b(:,:)
-
-    real(kind=dp), allocatable :: skew_matrix(:,:)
-    integer :: i, idx, a
-
-    allocate(skew_matrix(self%nbf, self%nbf), &
-             source=0.0_dp)
-
+    nbf = self%nbf
+    self%work_1 = 0
+    self%work_2 = 0
     idx = 0
-    do a = self%nocc_a + 1, self%nbf
-      do i = 1, self%nocc_a
-        idx = idx + 1
-        skew_matrix(a, i) = step(idx)
-        skew_matrix(i, a) = -step(idx)
-      end do
-    end do
-    call exp_scaling(skew_matrix, self%work_1, self%nbf)
-    call dgemm('N', 'N', self%nbf, self%nbf, self%nbf, &
-               1.0_dp, mo_a, self%nbf, &
-                       self%work_1, self%nbf, &
-               0.0_dp, self%work_2, self%nbf)
-    mo_a = self%work_2
-    if (self%verbose>1) &
-      write(iw, '(A,E20.10)') 'DEBUG: rotate_orbs: Alpha MO change norm = ', &
-        sqrt(sum((self%mo_a - self%dat%get_mo_a(-1))**2))
-    if (self%verbose>1) &
-      call check_orthogonality(mo_a, self%overlap, self%nbf, 'Alpha')
-
-    if (present(mo_b)) then
-      skew_matrix = 0.0_dp
-      do a = self%nocc_b + 1, self%nbf
-        do i = 1, self%nocc_b
-          idx = idx + 1
-          skew_matrix(a, i) = step(idx)
-          skew_matrix(i, a) = -step(idx)
-        end do
-      end do
-      call exp_scaling(skew_matrix, self%work_1, self%nbf)
-      call dgemm('N', 'N', self%nbf, self%nbf, self%nbf, &
-                 1.0_dp, mo_b, self%nbf, &
-                         self%work_1, self%nbf, &
-                 0.0_dp, self%work_2, self%nbf)
-      mo_b = self%work_2
-      if (self%verbose>1) &
-        write(iw, '(A,E20.10)') 'DEBUG: rotate_orbs: Beta MO change norm = ', &
-          sqrt(sum((self%mo_b - self%dat%get_mo_b(-1))**2))
-      if (self%verbose>1) &
-        call check_orthogonality(mo_b, self%overlap, self%nbf, 'Beta')
+    second_term = .true.
+    if (self%scf_type == 3) then! ROHF
+      second_term = .false.
     end if
+    call exp_scaling(self%work_1, step, idx, nocc_a, nocc_b, nbf, second_term)
+    call orthonormalize(self%work_1, nbf)
 
-    deallocate(skew_matrix)
+    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+    mo = self%work_2
 
   contains
 
-    subroutine check_orthogonality(mo, overlap, n, spin_label)
-      use precision, only: dp
-      implicit none
-      real(kind=dp), intent(in) :: mo(:,:), overlap(:,:)
-      integer, intent(in) :: n
-      character(len=*), intent(in) :: spin_label
+    subroutine exp_scaling(G, step, idx, nocc_a, nocc_b, nbf, second_term)
+      real(kind=dp), intent(out)     :: G(:,:)
+      real(kind=dp), intent(in)      :: step(:)
+      integer, intent(inout)         :: idx
+      integer, intent(in)            :: nocc_a, nocc_b, nbf
 
-      real(kind=dp) :: deviation, identity(n, n)
-      integer :: i
+      real(kind=dp), allocatable     :: K(:,:), K2(:,:)
+      integer                        :: occ, virt, istart, i
+      logical, intent(inout)         :: second_term
 
-      identity = 0.0_dp
-      forall(i=1:n) identity(i,i) = 1.0_dp
+      allocate(K(nbf,nbf), source=0.0_dp)
+      allocate(K2(nbf,nbf), source=0.0_dp)
 
-      call dgemm('T', 'N', n, n, n, &
-                 1.0_dp, mo, n, &
-                         overlap, n, &
-                 0.0_dp, self%work_1, n)
-      call dgemm('N', 'N', n, n, n, &
-                 1.0_dp, self%work_1, n, &
-                         mo, n, &
-                 0.0_dp, self%work_2, n)
+      do occ = 1, nocc_a
+        istart = merge(nocc_b+1, nocc_a+1, occ <= nocc_b)
+        do virt = istart, nbf
+          idx = idx + 1
+          K(virt, occ) =  step(idx)
+          K(occ, virt) = -step(idx)
+        end do
+      end do
 
-      deviation = maxval(abs(self%work_2 - identity))
-
-      write(iw, '(A,A,A,E15.7)') 'DEBUG: rotate_orbs: Orthogonality check for ',&
-                               spin_label, ' orbitals: max(abs(diff)) = ', deviation
-
-    end subroutine check_orthogonality
-
-    !> @brief Computes the matrix exponential of a skew-symmetric matrix
-    !>        using the scaling and squaring method
-    !>        with a Taylor series approximation.
-    !> @details The algorithm:
-    !>          1. Scale the input matrix by a power of 2 to reduce its norm
-    !>          2. Compute a truncated Taylor series approximation of the exponential
-    !>             for the scaled matrix (using terms up to A^5/5!)
-    !>          3. Repeatedly square the result to recover
-    !>             the exponential of the original matrix
-    !>          This method is numerically stable and efficient for computing
-    !>          rotation matrices from skew-symmetric matrices.
-    !> @note - For very small input matrices (norm < 1.0e-12), returns the identity matrix
-    !>       - Uses a 5-term Taylor series expansion for the matrix exponential
-    !>       - The scaling factor is chosen based on the matrix norm to ensure accuracy
-    !> @param[in] skew_mat Skew-symmetric matrix
-    !> @param[out] rot_mat Rotation matrix (exponential of skew_mat)
-    !> @param[in] dim Dimension of the matrices
-    subroutine exp_scaling(skew_mat, rot_mat, ldim)
-      use precision, only: dp
-      implicit none
-
-      ! Arguments
-      real(dp), intent(in) :: skew_mat(:,:)
-      real(dp), intent(out) :: rot_mat(:,:)
-      integer, intent(in) :: ldim
-
-      ! Local variables
-      real(dp) :: scaled_mat(ldim,ldim)  ! Scaled input matrix
-      real(dp) :: temp(ldim,ldim)        ! Temporary matrix for calculations
-      real(dp) :: norm_skew              ! Norm of the input matrix
-      integer  :: scale_factor           ! Scaling factor (power of 2)
-      integer  :: i, j                   ! Loop indices
-
-      ! Initialize result matrix to identity
-      rot_mat = 0.0_dp
-      forall(i=1:ldim) rot_mat(i,i) = 1.0_dp
-
-      ! Compute the matrix norm (maximum absolute element)
-      norm_skew = maxval(abs(skew_mat))
-
-      ! Handle special case for near-zero matrices
-      if (norm_skew < 1.0e-12_dp) then
-        ! For very small matrices, return the identity matrix
-        if (self%verbose>1) write(IW,'(A)') "DEBUG: exp_scaling: norm_skew < 1.0e-12_dp"
-        return
+      G = 0.0_dp
+      do i = 1, nbf
+        G(i,i) = 1.0_dp
+      end do
+      G = G + K
+      if (second_term) then
+        call dgemm('N','T', nbf, nbf, nbf, 1.0_dp, K, nbf, K, nbf, 0.0_dp, K2, nbf)
+        G = G + 0.5_dp * K2
       end if
 
-      ! Determine optimal scaling factor as ceiling(log_2(norm))
-      scale_factor = ceiling(log(max(1.0_dp, norm_skew)) / log(2.0_dp))
-
-      ! Scale the matrix by dividing by 2^scale_factor
-      scaled_mat = skew_mat / (2.0_dp ** scale_factor)
-
-      !---------------------------------------------------------------------------
-      ! Compute Taylor series approximation for exp(scaled_mat)
-      ! Using the formula: I + A + A^2/2! + A^3/3! + A^4/4! + A^5/5!
-      !---------------------------------------------------------------------------
-      ! First term: A
-      temp = scaled_mat
-      rot_mat = rot_mat + temp
-
-!      ! Second term: A^2/2!
-!      call dgemm('N', 'N', ldim, ldim, ldim, &
-!                 1.0_dp, scaled_mat, ldim, &
-!                         scaled_mat, ldim, &
-!                 0.0_dp, temp, ldim)
-!      rot_mat = rot_mat + 0.5_dp * temp
-!
-!      ! Third term: A^3/3!
-!      call dgemm('N', 'N', ldim, ldim, ldim, &
-!                 1.0_dp, scaled_mat, ldim, &
-!                         temp, ldim, &
-!                 0.0_dp, scaled_mat, ldim)
-!      rot_mat = rot_mat + (1.0_dp / 6.0_dp) * scaled_mat
-!
-!      ! Fourth term: A^4/4!
-!      call dgemm('N', 'N', ldim, ldim, ldim, &
-!                 1.0_dp, scaled_mat, ldim, &
-!                         temp, ldim, &
-!                 0.0_dp, scaled_mat, ldim)
-!      rot_mat = rot_mat + (1.0_dp / 24.0_dp) * scaled_mat
-!
-!      ! Fifth term: A^5/5!
-!      call dgemm('N', 'N', ldim, ldim, ldim, &
-!                 1.0_dp, scaled_mat, ldim, &
-!                         temp, ldim, &
-!                 0.0_dp, scaled_mat, ldim)
-!      rot_mat = rot_mat + (1.0_dp / 120.0_dp) * scaled_mat
-
-      !---------------------------------------------------------------------------
-      ! Recover exp(A) by squaring scale_factor times
-      ! Using the identity: exp(A) = [exp(A/2^n)]^(2^n)
-      !---------------------------------------------------------------------------
-!      do i = 1, scale_factor
-!        call dgemm('N', 'N', ldim, ldim, ldim, &
-!                   1.0_dp, rot_mat, ldim, &
-!                           rot_mat, ldim, &
-!                   0.0_dp, temp, ldim)
-!        rot_mat = temp
-!      end do
-
+      deallocate(K, K2)
     end subroutine exp_scaling
+
+    subroutine orthonormalize(G, nbf)
+      real(kind=dp), intent(inout) :: G(:,:)
+      integer, intent(in)          :: nbf
+      integer                      :: i, j
+      real(kind=dp)                :: norm, dot
+
+      do i = 1, nbf
+        norm = sqrt(dot_product(G(:,i), G(:,i)))
+        call dscal(nbf, 1.0_dp / norm, G(1,i), 1)
+        if (i == nbf) cycle
+        do j = i+1, nbf
+          dot = dot_product(G(:,i), G(:,j))
+          call daxpy(nbf, -dot, G(1,i), 1, G(1,j), 1)
+        end do
+      end do
+    end subroutine orthonormalize
 
   end subroutine rotate_orbs
 
@@ -3356,7 +3041,7 @@ contains
 
         ! Apply orbital rotation with current step size
         if (self%scf_type == 1) then
-          call self%rotate_orbs(step * alpha_try, mo_a)
+          call self%rotate_orbs(step * alpha_try, self%nocc_a, self%nocc_a, mo_a)
 
           if (associated(pfon)) then
             call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
@@ -3366,7 +3051,8 @@ contains
             call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
           end if
         else
-          call self%rotate_orbs(step * alpha_try, mo_a, mo_b)
+          call self%rotate_orbs(step * alpha_try, self%nocc_a, self%nocc_a, mo_a)
+          call self%rotate_orbs(step * alpha_try, self%nocc_b, self%nocc_b, mo_b)
           if (associated(pfon)) then
             call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
             call compute_mo_energies(self, fock_b, mo_b, mo_e_b, self%work_1, self%work_2)

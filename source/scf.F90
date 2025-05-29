@@ -610,10 +610,10 @@ contains
                  &5X,18("-"))')
       write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",I1)') &
              & use_soscf, infos%control%soscf_type
-      write(IW,'(5X,"SOSCF start iteration = ",I5,5X,"SOSCF frequency = ",I5)') &
-             & infos%control%soscf_start, infos%control%soscf_freq
-      write(IW,'(5X,"SOSCF max micro-iterations = ",I5,1X,"SOSCF min micro-iterations = ",I5)') &
-             & infos%control%soscf_max, infos%control%soscf_min
+!      write(IW,'(5X,"SOSCF start iteration = ",I5,5X,"SOSCF frequency = ",I5)') &
+!             & infos%control%soscf_start, infos%control%soscf_freq
+!      write(IW,'(5X,"SOSCF max micro-iterations = ",I5,1X,"SOSCF min micro-iterations = ",I5)') &
+!             & infos%control%soscf_max, infos%control%soscf_min
       write(IW,'(5X,"SOSCF convergence threshold = ",F10.8)') &
              & infos%control%soscf_conv
       write(IW,'(5X,"SOSCF gradient threshold = ",F10.8)') &
@@ -630,6 +630,12 @@ contains
             &  3x,113('='),/ &
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
             &  3x,113('='))")
+    elseif (infos%control%soscf_type == 1) then
+      write(IW,fmt="&
+            &(/3x,'Direct SCF iterations begin.'/, &
+            &  3x,93('='),/ &
+            &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. Norm',5x,'Shift',5x,'Method'/ &
+            &  3x,93('='))")
     else
       write(IW,fmt="&
             &(/3x,'Direct SCF iterations begin.'/, &
