@@ -1,0 +1,29 @@
+[input]
+system=
+ 8   0.000000000   0.000000000  -0.041061554
+ 1  -0.533194329   0.533194329  -0.614469223
+ 1   0.533194329  -0.533194329  -0.614469223
+
+charge=0
+method=hf
+basis=6-31g
+runtype=energy
+functional=pbe
+d4=False
+[guess]
+type=huckel
+save_mol=True
+[scf]
+type=rhf
+multiplicity=1
+maxit=30
+maxdiis=7
+pfon=True
+pfon_start_temp=2000.0
+pfon_cooling_rate=50.0
+pfon_nsmear=5.0
+conv=1.0e-6
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
