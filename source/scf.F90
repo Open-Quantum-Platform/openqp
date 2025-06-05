@@ -548,8 +548,8 @@ contains
                                       conv_soscf], &
                        thresholds   =[ethr_cdiis_big, &
                                       ethr_ediis, &
-                                      infos%control%vdiis_cdiis_switch, &
-                                      infos%control%soscf_conv], &
+                                      infos%control%vdiis_cdiis_switch], &
+!                                      infos%control%soscf_conv], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
@@ -565,8 +565,8 @@ contains
                        maxvec=maxdiis, &
                        subconvergers=[infos%control%diis_type, &
                                       conv_soscf], &
-                       thresholds   =[infos%control%diis_method_threshold, &
-                                      infos%control%soscf_conv], &
+                       thresholds   =[infos%control%diis_method_threshold], &
+!                                      infos%control%soscf_conv], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
@@ -614,12 +614,12 @@ contains
 !             & infos%control%soscf_start, infos%control%soscf_freq
 !      write(IW,'(5X,"SOSCF max micro-iterations = ",I5,1X,"SOSCF min micro-iterations = ",I5)') &
 !             & infos%control%soscf_max, infos%control%soscf_min
-      write(IW,'(5X,"SOSCF convergence threshold = ",F10.8)') &
-             & infos%control%soscf_conv
-      write(IW,'(5X,"SOSCF gradient threshold = ",F10.8)') &
-             & infos%control%soscf_grad
-      write(IW,'(5X,"SOSCF level shift = ",F10.8)') &
-             & infos%control%soscf_lvl_shift
+!      write(IW,'(5X,"SOSCF convergence threshold = ",F10.8)') &
+!             & infos%control%soscf_conv
+!      write(IW,'(5X,"SOSCF gradient threshold = ",F10.8)') &
+!             & infos%control%soscf_grad
+!      write(IW,'(5X,"SOSCF level shift = ",F10.8)') &
+!             & infos%control%soscf_lvl_shift
       write(IW,'(5X,"SOSCF+DIIS and alternate OPTION NEEEEED")')
     end if
 
@@ -1276,6 +1276,8 @@ contains
      write(IW,*)
   end subroutine print_scf_energy
 
+  !> @In this implementation, we don’t need these parameters— they were added,
+  !> @but they appear to be unnecessary right now.
   !> @brief Configures parameters for the Second-Order SCF (SOSCF) convergence accelerator.
   !> @detail Sets SOSCF-specific parameters.
   !> @author Konstantin Komarov, 2023
@@ -1294,12 +1296,6 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (soscf_converger)
-          sc%soscf_start = infos%control%soscf_start
-          sc%soscf_freq = infos%control%soscf_freq
-          sc%soscf_diis_alternate = infos%control%soscf_diis_alternate
-          sc%max_iter = infos%control%soscf_max
-          sc%min_iter = infos%control%soscf_min
-          sc%grad_thresh = infos%control%soscf_grad
           sc%level_shift = infos%control%soscf_lvl_shift
       end select
     end do

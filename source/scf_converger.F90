@@ -280,6 +280,7 @@
 !   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
 !   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
 !   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   work_3          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
 !   mo_a            [REAL(dp), ALLOCATABLE]: Alpha MO coefficients (nbf, nbf).
 !   mo_b            [REAL(dp), ALLOCATABLE]: Beta MO coefficients (nbf, nbf).
 !   dens_a          [REAL(dp), ALLOCATABLE]: Alpha density matrix (nbf_tri).
@@ -680,15 +681,10 @@ module scf_converger
     real(kind=dp), pointer :: overlap(:, :) => null()
     real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
 
-    ! SOSCF parameters from scf_driver:
-    integer :: soscf_start = -1
-    integer :: soscf_freq = 2
-    logical :: soscf_diis_alternate = .False.
-    integer :: max_iter = 10                  !< Maximum micro-iterations
-    integer :: min_iter = 1                   !< Minimum micro-iterations
+!    ! SOSCF parameters from scf_driver:
     real(kind=dp) :: hess_thresh = 1.0e-10_dp !< Orbital Hessian threshold
     real(kind=dp) :: grad_thresh = 1.0e-3_dp  !< Gradient threshold
-    real(kind=dp) :: level_shift = 0.2_dp     !< Level shifting parameter
+    real(kind=dp) :: level_shift = 0.0_dp     !< Level shifting parameter
     logical :: use_lineq = .false.            !< Use linear equations (vs BFGS)
 
     ! L-BFGS history
@@ -1395,88 +1391,45 @@ contains
     call move_alloc(from=tmp_result, to=conv_result)
   end subroutine scf_conv_run
 
-  !> @brief Select subconverger based on the current DIIS error value
+  !> @brief Select subconverger basing on the current DIIS error value
   !> @param[in] error DIIS error value
-  !> @return Pointer to selected converger
+  !> @return  pointer to selected converger
   function scf_conv_select(self, error) result(conv)
-    class(scf_conv), target, intent(in) :: self
+    implicit none
+    class(scf_conv), target :: self
     real(kind=dp), intent(in) :: error
     class(subconverger), pointer :: conv
     integer :: i, nconv
     logical :: use_soscf_now
 
-    ! Initial selection based on error thresholds
     nconv = ubound(self%thresholds, 1)
     do i = 0, nconv
       if (error > self%thresholds(i)) exit
     end do
 
-    ! Initially select converger based on error thresholds
-    conv => self%sconv(min(i, nconv))%s
-
-    ! Check if any of the convergers is SOSCF
+    conv => self%sconv(min(i,nconv))%s
     use_soscf_now = .false.
     do i = 0, nconv
       select type (sc => self%sconv(i)%s)
       type is (soscf_converger)
         ! SOSCF exists in the set of convergers
         ! Check if we should use it based on current iteration
-        if (sc%soscf_start >= 0 .and. self%step >= sc%soscf_start) then
-          use_soscf_now = .true.
-        end if
+        use_soscf_now = .true.
         exit
       end select
     end do
-
-    ! Handle alternating between DIIS and SOSCF if configured: soscf_diis_alternate
-    if (use_soscf_now) then
-      select type (selected_conv => conv)
-      type is (soscf_converger)
-        ! Current selection is SOSCF - check if we should alternate
-        if (selected_conv%soscf_diis_alternate) then
-          ! Apply SOSCF based on frequency, otherwise use DIIS
-          if (mod(self%step - selected_conv%soscf_start, selected_conv%soscf_freq) == 0) then
-            ! This iteration aligns with SOSCF frequency - keep SOSCF
-            conv => selected_conv
-          else
-            ! Use DIIS instead - find the first non-SOSCF converger
-            do i = 0, nconv
-              select type (sc => self%sconv(i)%s)
-              class default
-                conv => sc
-                exit
-              end select
-            end do
-          end if
-        end if
-      class default
-        ! Current selection is not SOSCF - check if we should alternate
-        ! Find a SOSCF converger
-        do i = 0, nconv
-          select type (sc => self%sconv(i)%s)
-          type is (soscf_converger)
-            if (sc%soscf_diis_alternate) then
-              ! Apply SOSCF based on frequency, otherwise keep non-SOSCF
-              if (mod(self%step - sc%soscf_start, sc%soscf_freq) == 0) then
-                ! This iteration aligns with SOSCF frequency - use SOSCF
-                conv => sc
-              end if ! Otherwise, retain the non-SOSCF converger (no action needed)
-              exit
-            end if
-          end select
-        end do
-      end select
-    end if
-
     ! Continue using the 'SD' converger if
     ! already initiated
     if (i == 0 .and. self%step > 0) then
-      conv => self%sconv(1)%s
+        conv => self%sconv(1)%s
     end if
 
     ! Use SD by default if no other converger selected
-    if (.not. associated(conv)) conv => self%sconv(0)%s
-  end function scf_conv_select
+    if (.not.associated(conv)) then
+        conv => self%sconv(0)%s
+    end if
+
+  end function
 
   !> @brief Calculate the DIIS error matrix: \f$ \mathrm{Err} = FDS - SDF \f$
   !> @details This routine is general for RHF, ROHF, and UHF.
@@ -2398,11 +2351,6 @@ contains
         call self%init_hess_inv(mo_e_a, mo_e_b)
       self%first_macro = .false.
       if (self%verbose>1) then
-        write(iw, '(A,I3)')     'DEBUG: soscf_run: Input: soscf_start=', self%soscf_start
-        write(iw, '(A,I3)')     'DEBUG: soscf_run: Input:  soscf_freq=', self%soscf_freq
-        write(iw, '(A,L1)')     'DEBUG: soscf_run: Input: soscf_diis_alternate=', self%soscf_diis_alternate
-        write(iw, '(A,I3)')     'DEBUG: soscf_run: Input:    max_iter=', self%max_iter
-        write(iw, '(A,I3)')     'DEBUG: soscf_run: Input:    min_iter=', self%min_iter
         write(iw, '(A,E20.10)') 'DEBUG: soscf_run: Input: grad_thresh=', self%grad_thresh
         write(iw, '(A,E20.10)') 'DEBUG: soscf_run: Input: level_shift=', self%level_shift
       end if
@@ -2416,12 +2364,12 @@ contains
     if (self%verbose>1) &
       write(iw, '(A,E20.10)') 'DEBUG soscf_run: init: grad_thresh=', self%grad_thresh
     ! Check convergence
-    if (iter > self%min_iter .and. grad_norm < self%grad_thresh) then
+    if ( grad_norm < self%grad_thresh) then
       if (self%verbose>1) &
         write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
     end if
 
-    ! Compute search direction using J. Phys. Chem. 1992, 96, 9768-9774
+    ! Compute step using J. Phys. Chem. 1992, 96, 9768-9774
     call self%bfgs_step(self%step)
     if (self%scf_type == 1) then
        call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)

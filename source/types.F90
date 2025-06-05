@@ -128,14 +128,7 @@ module types
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     ! SOSCF parameters
     integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
-    integer(c_int64_t) :: soscf_start = -1      !< First SCF iteration to apply SOSCF
-    integer(c_int64_t) :: soscf_freq = 2       !< Frequency of SOSCF application
-    integer(c_int64_t) :: soscf_max = 5        !< Maximum SOSCF micro-iterations
-    integer(c_int64_t) :: soscf_min = 1        !< Minimum SOSCF micro-iterations
-    real(c_double) :: soscf_conv = 1.0e-3_dp   !< DIIS error threshold to start SOSCF
-    real(c_double) :: soscf_grad = 1.0e-3_dp   !< Orbital gradient threshold for SOSCF convergence
-    real(c_double) :: soscf_lvl_shift = 0.2_dp !< Level shifting parameter for SOSCF
-    logical(c_bool) :: soscf_diis_alternate = .false. !< Alternate between SOSCF and DIIS instead of combining
+    real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
   end type control_parameters
 
