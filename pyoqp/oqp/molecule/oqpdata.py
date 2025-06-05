@@ -87,7 +87,7 @@ OQP_CONFIG_SCHEMA = {
         'init_scf': {'type': string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
-        'init_it': {'type': int, 'default': '0'},
+        'init_it': {'type': int, 'default': '15'},
         'init_conv': {'type': float, 'default': '0.001'}, 
         'init_converger': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},

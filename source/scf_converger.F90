@@ -504,6 +504,8 @@ module scf_converger
     procedure, pass :: get_mo_b    => conv_result_dummy_get_mo_b
     procedure, pass :: get_mo_e_a  => conv_result_dummy_get_mo_e_a
     procedure, pass :: get_mo_e_b  => conv_result_dummy_get_mo_e_b
+    procedure, pass :: get_rms_grad => conv_result_dummy_get_rms_g
+    procedure, pass :: get_rms_dp  => conv_result_dummy_get_rms_dp
   end type scf_conv_result
 
   !> @brief SCF converger results for interpolation methods like DIIS
@@ -520,11 +522,15 @@ module scf_converger
 
   !> @brief SCF converger results for SOSCF method
   type, extends(scf_conv_result) :: scf_conv_soscf_result
+    real(kind=dp) :: rms_grad = 1
+    real(kind=dp) :: rms_dp = 1
   contains
     procedure, pass :: get_mo_a    => conv_result_soscf_get_mo_a
     procedure, pass :: get_mo_b    => conv_result_soscf_get_mo_b
     procedure, pass :: get_mo_e_a  => conv_result_soscf_get_mo_e_a
     procedure, pass :: get_mo_e_b  => conv_result_soscf_get_mo_e_b
+    procedure, pass :: get_rms_grad => conv_result_soscf_get_rms_g
+    procedure, pass :: get_rms_dp  => conv_result_soscf_get_rms_dp
   end type scf_conv_soscf_result
 
   !> @brief Base type for real SCF convergers (subconvergers)
@@ -704,6 +710,8 @@ module scf_converger
     real(kind=dp), allocatable :: mo_b(:,:)       !< MOs matrix (nbf, nbf)
     real(kind=dp), allocatable :: dens_a(:)       !< MOs matrix (nbf_tri)
     real(kind=dp), allocatable :: dens_b(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_a_old(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_b_old(:)       !< MOs matrix (nbf_tri)
     integer :: m_max = 0                          !< Maximum number of stored history steps
     integer :: m_history = 0                      !< Number of stored history steps
     logical :: first_macro = .true.               !< Flag for first macro-iteration
@@ -717,6 +725,7 @@ module scf_converger
     procedure, private, pass :: bfgs_step => bfgs_step
     procedure, private, pass :: rotate_orbs => rotate_orbs
     procedure, private, pass :: line_search => line_search
+    procedure, private, pass :: rms_density => rms_density
   end type soscf_converger
 
 contains
@@ -1075,6 +1084,20 @@ contains
     istat = 0
   end subroutine conv_result_dummy_get_mo_e_b
 
+  function conv_result_dummy_get_rms_g(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_rms_g
+
+  function conv_result_dummy_get_rms_dp(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_rms_dp
+
   !> @brief Form the interpolated Fock matrix
   !> @detail F_n = \sum_{i=start}^{end} F_i * c_i
   subroutine conv_result_interp_get_fock(self, matrix, istat)
@@ -1212,6 +1235,21 @@ contains
     vector = self%dat%buffer(self%dat%slot)%mo_e_b
     istat = 0
   end subroutine conv_result_soscf_get_mo_e_b
+
+  function conv_result_soscf_get_rms_g(self) result(rms)
+    class(scf_conv_soscf_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%rms_grad
+  end function conv_result_soscf_get_rms_g
+
+  function conv_result_soscf_get_rms_dp(self) result(rms)
+    class(scf_conv_soscf_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%rms_dp
+  end function conv_result_soscf_get_rms_dp
+
 
 !==============================================================================
 ! scf_conv Methods
@@ -2218,11 +2256,15 @@ contains
       allocate(self%mo_a(self%nbf, self%nbf), stat=istat, source=0.0_dp)
     if (.not. allocated(self%dens_a)) &
       allocate(self%dens_a(self%nbf_tri), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%dens_a_old)) &
+      allocate(self%dens_a_old(self%nbf_tri), stat=istat, source=0.0_dp)
     if (self%scf_type > 1) then
       if (.not. allocated(self%mo_b)) &
         allocate(self%mo_b(self%nbf, self%nbf), stat=istat, source=0.0_dp)
       if (.not. allocated(self%dens_b)) &
         allocate(self%dens_b(self%nbf_tri), stat=istat, source=0.0_dp)
+      if (.not. allocated(self%dens_b_old)) &
+        allocate(self%dens_b_old(self%nbf_tri), stat=istat, source=0.0_dp)
     end if
 
     if (istat /= 0) then
@@ -2251,6 +2293,8 @@ contains
     if (allocated(self%dens_a)) deallocate(self%dens_a)
     if (allocated(self%mo_b)) deallocate(self%mo_b)
     if (allocated(self%dens_b)) deallocate(self%dens_b)
+    if (allocated(self%dens_a_old)) deallocate(self%dens_a_old)
+    if (allocated(self%dens_b_old)) deallocate(self%dens_b_old)
     call self%subconverger_clean()
   end subroutine soscf_clean
 
@@ -2280,7 +2324,7 @@ contains
     real(kind=dp), pointer :: occ_b(:) => null()
     real(kind=dp), pointer :: fock_ao_a(:), fock_ao_b(:)
     real(kind=dp), pointer :: mo_e_a(:), mo_e_b(:)
-    real(kind=dp) :: grad_norm, alpha, sy
+    real(kind=dp) :: grad_norm, alpha, sy, rms_dp
     integer :: iter, istat
     integer :: i
 
@@ -2297,6 +2341,7 @@ contains
     res%ierr = 0
     istat = 0
 
+
     ! --- Step 1: Extract current data from converger_data ---
     mo_e_a => self%dat%get_mo_e_a(-1)
     fock_ao_a => self%dat%get_fock(-1, 1)
@@ -2307,6 +2352,17 @@ contains
       fock_ao_b => self%dat%get_fock(-1, 2)
       self%mo_b = self%dat%get_mo_b(-1)
       self%dens_b = self%dat%get_density(-1, 2)
+    end if
+    if (self%scf_type == 1) then
+      call self%rms_density( d_new_a = self%dens_a,       &
+                             d_old_a = self%dens_a_old,   &
+                             rms_dp  = rms_dp )
+      self%dens_a_old = self%dens_a
+    else
+      call self%rms_density(self%dens_a, self%dens_b,            &
+                              self%dens_a_old, self%dens_b_old, rms_dp)
+      self%dens_a_old = self%dens_a
+      self%dens_b_old = self%dens_b
     end if
 
     pfon => self%dat%get_pfon(-1)
@@ -2357,7 +2413,7 @@ contains
     end if
 
     call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
-    grad_norm = sqrt(dot_product(self%grad, self%grad))
+    grad_norm = sqrt(dot_product(self%grad, self%grad)/self%nvec)
     if (self%verbose>1) &
       write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:1:calc_orb_grad: iter=', 0, ' grad_norm=', grad_norm
 
@@ -2411,7 +2467,12 @@ contains
 
     ! --- Step 4: Update result and converger_data ---
     res%ierr = 0
-    res%error = grad_norm/self%nvec
+    res%error = grad_norm
+    select type (res)
+    class is (scf_conv_soscf_result)
+      res%rms_grad = res%error
+      res%rms_dp = rms_dp
+    end select
 
     ! Update MO coefficients and compute MO energies
     self%dat%buffer(self%dat%slot)%mo_a = self%mo_a
@@ -2424,6 +2485,54 @@ contains
     end if
 
   end subroutine soscf_run
+
+  subroutine rms_density(self, d_new_a, d_new_b,            &
+                                d_old_a, d_old_b, rms_dp, max_dp)
+     use, intrinsic :: iso_fortran_env, only : dp => real64
+     implicit none
+     class(soscf_converger), intent(in)       :: self
+     real(dp), intent(in)                     :: d_new_a(:), d_old_a(:)
+     real(dp), intent(in),  optional          :: d_new_b(:), d_old_b(:)
+     real(dp), intent(out)                    :: rms_dp
+     real(dp), intent(out), optional          :: max_dp
+
+     integer  :: ntri, k
+     real(dp) :: sum_sq, sum_sq_b
+     real(dp) :: max_loc, max_loc_b
+     real(dp) :: diff
+
+     ntri = self%nbf_tri
+
+     sum_sq  = 0.0_dp
+     max_loc = 0.0_dp
+  !$omp   parallel do default(shared) private(k,diff)             &
+  !$omp&  reduction(+:sum_sq) reduction(max:max_loc)
+     do k = 1, ntri
+        diff    = d_new_a(k) - d_old_a(k)
+        sum_sq  = sum_sq + diff*diff
+        max_loc = max(max_loc, abs(diff))
+     end do
+  !$omp   end parallel do
+
+     rms_dp = sqrt( sum_sq / real(ntri, dp) )
+     if (present(max_dp)) max_dp = max_loc
+
+     if (present(d_new_b) .and. present(d_old_b)) then
+        sum_sq_b  = 0.0_dp
+        max_loc_b = 0.0_dp
+  !$omp   parallel do default(shared) private(k,diff)             &
+  !$omp&  reduction(+:sum_sq_b) reduction(max:max_loc_b)
+        do k = 1, ntri
+           diff       = d_new_b(k) - d_old_b(k)
+           sum_sq_b   = sum_sq_b + diff*diff
+           max_loc_b  = max(max_loc_b, abs(diff))
+        end do
+  !$omp   end parallel do
+
+        rms_dp = 0.5_dp * ( rms_dp + sqrt( sum_sq_b / real(ntri, dp) ) )
+        if (present(max_dp)) max_dp = max(max_dp, max_loc_b)
+     end if
+  end subroutine rms_density
 
   !> @brief Computes the initial diagonal inverse Hessian for SOSCF
   !> @details Approximates the inverse Hessian diagonal using orbital energy differences,
