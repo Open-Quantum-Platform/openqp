@@ -193,10 +193,15 @@ class SinglePoint(Calculator):
 
     def _init_convergence(self):
         init_calc = self.energy_func['hf']
-        init_basis = self.init_basis
-        init_library = self.init_library
         target_basis = self.basis
         target_library = self.library
+        if self.init_basis == 'none':
+            init_basis = target_basis
+            init_library = target_library
+        else :
+            init_basis = self.init_basis
+            init_library = self.init_library
+
         init_converger = self.mol.config['scf']['init_converger']
         target_converger = self.mol.config['scf']['soscf_type']
         self.mol.data.set_scf_soscf_type(init_converger)
