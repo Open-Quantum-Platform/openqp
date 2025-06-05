@@ -88,16 +88,9 @@ OQP_CONFIG_SCHEMA = {
         'init_basis': {'type': string, 'default': ''},
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '0'},
+        'init_converger': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'soscf_type': {'type': int, 'default': '0'},
-        'soscf_start': {'type': int, 'default': '-1'},
-        'soscf_freq': {'type': int, 'default': '2'},
-        'soscf_max': {'type': int, 'default': '5'},
-        'soscf_min': {'type': int, 'default': '1'},
-        'soscf_conv': {'type': float, 'default': '1.0e-3'},
-        'soscf_grad': {'type': float, 'default': '1.0e-3'},
-        'soscf_lvl_shift': {'type': float, 'default': '0.2'},
-        'soscf_diis_alternate': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
@@ -256,14 +249,6 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "soscf_type": "set_scf_soscf_type",
-            "soscf_start": "set_scf_soscf_start",
-            "soscf_freq": "set_scf_soscf_freq",
-            "soscf_max": "set_scf_soscf_max",
-            "soscf_min": "set_scf_soscf_min",
-            "soscf_conv": "set_scf_soscf_conv",
-            "soscf_grad": "set_scf_soscf_grad",
-            "soscf_lvl_shift": "set_scf_soscf_lvl_shift",
-            "soscf_diis_alternate": "set_scf_soscf_diis_alternate",
             "verbose": "set_scf_verbose",
         },
         "dftgrid": {
@@ -526,41 +511,6 @@ class OQPData:
                 2: SOSCF+DIIS combined mode
         """
         self._data.control.soscf_type = soscf_type
-
-    def set_scf_soscf_start(self, soscf_start):
-        """Set first iteration to start using SOSCF"""
-        self._data.control.soscf_start = soscf_start
-
-    def set_scf_soscf_freq(self, soscf_freq):
-        """Set frequency of using SOSCF"""
-        self._data.control.soscf_freq = soscf_freq
-
-    def set_scf_soscf_max(self, soscf_max):
-        """Set maximum number of SOSCF micro-iterations"""
-        self._data.control.soscf_max = soscf_max
-
-    def set_scf_soscf_min(self, soscf_min):
-        """Set minimum number of SOSCF micro-iterations"""
-        self._data.control.soscf_min = soscf_min
-
-    def set_scf_soscf_conv(self, soscf_conv):
-        """Set DIIS error threshold to start SOSCF"""
-        self._data.control.soscf_conv = soscf_conv
-
-    def set_scf_soscf_grad(self, soscf_grad):
-        """Set orbital gradient threshold for SOSCF convergence"""
-        self._data.control.soscf_grad = soscf_grad
-
-    def set_scf_soscf_lvl_shift(self, soscf_lvl_shift):
-        """Set level shifting parameter for SOSCF"""
-        self._data.control.soscf_lvl_shift = soscf_lvl_shift
-
-    def set_scf_soscf_diis_alternate(self, soscf_diis_alternate):
-        """
-        Set whether to alternate between SOSCF and DIIS instead
-        of combining them
-        """
-        self._data.control.soscf_diis_alternate = soscf_diis_alternate
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""

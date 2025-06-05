@@ -195,6 +195,9 @@ class SinglePoint(Calculator):
         init_library = self.init_library
         target_basis = self.basis
         target_library = self.library
+        init_converger = self.mol.config['scf']['init_converger']
+        target_converger = self.mol.config['scf']['soscf_type']
+        self.mol.data.set_scf_soscf_type(init_converger)
 
         if init_basis:
             self.mol.config['input']['basis'] = init_basis
@@ -257,6 +260,7 @@ class SinglePoint(Calculator):
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
         self.mol.config['input']['functional'] = self.functional
+        self.mol.data.set_scf_soscf_type(target_converger)
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
