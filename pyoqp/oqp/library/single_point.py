@@ -168,6 +168,8 @@ class SinglePoint(Calculator):
         self.init_it = mol.config['scf']['init_it']
         self.init_basis = mol.config['scf']['init_basis']
         self.init_library = mol.config['scf']['init_library']
+        self.init_conv =  mol.config['scf']['init_conv']
+        self.conv = mol.config['scf']['conv']
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
@@ -198,6 +200,7 @@ class SinglePoint(Calculator):
         init_converger = self.mol.config['scf']['init_converger']
         target_converger = self.mol.config['scf']['soscf_type']
         self.mol.data.set_scf_soscf_type(init_converger)
+        self.mol.data.set_scf_conv(self.init_conv)
 
         if init_basis:
             self.mol.config['input']['basis'] = init_basis
@@ -264,6 +267,7 @@ class SinglePoint(Calculator):
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
+        self.mol.data.set_scf_conv(self.conv)
         self.mol.data.set_mol_multiplicity(self.scf_mult)
         self._project_basis()
 #        oqp.library.update_guess(self.mol)
