@@ -16,7 +16,7 @@ save_mol=True
 [scf]
 type=rohf
 multiplicity=3
-maxit=30
+maxit=40
 maxdiis=7
 diis_type=ediis
 conv=1.0e-6
