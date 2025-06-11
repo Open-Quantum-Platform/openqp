@@ -92,6 +92,8 @@ OQP_CONFIG_SCHEMA = {
         'init_converger': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'soscf_type': {'type': int, 'default': '0'},
+        'soscf_reset_mod': {'type': int, 'default': '0'},
+        'soscf_lvl_shift': {'type': float, 'default': '0'},
         'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
@@ -250,6 +252,8 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "soscf_type": "set_scf_soscf_type",
+            "soscf_reset_mod": "set_scf_soscf_reset_mod",
+            "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
         },
         "dftgrid": {
@@ -512,6 +516,20 @@ class OQPData:
                 2: SOSCF+DIIS combined mode
         """
         self._data.control.soscf_type = soscf_type
+
+    def set_soscf_lvl_shift(self, soscf_lvl_shift):
+        """Reset the orbital Hessian. If it is zero, we don't reset by default.
+        """
+        self._data.control.soscf_lvl_shift = soscf_lvl_shift
+
+    def set_scf_soscf_reset_mod(self, soscf_reset_mod):
+        """Set the SOSCF Hessian reset mode.
+        Parameters:
+            soscf_reset_mod (int):
+                0      – Disable Hessian reset.
+                >0     – Reset the Hessian at the specified SCF iteration.
+        """
+        self._data.control.soscf_reset_mod = soscf_reset_mod
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""

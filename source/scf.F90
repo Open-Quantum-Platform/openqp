@@ -1287,7 +1287,7 @@ contains
     use types, only: information
     use scf_converger, only: scf_conv, soscf_converger
 
-    type(information), target, intent(in) :: infos
+    type(information), target, intent(inout) :: infos
     type(scf_conv) :: conv
 
     integer :: i
@@ -1297,6 +1297,7 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (soscf_converger)
           sc%level_shift = infos%control%soscf_lvl_shift
+          sc%soscf_reset_mod = infos%control%soscf_reset_mod
       end select
     end do
 

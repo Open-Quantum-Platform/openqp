@@ -691,6 +691,8 @@ module scf_converger
     real(kind=dp) :: hess_thresh = 1.0e-10_dp !< Orbital Hessian threshold
     real(kind=dp) :: grad_thresh = 1.0e-3_dp  !< Gradient threshold
     real(kind=dp) :: level_shift = 0.0_dp     !< Level shifting parameter
+    real(kind=dp) :: rms_grad_prev = 0.0_dp   !< previous Gradient norm
+    integer :: soscf_reset_mod = 1            !< Set the SOSCF Hessian reset mode.
     logical :: use_lineq = .false.            !< Use linear equations (vs BFGS)
 
     ! L-BFGS history
@@ -2325,6 +2327,7 @@ contains
     real(kind=dp), pointer :: fock_ao_a(:), fock_ao_b(:)
     real(kind=dp), pointer :: mo_e_a(:), mo_e_b(:)
     real(kind=dp) :: grad_norm, alpha, sy, rms_dp
+    real(kind=dp) :: grad_norm_ratio
     integer :: iter, istat
     integer :: i
 
@@ -2414,6 +2417,7 @@ contains
 
     call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
     grad_norm = sqrt(dot_product(self%grad, self%grad)/self%nvec)
+    if (self%m_history == 0 )  self%rms_grad_prev = grad_norm
     if (self%verbose>1) &
       write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:1:calc_orb_grad: iter=', 0, ' grad_norm=', grad_norm
 
@@ -2483,6 +2487,19 @@ contains
       call compute_mo_energies(self, fock_ao_b, self%mo_b, &
                                self%dat%buffer(self%dat%slot)%mo_e_b, self%work_1, self%work_2)
     end if
+
+    if (self%soscf_reset_mod /= 0 .and. mod(self%m_history, self%soscf_reset_mod) == 0) then
+      if (self%rms_grad_prev > 1.0d-12) then
+        grad_norm_ratio = grad_norm / self%rms_grad_prev
+        self%rms_grad_prev = grad_norm
+        if (grad_norm_ratio > 0.95_dp) then
+          write(iw, '(A,F8.5)') 'Reset the Hessian, grad_norm_ratio = ', grad_norm_ratio
+          self%m_history = 0
+          self%first_macro = .true.
+        end if
+      end if
+    end if
+
 
   end subroutine soscf_run
 

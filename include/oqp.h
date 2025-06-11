@@ -132,6 +132,7 @@ struct control_parameters {
     // SOSCF parameters
     int64_t   soscf_type;
     double    soscf_lvl_shift;
+    int64_t   soscf_reset_mod;
     int64_t   verbose;
 };
 
