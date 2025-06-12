@@ -2493,7 +2493,7 @@ contains
         grad_norm_ratio = grad_norm / self%rms_grad_prev
         self%rms_grad_prev = grad_norm
         if (grad_norm_ratio > 0.95_dp) then
-          write(iw, '(A,F8.5)') 'Reset the Hessian, grad_norm_ratio = ', grad_norm_ratio
+          write(iw, '(8X, "Resetting Hessian, gradient norm ratio = ", F8.5)') grad_norm_ratio
           self%m_history = 0
           self%first_macro = .true.
         end if

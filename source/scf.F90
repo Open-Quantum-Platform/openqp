@@ -1100,9 +1100,8 @@ contains
           H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
         end select
 
-        if (H_U_gap < H_U_gap_crit) then
+        if (H_U_gap < H_U_gap_crit .and. vshift>0) then
           ! Small gap detected, enable level shifting
-          !vshift = 0.1_dp
           write(IW,"(3x,64('-')/10x,&
                    &'Small HOMO-LUMO gap detected (',&
                    &F8.5,' au). Apply level vshift=',F6.4)") H_U_gap, vshift
