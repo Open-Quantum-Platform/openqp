@@ -163,11 +163,14 @@ class SinglePoint(Calculator):
         self.scf_type = mol.config['scf']['type']
         self.scf_maxit = mol.config['scf']['maxit']
         self.forced_attempt = mol.config['scf']['forced_attempt']
+        self.alternative_scf = mol.config["scf"]["alternative_scf"]
         self.scf_mult = mol.config['scf']['multiplicity']
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
         self.init_basis = mol.config['scf']['init_basis']
         self.init_library = mol.config['scf']['init_library']
+        self.init_conv =  mol.config['scf']['init_conv']
+        self.conv = mol.config['scf']['conv']
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
@@ -191,10 +194,19 @@ class SinglePoint(Calculator):
 
     def _init_convergence(self):
         init_calc = self.energy_func['hf']
-        init_basis = self.init_basis
-        init_library = self.init_library
         target_basis = self.basis
         target_library = self.library
+        if self.init_basis == 'none':
+            init_basis = target_basis
+            init_library = target_library
+        else :
+            init_basis = self.init_basis
+            init_library = self.init_library
+
+        init_converger = self.mol.config['scf']['init_converger']
+        target_converger = self.mol.config['scf']['soscf_type']
+        self.mol.data.set_scf_soscf_type(init_converger)
+        self.mol.data.set_scf_conv(self.init_conv)
 
         if init_basis:
             self.mol.config['input']['basis'] = init_basis
@@ -257,9 +269,11 @@ class SinglePoint(Calculator):
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
         self.mol.config['input']['functional'] = self.functional
+        self.mol.data.set_scf_soscf_type(target_converger)
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
+        self.mol.data.set_scf_conv(self.conv)
         self.mol.data.set_mol_multiplicity(self.scf_mult)
         self._project_basis()
 #        oqp.library.update_guess(self.mol)
@@ -339,8 +353,19 @@ class SinglePoint(Calculator):
             else:
                 dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
 
+
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
+
+            if self.alternative_scf:
+                dump_log(self.mol, title='PyOQP: Enable the SOSCF flag in SCF to improve convergence.', section='input')
+                self.mol.data.set_scf_soscf_type(1)
+                self.scf()
+                energy = [self.mol.mol_energy.energy]
+                scf_flag = self.mol.mol_energy.SCF_converged
+                if scf_flag:
+                    dump_log(self.mol, title='PyOQP: SCF energy is converged after %s attempts' % (itr + 1), section='')
+
 
             if self.exception is True:
                 raise SCFnotConverged()
