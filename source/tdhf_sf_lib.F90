@@ -933,7 +933,7 @@ contains
 
   end subroutine sfrowcal
 
-  function get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,nocb) result(s2)
+  function get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,nocb,noca) result(s2)
   ! dmat_a / dmat_b -- alpha/beta density of the excited state
   ! ta / tb -- alpha/beta difference density matrix
     use precision, only : dp
@@ -947,13 +947,13 @@ contains
       dmat_a, dmat_b, ta, tb
     real(kind=dp), intent(in), dimension(:,:) :: abxc
     real(kind=dp), intent(in), dimension(:) :: smat
-    integer, intent(in) :: nocb
-    real(kind=dp) :: s2
+    integer, intent(in) :: nocb, noca
+    real(kind=dp) :: s2, nsocc
 
     real(kind=dp), allocatable :: scr1(:), dmat_t(:), &
       dmat_t_sq(:,:), smat_sq(:,:), tmp1(:,:), tmp2(:,:)
     integer :: nbf, nbf_tri, ok
-    real(kind=dp) :: dum1, dum2, dum3, dum4
+    real(kind=dp) :: dum0, dum1, dum2, dum3, dum4
 
     nbf = ubound(abxc, 1)
     nbf_tri = ubound(dmat_a, 1)
@@ -968,6 +968,8 @@ contains
     if (ok/=0) call show_message('Cannot allocate memory in qet_spin_square',with_abort)
 
    ! Calculate spin expectation values
+     nsocc = noca - nocb
+     dum0 = 0.25_dp*nsocc*(nsocc-2)
      dum1 = nocb+1
 
    ! Symmetric matrix scr1 = Smat*Dmat_a*Smat
@@ -1007,7 +1009,7 @@ contains
      call pack_matrix(tmp1, scr1)
      dum4 = traceprod_sym_packed(scr1, smat, nbf)/2.0_dp
 
-     s2 = dum1 + dum2 - dum3 + dum4**2
+     s2 = dum0 + dum1 + dum2 - dum3 + dum4**2
 
  end function get_spin_square
 

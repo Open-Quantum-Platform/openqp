@@ -118,15 +118,22 @@ module types
     real(c_double) :: pfon_start_temp = 2000.0_dp    !< Starting tempreature for pFON
     real(c_double) :: pfon_cooling_rate = 50.0_dp    !< Tempreature cooling rate for pFON
     real(c_double) :: pfon_nsmear = 5.0_dp           !< Num. of smearing orbitals for pFON if = 0, all 
-    real(c_double) :: conv         = 1e-6_dp         !< Convergency criteria of SCF
+    real(c_double) :: conv = 1e-6_dp                 !< Convergency criteria of SCF
     integer(c_int64_t) :: scf_incremental = 1        !< Enable/disable incremental Fock build
     real(c_double) :: int2e_cutoff = 5e-11_dp        !< 2e-integrals cutoff
     integer(c_int64_t) :: esp = 0                    !< (R)ESP charges, 0 - skip, 1 - ESP, 2 - RESP
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
+
     real(c_double) :: conf_print_threshold = 5.0d-02             !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
+    real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
+    ! SOSCF parameters
+    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
+    real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
+    integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
+    integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
