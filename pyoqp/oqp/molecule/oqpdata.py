@@ -94,6 +94,7 @@ OQP_CONFIG_SCHEMA = {
         'soscf_type': {'type': int, 'default': '0'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
+        'alternative_scf': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
     },
     'dftgrid': {
