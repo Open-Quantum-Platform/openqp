@@ -1,0 +1,31 @@
+[input]
+system=
+   6     0.000000000      0.000000000     -0.505994000
+   7     0.000000000      0.000000000      0.657328000
+   1     0.000000000      0.000000000     -1.565330000
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+runtype=energy
+
+[guess]
+save_mol=False
+continue_geom=False
+swapmo=2,7
+
+[scf]
+type=rohf
+multiplicity=3
+save_molden=True
+rstctmo=True
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+
+[tdhf]
+type=mrsf
+multiplicity=1
+nstate=25
+ixcore=7
+

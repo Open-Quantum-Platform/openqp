@@ -95,6 +95,8 @@ struct dft_parameters {
     double spc_coco;
     double spc_ovov;
     double spc_coov;
+    int32_t* ixcore;
+    int64_t ixcore_len;
 };
 
 struct control_parameters {
@@ -129,6 +131,7 @@ struct control_parameters {
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
+    bool      rstctmo;
     // SOSCF parameters
     int64_t   soscf_type;
     double    soscf_lvl_shift;

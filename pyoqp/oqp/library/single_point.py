@@ -314,6 +314,31 @@ class SinglePoint(Calculator):
                 i += 1
         return final_filename
 
+    # IXCORE for XAS (X-ray absorption spectroscopy)
+    # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
+    def ixcore_shift(self):
+        from oqp import ffi
+        ixcore= self.mol.config["tdhf"]["ixcore"]
+        
+        if ixcore == "-1":  # if default
+            # Pass pointer 
+            ixcore_array = np.array([-1], dtype=np.int32)
+            self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
+            self.mol.data['ixcore_len'] = ixcore_array.size
+            return
+
+        # Pass pointer to Fortran via C
+        ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
+        self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
+        self.mol.data['ixcore_len'] = ixcore_array.size
+
+        # shift MO energies 
+        noccB = self.mol.data['nelec_B']
+        tmp = self.mol.data["OQP::E_MO_A"]
+        for i in range(noccB+1):  # up to HOMO-1
+            if i not in ixcore_array:
+                tmp[i-1] = -100000  # shift the MO energy down
+
     def energy(self, do_init_scf=True):
         # check method
         if self.method not in ['hf', 'tdhf']:
@@ -321,6 +346,9 @@ class SinglePoint(Calculator):
 
         # compute reference
         ref_energy = self.reference(do_init_scf=do_init_scf)
+
+        # ixcore
+        self.ixcore_shift()
 
         # compute excitations
         if self.method == 'tdhf':
@@ -330,6 +358,20 @@ class SinglePoint(Calculator):
 
         return energies
 
+    def swapmo(self):
+        # swap MO energy and AO coefficient depending on user's request
+        swapmo= self.mol.config["guess"]["swapmo"]
+        if swapmo:   # if not default (empty)
+            swapmo_array = [int(x.strip()) for x in swapmo.split(',')]
+
+            # Initial MO energy and coefficient
+            og_val = self.mol.data["OQP::E_MO_A"]
+            og_vec = self.mol.data["OQP::VEC_MO_A"]
+            # It only takes pairs. If it is not pair, it will be ignored.
+            for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
+                og_val[[i-1, j-1]] = og_val[[j-1, i-1]]
+                og_vec[[i-1, j-1]] = og_vec[[j-1, i-1]]
+
     def reference(self, do_init_scf=True):
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
@@ -338,6 +380,8 @@ class SinglePoint(Calculator):
             self._init_convergence()
         else:
             self._prep_guess()
+
+        self.swapmo()
 
         scf_flag = False
         for itr in range(self.forced_attempt):

@@ -188,6 +188,12 @@ contains
     real(kind=dp), allocatable :: qmat(:,:)  ! Orthogonalization matrix
     real(kind=dp), allocatable, target :: work1(:,:)  ! Work matrix 1
     real(kind=dp), allocatable, target :: work2(:,:)  ! Work matrix 2
+    !==============================================================================
+    ! Matrices and Vectors for SCF Calculation
+    !==============================================================================
+    logical :: do_rstctmo
+    real(kind=dp), allocatable, dimension(:,:) :: mo_a_for_rstctmo, mo_b_for_rstctmo
+    real(kind=dp), allocatable :: mo_energy_a_for_rstctmo(:)
 
     !==============================================================================
     ! Tag Arrays for Accessing Data
@@ -239,7 +245,7 @@ contains
       scf_type = scf_rohf
       scf_name = "ROHF"
       nfocks = 2
-      diis_nfocks = 1 
+      diis_nfocks = 1
       soscf_nfocks = 2
     end select
 
@@ -383,7 +389,17 @@ contains
         allocate(mo_e_b_prev(nbf), source=0.0_dp)
       end if
     end if
-
+    !==============================================================================
+    ! Initialize XAS parameters
+    !==============================================================================
+    do_rstctmo = infos%control%rstctmo
+    if(do_mom .and. do_rstctmo) call show_message('* Error: Use either MOM or RSTCTMO',WITH_ABORT)
+    if (do_rstctmo) then
+      allocate(mo_a_for_rstctmo(nbf,nbf), &
+                mo_b_for_rstctmo(nbf,nbf), &
+                mo_energy_a_for_rstctmo(nbf), &
+                source=0.0_dp)
+    end if
     !==============================================================================
     ! Initialize Vshift Parameters (currently only works for ROHF)
     !==============================================================================
@@ -640,6 +656,10 @@ contains
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
+      if (do_rstctmo) then
+        mo_energy_a_for_rstctmo = mo_energy_a
+        mo_a_for_rstctmo = mo_a
+      end if
       !----------------------------------------------------------------------------
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
@@ -1060,7 +1080,13 @@ contains
 
         initial_mom_iter = .false.
       end if
-
+      !----------------------------------------------------------------------------
+      ! Apply XAS if enabled
+      !----------------------------------------------------------------------------
+      if (do_rstctmo) then
+        call apply_mom(infos, mo_a_for_rstctmo, mo_energy_a_for_rstctmo, &
+                       mo_a, mo_energy_a, smat_full, nelec_a, "Alpha", work1, work2)
+      end if
       !----------------------------------------------------------------------------
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
@@ -1232,7 +1258,6 @@ contains
        if (allocated(mo_b_prev))   deallocate(mo_b_prev)
        if (allocated(mo_e_b_prev)) deallocate(mo_e_b_prev)
     end if
-
   end subroutine scf_driver
 
   !> @brief Prints the final energy components of the SCF calculation.

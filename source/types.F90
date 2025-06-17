@@ -125,7 +125,9 @@ module types
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
+
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
+    logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
     ! SOSCF parameters
     integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
@@ -153,6 +155,8 @@ module types
     real(c_double) :: spc_coco = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_ovov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
+    type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
+    integer(c_int64_t) :: ixcore_len = 1   !< length of ixcore
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator

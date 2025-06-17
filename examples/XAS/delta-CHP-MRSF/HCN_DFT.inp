@@ -1,0 +1,20 @@
+[input]
+system=
+   6     0.000000000      0.000000000     -0.505994000
+   7     0.000000000      0.000000000      0.657328000
+   1     0.000000000      0.000000000     -1.565330000
+basis=6-31g*
+functional=bhhlyp
+method=hf
+runtype=energy
+
+[guess]
+save_mol=False
+
+[scf]
+type=rhf
+multiplicity=1
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
