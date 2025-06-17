@@ -291,8 +291,13 @@ contains
 
     nbf = size(v_curr, 1)
 
-    if (infos%control%verbose>=1) &
-      write(IW, fmt='(/,"Applying MOM for ",A," spin channel")') trim(spin_label)
+    if (infos%control%verbose>=1) then
+      if (infos%control%rstctmo) then
+        write(IW, fmt='(/,"Applying Reodering for ",A," spin channel")') trim(spin_label)
+      else
+        write(IW, fmt='(/,"Applying MOM for ",A," spin channel")') trim(spin_label)
+      end if
+    end if
 
     ! Allocate reordered flag array
     allocate(reordered(nbf), source=.false.)
@@ -309,7 +314,7 @@ contains
     ! First, identify the best match for each orbital from the previous iteration
     ! Focus particularly on occupied orbitals and the HOMO-LUMO region
     ! Print information about important orbitals (HOMO, LUMO)
-    if (infos%control%verbose>=1) then
+    if (infos%control%verbose>1) then
       write(IW,fmt='(1X,"MOM reordering for ",A," orbitals:")') trim(spin_label)
       write(IW,fmt='(1X,"Old Index → New Index   | Overlap |  Status")')
       write(IW,fmt='(1X,"--------------------------------------------")')
@@ -333,25 +338,26 @@ contains
 
       ! Mark the orbital as reordered and print info for occupied orbitals
       reordered(max_idx) = .true.
+      if (infos%control%verbose>1) then
+        ! Print info for important orbitals or those being reordered
+        if (((i <= n_occ+1) .or. (i /= max_idx)).and. infos%control%verbose>=1) then
+          write(IW, fmt='(3X,I3,5X,"→",5X,I3,5X,"| ",F7.5," |")', advance='no') &
+            i, max_idx, max_overlap
 
-      ! Print info for important orbitals or those being reordered
-      if (((i <= n_occ+1) .or. (i /= max_idx)).and. infos%control%verbose>=1) then
-        write(IW, fmt='(3X,I3,5X,"→",5X,I3,5X,"| ",F7.5," |")', advance='no') &
-          i, max_idx, max_overlap
+          ! Add label for HOMO/LUMO
+          if (i == n_occ)   write(IW, fmt='(1X,"HOMO")', advance='no')
+          if (i == n_occ+1) write(IW, fmt='(1X,"LUMO")', advance='no')
 
-        ! Add label for HOMO/LUMO
-        if (i == n_occ)   write(IW, fmt='(1X,"HOMO")', advance='no')
-        if (i == n_occ+1) write(IW, fmt='(1X,"LUMO")', advance='no')
-
-        ! Add status message
-        if (i /= max_idx .and. max_overlap < 0.9_dp) then
-          write(IW, fmt='(1X,"Reordered (warning: low overlap)")')
-        else if (i /= max_idx) then
-          write(IW, fmt='(1X,"Reordered")')
-        else if (max_overlap < 0.9_dp) then
-          write(IW, fmt='(1X,"Unchanged (warning: low overlap)")')
-        else
-          write(IW, fmt='(1X,"Unchanged")')
+          ! Add status message
+          if (i /= max_idx .and. max_overlap < 0.9_dp) then
+            write(IW, fmt='(1X,"Reordered (warning: low overlap)")')
+          else if (i /= max_idx) then
+            write(IW, fmt='(1X,"Reordered")')
+          else if (max_overlap < 0.9_dp) then
+            write(IW, fmt='(1X,"Unchanged (warning: low overlap)")')
+          else
+            write(IW, fmt='(1X,"Unchanged")')
+          end if
         end if
       end if
     end do

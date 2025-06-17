@@ -194,7 +194,7 @@ contains
     logical :: do_rstctmo
     real(kind=dp), allocatable, dimension(:,:) :: mo_a_for_rstctmo, mo_b_for_rstctmo
     real(kind=dp), allocatable :: mo_energy_a_for_rstctmo(:)
-     
+
     !==============================================================================
     ! Tag Arrays for Accessing Data
     !==============================================================================
@@ -245,7 +245,7 @@ contains
       scf_type = scf_rohf
       scf_name = "ROHF"
       nfocks = 2
-      diis_nfocks = 1 
+      diis_nfocks = 1
       soscf_nfocks = 2
     end select
 
@@ -391,16 +391,15 @@ contains
     end if
     !==============================================================================
     ! Initialize XAS parameters
-    !==============================================================================    
+    !==============================================================================
     do_rstctmo = infos%control%rstctmo
     if(do_mom .and. do_rstctmo) call show_message('* Error: Use either MOM or RSTCTMO',WITH_ABORT)
     if (do_rstctmo) then
       allocate(mo_a_for_rstctmo(nbf,nbf), &
                 mo_b_for_rstctmo(nbf,nbf), &
                 mo_energy_a_for_rstctmo(nbf), &
-                work(nbf,nbf), &
                 source=0.0_dp)
-    end if    
+    end if
     !==============================================================================
     ! Initialize Vshift Parameters (currently only works for ROHF)
     !==============================================================================
@@ -657,6 +656,10 @@ contains
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
+      if (do_rstctmo) then
+        mo_energy_a_for_rstctmo = mo_energy_a
+        mo_a_for_rstctmo = mo_a
+      end if
       !----------------------------------------------------------------------------
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
@@ -1081,14 +1084,12 @@ contains
       ! Apply XAS if enabled
       !----------------------------------------------------------------------------
       if (do_rstctmo) then
-        mo_energy_a_for_rstctmo = mo_energy_a
-        mo_a_for_rstctmo = mo_a
-        call mo_reorder(infos, mo_a_for_rstctmo, mo_energy_a_for_rstctmo, &
-                           mo_a, mo_energy_a, smat_full)
-      end if    
+        call apply_mom(infos, mo_a_for_rstctmo, mo_energy_a_for_rstctmo, &
+                       mo_a, mo_energy_a, smat_full, nelec_a, "Alpha", work1, work2)
+      end if
       !----------------------------------------------------------------------------
       ! Build New Density Matrix from Updated Orbitals
-      !----------------------------------------------------------------------------  
+      !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
         if (do_pfon) then
           ! pFON density build with fractional occupations
@@ -1557,163 +1558,5 @@ contains
     call int2_driver%clean()
 
   end subroutine fock_jk
- subroutine mo_reorder(infos, Va, Ea, Vb, Eb, Sq)
-!  Va, Ea: MO and MO energies of Previous Point
-!  Vb, Eb: MO and MO energies of Current Point
-!  The Vb and Eb are reordered based on the orders of Va and Ea.
-!  Sq: Square Form of Overlap Matrix in AO
-   use precision, only: dp
-   use io_constants, only: iw
-   use types, only: information
 
-   implicit none
-
-   type(information), intent(inout) :: infos
-   real(kind=dp), intent(inout), dimension(:,:) :: Va, Vb ! (nbf, nbf)
-   real(kind=dp), intent(inout), dimension(:) :: Ea, Eb    ! (nbf)
-   real(kind=dp), intent(in), dimension(:,:) :: Sq    ! (nbf, nbf)
-
-   integer :: i, loc
-   real(kind=dp) :: tmp, tmp2, tmp_abs
-   real(kind=dp), allocatable, dimension(:,:) :: scr, smo
-   logical, allocatable, dimension(:) :: pr
-   integer, allocatable, dimension(:) :: locs
-   integer :: na, nbf
-
-   write(iw, fmt='(/," MOM is on: Reordering the New MO and MO energies....")')
-
-   nbf = infos%basis%nbf
-   na = infos%mol_prop%nelec_a
-
-   allocate(scr(nbf,nbf), &
-            smo(nbf,nbf), &
-            source=0.0_dp)
-   allocate(pr(nbf), source=.false.)
-   allocate(locs(nbf), source=0)
-
-   call dgemm('t', 'n', nbf, nbf, nbf, &
-               1.0_dp, Va, nbf, &
-                       Sq, nbf, &
-               0.0_dp, scr, nbf)
-   call dgemm('n', 'n', nbf, nbf, nbf, &
-               1.0_dp, scr, nbf, &
-                       Vb, nbf, &
-               0.0_dp, smo, nbf)
-!  Now Smo is overlap matrix in MO, row and column corresponds to Old and New MOs.
-   do i = 1, nbf
-     smo(:,i) = smo(:,i) / norm2(smo(:,i))
-   end do
-!  Finding out the location of maximum value in column i
-   do i = 1, nbf
-     loc = maxloc(abs(smo(:nbf,i)), dim=1)
-     locs(i) = loc
-     pr(loc) = .true.
-   enddo
-!  Checking printouts
-   if (.not.all(pr)) then
-     write(iw, fmt='(/,"   Warning")')
-     write(iw, fmt='(" Some orbitals are missing in reordering")')
-     write(iw, advance='no', fmt='(" Their indices are:")')
-     do i = 1, nbf
-       if (.not.pr(i)) write(iw, advance='no', fmt='(I4,",")') i
-     end do
-     write(iw,*)
-     write(iw, fmt='(/,"   Error. Stop")')
-     write(iw, fmt='(" Some orbitals are missing in reordering")')
-     write(iw,*)
-   end if
-
-   write(iw,fmt='(x,a)') 'Old MO Index ---> New MO Index'
-   do i = 1, nbf
-     tmp_abs = maxval(abs(smo(:nbf,i)), dim=1)
-     loc = maxloc(abs(smo(:nbf,i)), dim=1)
-     tmp = smo(loc,i)
-     tmp2 = smo(i,i)
-
-     if ((loc.ne.i).and.(i.le.na+1)) then
-       write(iw, advance='no', &
-        fmt='(5x,i4,14x,i4)') i, loc
-       if (i == na-1) write(iw, advance='no',fmt='(2x,a)') ' HOMO'
-       if (i == na) write(iw, advance='no',fmt='(2x,a)') ' LUMO'
-       if (i /= loc .and. tmp_abs < 0.9d+00) then
-         write(iw, fmt='(2x,a)') &
-         ' rearranged, WARNING'
-       elseif (i == loc .and. tmp_abs < 0.9d+00) then
-         write(iw, fmt='(2x,a)')  &
-         ' WARNING'
-       elseif (i /= loc .and. tmp_abs > 0.9d+00) then
-         write(iw, fmt='(2x,a)') &
-         ' rearranged'
-       else
-         write(iw,*)
-       end if
-     endif
-   enddo
-
-!  Reordering MO and MO energies of Current point.
-   call reorderMOs(Vb, Eb, Smo, nbf, nbf, 1, na+1)
-
- end subroutine mo_reorder
-!> @brief      This routine reorders orbitals to maximum overlap.
- subroutine reordermos(v,e,smo,l0,nbf,lr1,lr2)
-    use precision, only: dp
-
-    implicit none
-
-    real(kind=dp), intent(inout), dimension(nbf,*) :: V
-    real(kind=dp), intent(in), dimension(*) :: E
-    real(kind=dp), intent(in), dimension(l0,*) :: Smo
-    integer :: l0, nbf, lr1, lr2
-
-    integer, allocatable, dimension(:) :: iwrk, iwrk2
-    real(kind=dp), allocatable, dimension(:) :: wrk
-    integer :: i, j, k, ip1
-    real(kind=dp) :: ss, smax
-
-    allocate(iwrk(l0), iwrk2(l0), source=0)
-    allocate(wrk(l0), source=0.0_dp)
-
-    do i = 1, l0
-      smax = 0.0_dp
-      iwrk(i) = 0
-      do j = 1, l0
-        do k = 1, i
-          if(iwrk(k)==j) cycle
-        end do
-        ss = abs(smo(i,j))
-        if(ss > smax) then
-          smax = ss
-          iwrk(i) = j
-        end if
-      end do
-      if(smo(i, iwrk(i)) < 0.0_dp) then
-        do j = 1, nbf
-          v(j,iwrk(i)) = -v(j,iwrk(i))
-        end do
-      end if
-    end do
-
-    iwrk2 = iwrk
-
-    do i = lr1, lr2
-       j = iwrk(i)
-       call dswap(nbf,v(1,i),1,v(1,j),1)
-       ip1 = i+1
-       do k = ip1, lr2
-          if(iwrk(k)==i) iwrk(k) = j
-       end do
-    end do
-
-    iwrk = iwrk2
-    do i = lr1, lr2
-       j = iwrk(i)
-       call dswap(1,e(i),1,e(j),1)
-       ip1 = i+1
-       do k = ip1, lr2
-          if(iwrk(k)==i) iwrk(k) = j
-       end do
-    end do
-    return
- end subroutine
- 
 end module scf
