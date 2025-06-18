@@ -66,6 +66,7 @@ ExternalProject_Add(libxc
                    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   -DCMAKE_POLICY_VERSION_MINIMUM=3.25
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
 
