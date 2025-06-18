@@ -7,6 +7,7 @@
 !> @todo   add meta-GGA functionals with laplacian of electron density
 module libxc
   use xc_f03_lib_m
+  use xc_f03_funcs_m
   use functionals, only: functional_t
   use precision, only: fp
   implicit none
