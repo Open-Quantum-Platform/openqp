@@ -52,8 +52,8 @@ ExternalProject_Add(nlopt
 
 ExternalProject_Add(libxc
         PREFIX ${CMAKE_SOURCE_DIR}/external/libxc
-        URL https://gitlab.com/libxc/libxc/-/archive/6.2.2/libxc-6.2.2.tar.gz
-        URL_HASH SHA256=d1b65ef74615a1e539d87a0e6662f04baf3a2316706b4e2e686da3193b26b20f
+	URL https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz
+        URL_HASH SHA256=8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a77
         BINARY_DIR ${CMAKE_BINARY_DIR}/external/libxc/src/libxc-build-${CMAKE_Fortran_COMPILER_ID}
         STAMP_DIR  ${CMAKE_BINARY_DIR}/external/libxc/src/libxc-stamp-${CMAKE_Fortran_COMPILER_ID}
         UPDATE_COMMAND ""
@@ -66,6 +66,7 @@ ExternalProject_Add(libxc
                    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   -DCMAKE_POLICY_VERSION_MINIMUM=3.25
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
 
