@@ -491,10 +491,10 @@ contains
     case ("DTCAM-TUNE", "CDTCAMTUNE")  ! Use to tune HF exchange in DFT and TDDFT
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ dft_params%cam_alpha+dft_params%cam_beta, &
+            external_parameters=(/ 0.81_fp, &
+                                   dft_params%cam_alpha+dft_params%cam_beta, &
                                   -dft_params%cam_beta, &
-                                   dft_params%cam_mu, &
-                                   0.81_fp  /), &
+                                   dft_params%cam_mu /), &
             alpha=dft_params%cam_alpha, &
             beta=dft_params%cam_beta, &
             omega=dft_params%cam_mu)
@@ -504,7 +504,7 @@ contains
     case ("DTCAM-VAEE", "DTCAMVAEE")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.30_fp,  0.20_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.30_fp,  0.20_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.50
             beta=dft_params%cam_beta, &   ! =-0.20
             omega=dft_params%cam_mu)      ! = 0.33
@@ -520,7 +520,7 @@ contains
     case ("DTCAM-XIV", "DTCAMXIV")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.30_fp,  0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.30_fp,  0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.59
             beta=dft_params%cam_beta, &   ! =-0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -537,7 +537,7 @@ contains
     case ("DTCAM-XI", "DTCAMXI")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 1.02_fp, -0.52_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 1.02_fp, -0.52_fp, 0.33_fp   /), &
             alpha=dft_params%cam_alpha, & ! = 0.50
             beta=dft_params%cam_beta, &   ! = 0.52
             omega=dft_params%cam_mu)      ! = 0.33
@@ -553,7 +553,7 @@ contains
     case ("DTCAM-AEE", "DTCAMAEE")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.48_fp, -0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.48_fp, -0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.19
             beta=dft_params%cam_beta, &   ! = 0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -569,7 +569,7 @@ contains
     case ("DTCAM-VEE", "DTCAMVEE")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.48_fp, -0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.48_fp, -0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.19
             beta=dft_params%cam_beta, &   ! = 0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -585,7 +585,7 @@ contains
     case ("DTCAM-STG", "DTCAMSTG")  
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.24_fp,  0.24_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.24_fp,  0.24_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.48
             beta=dft_params%cam_beta, &   ! =-0.24
             omega=dft_params%cam_mu)      ! = 0.33
