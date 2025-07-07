@@ -293,7 +293,7 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
-#            "ixcore" : "set_tdhf_ixcore",
+            "ixcore" : "set_tdhf_ixcore",
         },
     }
     _typemap = [np.void,
@@ -623,6 +623,11 @@ class OQPData:
     def set_tdhf_spc_coov(self, spc_coov):
         """Set CO-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation"""
         self._data.tddft.spc_coov = spc_coov
+
+    def set_tdhf_ixcore(self, ixcore):
+        self.ixcore_array = np.ascontiguousarray(np.array(ixcore.split(','), dtype=np.int32))
+        self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(self.ixcore_array))
+        self._data.tddft.ixcore_len = self.ixcore_array.size
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
