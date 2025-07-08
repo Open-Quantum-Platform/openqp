@@ -625,9 +625,15 @@ class OQPData:
         self._data.tddft.spc_coov = spc_coov
 
     def set_tdhf_ixcore(self, ixcore):
-        self.ixcore_array = np.ascontiguousarray(np.array(ixcore.split(','), dtype=np.int32))
-        self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(self.ixcore_array))
-        self._data.tddft.ixcore_len = self.ixcore_array.size
+        if ixcore == '-1' :
+            self.ixcore_array = None
+            self._data.tddft.ixcore = ffi.NULL
+            self._data.tddft.ixcore_len = 0
+        else:
+            arr = np.ascontiguousarray(np.array(ixcore.split(','), dtype=np.int32))
+            self.ixcore_array = arr  # keep reference!
+            self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(arr))
+            self._data.tddft.ixcore_len = arr.size
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
