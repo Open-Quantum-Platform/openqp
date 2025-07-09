@@ -319,19 +319,9 @@ class SinglePoint(Calculator):
     def ixcore_shift(self):
         from oqp import ffi
         ixcore= self.mol.config["tdhf"]["ixcore"]
-        
         if ixcore == "-1":  # if default
-            # Pass pointer 
-            ixcore_array = np.array([-1], dtype=np.int32)
-            self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
-            self.mol.data['ixcore_len'] = ixcore_array.size
             return
-
-        # Pass pointer to Fortran via C
         ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
-        self.mol.data['ixcore'] = ffi.cast("int32_t *", ffi.from_buffer(ixcore_array))
-        self.mol.data['ixcore_len'] = ixcore_array.size
-
         # shift MO energies 
         noccB = self.mol.data['nelec_B']
         tmp = self.mol.data["OQP::E_MO_A"]
