@@ -585,13 +585,13 @@ contains
     case ("DTCAM-STG", "DTCAMSTG")  
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.81_fp, 0.17_fp,  0.28_fp, 0.30_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.17_fp,  0.28_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.45
             beta=dft_params%cam_beta, &   ! =-0.28
-            omega=dft_params%cam_mu)      ! = 0.30
+            omega=dft_params%cam_mu)      ! = 0.33
       tddft_params%cam_alpha = 0.64_fp
       tddft_params%cam_beta = -0.11_fp
-      tddft_params%cam_mu = dft_params%cam_mu
+      tddft_params%cam_mu =   0.30_fp
       tddft_params%spc_coco = 0.43_fp
       tddft_params%spc_ovov = 0.44_fp
       tddft_params%spc_coov = 0.65_fp
