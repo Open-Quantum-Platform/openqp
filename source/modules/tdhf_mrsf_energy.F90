@@ -526,7 +526,7 @@ contains
     call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)
 
     select case (mrst)
-      case (1)  
+      case(1)
         do ist = 1, nstates
           do jst = ist, nstates
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
@@ -540,7 +540,7 @@ contains
         call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
-      case (3)  
+      case(3)
         do ist = 1, nstates
           do jst = ist, nstates
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
@@ -554,7 +554,7 @@ contains
         call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
-      case (5)  
+      case(5)
         call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
         squared_S(:) = 6.0_dp
         call get_transitions(trans, noccb, nocca, nbf)
