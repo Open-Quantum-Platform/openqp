@@ -527,21 +527,15 @@ contains
 
     select case (mrst)
     case (1)
-      if (verbose > 2) then
-        do ist = 1, nstates
-          do jst = ist, nstates
+      do ist = 1, nstates
+        do jst = ist, nstates
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
+          if (verbose > 2) then
             write(iw,'(A,I0,A,I0)') '=== Singlet Δρ for state ', ist, '→', jst, ' ==='
             call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
-          end do
+          end if
         end do
-      else
-        do ist = 1, nstates
-          do jst = ist, nstates
-            call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
-          end do
-        end do
-      end if
+      end do
       squared_S(:) = 0.0_dp
       call get_mrsf_transitions(trans, nocca, noccb, nbf)
       write(iw,'(/,2x,35("="),/,2x,"Spin-adapted spin-flip excitations",/,2x,35("="))')
