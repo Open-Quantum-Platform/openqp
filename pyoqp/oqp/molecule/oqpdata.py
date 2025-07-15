@@ -133,6 +133,7 @@ OQP_CONFIG_SCHEMA = {
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type' : string, 'default' : '-1'},
+        'verbose': {'type': int, 'default': '1'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -294,6 +295,7 @@ class OQPData:
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
             "ixcore" : "set_tdhf_ixcore",
+            "verbose": "set_tdhf_verbose",
         },
     }
     _typemap = [np.void,
@@ -634,6 +636,10 @@ class OQPData:
             self.ixcore_array = arr  # keep reference!
             self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(arr))
             self._data.tddft.ixcore_len = arr.size
+
+    def set_tdhf_verbose(self, verbose):
+        """Controls output verbosity"""
+        self._data.tddft.verbose = verbose
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
