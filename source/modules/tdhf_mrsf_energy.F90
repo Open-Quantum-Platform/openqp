@@ -526,62 +526,42 @@ contains
     call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)
 
     select case (mrst)
-    case (1)
-      if (verbose > 2) then
+      case (1)  
         do ist = 1, nstates
           do jst = ist, nstates
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
-            write(iw,'(A,I0,A,I0)') '=== Singlet Δρ for state ', ist, '→', jst, ' ==='
-            call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
+            if (verbose > 2) then
+              write(iw,'(A,I0,A,I0)') '=== Singlet density matrix for state ', ist, '->', jst, ' ==='
+              call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
+            end if
           end do
         end do
-      else
+        squared_S(:) = 0.0_dp
+        call get_mrsf_transitions(trans, nocca, noccb, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Spin-adapted spin-flip excitations",/,2x,35("="))')
+      case (3)  
         do ist = 1, nstates
           do jst = ist, nstates
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
+            if (verbose > 2) then
+              write(iw,'(A,I0,A,I0)') '=== Triplet density matrix for state ', ist, '->', jst, ' ==='
+              call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
+            end if
           end do
         end do
-      end if
-      squared_S(:) = 0.0_dp
-      call get_mrsf_transitions(trans, nocca, noccb, nbf)
-      write(iw,'(/,2x,35("="),/,2x,"Spin-adapted spin-flip excitations",/,2x,35("="))')
-    
-    case (3)
-      if (verbose > 2) then
-        do ist = 1, nstates
-          do jst = ist, nstates
-            call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
-            write(iw,'(A,I0,A,I0)') '=== Triplet Δρ for state ', ist, '→', jst, ' ==='
-            call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
-          end do
-        end do
-      else
-        do ist = 1, nstates
-          do jst = ist, nstates
-            call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
-          end do
-        end do
-      end if
-      squared_S(:) = 2.0_dp
-      call get_mrsf_transitions(trans, nocca, noccb, nbf)
-      write(iw,'(/,2x,35("="),/,2x,"Spin-adapted spin-flip excitations",/,2x,35("="))')
-    
-    case (5)
-      call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
-      if (verbose > 2) then
-        do ist = 1, nstates
-          do jst = 1, nstates
-            write(iw,'(A,I0,A,I0)') '=== Quintet Δρ for state ', ist, '→', jst, ' ==='
-            call print_square(trden(:,:,ist,jst), nbf, nbf, nbf)
-          end do
-        end do
-      end if
-      squared_S(:) = 6.0_dp
-      call get_transitions(trans, noccb, nocca, nbf)
-      write(iw,'(/,2x,35("="),/,2x,"Beta -> Alpha spin-flip excitations",/,2x,35("="))')
-    
-    case default
-      error stop "Unknown mrst value"
+        squared_S(:) = 2.0_dp
+        call get_mrsf_transitions(trans, nocca, noccb, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Spin-adapted spin-flip excitations",/,2x,35("="))')
+      case (5)  
+        call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
+        squared_S(:) = 6.0_dp
+        call get_transitions(trans, noccb, nocca, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Beta -> Alpha spin-flip excitations",/,2x,35("="))')
+      case default
+        error stop "Unknown mrst value"
     end select
 
     call get_transition_dipole(basis, dip, mo_a, trden, nstates)
