@@ -60,10 +60,10 @@ class Molecule:
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
         ]
-        self.skip_tag = { "rhf": ['OQP::DM_B','OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
-                "rohf": [],
-                "uhf": []
-                }
+        self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
+                         "rohf": [],
+                         "uhf": []
+                         }
         self.config_tag = {
             'json': ['scf_type', 'basis', 'library']
         }
@@ -457,7 +457,8 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
-            'OQP::dc_matrix', 'OQP::nac_matrix','OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B','E_MO_A','OQP::Hcore','OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B','OQP::WAO', 'json'
+            'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
+            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO', 'json'
         ]
 
         if runtype in ['energy']:

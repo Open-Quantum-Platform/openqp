@@ -39,7 +39,7 @@ class OQPTester:
                  output_dir: str = None,
                  total_cpus: int = None,
                  omp_threads: int = None,
-                 mpi_manager = None):
+                 mpi_manager=None):
         """
         Initialize the OQPTester.
 
@@ -81,7 +81,7 @@ class OQPTester:
 
     def log(self, message: str):
         """Simple logging function to stdout."""
-        if self.mpi_manager.rank == 0 :
+        if self.mpi_manager.rank == 0:
             print(f"[OQPTester] {message}")
 
     def get_git_commit_info(self):
@@ -166,7 +166,7 @@ class OQPTester:
         self.start_time = time.perf_counter()
         if self.mpi_manager.rank == 0:
             if not os.path.exists(self.output_dir):
-                 os.makedirs(self.output_dir)
+                os.makedirs(self.output_dir)
 
         input_files = self._get_input_files(test_path)
         if not input_files:
@@ -292,5 +292,5 @@ Total execution time: {self.format_time(total_time)}
             report = self.generate_report()
             self.log("OpenQP tests completed")
             return report
-        else :
+        else:
             return 1

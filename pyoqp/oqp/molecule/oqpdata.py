@@ -61,7 +61,7 @@ OQP_CONFIG_SCHEMA = {
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
-        'swapmo': {'type' : string, 'default' : ''},
+        'swapmo': {'type': string, 'default': ''},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
@@ -132,7 +132,7 @@ OQP_CONFIG_SCHEMA = {
         'spc_ovov': {'type': float, 'default': '-1.0'},
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
-        'ixcore': {'type' : string, 'default' : '-1'},
+        'ixcore': {'type': string, 'default': '-1'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -197,7 +197,7 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
-    'json':{
+    'json': {
             'scf_type': {'type': string, 'default': ''},
             'basis': {'type': string, 'default': ''},
             'library': {'type': string, 'default': ''},
@@ -255,7 +255,7 @@ class OQPData:
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
-            "rstctmo" : "set_scf_rstctmo",
+            "rstctmo": "set_scf_rstctmo",
             "soscf_type": "set_scf_soscf_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
@@ -293,7 +293,7 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
-            "ixcore" : "set_tdhf_ixcore",
+            "ixcore": "set_tdhf_ixcore",
         },
     }
     _typemap = [np.void,
@@ -625,7 +625,7 @@ class OQPData:
         self._data.tddft.spc_coov = spc_coov
 
     def set_tdhf_ixcore(self, ixcore):
-        if ixcore == '-1' :
+        if ixcore == '-1':
             self.ixcore_array = None
             self._data.tddft.ixcore = ffi.NULL
             self._data.tddft.ixcore_len = 0
@@ -845,4 +845,3 @@ def read_system(system):
     mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass
-

@@ -9,10 +9,14 @@ method=hf
 basis=6-31g
 runtype=energy
 functional=pbe
-d4=False
+d4=false
+
+
 [guess]
 type=huckel
-save_mol=True
+save_mol=true
+
+
 [scf]
 type=uhf
 multiplicity=3
@@ -20,6 +24,8 @@ maxit=30
 maxdiis=7
 diis_type=cdiis
 conv=1.0e-6
+
+
 [dftgrid]
 rad_npts=96
 ang_npts=302
