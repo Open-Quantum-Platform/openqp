@@ -109,7 +109,7 @@ class BasisData:
 
         :return: A list of basis names (strings).
         """
-        if self.mol.config["input"]["basis"]=='library':
+        if self.mol.config["input"]["basis"] == 'library':
             basis_tags = []
             system = self.mol.config["input"]["system"]
             system = system.split("\n")
@@ -134,7 +134,7 @@ class BasisData:
                 basis_tags.append(parts[4])
 
             basis_list_str = self.mol.config["input"]["library"].strip()
-            if not(basis_list_str):
+            if not basis_list_str:
                 raise FileNotFoundError("Please ensure the necessary library for tags is correctly added.")
             basis_dict = {}
             for line in basis_list_str.splitlines():

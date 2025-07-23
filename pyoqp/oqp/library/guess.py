@@ -19,7 +19,7 @@ def guess(mol):
 
     guess_type = mol.config["guess"]["type"]
     guess_file = 'compute orbitals'
-    swapmo= mol.config["guess"]["swapmo"]
+    swapmo = mol.config["guess"]["swapmo"]
 
     if guess_type == "huckel":
         hubas = try_basis("MINI_huckel", fallback=None)
