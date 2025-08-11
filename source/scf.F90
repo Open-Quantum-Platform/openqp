@@ -945,6 +945,11 @@ contains
             exit
           end if
         else
+          if (use_soscf) then 
+            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            if (scf_type == scf_uhf) &
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+          end if
           exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
