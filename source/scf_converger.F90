@@ -2330,6 +2330,7 @@ contains
     real(kind=dp) :: grad_norm_ratio
     integer :: iter, istat
     integer :: i
+    integer :: nocc
 
     ! Allocate result object
     allocate(scf_conv_soscf_result :: res)
@@ -2377,23 +2378,10 @@ contains
       end if
     else
       ! Allocate local occupation arrays
-      allocate(occ_a(self%nbf), source=0.0_dp)
-      if (self%scf_type > 1) then
-        allocate(occ_b(self%nbf), source=0.0_dp)
-      end if
-
-      ! Set initial occupation numbers based on SCF type
-      select case (self%scf_type)
-      case (1)
-        occ_a(1:self%nocc_a) = 2.0_dp
-      case (2)
-        occ_a(1:self%nocc_a) = 1.0_dp
-        occ_b(1:self%nocc_b) = 1.0_dp
-      case (3)
-        occ_a(1:self%nocc_b) = 2.0_dp              ! Closed shells
-        occ_a(self%nocc_b+1:self%nocc_a) = 1.0_dp  ! Open shells
-        occ_b(1:self%nocc_b) = 2.0_dp              ! Closed shells only
-      end select
+      nocc = min(self%nocc_a,self%nocc_b)
+      allocate(occ_a(nocc), source=0.0_dp)
+      occ_a = 2
+      if (self%scf_type/=1) occ_a = 1
     end if
 
     ! --- Step 2: Initialize LBFGS history ---
@@ -2451,7 +2439,7 @@ contains
         call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
       else
         call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_b, occ_b, self%nocc_b, self%nbf, self%nbf)
+        call orb_to_dens(self%dens_b, self%mo_b, occ_a, self%nocc_b, self%nbf, self%nbf)
       end if
     elseif(self%scf_type == 3) then
       call self%rotate_orbs(self%step, self%nocc_a, self%nocc_b, self%mo_a)
@@ -2463,7 +2451,7 @@ contains
         call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
       else
         call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_b, occ_b, self%nocc_b, self%nbf, self%nbf)
+        call orb_to_dens(self%dens_b, self%mo_a, occ_a, self%nocc_b, self%nbf, self%nbf)
       end if
     end if
     self%m_history = self%m_history + 1
