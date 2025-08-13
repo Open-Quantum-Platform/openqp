@@ -949,6 +949,11 @@ contains
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
             if (scf_type == scf_uhf) & 
                call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+            if (scf_type == scf_rohf) then
+              mo_b = mo_a
+              pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+            end if
           end if
           exit
         end if
@@ -1199,7 +1204,8 @@ contains
       dmat_b = pdmat(:,2)
     case (scf_rohf)
       fock_a = rohf_bak(:,1)
-      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
+      fock_b = rohf_bak(:,2)
+!      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
       dmat_a = pdmat(:,1) - pdmat(:,2)
       dmat_b = pdmat(:,2)
       mo_b = mo_a
