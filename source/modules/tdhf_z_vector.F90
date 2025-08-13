@@ -52,6 +52,7 @@ contains
 !###############################################################################
 
   subroutine oqp_tdhf_z_vector(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use oqp_tagarray_driver
 
     use strings, only: Cstring, fstring
@@ -103,6 +104,7 @@ contains
     real(kind=dp) :: cnvtol, scale_exch
 
     ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       mo_a(:,:), mo_energy_a(:), wao(:), td_p(:,:), td_t(:,:), &
       ta(:), xpy(:,:), xmy(:,:), td_energies(:)
@@ -148,7 +150,7 @@ contains
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    call infos%dat%remove_records([character(80) :: OQP_WAO, OQP_TD_P])
+    call infos%dat%erase([character(80) :: OQP_WAO, OQP_TD_P])
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
@@ -288,7 +290,7 @@ contains
     pa(:,:,1) = pa(:,:,1) + wrk1 ! T+Z
 
     ! Store relaxed difference density matrix P to global memory
-    call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf2, [nbf2, 1], comment=OQP_td_p_comment)
+    stat = infos%dat%create(OQP_td_p, TA_TYPE_REAL64, [nbf2, 1], description=OQP_td_p_comment)
     call tagarray_get_data(infos%dat, OQP_td_p, td_p)
     call pack_matrix(pa(:,:,1), td_p(:,1))
 
@@ -344,7 +346,7 @@ contains
     call orthogonal_transform('t', nbf, mo_a, wmo)
 
     ! Store W to global memory
-    call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf2, comment=OQP_WAO_comment)
+    stat = infos%dat%create(OQP_WAO, TA_TYPE_REAL64, (/ nbf2 /), description=OQP_WAO_comment)
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
     call pack_matrix(wmo, wao)
     wao = wao*0.5_dp
