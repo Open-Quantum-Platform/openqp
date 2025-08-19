@@ -947,11 +947,11 @@ contains
         else
           if (use_soscf) then
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            if (scf_type == scf_rohf) mo_b = mo_a 
             if (scf_type == scf_uhf) &
               call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
             call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
             if (scf_type == scf_rohf) then
-              mo_b = mo_a
               pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
             end if
           end if
