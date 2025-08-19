@@ -2628,12 +2628,10 @@ contains
           end if
           do a= istart, nbf
             k = k +1
-            if (i <= nocc_b) then
               diff = mo_e_a(a) - mo_e_a(i)
               if (abs(diff) < thresh) then
                  diff = sign(thresh + lvl_shift, diff)
               end if
-            end if
             self%h_inv(k) = scale /diff
           end do
         end do
