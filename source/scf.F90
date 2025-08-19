@@ -1570,5 +1570,70 @@ contains
     call int2_driver%clean()
 
   end subroutine fock_jk
+  subroutine rohf_fix(Mo, E, D, S, na, l0, nbf)!, num_swaps)
+!! In/Out:
+!!   Mo(nbf,nbf) : MO coefficients (columns are MOs) — columns swapped in place
+!!   E(nbf)      : orbital energies — elements swapped in place (1..l0 used)
+!!
+!! In:
+!!   D(nbf,nbf)  : AO density (symmetric)
+!!   S(nbf,nbf)  : AO overlap (symmetric)
+!!   na          : number of occupied orbitals expected first
+!!   l0          : number of orbitals in this ROHF block to check (<= nbf)
+!!
+!! Out:
+!!   num_swaps   : total column swaps performed
+     use mathlib, only: unpack_matrix
+     implicit none
+     real(dp), intent(inout) :: Mo(:,:)     ! (nbf, nbf)
+     real(dp), intent(inout) :: E(:)        ! (nbf)
+     real(dp), intent(in)    :: D(:)      ! (nbf, nbf)
+     real(dp), intent(in)    :: S(:,:)      ! (nbf, nbf)
+     integer,  intent(in)    :: na, l0, nbf
+     integer   :: num_swaps
 
+     integer :: i, j, itiny, ibig
+     real(dp), allocatable :: WS(:,:), T(:,:), wrk(:), den(:,:)
+     real(dp) :: tiny, big, tmp
+     logical  :: need_swap
+
+     if (na == 0 .or. na == l0) then
+       num_swaps = 0
+       return
+     end if
+
+     allocate(den(nbf, nbf), WS(nbf, l0), T(nbf, l0), wrk(l0))
+     call unpack_matrix(D, den, nbf, 'U')
+
+     call dgemm('N','N', nbf, l0, nbf, 1.0_dp, S,  nbf, Mo, nbf, 0.0_dp, WS, nbf)
+
+     call dgemm('N','N', nbf, l0, nbf, 1.0_dp, den,  nbf, WS, nbf, 0.0_dp, T,  nbf)
+
+     do i = 1, l0
+       wrk(i) = dot_product(WS(:,i), T(:,i))
+     end do
+     num_swaps = 0
+     do
+       itiny = minloc(wrk(1:na), dim=1)
+       tiny  = wrk(itiny)
+       ibig  = maxloc(wrk(na+1:l0), dim=1) + na
+       big   = wrk(ibig)
+
+       need_swap = (itiny > 0) .and. (ibig > 0) .and. (tiny < big)
+       if ( need_swap) then
+       print *, "itiny",itiny,"ibig",ibig
+       Mo(:, [itiny, ibig]) = Mo(:, [ibig, itiny])
+       E([itiny, ibig])    = E([ibig, itiny])
+       wrk([itiny, ibig])  = wrk([ibig, itiny])
+!       WS(:, [itiny,ibig]) = WS(:, [ibig, itiny])
+!       T(:,  [itiny,ibig]) = T(:,  [ibig, itiny])
+
+       num_swaps = num_swaps + 1
+       else
+         exit
+       endif
+     end do
+
+     deallocate(WS, T, wrk)
+   end subroutine rohf_fix
 end module scf
