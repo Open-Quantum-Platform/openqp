@@ -147,7 +147,9 @@ contains
     logical :: use_soscf            ! Flag to use SOSCF method
     real(kind=dp) :: rms_grad       ! RMS of gradient
     real(kind=dp) :: rms_dp         ! RMS of density different
-
+    real(kind=dp) :: delta_dens_a   ! for ROHFFIX
+    real(kind=dp) :: delta_dens_b   ! for ROHFFIX
+    real(kind=dp), allocatable :: dens_prev(:,:) ! Previous density
     !==============================================================================
      ! Virtual Orbital Shift Parameters (for ROHF)
     !==============================================================================
@@ -300,6 +302,7 @@ contains
     ! Allocate main work arrays
     ok = 0
     allocate(smat_full(nbf, nbf), &
+             dens_prev(nbf_tri, nfocks), &
              pdmat(nbf_tri, nfocks), &
              pfock(nbf_tri, nfocks), &
              rohf_bak(nbf_tri, nfocks), &
@@ -767,7 +770,7 @@ contains
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
-      if (scf_type == scf_rohf) then
+      if (scf_type == scf_rohf .and. .not. use_soscf .or. iter ==1 ) then
         ! Store the original alpha Fock matrix before ROHF transformation
         ! This is needed to preserve it for energy evaluation and printing
         rohf_bak(:,1) = pfock(:,1)
@@ -863,7 +866,7 @@ contains
                      mo_e_a=mo_energy_a)
           case (scf_rohf)
             call conv%add_data( &
-                     f=rohf_bak(:,1:soscf_nfocks), &
+                     f=pfock(:,1:soscf_nfocks), &
                      dens=pdmat(:,1:soscf_nfocks), &
                      e=etot, &
                      mo_a=mo_a, &
@@ -945,13 +948,26 @@ contains
             exit
           end if
         else
+          if (vshift_last_iter) vshift = 0.0_dp
           if (use_soscf) then
+             rohf_bak(:,1) = pfock(:,1)
+             rohf_bak(:,2) = pfock(:,2)
+             call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
             if (scf_type == scf_rohf) mo_b = mo_a 
             if (scf_type == scf_uhf) &
               call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+            call get_ab_initio_density(dens_prev(:,1),mo_a,dens_prev(:,2),mo_b,infos,basis)
             if (scf_type == scf_rohf) then
+              delta_dens_a = 0
+              delta_dens_b = 0
+              do i=1, nbf_tri
+                 delta_dens_a = delta_dens_a + abs(dens_prev(i,1) - pdmat(i,1) )
+                 delta_dens_b = delta_dens_b + abs(dens_prev(i,2) - pdmat(i,2) )
+              end do
+              if (delta_dens_a>0.1) &
+                call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
               pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
             end if
           end if
@@ -1612,6 +1628,7 @@ contains
      do i = 1, l0
        wrk(i) = dot_product(WS(:,i), T(:,i))
      end do
+     print *,"wrk",wrk
      num_swaps = 0
      do
        itiny = minloc(wrk(1:na), dim=1)
