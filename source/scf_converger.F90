@@ -274,9 +274,9 @@
 !   rho_history     [REAL(dp), ALLOCATABLE]: L-BFGS curvature reciprocals (m_max).
 !   y_history       [REAL(dp), ALLOCATABLE]: L-BFGS gradient difference history (nvec, m_max).
 !   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
-!   x            [REAL(dp), ALLOCATABLE]: Current step (nvec).
+!   x               [REAL(dp), ALLOCATABLE]: Current x (nvec).
 !   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
-!   x_prev       [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
+!   x_prev          [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
 !   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
 !   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
 !   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
@@ -296,7 +296,7 @@
 !   run            - Executes SOSCF micro-iterations and returns a `scf_conv_soscf_result`.
 !   init_hess_inv  - Computes the initial inverse Hessian diagonal.
 !   calc_orb_grad  - Calculates the orbital gradient.
-!   lbfgs_step     - Computes the orbital rotation step using L-BFGS.
+!   bfgs           - Computes the orbital rotation x using L-BFGS.
 !   rotate_orbs    - Applies the orbital rotation.
 !
 !===============================================================================
@@ -723,7 +723,7 @@ module scf_converger
     procedure, pass :: run   => soscf_run
     procedure, private, pass :: init_hess_inv => init_hess_inv
     procedure, private, pass :: calc_orb_grad => calc_orb_grad
-    procedure, private, pass :: bfgs_step => bfgs_step
+    procedure, private, pass :: bfgs => bfgs
     procedure, private, pass :: rotate_orbs => rotate_orbs
     procedure, private, pass :: rms_density => rms_density
   end type soscf_converger
@@ -2416,8 +2416,8 @@ contains
         write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
     end if
 
-    ! Compute step using J. Phys. Chem. 1992, 96, 9768-9774
-    call self%bfgs_step(self%x)
+    ! Compute trail vector x using J. Phys. Chem. 1992, 96, 9768-9774
+    call self%bfgs(self%x)
     if (self%scf_type == 1) then
        call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
       if (associated(pfon)) then
@@ -2788,7 +2788,7 @@ contains
     end associate
   end subroutine calc_orb_grad
 
-  subroutine bfgs_step(self, x)
+  subroutine bfgs(self, x)
     implicit none
     class(soscf_converger) :: self
     real(kind=dp), intent(out) :: x(:)
@@ -2853,7 +2853,7 @@ contains
     end if
     self%x_prev = x
     self%grad_prev = self%grad
-  end subroutine bfgs_step
+  end subroutine bfgs
 
   subroutine rotate_orbs(self, x, nocc_a, nocc_b, mo)
     implicit none
