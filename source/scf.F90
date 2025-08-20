@@ -1641,7 +1641,6 @@ contains
 
        need_swap = (itiny > 0) .and. (ibig > 0) .and. (tiny < big)
        if ( need_swap) then
-       print *, "itiny",itiny,"ibig",ibig
        Mo(:, [itiny, ibig]) = Mo(:, [ibig, itiny])
        E([itiny, ibig])    = E([ibig, itiny])
        wrk([itiny, ibig])  = wrk([ibig, itiny])
