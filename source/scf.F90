@@ -770,25 +770,27 @@ contains
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
-      if (scf_type == scf_rohf .and. .not. use_soscf .or. iter ==1 ) then
-        ! Store the original alpha Fock matrix before ROHF transformation
-        ! This is needed to preserve it for energy evaluation and printing
-        rohf_bak(:,1) = pfock(:,1)
-        rohf_bak(:,2) = pfock(:,2)
+      if (scf_type == scf_rohf) then
+        if (.not. use_soscf .or. iter ==1 ) then
+          ! Store the original alpha Fock matrix before ROHF transformation
+          ! This is needed to preserve it for energy evaluation and printing
+          rohf_bak(:,1) = pfock(:,1)
+          rohf_bak(:,2) = pfock(:,2)
 
-        ! Turn off level shifting for the final iteration if requested
-        if (vshift_last_iter) vshift = 0.0_dp
+          ! Turn off level shifting for the final iteration if requested
+          if (vshift_last_iter) vshift = 0.0_dp
 
-        ! Apply the Guest-Saunders ROHF Fock transformation
-        ! This creates a modified Fock matrix with proper coupling between
-        ! closed-shell, open-shell, and virtual orbital spaces
-        call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
-                            nelec_a, nelec_b, nbf, vshift, work1, work2)
+          ! Apply the Guest-Saunders ROHF Fock transformation
+          ! This creates a modified Fock matrix with proper coupling between
+          ! closed-shell, open-shell, and virtual orbital spaces
+          call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, vshift, work1, work2)
 
-        ! Combine alpha and beta densities for ROHF
-        ! This is needed because ROHF uses a single set of MOs for both spins,
-        ! so we need the total density for the next iteration
-        pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+          ! Combine alpha and beta densities for ROHF
+          ! This is needed because ROHF uses a single set of MOs for both spins,
+          ! so we need the total density for the next iteration
+          pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+        end if
       end if
 
       !----------------------------------------------------------------------------
@@ -950,10 +952,12 @@ contains
         else
           if (vshift_last_iter) vshift = 0.0_dp
           if (use_soscf) then
-             rohf_bak(:,1) = pfock(:,1)
-             rohf_bak(:,2) = pfock(:,2)
-             call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
-                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
+             if(scf_type == scf_rohf) then
+               rohf_bak(:,1) = pfock(:,1)
+               rohf_bak(:,2) = pfock(:,2)
+               call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                                   nelec_a, nelec_b, nbf, vshift, work1, work2)
+            endif
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
             if (scf_type == scf_rohf) mo_b = mo_a 
             if (scf_type == scf_uhf) &
@@ -1628,7 +1632,6 @@ contains
      do i = 1, l0
        wrk(i) = dot_product(WS(:,i), T(:,i))
      end do
-     print *,"wrk",wrk
      num_swaps = 0
      do
        itiny = minloc(wrk(1:na), dim=1)

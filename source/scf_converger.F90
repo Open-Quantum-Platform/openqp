@@ -702,6 +702,7 @@ module scf_converger
     real(kind=dp), allocatable :: upd_history(:,:)! h_inv*dgrad history (nvec, m_max)
     real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
     real(kind=dp), allocatable :: step(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: step_prev(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
     real(kind=dp), allocatable :: x_prev(:)       !< Previous rotation parameters (nvec)
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
@@ -2242,6 +2243,8 @@ contains
       allocate(self%grad(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%step)) &
       allocate(self%step(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%step_prev)) &
+      allocate(self%step_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%grad_prev)) &
       allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%y_history)) &
@@ -2289,6 +2292,8 @@ contains
     if (allocated(self%upd_history)) deallocate(self%upd_history)
     if (allocated(self%grad)) deallocate(self%grad)
     if (allocated(self%grad_prev)) deallocate(self%grad_prev)
+    if (allocated(self%step_prev)) deallocate(self%step_prev)
+    if (allocated(self%step)) deallocate(self%step)
     if (allocated(self%x_prev)) deallocate(self%x_prev)
     if (allocated(self%h_inv)) deallocate(self%h_inv)
     if (allocated(self%mo_a)) deallocate(self%mo_a)
@@ -2832,9 +2837,9 @@ contains
       end if
 
       ! Final correction using current dgrad and updti
-      s1 = dot_product(step, dgrad)
+      s1 = dot_product(self%step_prev, dgrad)
       s2 = dot_product(dgrad, updti)
-      s3 = dot_product(step, self%grad)
+      s3 = dot_product(self%step_prev, self%grad)
       s4 = dot_product(updti, self%grad)
 
       s1 = 1.0_dp / s1
@@ -2842,8 +2847,8 @@ contains
       t = 1.0_dp + s1 / s2
       t2 = s1 * s3
       t1 = t * t2 - s1 * s4
-      displn = displn + t1 * step - t2 * updti
-      self%s_history(:, self%m_history) = self%step
+      displn = displn + t1 * self%step_prev - t2 * updti
+      self%s_history(:, self%m_history) = self%step_prev
       self%y_history(:, self%m_history) = dgrad
       self%upd_history(:, self%m_history) = updti
       step = -displn
@@ -2852,6 +2857,8 @@ contains
     if (norm_disp > 0.1)  then
        step = step*0.1/norm_disp
     end if
+    self%step_prev = step
+    self%grad_prev = self%grad
   end subroutine bfgs_step
 
   subroutine rotate_orbs(self, step, nocc_a, nocc_b, mo)
