@@ -2476,7 +2476,8 @@ contains
                                self%dat%buffer(self%dat%slot)%mo_e_b, self%work_1, self%work_2)
     end if
 
-    if (self%soscf_reset_mod /= 0 .and. mod(self%m_history, self%soscf_reset_mod) == 0) then
+    if (self%soscf_reset_mod == 0) return
+    if (mod(self%m_history, self%soscf_reset_mod) == 0) then
       if (self%rms_grad_prev > 1.0d-12) then
         grad_norm_ratio = grad_norm / self%rms_grad_prev
         self%rms_grad_prev = grad_norm
