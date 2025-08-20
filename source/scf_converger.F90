@@ -276,7 +276,7 @@
 !   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
 !   step            [REAL(dp), ALLOCATABLE]: Current step (nvec).
 !   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
-!   x_prev          [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
+!   step_prev       [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
 !   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
 !   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
 !   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
@@ -703,7 +703,6 @@ module scf_converger
     real(kind=dp), allocatable :: step(:)         !< Step (nvec)
     real(kind=dp), allocatable :: step_prev(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
-    real(kind=dp), allocatable :: x_prev(:)       !< Previous rotation parameters (nvec)
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
     real(kind=dp), allocatable :: work_1(:,:)     !< Work matrix (nbf, nbf)
     real(kind=dp), allocatable :: work_2(:,:)     !< Work matrix (nbf, nbf)
@@ -2249,8 +2248,6 @@ contains
       allocate(self%y_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%upd_history)) &
       allocate(self%upd_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
-    if (.not. allocated(self%x_prev)) &
-      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%h_inv)) &
       allocate(self%h_inv(self%nvec), stat=istat, source=0.0_dp)
 
@@ -2292,7 +2289,6 @@ contains
     if (allocated(self%grad_prev)) deallocate(self%grad_prev)
     if (allocated(self%step_prev)) deallocate(self%step_prev)
     if (allocated(self%step)) deallocate(self%step)
-    if (allocated(self%x_prev)) deallocate(self%x_prev)
     if (allocated(self%h_inv)) deallocate(self%h_inv)
     if (allocated(self%mo_a)) deallocate(self%mo_a)
     if (allocated(self%dens_a)) deallocate(self%dens_a)
@@ -2395,7 +2391,7 @@ contains
       self%grad_prev = 0.0_dp
       self%grad = 0.0_dp
       self%step = 0.0_dp
-      self%x_prev = 0.0_dp
+      self%step_prev = 0.0_dp
       self%m_history = 0
       if (self%m_history == 0) &
         call self%init_hess_inv(mo_e_a, mo_e_b)
