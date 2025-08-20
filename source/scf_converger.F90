@@ -274,9 +274,9 @@
 !   rho_history     [REAL(dp), ALLOCATABLE]: L-BFGS curvature reciprocals (m_max).
 !   y_history       [REAL(dp), ALLOCATABLE]: L-BFGS gradient difference history (nvec, m_max).
 !   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
-!   step            [REAL(dp), ALLOCATABLE]: Current step (nvec).
+!   x            [REAL(dp), ALLOCATABLE]: Current step (nvec).
 !   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
-!   step_prev       [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
+!   x_prev       [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
 !   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
 !   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
 !   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
@@ -700,8 +700,8 @@ module scf_converger
     real(kind=dp), allocatable :: y_history(:,:)  !< Gradient difference history (nvec, m_max)
     real(kind=dp), allocatable :: upd_history(:,:)! h_inv*dgrad history (nvec, m_max)
     real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
-    real(kind=dp), allocatable :: step(:)         !< Step (nvec)
-    real(kind=dp), allocatable :: step_prev(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: x(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: x_prev(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
     real(kind=dp), allocatable :: work_1(:,:)     !< Work matrix (nbf, nbf)
@@ -2238,10 +2238,10 @@ contains
       allocate(self%s_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%grad)) &
       allocate(self%grad(self%nvec), stat=istat, source=0.0_dp)
-    if (.not. allocated(self%step)) &
-      allocate(self%step(self%nvec), stat=istat, source=0.0_dp)
-    if (.not. allocated(self%step_prev)) &
-      allocate(self%step_prev(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x)) &
+      allocate(self%x(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x_prev)) &
+      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%grad_prev)) &
       allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%y_history)) &
@@ -2287,8 +2287,8 @@ contains
     if (allocated(self%upd_history)) deallocate(self%upd_history)
     if (allocated(self%grad)) deallocate(self%grad)
     if (allocated(self%grad_prev)) deallocate(self%grad_prev)
-    if (allocated(self%step_prev)) deallocate(self%step_prev)
-    if (allocated(self%step)) deallocate(self%step)
+    if (allocated(self%x_prev)) deallocate(self%x_prev)
+    if (allocated(self%x)) deallocate(self%x)
     if (allocated(self%h_inv)) deallocate(self%h_inv)
     if (allocated(self%mo_a)) deallocate(self%mo_a)
     if (allocated(self%dens_a)) deallocate(self%dens_a)
@@ -2390,8 +2390,8 @@ contains
       self%upd_history = 0.0_dp
       self%grad_prev = 0.0_dp
       self%grad = 0.0_dp
-      self%step = 0.0_dp
-      self%step_prev = 0.0_dp
+      self%x = 0.0_dp
+      self%x_prev = 0.0_dp
       self%m_history = 0
       if (self%m_history == 0) &
         call self%init_hess_inv(mo_e_a, mo_e_b)
@@ -2417,9 +2417,9 @@ contains
     end if
 
     ! Compute step using J. Phys. Chem. 1992, 96, 9768-9774
-    call self%bfgs_step(self%step)
+    call self%bfgs_step(self%x)
     if (self%scf_type == 1) then
-       call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
+       call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
         call pfon%compute_occupations(mo_e_a)
@@ -2428,8 +2428,8 @@ contains
         call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
       end if
     elseif(self%scf_type == 2) then
-      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
-      call self%rotate_orbs(self%step(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
+      call self%rotate_orbs(self%x(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
               , self%nocc_b, self%nocc_b, self%mo_b)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
@@ -2441,7 +2441,7 @@ contains
         call orb_to_dens(self%dens_b, self%mo_b, occ_a, self%nocc_b, self%nbf, self%nbf)
       end if
     elseif(self%scf_type == 3) then
-      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_b, self%mo_a)
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_b, self%mo_a)
       self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
       if (associated(pfon)) then
         call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
@@ -2788,10 +2788,10 @@ contains
     end associate
   end subroutine calc_orb_grad
 
-  subroutine bfgs_step(self, step)
+  subroutine bfgs_step(self, x)
     implicit none
     class(soscf_converger) :: self
-    real(kind=dp), intent(out) :: step(:)
+    real(kind=dp), intent(out) :: x(:)
 
     real(kind=dp) :: displn(self%nvec)
     real(kind=dp) :: dgrad(self%nvec)
@@ -2803,8 +2803,8 @@ contains
     ! Initialize displacement and preconditioned gradient difference
     if (self%m_history < 1) then
       scale = 1.0_dp
-      step = -scale * self%h_inv * self%grad
-      where (isnan(step)) step = 0.0_dp
+      x = -scale * self%h_inv * self%grad
+      where (isnan(x)) x = 0.0_dp
     else
       displn = self%h_inv * self%grad
       dgrad = self%grad-self%grad_prev
@@ -2831,9 +2831,9 @@ contains
       end if
 
       ! Final correction using current dgrad and updti
-      s1 = dot_product(self%step_prev, dgrad)
+      s1 = dot_product(self%x_prev, dgrad)
       s2 = dot_product(dgrad, updti)
-      s3 = dot_product(self%step_prev, self%grad)
+      s3 = dot_product(self%x_prev, self%grad)
       s4 = dot_product(updti, self%grad)
 
       s1 = 1.0_dp / s1
@@ -2841,25 +2841,25 @@ contains
       t = 1.0_dp + s1 / s2
       t2 = s1 * s3
       t1 = t * t2 - s1 * s4
-      displn = displn + t1 * self%step_prev - t2 * updti
-      self%s_history(:, self%m_history) = self%step_prev
+      displn = displn + t1 * self%x_prev - t2 * updti
+      self%s_history(:, self%m_history) = self%x_prev
       self%y_history(:, self%m_history) = dgrad
       self%upd_history(:, self%m_history) = updti
-      step = -displn
+      x = -displn
     end if
-    norm_disp = sqrt(dot_product(step, step)/self%nvec)
+    norm_disp = sqrt(dot_product(x, x)/self%nvec)
     if (norm_disp > 0.1)  then
-       step = step*0.1/norm_disp
+       x = x*0.1/norm_disp
     end if
-    self%step_prev = step
+    self%x_prev = x
     self%grad_prev = self%grad
   end subroutine bfgs_step
 
-  subroutine rotate_orbs(self, step, nocc_a, nocc_b, mo)
+  subroutine rotate_orbs(self, x, nocc_a, nocc_b, mo)
     implicit none
 
     class(soscf_converger) :: self
-    real(kind=dp), intent(in)        :: step(:)
+    real(kind=dp), intent(in)        :: x(:)
     integer, intent(in)              :: nocc_a, nocc_b
     real(kind=dp), intent(inout)     :: mo(:,:)
 
@@ -2874,7 +2874,7 @@ contains
     if (self%scf_type == 3) then! ROHF
       second_term = .false.
     end if
-    call exp_scaling(self%work_1, step, idx, nocc_a, nocc_b, nbf, second_term)
+    call exp_scaling(self%work_1, x, idx, nocc_a, nocc_b, nbf, second_term)
     call orthonormalize(self%work_1, nbf)
 
     call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
@@ -2882,9 +2882,9 @@ contains
 
   contains
 
-    subroutine exp_scaling(G, step, idx, nocc_a, nocc_b, nbf, second_term)
+    subroutine exp_scaling(G, x, idx, nocc_a, nocc_b, nbf, second_term)
       real(kind=dp), intent(out)     :: G(:,:)
-      real(kind=dp), intent(in)      :: step(:)
+      real(kind=dp), intent(in)      :: x(:)
       integer, intent(inout)         :: idx
       integer, intent(in)            :: nocc_a, nocc_b, nbf
 
@@ -2899,8 +2899,8 @@ contains
         istart = merge(nocc_b+1, nocc_a+1, occ <= nocc_b)
         do virt = istart, nbf
           idx = idx + 1
-          K(virt, occ) =  step(idx)
-          K(occ, virt) = -step(idx)
+          K(virt, occ) =  x(idx)
+          K(occ, virt) = -x(idx)
         end do
       end do
 
