@@ -2328,8 +2328,8 @@ contains
     real(kind=dp) :: grad_norm, alpha, sy, rms_dp
     real(kind=dp) :: grad_norm_ratio
     integer :: iter, istat
-    integer :: i
-    integer :: nocc
+    integer :: i, nocc
+
 
     ! Allocate result object
     allocate(scf_conv_soscf_result :: res)

@@ -1227,7 +1227,7 @@ contains
     case (scf_rohf)
       fock_a = rohf_bak(:,1)
       fock_b = rohf_bak(:,2)
-!      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a_bk, nbf, nbf, work1, work2)
+!      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
       dmat_a = pdmat(:,1) - pdmat(:,2)
       dmat_b = pdmat(:,2)
       mo_b = mo_a
