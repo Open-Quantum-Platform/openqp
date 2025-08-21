@@ -972,6 +972,8 @@ contains
               end do
               if (delta_dens_a>0.1) &
                 call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
+              if (delta_dens_b>0.1) &
+                call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
               pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
             end if
           end if
@@ -1605,10 +1607,10 @@ contains
 !!   num_swaps   : total column swaps performed
      use mathlib, only: unpack_matrix
      implicit none
-     real(dp), intent(inout) :: Mo(:,:)     ! (nbf, nbf)
-     real(dp), intent(inout) :: E(:)        ! (nbf)
-     real(dp), intent(in)    :: D(:)      ! (nbf, nbf)
-     real(dp), intent(in)    :: S(:,:)      ! (nbf, nbf)
+     real(dp), intent(inout) :: Mo(:,:)
+     real(dp), intent(inout) :: E(:)
+     real(dp), intent(in)    :: D(:)
+     real(dp), intent(in)    :: S(:,:)
      integer,  intent(in)    :: na, l0, nbf
      integer   :: num_swaps
 
@@ -1644,8 +1646,6 @@ contains
        Mo(:, [itiny, ibig]) = Mo(:, [ibig, itiny])
        E([itiny, ibig])    = E([ibig, itiny])
        wrk([itiny, ibig])  = wrk([ibig, itiny])
-!       WS(:, [itiny,ibig]) = WS(:, [ibig, itiny])
-!       T(:,  [itiny,ibig]) = T(:,  [ibig, itiny])
 
        num_swaps = num_swaps + 1
        else

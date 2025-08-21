@@ -2420,38 +2420,13 @@ contains
     call self%bfgs(self%x)
     if (self%scf_type == 1) then
        call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-      end if
     elseif(self%scf_type == 2) then
       call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
       call self%rotate_orbs(self%x(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
               , self%nocc_b, self%nocc_b, self%mo_b)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a, mo_e_b)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_b, occ_a, self%nocc_b, self%nbf, self%nbf)
-      end if
     elseif(self%scf_type == 3) then
       call self%rotate_orbs(self%x, self%nocc_a, self%nocc_b, self%mo_a)
       self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a, mo_e_b)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_a, occ_a, self%nocc_b, self%nbf, self%nbf)
-      end if
     end if
     self%m_history = self%m_history + 1
     self%grad_prev = self%grad
@@ -2604,7 +2579,7 @@ contains
         do i = 1, nocc_b
           do a= nocc_b+1, nbf
             k = k +1
-            diff = mo_e_a(a) - mo_e_a(i)
+            diff = mo_e_b(a) - mo_e_b(i)
             if (abs(diff) < thresh) then
                diff = sign(thresh + lvl_shift, diff)
             end if
