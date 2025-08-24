@@ -69,12 +69,6 @@ contains
 
 !    call infos%basis%basis_broadcast(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
-    if (sum(infos%basis%ecp_zn_num)>0) then
-      call pe%bcast(infos%mol_prop%nelec, 1)
-      call pe%bcast(infos%mol_prop%nelec_A, 1)
-      call pe%bcast(infos%mol_prop%nelec_B, 1)
-      call pe%bcast(infos%mol_prop%nocc, 1)
-    end if
 
 ! Checking error of basis set reading..
 !    call pe%bcast(infos%control%basis_set_issue, 1)

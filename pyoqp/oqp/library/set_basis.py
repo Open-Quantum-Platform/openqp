@@ -9,6 +9,7 @@ from oqp import ffi
 import basis_set_exchange as bse
 from oqp.utils.mpi_utils import MPIManager
 import json
+from oqp.molecule.oqpdata import compute_alpha_beta_electrons
 
 
 class BasisData:
@@ -31,6 +32,7 @@ class BasisData:
             "ecp_electron": [],
             "num_expo": []
         }
+        self.use_ecp = False
 
     def get_basis_data(self, elements, basis_name='STO-3G', el_index=0):
         """
@@ -84,6 +86,7 @@ class BasisData:
                 ang_ii += 1
 
         if 'ecp_potentials' in basis['elements'][element_key]:
+            self.use_ecp = True
             self.ecp["ecp_electron"].append(basis['elements'][element_key]['ecp_electrons'])
             self.ecp["element_id"] += 1
 
@@ -196,6 +199,27 @@ class BasisData:
         self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
 
         oqp.append_ecp(self.mol)
+
+        if self.use_ecp:
+
+            molecule = self.mol.data._data
+            natom = molecule.mol_prop.natom
+            charge = molecule.mol_prop.charge
+            nelec_base = sum(int(molecule.qn[i]) for i in range(natom)) - charge
+            ecp_all_n = 0
+            ecp_all_n = sum(int(v) for v in self.ecp["ecp_electron"])
+
+            nelec_qm = nelec_base - ecp_all_n
+            if nelec_qm < 0:
+                raise ValueError(f"ECP removes more electrons than available: nelec_qm={nelec_qm}")
+
+            mult = molecule.mol_prop.mult
+            na, nb = compute_alpha_beta_electrons(nelec_qm, mult)
+
+            molecule.mol_prop.nelec     = nelec_qm
+            molecule.mol_prop.nelec_A   = na
+            molecule.mol_prop.nelec_B   = nb
+            molecule.mol_prop.nocc      = max(na, nb)
 
     def set_basis_data(self):
         """
