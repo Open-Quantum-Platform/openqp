@@ -271,12 +271,6 @@ contains
 
         basis%ecp_zn_num = ecp_head%ecp_zn
 
-        if (sum(basis%ecp_zn_num) > 0) then
-            infos%mol_prop%nelec = infos%mol_prop%nelec - sum(basis%ecp_zn_num)
-            infos%mol_prop%nelec_A = infos%mol_prop%nelec_A - sum(basis%ecp_zn_num)/2
-            infos%mol_prop%nelec_B = infos%mol_prop%nelec_B - sum(basis%ecp_zn_num)/2
-            infos%mol_prop%nocc = max(infos%mol_prop%nelec_A,infos%mol_prop%nelec_B)
-        end if
 
         call basis%set_bfnorms()
         call basis%normalize_primitives()
@@ -294,12 +288,13 @@ contains
         basis%ecp_params%is_ecp = .true.
         f_expo_len = sum(ecp_head%n_exponents)
 
-        allocate(basis%ecp_params%ecp_ex(f_expo_len))
-        allocate(basis%ecp_params%ecp_cc(f_expo_len))
-        allocate(basis%ecp_params%ecp_coord(size(ecp_head%ecp_coord)))
-        allocate(basis%ecp_params%ecp_r_ex(f_expo_len))
-        allocate(basis%ecp_params%ecp_am(size(ecp_head%ecp_am)))
-        allocate(basis%ecp_params%n_expo(size(ecp_head%n_exponents)))
+        if (.not. allocated(basis%ecp_params%ecp_ex)) allocate(basis%ecp_params%ecp_ex(f_expo_len))
+        if (.not. allocated(basis%ecp_params%ecp_cc)) allocate(basis%ecp_params%ecp_cc(f_expo_len))
+        if (.not. allocated(basis%ecp_params%ecp_coord)) allocate(basis%ecp_params%ecp_coord(size(ecp_head%ecp_coord)))
+        if (.not. allocated(basis%ecp_params%ecp_r_ex)) allocate(basis%ecp_params%ecp_r_ex(f_expo_len))
+        if (.not. allocated(basis%ecp_params%ecp_am)) allocate(basis%ecp_params%ecp_am(size(ecp_head%ecp_am)))
+        if (.not. allocated(basis%ecp_params%n_expo)) allocate(basis%ecp_params%n_expo(size(ecp_head%n_exponents)))
+
 
         basis%ecp_params%ecp_ex = ecp_head%exponents
         basis%ecp_params%ecp_cc = ecp_head%coefficient
