@@ -147,7 +147,9 @@ contains
     logical :: use_soscf            ! Flag to use SOSCF method
     real(kind=dp) :: rms_grad       ! RMS of gradient
     real(kind=dp) :: rms_dp         ! RMS of density different
-
+    real(kind=dp) :: delta_dens_a   ! for ROHFFIX
+    real(kind=dp) :: delta_dens_b   ! for ROHFFIX
+    real(kind=dp), allocatable :: dens_prev(:,:) ! Previous density
     !==============================================================================
      ! Virtual Orbital Shift Parameters (for ROHF)
     !==============================================================================
@@ -300,6 +302,7 @@ contains
     ! Allocate main work arrays
     ok = 0
     allocate(smat_full(nbf, nbf), &
+             dens_prev(nbf_tri, nfocks), &
              pdmat(nbf_tri, nfocks), &
              pfock(nbf_tri, nfocks), &
              rohf_bak(nbf_tri, nfocks), &
@@ -768,24 +771,26 @@ contains
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
       if (scf_type == scf_rohf) then
-        ! Store the original alpha Fock matrix before ROHF transformation
-        ! This is needed to preserve it for energy evaluation and printing
-        rohf_bak(:,1) = pfock(:,1)
-        rohf_bak(:,2) = pfock(:,2)
+        if (.not. use_soscf .or. iter ==1 ) then
+          ! Store the original alpha Fock matrix before ROHF transformation
+          ! This is needed to preserve it for energy evaluation and printing
+          rohf_bak(:,1) = pfock(:,1)
+          rohf_bak(:,2) = pfock(:,2)
 
-        ! Turn off level shifting for the final iteration if requested
-        if (vshift_last_iter) vshift = 0.0_dp
+          ! Turn off level shifting for the final iteration if requested
+          if (vshift_last_iter) vshift = 0.0_dp
 
-        ! Apply the Guest-Saunders ROHF Fock transformation
-        ! This creates a modified Fock matrix with proper coupling between
-        ! closed-shell, open-shell, and virtual orbital spaces
-        call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
-                            nelec_a, nelec_b, nbf, vshift, work1, work2)
+          ! Apply the Guest-Saunders ROHF Fock transformation
+          ! This creates a modified Fock matrix with proper coupling between
+          ! closed-shell, open-shell, and virtual orbital spaces
+          call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, vshift, work1, work2)
 
-        ! Combine alpha and beta densities for ROHF
-        ! This is needed because ROHF uses a single set of MOs for both spins,
-        ! so we need the total density for the next iteration
-        pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+          ! Combine alpha and beta densities for ROHF
+          ! This is needed because ROHF uses a single set of MOs for both spins,
+          ! so we need the total density for the next iteration
+          pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+        end if
       end if
 
       !----------------------------------------------------------------------------
@@ -863,7 +868,7 @@ contains
                      mo_e_a=mo_energy_a)
           case (scf_rohf)
             call conv%add_data( &
-                     f=rohf_bak(:,1:soscf_nfocks), &
+                     f=pfock(:,1:soscf_nfocks), &
                      dens=pdmat(:,1:soscf_nfocks), &
                      e=etot, &
                      mo_a=mo_a, &
@@ -945,13 +950,30 @@ contains
             exit
           end if
         else
-          if (use_soscf) then 
+          if (vshift_last_iter) vshift = 0.0_dp
+          if (use_soscf) then
+             if(scf_type == scf_rohf) then
+               rohf_bak(:,1) = pfock(:,1)
+               rohf_bak(:,2) = pfock(:,2)
+               call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                                   nelec_a, nelec_b, nbf, vshift, work1, work2)
+            endif
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            if (scf_type == scf_uhf) & 
-               call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+            if (scf_type == scf_rohf) mo_b = mo_a 
+            if (scf_type == scf_uhf) &
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+            call get_ab_initio_density(dens_prev(:,1),mo_a,dens_prev(:,2),mo_b,infos,basis)
             if (scf_type == scf_rohf) then
-              mo_b = mo_a
+              delta_dens_a = 0
+              delta_dens_b = 0
+              do i=1, nbf_tri
+                 delta_dens_a = delta_dens_a + abs(dens_prev(i,1) - pdmat(i,1) )
+                 delta_dens_b = delta_dens_b + abs(dens_prev(i,2) - pdmat(i,2) )
+              end do
+              if (delta_dens_a>0.1) &
+                call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
+              if (delta_dens_b>0.1) &
+                call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
               pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
             end if
           end if
@@ -1210,6 +1232,7 @@ contains
       dmat_b = pdmat(:,2)
       mo_b = mo_a
       mo_energy_b = mo_energy_a
+
     end select
 
     !----------------------------------------------------------------------------
@@ -1569,5 +1592,67 @@ contains
     call int2_driver%clean()
 
   end subroutine fock_jk
+  subroutine rohf_fix(Mo, E, D, S, na, l0, nbf)!, num_swaps)
+!! In/Out:
+!!   Mo(nbf,nbf) : MO coefficients (columns are MOs) — columns swapped in place
+!!   E(nbf)      : orbital energies — elements swapped in place (1..l0 used)
+!!
+!! In:
+!!   D(nbf,nbf)  : AO density (symmetric)
+!!   S(nbf,nbf)  : AO overlap (symmetric)
+!!   na          : number of occupied orbitals expected first
+!!   l0          : number of orbitals in this ROHF block to check (<= nbf)
+!!
+!! Out:
+!!   num_swaps   : total column swaps performed
+     use mathlib, only: unpack_matrix
+     implicit none
+     real(dp), intent(inout) :: Mo(:,:)
+     real(dp), intent(inout) :: E(:)
+     real(dp), intent(in)    :: D(:)
+     real(dp), intent(in)    :: S(:,:)
+     integer,  intent(in)    :: na, l0, nbf
+     integer   :: num_swaps
 
+     integer :: i, j, itiny, ibig
+     real(dp), allocatable :: WS(:,:), T(:,:), wrk(:), den(:,:)
+     real(dp) :: tiny, big, tmp
+     logical  :: need_swap
+
+     if (na == 0 .or. na == l0) then
+       num_swaps = 0
+       return
+     end if
+
+     allocate(den(nbf, nbf), WS(nbf, l0), T(nbf, l0), wrk(l0))
+     call unpack_matrix(D, den, nbf, 'U')
+
+     call dgemm('N','N', nbf, l0, nbf, 1.0_dp, S,  nbf, Mo, nbf, 0.0_dp, WS, nbf)
+
+     call dgemm('N','N', nbf, l0, nbf, 1.0_dp, den,  nbf, WS, nbf, 0.0_dp, T,  nbf)
+
+     do i = 1, l0
+       wrk(i) = dot_product(WS(:,i), T(:,i))
+     end do
+     num_swaps = 0
+     do
+       itiny = minloc(wrk(1:na), dim=1)
+       tiny  = wrk(itiny)
+       ibig  = maxloc(wrk(na+1:l0), dim=1) + na
+       big   = wrk(ibig)
+
+       need_swap = (itiny > 0) .and. (ibig > 0) .and. (tiny < big)
+       if ( need_swap) then
+       Mo(:, [itiny, ibig]) = Mo(:, [ibig, itiny])
+       E([itiny, ibig])    = E([ibig, itiny])
+       wrk([itiny, ibig])  = wrk([ibig, itiny])
+
+       num_swaps = num_swaps + 1
+       else
+         exit
+       endif
+     end do
+
+     deallocate(WS, T, wrk)
+   end subroutine rohf_fix
 end module scf

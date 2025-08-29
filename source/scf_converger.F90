@@ -274,7 +274,7 @@
 !   rho_history     [REAL(dp), ALLOCATABLE]: L-BFGS curvature reciprocals (m_max).
 !   y_history       [REAL(dp), ALLOCATABLE]: L-BFGS gradient difference history (nvec, m_max).
 !   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
-!   step            [REAL(dp), ALLOCATABLE]: Current step (nvec).
+!   x               [REAL(dp), ALLOCATABLE]: Current x (nvec).
 !   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
 !   x_prev          [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
 !   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
@@ -296,8 +296,7 @@
 !   run            - Executes SOSCF micro-iterations and returns a `scf_conv_soscf_result`.
 !   init_hess_inv  - Computes the initial inverse Hessian diagonal.
 !   calc_orb_grad  - Calculates the orbital gradient.
-!   lbfgs_step     - Computes the orbital rotation step using L-BFGS.
-!   line_search    - Performs a line search to optimize the step size.
+!   bfgs           - Computes the orbital rotation x using L-BFGS.
 !   rotate_orbs    - Applies the orbital rotation.
 !
 !===============================================================================
@@ -701,9 +700,9 @@ module scf_converger
     real(kind=dp), allocatable :: y_history(:,:)  !< Gradient difference history (nvec, m_max)
     real(kind=dp), allocatable :: upd_history(:,:)! h_inv*dgrad history (nvec, m_max)
     real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
-    real(kind=dp), allocatable :: step(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: x(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: x_prev(:)         !< Step (nvec)
     real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
-    real(kind=dp), allocatable :: x_prev(:)       !< Previous rotation parameters (nvec)
     real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
     real(kind=dp), allocatable :: work_1(:,:)     !< Work matrix (nbf, nbf)
     real(kind=dp), allocatable :: work_2(:,:)     !< Work matrix (nbf, nbf)
@@ -724,9 +723,8 @@ module scf_converger
     procedure, pass :: run   => soscf_run
     procedure, private, pass :: init_hess_inv => init_hess_inv
     procedure, private, pass :: calc_orb_grad => calc_orb_grad
-    procedure, private, pass :: bfgs_step => bfgs_step
+    procedure, private, pass :: bfgs => bfgs
     procedure, private, pass :: rotate_orbs => rotate_orbs
-    procedure, private, pass :: line_search => line_search
     procedure, private, pass :: rms_density => rms_density
   end type soscf_converger
 
@@ -2240,16 +2238,16 @@ contains
       allocate(self%s_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%grad)) &
       allocate(self%grad(self%nvec), stat=istat, source=0.0_dp)
-    if (.not. allocated(self%step)) &
-      allocate(self%step(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x)) &
+      allocate(self%x(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x_prev)) &
+      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%grad_prev)) &
       allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%y_history)) &
       allocate(self%y_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
     if (.not. allocated(self%upd_history)) &
       allocate(self%upd_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
-    if (.not. allocated(self%x_prev)) &
-      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
     if (.not. allocated(self%h_inv)) &
       allocate(self%h_inv(self%nvec), stat=istat, source=0.0_dp)
 
@@ -2290,6 +2288,7 @@ contains
     if (allocated(self%grad)) deallocate(self%grad)
     if (allocated(self%grad_prev)) deallocate(self%grad_prev)
     if (allocated(self%x_prev)) deallocate(self%x_prev)
+    if (allocated(self%x)) deallocate(self%x)
     if (allocated(self%h_inv)) deallocate(self%h_inv)
     if (allocated(self%mo_a)) deallocate(self%mo_a)
     if (allocated(self%dens_a)) deallocate(self%dens_a)
@@ -2330,6 +2329,7 @@ contains
     real(kind=dp) :: grad_norm_ratio
     integer :: iter, istat
     integer :: i, nocc
+
 
     ! Allocate result object
     allocate(scf_conv_soscf_result :: res)
@@ -2390,7 +2390,7 @@ contains
       self%upd_history = 0.0_dp
       self%grad_prev = 0.0_dp
       self%grad = 0.0_dp
-      self%step = 0.0_dp
+      self%x = 0.0_dp
       self%x_prev = 0.0_dp
       self%m_history = 0
       if (self%m_history == 0) &
@@ -2416,42 +2416,17 @@ contains
         write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
     end if
 
-    ! Compute step using J. Phys. Chem. 1992, 96, 9768-9774
-    call self%bfgs_step(self%step)
+    ! Compute trail vector x using J. Phys. Chem. 1992, 96, 9768-9774
+    call self%bfgs(self%x)
     if (self%scf_type == 1) then
-       call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-      end if
+       call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
     elseif(self%scf_type == 2) then
-      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_a, self%mo_a)
-      call self%rotate_orbs(self%step(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
+      call self%rotate_orbs(self%x(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
               , self%nocc_b, self%nocc_b, self%mo_b)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a, mo_e_b)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_b, occ_a, self%nocc_b, self%nbf, self%nbf)
-      end if
     elseif(self%scf_type == 3) then
-      call self%rotate_orbs(self%step, self%nocc_a, self%nocc_b, self%mo_a)
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_b, self%mo_a)
       self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
-      if (associated(pfon)) then
-        call compute_mo_energies(self, fock_ao_a, self%mo_a, mo_e_a, self%work_1, self%work_2)
-        call compute_mo_energies(self, fock_ao_b, self%mo_b, mo_e_b, self%work_1, self%work_2)
-        call pfon%compute_occupations(mo_e_a, mo_e_b)
-        call pfon%build_density(self%dens_a, self%mo_a, self%work_1, self%work_2, self%dens_b, self%mo_b)
-      else
-        call orb_to_dens(self%dens_a, self%mo_a, occ_a, self%nocc_a, self%nbf, self%nbf)
-        call orb_to_dens(self%dens_b, self%mo_a, occ_a, self%nocc_b, self%nbf, self%nbf)
-      end if
     end if
     self%m_history = self%m_history + 1
     self%grad_prev = self%grad
@@ -2475,7 +2450,8 @@ contains
                                self%dat%buffer(self%dat%slot)%mo_e_b, self%work_1, self%work_2)
     end if
 
-    if (self%soscf_reset_mod /= 0 .and. mod(self%m_history, self%soscf_reset_mod) == 0) then
+    if (self%soscf_reset_mod == 0) return
+    if (mod(self%m_history, self%soscf_reset_mod) == 0) then
       if (self%rms_grad_prev > 1.0d-12) then
         grad_norm_ratio = grad_norm / self%rms_grad_prev
         self%rms_grad_prev = grad_norm
@@ -2603,7 +2579,7 @@ contains
         do i = 1, nocc_b
           do a= nocc_b+1, nbf
             k = k +1
-            diff = mo_e_a(a) - mo_e_a(i)
+            diff = mo_e_b(a) - mo_e_b(i)
             if (abs(diff) < thresh) then
                diff = sign(thresh + lvl_shift, diff)
             end if
@@ -2627,12 +2603,10 @@ contains
           end if
           do a= istart, nbf
             k = k +1
-            if (i <= nocc_b) then
               diff = mo_e_a(a) - mo_e_a(i)
               if (abs(diff) < thresh) then
                  diff = sign(thresh + lvl_shift, diff)
               end if
-            end if
             self%h_inv(k) = scale /diff
           end do
         end do
@@ -2789,10 +2763,10 @@ contains
     end associate
   end subroutine calc_orb_grad
 
-  subroutine bfgs_step(self, step)
+  subroutine bfgs(self, x)
     implicit none
     class(soscf_converger) :: self
-    real(kind=dp), intent(out) :: step(:)
+    real(kind=dp), intent(out) :: x(:)
 
     real(kind=dp) :: displn(self%nvec)
     real(kind=dp) :: dgrad(self%nvec)
@@ -2804,8 +2778,8 @@ contains
     ! Initialize displacement and preconditioned gradient difference
     if (self%m_history < 1) then
       scale = 1.0_dp
-      step = -scale * self%h_inv * self%grad
-      where (isnan(step)) step = 0.0_dp
+      x = -scale * self%h_inv * self%grad
+      where (isnan(x)) x = 0.0_dp
     else
       displn = self%h_inv * self%grad
       dgrad = self%grad-self%grad_prev
@@ -2832,9 +2806,9 @@ contains
       end if
 
       ! Final correction using current dgrad and updti
-      s1 = dot_product(step, dgrad)
+      s1 = dot_product(self%x_prev, dgrad)
       s2 = dot_product(dgrad, updti)
-      s3 = dot_product(step, self%grad)
+      s3 = dot_product(self%x_prev, self%grad)
       s4 = dot_product(updti, self%grad)
 
       s1 = 1.0_dp / s1
@@ -2842,23 +2816,25 @@ contains
       t = 1.0_dp + s1 / s2
       t2 = s1 * s3
       t1 = t * t2 - s1 * s4
-      displn = displn + t1 * step - t2 * updti
-      self%s_history(:, self%m_history) = self%step
+      displn = displn + t1 * self%x_prev - t2 * updti
+      self%s_history(:, self%m_history) = self%x_prev
       self%y_history(:, self%m_history) = dgrad
       self%upd_history(:, self%m_history) = updti
-      step = -displn
+      x = -displn
     end if
-    norm_disp = sqrt(dot_product(step, step)/self%nvec)
+    norm_disp = sqrt(dot_product(x, x)/self%nvec)
     if (norm_disp > 0.1)  then
-       step = step*0.1/norm_disp
+       x = x*0.1/norm_disp
     end if
-  end subroutine bfgs_step
+    self%x_prev = x
+    self%grad_prev = self%grad
+  end subroutine bfgs
 
-  subroutine rotate_orbs(self, step, nocc_a, nocc_b, mo)
+  subroutine rotate_orbs(self, x, nocc_a, nocc_b, mo)
     implicit none
 
     class(soscf_converger) :: self
-    real(kind=dp), intent(in)        :: step(:)
+    real(kind=dp), intent(in)        :: x(:)
     integer, intent(in)              :: nocc_a, nocc_b
     real(kind=dp), intent(inout)     :: mo(:,:)
 
@@ -2873,7 +2849,7 @@ contains
     if (self%scf_type == 3) then! ROHF
       second_term = .false.
     end if
-    call exp_scaling(self%work_1, step, idx, nocc_a, nocc_b, nbf, second_term)
+    call exp_scaling(self%work_1, x, idx, nocc_a, nocc_b, nbf, second_term)
     call orthonormalize(self%work_1, nbf)
 
     call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
@@ -2881,9 +2857,9 @@ contains
 
   contains
 
-    subroutine exp_scaling(G, step, idx, nocc_a, nocc_b, nbf, second_term)
+    subroutine exp_scaling(G, x, idx, nocc_a, nocc_b, nbf, second_term)
       real(kind=dp), intent(out)     :: G(:,:)
-      real(kind=dp), intent(in)      :: step(:)
+      real(kind=dp), intent(in)      :: x(:)
       integer, intent(inout)         :: idx
       integer, intent(in)            :: nocc_a, nocc_b, nbf
 
@@ -2898,8 +2874,8 @@ contains
         istart = merge(nocc_b+1, nocc_a+1, occ <= nocc_b)
         do virt = istart, nbf
           idx = idx + 1
-          K(virt, occ) =  step(idx)
-          K(occ, virt) = -step(idx)
+          K(virt, occ) =  x(idx)
+          K(occ, virt) = -x(idx)
         end do
       end do
 
@@ -2972,368 +2948,5 @@ contains
     end do
 
   end subroutine compute_mo_energies
-
-  !==============================================================================
-  ! Line Search Subroutine for SOSCF
-  !==============================================================================
-  !> @brief Finds the optimal step size for orbital updates in the SOSCF method
-  !>        to minimize the system energy along the LBFGS search direction.
-  !>
-  !> @detail This subroutine implements an adaptive line search algorithm that
-  !>         combines backtracking with polynomial interpolation (quadratic or cubic)
-  !>         to efficiently find a step size satisfying the Armijo and Wolfe conditions.
-  !>
-  !> The algorithm operates as follows:
-  !> 1. Initialization:
-  !>    - Computes the initial energy `e0` and directional derivative `dphi0` along the search direction.
-  !>    - Sets an initial step size `alpha_try` with bounds to prevent excessively small or large values.
-  !> 2. Search Loop:
-  !>    - Applies an orbital rotation using the current step size `alpha_try * step`.
-  !>    - Updates density matrices and calculates the new energy `e_new`.
-  !>    - Evaluates the Armijo condition (sufficient decrease) and Wolfe condition (curvature).
-  !>    - If the Armijo condition is satisfied, the search terminates.
-  !>    - Otherwise, adjusts the step size using polynomial interpolation (quadratic on the first iteration,
-  !>      cubic on subsequent iterations) or simple backtracking.
-  !> 3. Additional Checks:
-  !>    - Tracks the best step size (`alpha_best`) corresponding to the lowest energy encountered.
-  !>    - Terminates if the maximum number of iterations or a minimum step size threshold is reached.
-  !> 4. Exit Conditions:
-  !>    - Satisfaction of the Armijo condition.
-  !>    - Negligible energy change between iterations (optional, enforced after a minimum number of iterations).
-  !>    - Reaching the maximum number of iterations or a minimum step size.
-  !>
-  !> @section Supported Interpolation Options:
-  !>    - Backtracking: Simple step size reduction (interp_type = 0).
-  !>    - Quadratic: Quadratic polynomial interpolation (interp_type = 1).
-  !>    - Cubic: Cubic polynomial interpolation (default, interp_type = 2).
-  !>
-  !> @param[inout] self        SOSCF converger instance containing data and parameters.
-  !> @param[inout] alpha       Initial step size guess (in), optimal step size (out).
-  !> @param[in]    grad        Orbital gradient in the orthogonal basis.
-  !> @param[in]    step        LBFGS search direction.
-  !> @param[in]    fock_a      Packed alpha Fock matrix.
-  !> @param[in]    fock_b      Packed beta Fock matrix (UHF only).
-  !> @param[in]    occ_a       Alpha orbital occupations.
-  !> @param[in]    occ_b       Beta orbital occupations (UHF only).
-  !> @param[inout] mo_a        Alpha molecular orbital coefficients (updated during trials).
-  !> @param[inout] mo_b        Beta molecular orbital coefficients (updated during trials).
-  !> @param[in]    interp_type Optional: Interpolation method (0=backtracking, 1=quadratic, 2=cubic; default=2).
-  !==============================================================================
-  subroutine line_search(self, alpha, grad, step, &
-                         fock_a, fock_b, occ_a, occ_b, &
-                         mo_a, mo_b, pfon, interp_type)
-    class(soscf_converger) :: self
-    real(kind=dp), intent(inout) :: alpha
-    real(kind=dp), intent(in) :: grad(:)
-    real(kind=dp), intent(in) :: step(:)
-    real(kind=dp), pointer, intent(in) :: fock_a(:)
-    real(kind=dp), pointer, intent(in) :: fock_b(:)
-    real(kind=dp), intent(inout) :: mo_a(:,:)
-    real(kind=dp), intent(inout) :: mo_b(:,:)
-    real(kind=dp), pointer, intent(in) :: occ_a(:)
-    real(kind=dp), pointer, intent(in) :: occ_b(:)
-    real(kind=dp), pointer :: mo_e_a(:)
-    real(kind=dp), pointer :: mo_e_b(:)
-    type(pfon_t), pointer :: pfon
-    integer, optional, intent(in) :: interp_type
-
-    ! Local variables
-    real(kind=dp) :: e0, e_new, dphi0, alpha_try, alpha_prev, e_prev
-    real(kind=dp) :: alpha_best, e_best ! Best alpha value found
-    real(kind=dp) :: dphi_new           ! New directional derivative for Wolfe condition
-    real(kind=dp) :: a, b, c, disc      ! For polynomial interpolation
-
-    ! Line search parameters
-    real(kind=dp), parameter :: c1 = 1.0e-4_dp ! Armijo condition parameter
-    real(kind=dp), parameter :: c2 = 0.9_dp    ! Wolfe condition parameter
-    real(kind=dp), parameter :: min_alpha = 1.0e-6_dp ! Minimum step size
-    real(kind=dp), parameter :: max_alpha = 2.0_dp    ! Maximum step size
-    real(kind=dp), parameter :: threshold = 1.0e-10_dp ! Small number threshold
-    real(kind=dp), parameter :: energy_tol = 1.0e-10_dp ! Energy change threshold
-    integer, parameter :: max_iter = 25 ! Maximum line search iterations
-    integer, parameter :: min_iter_for_energy_check = 16 ! Minimum number of iterations
-
-    integer :: i, j, interp, istat
-    logical :: found_better, wolfe_satisfied, armijo_satisfied
-
-    ! Set interpolation method
-    interp = 2  ! Default to cubic interpolation
-    if (present(interp_type)) interp = min(max(interp_type, 0), 2)
-
-    associate (nbf => self%nbf, &
-               nocc_a => self%nocc_a, &
-               nocc_b => self%nocc_b, &
-               mo_e_a => self%dat%buffer(self%dat%slot)%mo_e_a, &
-               mo_e_b => self%dat%buffer(self%dat%slot)%mo_e_b)
-
-      ! Calculate initial energy
-      e0 = traceprod_sym_packed(self%dens_a, fock_a, nbf)
-      if (self%scf_type > 1) &  ! UHF
-        e0 = e0 + traceprod_sym_packed(self%dens_b, fock_b, nbf)
-
-      ! Calculate directional derivative (should be negative for descent)
-      dphi0 = dot_product(grad, step)
-
-      ! Initialize search parameters
-      alpha_try = min(max(alpha, 0.1_dp), 1.0_dp)  ! Initial step size
-      alpha_prev = 0.0_dp  ! Previous step size
-      e_prev = e0  ! Previous energy
-
-      ! Initialize best solution tracking
-      alpha_best = alpha_try
-      e_best = e0
-      found_better = .false.
-
-      if (self%verbose>1) then
-        write(iw, '(A,E20.10)') 'DEBUG line_search: init: dot_product(grad, step)=', dphi0
-        write(iw, '(A,E20.10)') 'DEBUG line_search: init: e0=', e0
-        write(iw, '(A,E20.10)') 'DEBUG line_search: init: alpha_try=', alpha_try
-      end if
-
-      ! Line search loop
-      do i = 1, max_iter
-
-        if (self%verbose>1) then
-          write(iw, '(A,I3)') 'DEBUG line_search: loop: first 3x3 MO_a: Iter=', i
-          do j = 1, min(3, nbf)
-            write(iw, '(3E20.10)') self%mo_a(j, 1:min(3, nbf))
-          end do
-        end if
-
-        ! Apply orbital rotation with current step size
-        if (self%scf_type == 1) then
-          call self%rotate_orbs(step * alpha_try, self%nocc_a, self%nocc_a, mo_a)
-
-          if (associated(pfon)) then
-            call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
-            call pfon%compute_occupations(mo_e_a)
-            call pfon%build_density(self%dens_a, mo_a, self%work_1, self%work_2)
-          else
-            call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
-          end if
-        else
-          call self%rotate_orbs(step * alpha_try, self%nocc_a, self%nocc_a, mo_a)
-          call self%rotate_orbs(step * alpha_try, self%nocc_b, self%nocc_b, mo_b)
-          if (associated(pfon)) then
-            call compute_mo_energies(self, fock_a, mo_a, mo_e_a, self%work_1, self%work_2)
-            call compute_mo_energies(self, fock_b, mo_b, mo_e_b, self%work_1, self%work_2)
-            call pfon%compute_occupations(mo_e_a, mo_e_b)
-            call pfon%build_density(self%dens_a, mo_a, self%work_1, self%work_2, self%dens_b, mo_b)
-          else
-            call orb_to_dens(self%dens_a, mo_a, occ_a, nocc_a, nbf, nbf)
-            call orb_to_dens(self%dens_b, mo_b, occ_b, nocc_b, nbf, nbf)
-          end if
-        end if
-
-        if (self%verbose>1) then
-          call unpack_matrix(fock_a, self%work_1)
-          call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
-          call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_a, nbf, 0.0_dp, self%work_1, nbf)
-          write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
-
-          call unpack_matrix(fock_b, self%work_1)
-          call dgemm('T', 'N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
-          call dgemm('N', 'N', nbf, nbf, nbf, 1.0_dp, self%work_2, nbf, mo_b, nbf, 0.0_dp, self%work_1, nbf)
-          write(iw, '(A,E20.10)') 'DEBUG: Max |F_mo(occ,virt)| after rotation = ', maxval(abs(self%work_1(1:nocc_a, nocc_a+1:)))
-
-          ! Debug check of density matrix trace
-          call unpack_matrix(self%dens_a, self%work_1)
-          call dgemm('N', 'N', nbf, nbf, nbf, &
-                     1.0_dp, self%work_1, nbf, &
-                             self%overlap, nbf, &
-                     0.0_dp, self%work_2, nbf)
-          write(iw, '(A,E20.10)') &
-            'DEBUG orb_to_dens Alpha: Tr(D*S) after update:', &
-            sum([(self%work_2(i,i), i=1,nbf)])
-
-          call unpack_matrix(self%dens_b, self%work_1)
-          call dgemm('N', 'N', nbf, nbf, nbf, &
-                     1.0_dp, self%work_1, nbf, &
-                             self%overlap, nbf, &
-                     0.0_dp, self%work_2, nbf)
-          write(iw, '(A,E20.10)') &
-            'DEBUG orb_to_dens Beta: Tr(D*S) after update:', &
-            sum([(self%work_2(i,i), i=1,nbf)])
-        end if
-
-        ! Calculate new energy
-        e_new = traceprod_sym_packed(self%dens_a, fock_a, nbf)
-        if (self%scf_type > 1) &  ! UHF
-          e_new = e_new + traceprod_sym_packed(self%dens_b, fock_b, nbf)
-
-        if (self%verbose>1) then
-          write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, ' e_new=', e_new
-          write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, ' condition=', &
-            e_new - (e0 + c1 * alpha_try * dphi0)
-        end if
-
-        ! Calculate gradient at new point for Wolfe condition
-        call self%calc_orb_grad(self%grad, fock_a, fock_b, mo_a, mo_b)
-        dphi_new = dot_product(self%grad, step)
-        if (self%verbose>1) then
-          write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, &
-            ' grad_norm=', sqrt(dot_product(self%grad,self%grad))
-          write(iw, '(A,I3,A,E20.10)') 'DEBUG line_search: loop: iter=', i, &
-            ' dphi_new=', dphi_new
-        end if
-
-        ! Check Armijo condition (sufficient decrease)
-        armijo_satisfied = (e_new <= e0 + c1 * alpha_try * dphi0)
-
-        ! Check Wolfe condition (curvature)
-        wolfe_satisfied = (abs(dphi_new) <= c2 * abs(dphi0))
-
-        if (self%verbose>1) then
-          write(iw, '(A,I3,A,L1,A,L1)') 'DEBUG line_search: loop: iter=', i, &
-                                        ' Armijo=', armijo_satisfied, &
-                                        ' Wolfe=', wolfe_satisfied
-        end if
-
-        ! Track best solution found
-        if (e_new < e_best) then
-          e_best = e_new
-          alpha_best = alpha_try
-          found_better = .true.
-        end if
-
-        ! Check convergence criteria
-        if (armijo_satisfied) then
-          alpha = alpha_try
-          if (self%verbose>1) then
-            write(iw, '(A,E20.10)') 'DEBUG line_search: exit: alpha=', alpha
-            write(iw, '(A,I3,A)') 'DEBUG line_search: loop: iter=', i, ' converged - Armijo satisfied'
-          end if
-          exit
-        end if
-
-        ! Additional exit condition based on small energy change
-        if (i > min_iter_for_energy_check .and. abs(e_new - e_prev) < energy_tol) then
-          if (self%verbose > 1) then
-            write(iw, '(A,I3,A,E20.10)') &
-              'DEBUG line_search: Energy change below threshold at iter=', i, &
-              ', delta E=', abs(e_new - e_prev)
-          end if
-          alpha = alpha_try  ! Accept the current step
-          exit
-        end if
-
-        ! Interpolation for next step size
-        if (i == 1 .and. interp >= 1) then
-          ! Quadratic interpolation: phi(alpha) = a*alpha^2 + dphi0*alpha + e0
-          a = (e_new - e0 - dphi0 * alpha_try) / (alpha_try**2)
-          if (a > 0.0_dp) then  ! Ensure minimum exists
-            alpha_try = -dphi0 / (2.0_dp * a)
-            ! Safeguard to avoid too small or large steps
-            alpha_try = min(max(alpha_try, 0.2_dp * alpha_try), 0.8_dp * alpha_try)
-          else
-            alpha_try = alpha_try * 0.5_dp  ! Fallback to backtracking
-          end if
-        else if (i > 1 .and. interp == 2) then
-          ! Cubic interpolation: phi(alpha) = a*alpha^3 + b*alpha^2 + dphi0*alpha + e0
-          associate (a1 => alpha_prev, &
-                     a2 => alpha_try, &
-                     p1 => e_prev, &
-                     p2 => e_new)
-            if (abs(a2 - a1) > threshold) then
-              ! Compute cubic coefficients
-              block
-                real(kind=dp) :: den, r1, r2
-                den = (a1 - a2) * a1 * a2
-                if (abs(den) > threshold) then
-                  a = ((p2 - e0 - dphi0*a2)*a1**2 - (p1 - e0 - dphi0*a1)*a2**2) / (den**2)
-                  b = ((p1 - e0 - dphi0*a1)*a2 - (p2 - e0 - dphi0*a2)*a1) / den
-                else
-                  a = 0.0_dp
-                  b = 0.0_dp
-                end if
-
-                ! Solve derivative: 3a*alpha^2 + 2b*alpha + dphi0 = 0
-                disc = b**2 - 3.0_dp * a * dphi0
-                if (abs(a) > threshold .and. disc > -threshold) then
-                  ! Ensure discriminant is treated as non-negative within tolerance
-                  disc = max(disc, 0.0_dp)
-                  r1 = (-b + sqrt(disc)) / (3.0_dp * a)  ! First root
-                  r2 = (-b - sqrt(disc)) / (3.0_dp * a)  ! Second root
-
-                  ! Select the root that positive and within bounds
-                  if (r1 > 0.0_dp .and. r1 <= a2) then
-                    alpha_try = r1
-                  else if (r2 > 0.0_dp .and. r2 <= a2) then
-                    alpha_try = r2
-                  else
-                    alpha_try = a2 * 0.5_dp  ! Fallback if no valid root
-                  end if
-                else if (abs(b) > threshold) then
-                  ! Fall back to quadratic: 2b*alpha + dphi0 = 0
-                  alpha_try = -dphi0 / (2.0_dp * b)
-                  if (alpha_try <= 0.0_dp .or. alpha_try > a2) alpha_try = a2 * 0.5_dp
-                else
-                  ! Flat or linear: backtrack
-                  alpha_try = a2 * 0.5_dp
-                end if
-              end block
-              alpha_try = min(max(alpha_try, min_alpha), max_alpha)
-            else
-              alpha_try = a2 * 0.5_dp
-            end if
-          end associate
-        else
-          alpha_try = alpha_try * 0.5_dp  ! Simple backtracking
-        end if
-
-        ! Enforce min/max step size bounds
-        alpha_try = min(max(alpha_try, min_alpha), max_alpha)
-
-        if (self%verbose>1) then
-          write(iw, '(A,I3,A,E20.10)') &
-            'DEBUG line_search: loop: iter=', i, &
-            ' alpha_try=', alpha_try
-          write(iw, '(A,I3,A,E20.10)') &
-            'DEBUG line_search: loop: iter=', i, &
-            ' E_prev=', e_prev
-          write(iw, '(A,I3,A,E20.10)') &
-            'DEBUG line_search: loop: iter=', i, &
-            ' E_new=', e_new
-        end if
-
-        ! Check for minimum step size
-        if (alpha_try < min_alpha) then
-          if (self%verbose>1) then
-            write(iw, '(A,I3,A)') 'DEBUG line_search: loop: iter=', i, ' alpha < min_alpha'
-          end if
-          if (found_better) then
-            alpha = alpha_best
-            if (self%verbose>1) then
-              write(iw, '(A,E20.10,A,E20.10)') 'DEBUG line_search: Using best alpha=', &
-                alpha_best, ' with energy=', e_best
-            end if
-          else
-            alpha = alpha_prev
-          end if
-          exit
-        end if
-
-        ! Store current values for next iteration
-        alpha_prev = alpha_try
-        e_prev = e_new
-
-      end do  ! End of line search loop
-
-      ! Final handling for max iterations exit
-      if (i > max_iter) then
-        if (self%verbose>1) &
-          write(iw, '(A,I3,A)') 'DEBUG line_search: Maximum iterations (', max_iter, ') reached'
-        if (found_better) then
-          alpha = alpha_best
-          if (self%verbose>1) &
-            write(iw, '(A,E20.10,A,E20.10)') 'DEBUG line_search: Using best alpha=', &
-              alpha_best, ' with energy=', e_best
-        else
-          alpha = alpha_prev  ! Use last attempt if no better solution found
-        end if
-      end if
-
-    end associate
-  end subroutine line_search
 
 end module scf_converger
