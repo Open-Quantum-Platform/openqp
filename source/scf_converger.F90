@@ -409,6 +409,9 @@ module scf_converger
   use messages, only: show_message, with_abort
   use mathlib, only: antisymmetrize_matrix, unpack_matrix, pack_matrix
   use scf_addons, only: pfon_t
+  use, intrinsic :: iso_fortran_env, only: int32
+  use types, only: information
+  use mod_dft_molgrid, only: dft_grid_t
 
   implicit none
 
@@ -416,6 +419,7 @@ module scf_converger
   public :: scf_conv
   public :: scf_conv_result
   public :: soscf_converger ! Used to provide parametres for soscf
+  public :: trah_converger  ! Used to provide parametres dor trah
 
   !> Constants for converger types
   integer, parameter, public :: conv_none  = 1
@@ -423,6 +427,7 @@ module scf_converger
   integer, parameter, public :: conv_ediis = 3
   integer, parameter, public :: conv_adiis = 4
   integer, parameter, public :: conv_soscf = 5
+  integer, parameter, public :: conv_trah  = 6
 
   !> Converger state constants
   integer, parameter, public :: conv_state_not_initialized = 0
@@ -430,7 +435,7 @@ module scf_converger
 
   !> Maximum length for converger names
   integer, parameter, public :: conv_name_maxlen = 32
-
+  integer, parameter, public :: SCF_RHF=1, SCF_UHF=2, SCF_ROHF=3
   !> @brief Type to encapsulate SCF iteration data
   !> @detail Stores Fock, density, DIIS error matrices, and SCF energy for a single SCF iteration.
   !>         Designed for efficient memory use and data locality in a ring buffer.
@@ -727,6 +732,55 @@ module scf_converger
     procedure, private, pass :: rotate_orbs => rotate_orbs
     procedure, private, pass :: rms_density => rms_density
   end type soscf_converger
+!=================================================================
+!impementation of trust region agumented hessian
+!=================================================================
+
+  type, extends(subconverger) :: trah_converger
+    integer :: scf_type   = SCF_RHF
+    integer :: nbf        = 0
+    integer :: nbf_tri    = 0
+    integer :: nocc_a     = 0
+    integer :: nocc_b     = 0
+    integer :: nvir_a     = 0
+    integer :: nvir_b     = 0
+    integer :: nfocks     = 1
+    integer :: verbose = 0
+    integer(int32) :: n_param     = 0
+    logical :: is_dft     = .false.
+    real(dp) :: hf_scale  = 1.0_dp
+
+    real(dp), allocatable :: fock_ao(:,:)   ! Fock matrix fock_ao (nbf_tri, nfock)
+    real(dp), allocatable :: dens(:,:)      ! Density matrix (nbf_tri, nfocks)
+    real(kind=dp), pointer :: overlap(:, :) => null()
+    real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
+
+    class(information), pointer :: infos
+    type(dft_grid_t), pointer :: molgrid
+
+    real(dp), allocatable :: mo_a(:,:), mo_b(:,:)
+
+    real(dp), allocatable :: foo_a(:,:), fvv_a(:,:), xmat_a(:,:), x2mat_a(:,:)
+    real(dp), allocatable :: foo_b(:,:), fvv_b(:,:), xmat_b(:,:), x2mat_b(:,:)
+
+    real(dp), allocatable :: v(:,:)         ! response v(nbf, nbf)
+    real(dp), allocatable :: dm(:,:)        ! response density dm(nbf,nbf)
+    real(dp), allocatable :: pfock(:,:)     ! Fock matrix (nbf_tri, nfocks) from respose density
+    real(dp), allocatable :: dm_tri(:,:)    ! packed DM (nbf_tri, nfocks)
+
+    real(dp), allocatable :: work1(:,:)     ! (nbf, nbf)
+    real(dp), allocatable :: work2(:,:)     ! (nbf, nbf)
+    real(dp), allocatable :: work3(:,:)     ! (nbf, nbf)
+
+  contains
+    procedure, pass :: init  => trah_init
+    procedure, pass :: clean => trah_clean
+    procedure, pass :: setup => trah_setup
+    procedure, pass :: run   => trah_run
+!    procedure, pass :: rotate_orbs => rotate_orbs_trah
+    procedure, pass :: calc_h_op => calc_h_op
+    procedure, pass :: calc_g_h => calc_g_h
+  end type trah_converger
 
 contains
 
@@ -1349,6 +1403,8 @@ contains
           allocate(adiis_converger :: self%sconv(i)%s)
         case (conv_soscf)
           allocate(soscf_converger :: self%sconv(i)%s)
+        case (conv_trah)
+          allocate(trah_converger :: self%sconv(i)%s)
         end select
         call self%sconv(i)%s%init(self)
       end do
@@ -2948,5 +3004,637 @@ contains
     end do
 
   end subroutine compute_mo_energies
+!====================================================================
+! Trust region agumnted hessian subroutines
+!====================================================================
+  subroutine trah_init(self, params)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
+    call self%subconverger_init(params)
+
+    self%conv_name = 'TRAH'
+    self%nfocks    = params%dat%num_focks
+    self%verbose   = params%verbose
+    self%nbf       = params%dat%ldim
+    self%nocc_a    = params%dat%nelec_a
+    self%nocc_b    = params%dat%nelec_b
+    self%nbf_tri   = self%nbf * (self%nbf + 1) / 2
+    self%dat       => params%dat
+    self%overlap   => params%overlap
+    self%overlap_invsqrt => params%overlap_sqrt
+    self%scf_type = params%scf_type
+
+    self%nvir_a = self%nbf - self%nocc_a
+    self%nvir_b = self%nbf - self%nocc_b
+
+!    self%is_dft  = (infos%control%hamilton >= 20)
+!    self%hf_scale = merge(infos%dft%HFscale, 1.0_dp, self%is_dft)
+
+    select case (self%scf_type)
+    case (SCF_RHF)
+      self%n_param = int((self%nocc_a * self%nvir_a), kind=int32)
+    case (SCF_UHF)
+      self%n_param = int((self%nocc_a * self%nvir_a) + (self%nocc_b * self%nvir_b), kind=int32)
+    case (SCF_ROHF)
+      self%scf_type = SCF_ROHF; self%nfocks = 2
+      self%n_param = int((self%nocc_a * self%nvir_a) + (self%nocc_b * self%nvir_a), kind=int32)
+    end select
+
+    call alloc_workspace(self)
+
+
+  end subroutine trah_init
+
+  subroutine alloc_workspace(self)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    integer :: nbf, nbf_tri
+
+    nbf      = self%nbf
+    nbf_tri  = nbf*(nbf+1)/2
+
+    if (.not.allocated(self%work1))   allocate(self%work1(nbf,nbf))
+    if (.not.allocated(self%work2))   allocate(self%work2(nbf,nbf))
+    if (.not.allocated(self%work3))   allocate(self%work3(nbf,nbf))
+
+    if (.not.allocated(self%v))       allocate(self%v(nbf,nbf))
+    if (.not.allocated(self%dm))      allocate(self%dm(nbf,nbf))
+    if (.not.allocated(self%pfock))   allocate(self%pfock(nbf_tri, self%nfocks))
+    if (.not.allocated(self%dens))   allocate(self%dens(nbf_tri, self%nfocks))
+    if (.not.allocated(self%fock_ao))   allocate(self%fock_ao(nbf_tri, self%nfocks))
+    if (.not.allocated(self%dm_tri))  allocate(self%dm_tri(nbf_tri, self%nfocks))
+
+    if (self%scf_type == SCF_RHF .or. self%scf_type == SCF_ROHF .or. self%scf_type == SCF_UHF) then
+      if (.not.allocated(self%mo_a))   allocate(self%mo_a(nbf,nbf))
+      if (.not.allocated(self%foo_a))   allocate(self%foo_a(self%nocc_a, self%nocc_a))
+      if (.not.allocated(self%fvv_a))   allocate(self%fvv_a(self%nvir_a, self%nvir_a))
+      if (.not.allocated(self%xmat_a))  allocate(self%xmat_a(self%nvir_a, self%nocc_a))
+      if (.not.allocated(self%x2mat_a)) allocate(self%x2mat_a(self%nvir_a, self%nocc_a))
+    end if
+    if (self%scf_type == SCF_UHF .or. self%scf_type == SCF_ROHF) then
+      if (.not.allocated(self%mo_b))   allocate(self%mo_b(nbf,nbf))
+      if (.not.allocated(self%foo_b))   allocate(self%foo_b(self%nocc_b, self%nocc_b))
+      if (.not.allocated(self%fvv_b))   allocate(self%fvv_b(self%nvir_b, self%nvir_b))
+      if (.not.allocated(self%xmat_b))  allocate(self%xmat_b(self%nvir_b, self%nocc_b))
+      if (.not.allocated(self%x2mat_b)) allocate(self%x2mat_b(self%nvir_b, self%nocc_b))
+    end if
+  end subroutine alloc_workspace
+
+  subroutine trah_clean(self)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    if (allocated(self%work1))   deallocate(self%work1)
+    if (allocated(self%work2))   deallocate(self%work2)
+    if (allocated(self%work3))   deallocate(self%work3)
+    if (allocated(self%v))       deallocate(self%v)
+    if (allocated(self%dm))      deallocate(self%dm)
+    if (allocated(self%pfock))   deallocate(self%pfock)
+    if (allocated(self%dm_tri))  deallocate(self%dm_tri)
+    if (allocated(self%foo_a))   deallocate(self%foo_a)
+    if (allocated(self%fvv_a))   deallocate(self%fvv_a)
+    if (allocated(self%xmat_a))  deallocate(self%xmat_a)
+    if (allocated(self%x2mat_a)) deallocate(self%x2mat_a)
+    if (allocated(self%foo_b))   deallocate(self%foo_b)
+    if (allocated(self%fvv_b))   deallocate(self%fvv_b)
+    if (allocated(self%xmat_b))  deallocate(self%xmat_b)
+    if (allocated(self%x2mat_b)) deallocate(self%x2mat_b)
+  end subroutine trah_clean
+
+  subroutine trah_setup(self)
+
+    class(trah_converger), intent(inout) :: self
+    ! Data verification on each setup call
+    self%last_setup = 0
+
+  end subroutine trah_setup
+
+  subroutine trah_run(self, res)
+!    use otr_inter, only: init_trah_solver, run_trah_solver
+    class(trah_converger), target, intent(inout) :: self
+    class(scf_conv_result), allocatable, intent(out) :: res
+    ! --- Step 1: Extract current data from converger_data ---
+    self%fock_ao(:,1) = self%dat%get_fock(-1, 1)
+    self%mo_a = self%dat%get_mo_a(-1)
+    self%dens(:,1) = self%dat%get_density(-1, 1)
+    if (self%scf_type > 1) then
+      self%fock_ao(:,2) = self%dat%get_fock(-1, 2)
+      self%mo_b = self%dat%get_mo_b(-1)
+      self%dens(:,2) = self%dat%get_density(-1, 2)
+    end if
+    allocate(scf_conv_soscf_result :: res)
+    res%dat => self%dat
+    res%active_converger_name = self%conv_name
+
+    res%error = 0.1_dp
+!    call init_trah_solver(self, self%infos, self%molgrid)
+!    call run_trah_solver()
+
+  end subroutine trah_run
+
+  subroutine calc_g_h(self, grad, h_diag)
+    use precision,  only: dp
+    use mathlib,    only: unpack_matrix
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    real(dp),             intent(out)    :: grad(:)
+    real(dp),             intent(out)    :: h_diag(:)
+
+    integer :: i, a, k
+
+    ! alias for brevity
+    associate( nbf => self%nbf, &
+               nocc_a => self%nocc_a, &
+               nocc_b => self%nocc_b, &
+               w1 => self%work1, &
+               w2 => self%work2, &
+               w3 => self%work3, &
+               fock_ao  => self%fock_ao,&
+               mo_a => self%mo_a, &
+               mo_b => self%mo_b)
+
+    select case (self%scf_type)
+    case (SCF_RHF)
+
+      call unpack_matrix(fock_ao(:,1), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          grad(k)  = 2.0_dp * w3(i,a)
+        end do
+      end do
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          h_diag(k) = 2.0_dp * ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+
+    case (SCF_UHF)
+      ! ---- UHF α block ----
+      call unpack_matrix(fock_ao(:,1), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          grad(k)  = w3(i,a)
+        end do
+      end do
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          h_diag(k) = ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+
+      call unpack_matrix(fock_ao(:,2), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      k = self%nvir_a * nocc_a
+      do i = nocc_b+1, nbf
+        do a = 1, nocc_b
+          k = k + 1
+          grad(k)  = w3(i,a)
+        end do
+      end do
+
+      k = self%nvir_a * nocc_a
+      do i = nocc_b+1, nbf
+        do a = 1, nocc_b
+          k = k + 1
+          h_diag(k) = ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+
+    case default
+      error stop 'calc_g_h: unsupported scftype'
+    end select
+
+    end associate
+  end subroutine calc_g_h
+
+  subroutine calc_h_op(self, infos, x, x2)
+    use precision,  only: dp
+    use types, only: information
+    use mathlib,    only: pack_matrix, unpack_matrix
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    class(information), intent(inout), target :: infos
+    real(dp),                intent(in)  :: x(:)     ! length nocc*nvir (α then β for UHF)
+    real(dp),                intent(out) :: x2(:)    ! same length
+
+    integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b
+    integer :: i, a, k
+    associate( nbf => self%nbf, &
+               nocc_a => self%nocc_a, nocc_b => self%nocc_b, &
+               nvir_a => self%nvir_a, nvir_b => self%nvir_b, &
+               work1 => self%work1, &
+               work2 => self%work2, &
+               work3 => self%work3, &
+               fock_ao  => self%fock_ao,&
+               mo => self%mo_a, &
+               mo_b => self%mo_b, &
+               dm  => self%dm, pfock => self%pfock,  dm_tri => self%dm_tri, v => self%v, &
+               foo => self%foo_a,  fvv => self%fvv_a, xmat => self%xmat_a, x2mat => self%x2mat_a, &
+               foo_b => self%foo_b,  fvv_b => self%fvv_b, xmat_b => self%xmat_b, x2mat_b => self%x2mat_b )
+
+    select case (self%scf_type)
+    case(SCF_RHF)
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          xmat(i,a) = x(k)
+        end do
+      end do
+      call unpack_matrix(fock_ao(:,1), work1)
+
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work1, nbf,      &
+                         mo, nbf, &
+                 0.0_dp, work2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         work2,         nbf, &
+                 0.0_dp, work3,nbf)
+       foo = work3(1:nocc_a,1:nocc_a)
+       fvv = work3(nocc_a+1:nbf,nocc_a+1:nbf)
+
+
+      call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
+                 1.0_dp, fvv,  nvir_a, &
+                         xmat, nvir_a, &
+                 0.0_dp, x2mat, nvir_a)
+      call dgemm('N','N', nvir_a, nocc_a, nocc_a, &
+                -1.0_dp, xmat, nvir_a, &
+                          foo, nocc_a, &
+                 1.0_dp, x2mat, nvir_a)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_a, nvir_a, &
+                 2.0_dp, mo(:, nocc_a+1:nbf), nbf, &
+                         xmat,             nvir_a, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_a, &
+                 1.0_dp, work2,          nbf, &
+                         mo(:, 1:nocc_a),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+      call pack_matrix(dm,dm_tri(:,1))
+      dm_tri(:,2) = dm_tri(:,1)
+!      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call unpack_matrix(pfock(:,1), v)
+      work2 = 0
+
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
+
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          x2(k) = 2*x2mat(i,a)
+        end do
+      end do
+      !#################### UHF
+    case (scf_uhf)
+! alpha
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          xmat(i,a) = x(k)
+        end do
+      end do
+      call unpack_matrix(fock_ao(:,1), work1)
+
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work1, nbf,      &
+                         mo, nbf, &
+                 0.0_dp, work2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         work2,         nbf, &
+                 0.0_dp, work3,nbf)
+       foo = work3(1:nocc_a,1:nocc_a)
+       fvv = work3(nocc_a+1:nbf,nocc_a+1:nbf)
+
+
+      call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
+                 1.0_dp, fvv,  nvir_a, &
+                         xmat, nvir_a, &
+                 0.0_dp, x2mat, nvir_a)
+      call dgemm('N','N', nvir_a, nocc_a, nocc_a, &
+                -1.0_dp, xmat, nvir_a, &
+                          foo, nocc_a, &
+                 1.0_dp, x2mat, nvir_a)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_a, nvir_a, &
+                 1.0_dp, mo(:, nocc_a+1:nbf), nbf, &
+                         xmat,             nvir_a, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_a, &
+                 1.0_dp, work2,          nbf, &
+                         mo(:, 1:nocc_a),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+      call pack_matrix(dm,dm_tri(:,1))
+
+! beta
+      k = nvir_a*nocc_a
+      do i = 1, nvir_b
+        do a = 1, nocc_b
+          k= k+1
+          xmat_b(i,a) = x(k)
+        end do
+      end do
+      call unpack_matrix(fock_ao(:,2), work1)
+
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work1, nbf,      &
+                         mo_b, nbf, &
+                 0.0_dp, work2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo_b, nbf, &
+                         work2,         nbf, &
+                 0.0_dp, work3,nbf)
+      foo_b = work3(1:nocc_b,1:nocc_b)
+      fvv_b = work3(nocc_b+1:nbf,nocc_b+1:nbf)
+
+      call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
+                 1.0_dp, fvv_b,  nvir_b, &
+                         xmat_b, nvir_b, &
+                 0.0_dp, x2mat_b, nvir_b)
+      call dgemm('N','N', nvir_b, nocc_b, nocc_b, &
+                -1.0_dp, xmat_b, nvir_b, &
+                          foo_b, nocc_b, &
+                 1.0_dp, x2mat_b, nvir_b)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_b, nvir_b, &
+                 1.0_dp, mo_b(:, nocc_b+1:nbf), nbf, &
+                         xmat_b,             nvir_b, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_b, &
+                 1.0_dp, work2,          nbf, &
+                         mo_b(:, 1:nocc_b),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+
+      call pack_matrix(dm,dm_tri(:,2))
+! end of dm calculation
+!      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+! alpha x2mat
+      call unpack_matrix(pfock(:,1), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
+
+! beta x2mat
+      call unpack_matrix(pfock(:,2), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo_b, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo_b, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          x2(k) = x2mat(i,a)
+        end do
+      end do
+
+      do i = 1, nvir_b
+        do a = 1, nocc_b
+          k= k+1
+          x2(k) = x2mat_b(i,a)
+        end do
+      end do
+
+    end select
+
+
+    end associate
+  end subroutine calc_h_op
+
+  subroutine skew_sym_k(infos, step, K, nocc)
+    use types,     only : information
+    use precision, only : dp
+    implicit none
+    class(information), intent(in)    :: infos
+    real(kind=dp),      intent(in)    :: step(:)
+    real(kind=dp),      intent(inout) :: K(:,:)
+    integer,            intent(in)    :: nocc
+
+    integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b, scftype
+    integer :: virt, occ, idx, expected
+
+    nbf     = infos%basis%nbf
+    nocc_a  = infos%mol_prop%nelec_a
+    nocc_b  = infos%mol_prop%nelec_b
+    nvir_a  = nbf - nocc_a
+    nvir_b  = nbf - nocc_b
+    scftype = infos%control%scftype
+
+    if (size(K,1) /= nbf .or. size(K,2) /= nbf) error stop "unpack_x: bad K dims"
+    if (nocc_a + nvir_a /= nbf) error stop "unpack_x: nocc_a+nvir_a != nbf"
+    if (nocc_b + nvir_b /= nbf) error stop "unpack_x: nocc_b+nvir_b != nbf"
+
+    K   = 0.0_dp
+    idx = 0
+
+    if (scftype == 3) then
+      expected = (nocc_a - nocc_b)*nocc_b + nvir_a*nocc_a
+      if (size(step) /= expected) error stop "unpack_x(ROHF): step length mismatch"
+      do virt = nocc_b+1, nocc_a
+        do occ = 1, nocc_b
+          idx = idx + 1
+          K(virt, occ) =  step(idx)
+          K(occ,  virt) = -step(idx)
+        end do
+      end do
+      do virt = nocc_a+1, nbf
+        do occ = 1, nocc_a
+          idx = idx + 1
+          K(virt, occ) =  step(idx)
+          K(occ,  virt) = -step(idx)
+        end do
+      end do
+    else
+      if (nocc < 0 .or. nocc > nbf) error stop "unpack_x: nocc out of range"
+      expected = (nbf - nocc) * nocc
+      if (size(step) /= expected) error stop "unpack_x: step length mismatch"
+      do virt = nocc+1, nbf
+        do occ = 1, nocc
+          idx = idx + 1
+          K(virt, occ) =  step(idx)
+          K(occ,  virt) = -step(idx)
+        end do
+      end do
+    end if
+
+    if (idx /= size(step)) error stop "unpack_x: not all elements consumed"
+  end subroutine skew_sym_k
+
+  subroutine rotate_orbs_trah(infos, step, nbf, nocc, mo)
+    use types, only : information
+    use oqp_tagarray_driver
+    implicit none
+
+    class(information), intent(inout), target :: infos
+    real(kind=dp), intent(in)        :: step(:)
+    integer, intent(in)              :: nbf,nocc
+    real(kind=dp), intent(inout)     :: mo(:,:)
+    real(kind=dp), allocatable       :: work_1(:,:), work_2(:,:)
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
+    real(kind=dp), allocatable :: K(:,:)
+    integer            :: i, idx, occ, virt, istart
+    logical :: second_term
+
+    allocate(K(nbf,nbf),    source=0.0_dp)
+    allocate(work_1(nbf,nbf),work_2(nbf,nbf))
+    work_1 = 0
+    work_2 = 0
+    idx = 0
+    second_term = .true.
+    ! ---- Build skew-symmetric K from "step" (same as before) ----
+    call skew_sym_k(infos, step, K, nocc)
+
+    if (infos%control%scftype == 3) then! ROHF
+      second_term = .false.
+
+    end if
+    call exp_scaling(work_1, K, second_term)
+
+    call orthonormalize(work_1, nbf)
+    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, work_1, nbf, 0.0_dp, work_2, nbf)
+    mo = work_2
+
+  contains
+
+    subroutine exp_scaling(G, K, higher_order)
+      implicit none
+      real(kind=dp),    intent(out)   :: G(:,:)
+      real(kind=dp),    intent(in)    :: K(:,:)
+      logical,          intent(in)    :: higher_order
+
+      real(kind=dp), allocatable :: Kpow(:,:), Tmp(:,:)
+      integer :: i, m
+      integer, parameter :: max_order = 6      ! increase to 8/10 if desired
+      real(kind=dp) :: coef
+
+      allocate(Kpow(nbf,nbf), source=0.0_dp)
+      allocate(Tmp(nbf,nbf),  source=0.0_dp)
+
+      ! ---- Initialize G = I ----
+      G = 0.0_dp
+      do i = 1, nbf
+        G(i,i) = 1.0_dp
+      end do
+
+      ! ---- First-order: G <- I + K (always) ----
+      G = G + K
+
+      if (higher_order) then
+        ! Accumulate higher Taylor terms up to max_order using BLAS
+        ! Start from K^1 already in hand; build K^m iteratively.
+        Kpow = K
+        coef = 1.0_dp
+        do m = 2, max_order
+          ! Kpow <- Kpow * K == K^m
+          call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, Kpow, nbf, K, nbf, 0.0_dp, Tmp, nbf)
+          Kpow = Tmp
+          coef = coef / real(m, dp)           ! 1/m! (incrementally)
+          G = G + coef * Kpow
+        end do
+      end if
+
+      deallocate(Tmp, Kpow)
+    end subroutine exp_scaling
+
+    subroutine orthonormalize(G, nbf)
+      real(kind=dp), intent(inout) :: G(:,:)
+      integer, intent(in)          :: nbf
+      integer                      :: i, j
+      real(kind=dp)                :: norm, dot
+
+      do i = 1, nbf
+        norm = sqrt(dot_product(G(:,i), G(:,i)))
+        call dscal(nbf, 1.0_dp / norm, G(1,i), 1)
+        if (i == nbf) cycle
+        do j = i+1, nbf
+          dot = dot_product(G(:,i), G(:,j))
+          call daxpy(nbf, -dot, G(1,i), 1, G(1,j), 1)
+        end do
+      end do
+    end subroutine orthonormalize
+  end subroutine rotate_orbs_trah
+
+  function compute_energy(infos) result(etot)
+    use types, only: information
+    implicit none
+    type(information), intent(in):: infos
+    real(dp)  :: etot
+    etot = infos%mol_energy%energy
+  end function
+
 
 end module scf_converger

@@ -61,7 +61,8 @@ contains
     use io_constants, only: IW
     use basis_tools, only: basis_set
     use scf_converger, only: scf_conv_result, scf_conv, &
-                             conv_cdiis, conv_ediis, conv_soscf
+                             conv_cdiis, conv_ediis, conv_soscf, &
+                             conv_trah
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock
 
     implicit none
@@ -150,6 +151,12 @@ contains
     real(kind=dp) :: delta_dens_a   ! for ROHFFIX
     real(kind=dp) :: delta_dens_b   ! for ROHFFIX
     real(kind=dp), allocatable :: dens_prev(:,:) ! Previous density
+
+    !==============================================================================
+    ! TRAH Convergence Acceleration Parameters
+    !==============================================================================
+    logical :: use_trah = .false.
+
     !==============================================================================
      ! Virtual Orbital Shift Parameters (for ROHF)
     !==============================================================================
@@ -557,45 +564,20 @@ contains
                      verbose=infos%control%verbose)
       ! Configure the SOSCF converger with SOSCF input parameters
       call set_soscf_parametres(infos, conv)
-    case (2) ! DIIS+SOSCF Accelerator
-      use_soscf = .true.
-      if (infos%control%diis_type == 5) then
-        ! V-DIIS + SOSCF hybrid strategy
+    case (2) ! Pure TRAH Accelerator
+      use_trah = .true.
         call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis, &
-                                      conv_ediis, &
-                                      conv_cdiis, &
-                                      conv_soscf], &
-                       thresholds   =[ethr_cdiis_big, &
-                                      ethr_ediis, &
-                                      infos%control%vdiis_cdiis_switch], &
-!                                      infos%control%soscf_conv], &
+                       maxvec=infos%control%maxit, &
+                       subconvergers=[conv_trah], &
+                       thresholds=[huge(1.0_dp)], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
+                       num_focks=soscf_nfocks, &
                        verbose=infos%control%verbose)
-        if (infos%control%vshift == 0.0_dp) then
-          infos%control%vshift = 0.1_dp
-          vshift = 0.1_dp
-          write(IW, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
-        end if
-      else
-        ! Regular DIIS + SOSCF hybrid strategy
-        call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                       maxvec=maxdiis, &
-                       subconvergers=[infos%control%diis_type, &
-                                      conv_soscf], &
-                       thresholds   =[infos%control%diis_method_threshold], &
-!                                      infos%control%soscf_conv], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-      end if
 
-      ! Configure the SOSCF converger with SOSCF input parameters
-      call set_soscf_parametres(infos, conv)
+      ! Configure the TRAH converger with input parameters
+      call set_trah_parametres(infos, molgrid, conv)
+
     end select
 
 
@@ -886,6 +868,34 @@ contains
                      mo_e_b=mo_energy_b)
           end select
         end if
+      elseif (use_trah) then
+          select case (scf_type)
+          case (scf_rhf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_e_a=mo_energy_a)
+          case (scf_rohf)
+            call conv%add_data( &
+                     f=pfock(:,1:soscf_nfocks), &
+                     dens=pdmat(:,1:soscf_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b)
+          case (scf_uhf)
+            call conv%add_data( &
+                     f=pfock(:,1:diis_nfocks), &
+                     dens=pdmat(:,1:diis_nfocks), &
+                     e=etot, &
+                     mo_a=mo_a, &
+                     mo_b=mo_b, &
+                     mo_e_a=mo_energy_a, &
+                     mo_e_b=mo_energy_b)
+          end select
       else
         ! DIIS: Only pass Fock and density matrices
         call conv%add_data( &
@@ -1360,6 +1370,30 @@ contains
     end do
 
   end subroutine set_soscf_parametres
+
+  subroutine set_trah_parametres(infos, mol_grid, conv)
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_converger, only: scf_conv, trah_converger
+
+    type(information), target, intent(inout) :: infos
+    type(dft_grid_t), target, intent(in) :: mol_grid
+    type(scf_conv) :: conv
+
+    integer :: i
+
+    ! Through accessing the SOSCF converger set its parameters:
+    do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
+      select type (sc => conv%sconv(i)%s)
+        type is (trah_converger)
+          sc%infos => infos
+          sc%molgrid => mol_grid
+      end select
+    end do
+
+  end subroutine set_trah_parametres
+
+
 
   !> @brief Forms the ROHF Fock matrix in the MO basis using the Guest-Saunders method.
   !> @detail Transforms alpha and beta Fock matrices from the AO basis to the MO basis,
