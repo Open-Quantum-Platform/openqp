@@ -777,7 +777,7 @@ module scf_converger
     procedure, pass :: clean => trah_clean
     procedure, pass :: setup => trah_setup
     procedure, pass :: run   => trah_run
-!    procedure, pass :: rotate_orbs => rotate_orbs_trah
+    procedure, pass :: rotate_orbs => rotate_orbs_trah
     procedure, pass :: calc_h_op => calc_h_op
     procedure, pass :: calc_g_h => calc_g_h
   end type trah_converger
@@ -3235,6 +3235,7 @@ contains
     use precision,  only: dp
     use types, only: information
     use mathlib,    only: pack_matrix, unpack_matrix
+    use scf_addons, only: fock_jk
     implicit none
     class(trah_converger), intent(inout) :: self
     class(information), intent(inout), target :: infos
@@ -3305,7 +3306,7 @@ contains
       end do
       call pack_matrix(dm,dm_tri(:,1))
       dm_tri(:,2) = dm_tri(:,1)
-!      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
 
@@ -3425,7 +3426,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
 ! end of dm calculation
-!      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
 ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
@@ -3475,11 +3476,11 @@ contains
     end associate
   end subroutine calc_h_op
 
-  subroutine skew_sym_k(infos, step, K, nocc)
-    use types,     only : information
+  subroutine skew_sym_k(self, step, K, nocc)
     use precision, only : dp
     implicit none
-    class(information), intent(in)    :: infos
+
+    class(trah_converger), intent(inout) :: self
     real(kind=dp),      intent(in)    :: step(:)
     real(kind=dp),      intent(inout) :: K(:,:)
     integer,            intent(in)    :: nocc
@@ -3487,12 +3488,12 @@ contains
     integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b, scftype
     integer :: virt, occ, idx, expected
 
-    nbf     = infos%basis%nbf
-    nocc_a  = infos%mol_prop%nelec_a
-    nocc_b  = infos%mol_prop%nelec_b
-    nvir_a  = nbf - nocc_a
-    nvir_b  = nbf - nocc_b
-    scftype = infos%control%scftype
+    nbf     = self%nbf
+    nocc_a  = self%nocc_a
+    nocc_b  = self%nocc_b
+    nvir_a  = self%nvir_a
+    nvir_b  = self%nvir_b
+    scftype = self%scf_type
 
     if (size(K,1) /= nbf .or. size(K,2) /= nbf) error stop "unpack_x: bad K dims"
     if (nocc_a + nvir_a /= nbf) error stop "unpack_x: nocc_a+nvir_a != nbf"
@@ -3534,39 +3535,33 @@ contains
     if (idx /= size(step)) error stop "unpack_x: not all elements consumed"
   end subroutine skew_sym_k
 
-  subroutine rotate_orbs_trah(infos, step, nbf, nocc, mo)
-    use types, only : information
-    use oqp_tagarray_driver
+  subroutine rotate_orbs_trah(self, step, nbf, nocc, mo)
     implicit none
 
-    class(information), intent(inout), target :: infos
+    class(trah_converger), intent(inout) :: self
     real(kind=dp), intent(in)        :: step(:)
     integer, intent(in)              :: nbf,nocc
     real(kind=dp), intent(inout)     :: mo(:,:)
-    real(kind=dp), allocatable       :: work_1(:,:), work_2(:,:)
-    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
     real(kind=dp), allocatable :: K(:,:)
     integer            :: i, idx, occ, virt, istart
     logical :: second_term
 
     allocate(K(nbf,nbf),    source=0.0_dp)
-    allocate(work_1(nbf,nbf),work_2(nbf,nbf))
-    work_1 = 0
-    work_2 = 0
+    self%work1 = 0
+    self%work2 = 0
     idx = 0
     second_term = .true.
     ! ---- Build skew-symmetric K from "step" (same as before) ----
-    call skew_sym_k(infos, step, K, nocc)
+    call skew_sym_k(self, step, K, nocc)
 
-    if (infos%control%scftype == 3) then! ROHF
+    if (self%scf_type == 3) then! ROHF
       second_term = .false.
-
     end if
-    call exp_scaling(work_1, K, second_term)
+    call exp_scaling(self%work1, K, second_term)
 
-    call orthonormalize(work_1, nbf)
-    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, work_1, nbf, 0.0_dp, work_2, nbf)
-    mo = work_2
+    call orthonormalize(self%work1, nbf)
+    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work1, nbf, 0.0_dp, self%work2, nbf)
+    mo = self%work2
 
   contains
 
@@ -3628,13 +3623,13 @@ contains
     end subroutine orthonormalize
   end subroutine rotate_orbs_trah
 
-  function compute_energy(infos) result(etot)
-    use types, only: information
-    implicit none
-    type(information), intent(in):: infos
-    real(dp)  :: etot
-    etot = infos%mol_energy%energy
-  end function
+!  function compute_energy(infos) result(etot)
+!    use types, only: information
+!    implicit none
+!    type(information), intent(in):: infos
+!    real(dp)  :: etot
+!    etot = infos%mol_energy%energy
+!  end function
 
 
 end module scf_converger
