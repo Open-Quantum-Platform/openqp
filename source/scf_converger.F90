@@ -3027,17 +3027,15 @@ contains
 
     self%nvir_a = self%nbf - self%nocc_a
     self%nvir_b = self%nbf - self%nocc_b
-
 !    self%is_dft  = (infos%control%hamilton >= 20)
 !    self%hf_scale = merge(infos%dft%HFscale, 1.0_dp, self%is_dft)
 
     select case (self%scf_type)
     case (SCF_RHF)
       self%n_param = int((self%nocc_a * self%nvir_a), kind=int32)
-    case (SCF_UHF)
+    case (2)
       self%n_param = int((self%nocc_a * self%nvir_a) + (self%nocc_b * self%nvir_b), kind=int32)
     case (SCF_ROHF)
-      self%scf_type = SCF_ROHF; self%nfocks = 2
       self%n_param = int((self%nocc_a * self%nvir_a) + (self%nocc_b * self%nvir_a), kind=int32)
     end select
 
@@ -3110,7 +3108,7 @@ contains
   end subroutine trah_setup
 
   subroutine trah_run(self, res)
-!    use otr_inter, only: init_trah_solver, run_trah_solver
+!    use otr_interface, only: init_trah_solver, run_trah_solver
     class(trah_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
     ! --- Step 1: Extract current data from converger_data ---
@@ -3126,7 +3124,7 @@ contains
     res%dat => self%dat
     res%active_converger_name = self%conv_name
 
-    res%error = 0.1_dp
+!    res%error = 0.1_dp
 !    call init_trah_solver(self, self%infos, self%molgrid)
 !    call run_trah_solver()
 
@@ -3142,7 +3140,6 @@ contains
 
     integer :: i, a, k
 
-    ! alias for brevity
     associate( nbf => self%nbf, &
                nocc_a => self%nocc_a, &
                nocc_b => self%nocc_b, &
@@ -3305,7 +3302,7 @@ contains
         end do
       end do
       call pack_matrix(dm,dm_tri(:,1))
-      dm_tri(:,2) = dm_tri(:,1)
+!      dm_tri(:,1) = dm_tri(:,1)
       call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
@@ -3623,13 +3620,6 @@ contains
     end subroutine orthonormalize
   end subroutine rotate_orbs_trah
 
-!  function compute_energy(infos) result(etot)
-!    use types, only: information
-!    implicit none
-!    type(information), intent(in):: infos
-!    real(dp)  :: etot
-!    etot = infos%mol_energy%energy
-!  end function
 
 
 end module scf_converger

@@ -27,7 +27,7 @@ target_link_directories(oqp PUBLIC    ${CMAKE_BINARY_DIR}/external/libecpint/src
 	                              ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}/external/Faddeeva)
 target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libecpint/install/include/libecpint
 			              ${CMAKE_BINARY_DIR}/external/libecpint/install/include)
-target_link_directories(oqp PUBLIC    ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID})
+target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID})
 target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID})
 
 set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)

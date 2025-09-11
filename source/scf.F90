@@ -64,7 +64,6 @@ contains
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock
-
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -573,6 +572,7 @@ contains
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=soscf_nfocks, &
+                       scf_type=infos%control%scftype, &
                        verbose=infos%control%verbose)
 
       ! Configure the TRAH converger with input parameters
@@ -908,6 +908,11 @@ contains
       ! Run Convergence Accelerator (DIIS/SOSCF)
       !----------------------------------------------------------------------------
       call conv%run(conv_res)
+      if (use_trah .and. iter >1 ) then
+        call run_otr(infos, molgrid, conv)
+        exit
+      end if
+
       diis_error = conv_res%get_error()
       if (use_soscf) then
         rms_grad = conv_res%get_rms_grad()
@@ -1182,7 +1187,7 @@ contains
     !----------------------------------------------------------------------------
     ! Clean Convergence Accelerator (DIIS/SOSCF)
     !----------------------------------------------------------------------------
-    call conv%clean()
+!    call conv%clean()
 
     !==============================================================================
     ! Post-SCF Processing and Final Output
@@ -1248,7 +1253,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Molecular Orbitals
     !----------------------------------------------------------------------------
-    call print_mo_range(basis, infos, mostart=1, moend=nbf)
+!    call print_mo_range(basis, infos, mostart=1, moend=nbf)
 
     !----------------------------------------------------------------------------
     ! Calculate Final Energy Components
@@ -1270,7 +1275,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Final Energy Components
     !----------------------------------------------------------------------------
-    call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
+!    call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
 
     !----------------------------------------------------------------------------
     ! Save Results to infos Structure
@@ -1388,11 +1393,35 @@ contains
         type is (trah_converger)
           sc%infos => infos
           sc%molgrid => mol_grid
+          sc%is_dft  = (infos%control%hamilton >= 20)
+          sc%hf_scale = merge(infos%dft%HFscale, 1.0_dp, sc%is_dft)
       end select
     end do
 
   end subroutine set_trah_parametres
 
+    subroutine run_otr(infos, mol_grid, conv)
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_converger, only: scf_conv, trah_converger
+    use otr_interface, only: init_trah_solver, run_trah_solver
+
+    type(information), target, intent(inout) :: infos
+    type(dft_grid_t), target, intent(in) :: mol_grid
+    type(scf_conv) :: conv
+
+    integer :: i
+
+    ! Through accessing the SOSCF converger set its parameters:
+    do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
+      select type (sc => conv%sconv(i)%s)
+        type is (trah_converger)
+          call init_trah_solver(infos, mol_grid, sc)
+          call run_trah_solver()
+      end select
+    end do
+
+  end subroutine run_otr
 
 
   !> @brief Forms the ROHF Fock matrix in the MO basis using the Guest-Saunders method.
@@ -1561,71 +1590,6 @@ contains
 
   end subroutine mo_to_ao
 
-  !> @brief Computes the two-electron part (Coulomb and exchange) of the Fock matrix.
-  !> @detail Forms the Coulomb (J) and exchange (K) contributions to the Fock matrix
-  !>         using two-electron integrals,
-  !>         with optional scaling of the exchange term for hybrid DFT methods.
-  !> @param[in] basis Basis set information.
-  !> @param[in] d Density matrices (triangular format).
-  !> @param[inout] f Fock matrices to be updated (triangular format).
-  !> @param[in] scalefactor Optional scaling factor for exchange (default = 1.0).
-  !> @param[inout] infos System information.
-  subroutine fock_jk(basis, d, f, scalefactor, infos)
-    use precision, only: dp
-    use io_constants, only: iw
-    use util, only: measure_time
-    use basis_tools, only: basis_set
-    use types, only: information
-    use int2_compute, only: int2_compute_t, int2_fock_data_t, &
-                            int2_rhf_data_t, int2_urohf_data_t
-
-    implicit none
-
-    type(basis_set), intent(in) :: basis
-    type(information), intent(inout) :: infos
-    real(kind=dp), optional, intent(in) :: scalefactor
-
-    integer :: i, ii, nf, nschwz
-    real(kind=dp) :: scalef
-    real(kind=dp), target, intent(in) :: d(:,:)
-    real(kind=dp), intent(inout) :: f(:,:)
-
-    type(int2_compute_t) :: int2_driver
-    class(int2_fock_data_t), allocatable :: int2_data
-
-    ! Initial Settings
-    scalef = 1.0d0
-    if (present(scalefactor)) scalef = scalefactor
-
-    call measure_time(print_total=1, log_unit=IW)
-
-    write(IW,"(/3x,'Form Two-Electron J and K Fock')")
-
-    ! Initialize ERI calculations
-    call int2_driver%init(basis, infos)
-    call int2_driver%set_screening()
-    int2_data = int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scalefactor)
-
-    call flush(IW)
-
-    ! Constructing two electron Fock matrix
-    call int2_driver%run(int2_data)
-    nschwz = int2_driver%skipped
-
-    ! Scaling (everything except diagonal is halved)
-    f =  0.5 * int2_data%f(:,:,1)
-
-    do nf = 1, ubound(f,2)
-      ii = 0
-      do i = 1, basis%nbf
-         ii = ii + i
-         f(ii,nf) = 2*f(ii,nf)
-      end do
-    end do
-
-    call int2_driver%clean()
-
-  end subroutine fock_jk
   subroutine rohf_fix(Mo, E, D, S, na, l0, nbf)!, num_swaps)
 !! In/Out:
 !!   Mo(nbf,nbf) : MO coefficients (columns are MOs) — columns swapped in place

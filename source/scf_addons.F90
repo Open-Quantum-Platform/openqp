@@ -221,7 +221,8 @@ module scf_addons
   public :: apply_mom
   public :: level_shift_fock
   public :: fock_jk
-  public :: get_fock
+  public :: calc_fock
+  public :: compute_energy
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
   !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
@@ -1017,7 +1018,7 @@ contains
   end subroutine fock_jk
 
 
-  subroutine get_fock(basis, infos, molgrid, fock_ao, mo_a_in, mo_b_in, dens_in)
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in, dens_in, mo_b_in)
     use precision, only: dp
     use oqp_tagarray_driver
     use types, only: information
@@ -1034,7 +1035,7 @@ contains
     type(basis_set), intent(in) :: basis
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), intent(in) :: molgrid
-    real(dp), pointer, intent(inout)        :: fock_ao(:,:)
+    real(dp), intent(inout), target   :: fock_ao(:,:)
     real(dp), intent(inout), optional :: mo_a_in(:,:)
     real(dp), intent(inout), optional :: mo_b_in(:,:)
     real(kind=dp), intent(inout), optional :: dens_in(:,:)
@@ -1268,6 +1269,14 @@ contains
     infos%mol_energy%energy = etot
     call int2_driver%clean()
 
-  end subroutine get_fock
+  end subroutine calc_fock
+
+  function compute_energy(infos) result(etot)
+    use types, only: information
+    implicit none
+    type(information), intent(in):: infos
+    real(dp)  :: etot
+    etot = infos%mol_energy%energy
+  end function
 
 end module scf_addons
