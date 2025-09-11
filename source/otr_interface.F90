@@ -149,7 +149,9 @@ contains
       work1 = conv%mo_a
       work2 = conv%mo_b
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
+
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
+      work2 = work1
       call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens, work2)
       val = compute_energy(infos)
     end select
