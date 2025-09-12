@@ -223,6 +223,7 @@ module scf_addons
   public :: fock_jk
   public :: calc_fock
   public :: compute_energy
+  public :: calc_jk_xc
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
   !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
@@ -998,6 +999,7 @@ contains
       int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scalefactor)
     end select
 
+
     ! Constructing two electron Fock matrix
     call int2_driver%run(int2_data)
     nschwz = int2_driver%skipped
@@ -1011,24 +1013,13 @@ contains
          f(ii,nf) = 2*f(ii,nf)
       end do
     end do
+
     call int2_driver%clean()
 
   end subroutine fock_jk
 
-  !> @brief Computes the DFT exchange-correlation contribution to the Fock matrix.
-  !> @param[in] basis Basis set information.
-  !> @param[in] molgrid Molecular grid for DFT calculations.
-  !> @param[in] scf_type Type of SCF calculation (1=RHF, 2=UHF, 3=ROHF).
-  !> @param[in] nbf Number of basis functions.
-  !> @param[in] nbf_tri Number of elements in triangular matrix (nbf*(nbf+1)/2).
-  !> @param[in] mo_a Alpha molecular orbitals.
-  !> @param[inout] mo_b Beta molecular orbitals (used and updated for ROHF).
-  !> @param[out] pfxc Exchange-correlation contribution to Fock matrix.
-  !> @param[out] eexc Exchange-correlation energy.
-  !> @param[out] totele Total electron density.
-  !> @param[out] totkin Total kinetic energy.
-  !> @param[inout] infos System information.
-  subroutine calc_dft_xc(basis, molgrid, mo_a, mo_b, pfxc, eexc, totele, totkin, infos)
+
+  subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)
     use precision, only: dp
     use types, only: information
     use dft, only: dftexcor
@@ -1038,17 +1029,14 @@ contains
 
     type(basis_set), intent(in) :: basis
     type(dft_grid_t), intent(in) :: molgrid
-    integer, intent(in) :: scf_type
-    integer, intent(in) :: nbf
-    integer, intent(in) :: nbf_tri
-    real(kind=dp), intent(in) :: mo_a(:,:)
+    real(kind=dp), intent(inout) :: mo_a(:,:)
     real(kind=dp), intent(inout) :: mo_b(:,:)
     real(kind=dp), intent(out) :: pfxc(:,:)
     real(kind=dp), intent(out) :: eexc
     real(kind=dp), intent(out) :: totele
     real(kind=dp), intent(out) :: totkin
     type(information), intent(inout) :: infos
-
+    integer :: scf_type, nbf, nbf_tri
     ! Local parameters for SCF type
     integer, parameter :: scf_rhf = 1, scf_uhf = 2, scf_rohf = 3
 
@@ -1080,7 +1068,76 @@ contains
 
   end subroutine calc_dft_xc
 
-  subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in, mo_b_in, dens_in)
+  subroutine calc_jk_xc(basis, infos, d, f, &
+                               molgrid, mo_a, mo_b, &
+                               eexc, totele, totkin, scalefactor)
+    use precision,       only : dp
+    use basis_tools,     only : basis_set
+    use types,           only : information
+    use mod_dft_molgrid, only : dft_grid_t
+    implicit none
+
+    type(basis_set),   intent(in)    :: basis
+    type(information), intent(inout) :: infos
+    real(dp),          intent(in)    :: d(:,:)              ! (nbf_tri, nfocks)
+    type(dft_grid_t),  intent(in),   optional :: molgrid
+    real(dp),          intent(inout),optional :: mo_a(:,:)  ! (nbf, nbf)
+    real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
+    real(dp),          intent(in),   optional :: scalefactor
+
+    real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
+
+    real(dp),          intent(out),  optional :: eexc, totele, totkin
+    real(dp) :: scale_factor
+
+    integer  :: scf_type, nfocks, nbf
+    real(dp) :: eexc_loc, totele_loc, totkin_loc
+    real(dp), allocatable :: pfxc(:,:)
+    logical :: is_dft = .false.
+
+    is_dft = infos%control%hamilton >= 20
+    if(.not. present(scalefactor)) then
+      if (is_dft) then
+        scale_factor = infos%dft%HFscale
+      else
+        scale_factor = 1.0_dp
+      end if
+    else
+      scale_factor = scalefactor
+    end if
+
+    ! HF JK part (uses your existing fock_jk unchanged) ----
+    call fock_jk(basis, d, f, scale_factor, infos)
+
+    ! DFT XC part (only if Hamiltonian requests DFT) ----
+    eexc_loc   = 0.0_dp
+    totele_loc = 0.0_dp
+    totkin_loc = 0.0_dp
+
+    if (.not. is_dft) return
+
+    if (.not.present(molgrid) .or. .not.present(mo_a) .or. .not.present(mo_b)) then
+      error stop 'calc_jk_xc: DFT requested but molgrid/mo_a/mo_b not provided.'
+    end if
+
+    scf_type = infos%control%scftype
+    nfocks   = merge(1, 2, scf_type == 1)
+    nbf      = basis%nbf
+
+    allocate(pfxc(nbf*(nbf+1)/2, nfocks))
+    pfxc = 0.0_dp
+
+    call calc_dft_xc(infos, basis, molgrid, pfxc, eexc_loc, totele_loc, totkin_loc, mo_a, mo_b)
+
+    f = f + pfxc
+    deallocate(pfxc)
+
+    if (present(eexc))   eexc   = eexc_loc
+    if (present(totele)) totele = totele_loc
+    if (present(totkin)) totkin = totkin_loc
+  end subroutine calc_jk_xc
+
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in,dens_in, mo_b_in)
     use precision, only: dp
     use oqp_tagarray_driver
     use types, only: information

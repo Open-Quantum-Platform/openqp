@@ -51,10 +51,10 @@ contains
 !    case (1)
 !      call get_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens)
 !    case (2)
-     conv%mo_b = conv%mo_a
-     call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
-     call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
-
+!     conv%mo_b = conv%mo_a
+!     call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
+!     call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
+!
 !    case (3)
 !      self%mo_a = self%mo_b
 !      call get_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
