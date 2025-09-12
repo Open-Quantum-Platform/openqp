@@ -998,7 +998,6 @@ contains
       int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scalefactor)
     end select
 
-
     ! Constructing two electron Fock matrix
     call int2_driver%run(int2_data)
     nschwz = int2_driver%skipped
@@ -1012,13 +1011,76 @@ contains
          f(ii,nf) = 2*f(ii,nf)
       end do
     end do
-
     call int2_driver%clean()
 
   end subroutine fock_jk
 
+  !> @brief Computes the DFT exchange-correlation contribution to the Fock matrix.
+  !> @param[in] basis Basis set information.
+  !> @param[in] molgrid Molecular grid for DFT calculations.
+  !> @param[in] scf_type Type of SCF calculation (1=RHF, 2=UHF, 3=ROHF).
+  !> @param[in] nbf Number of basis functions.
+  !> @param[in] nbf_tri Number of elements in triangular matrix (nbf*(nbf+1)/2).
+  !> @param[in] mo_a Alpha molecular orbitals.
+  !> @param[inout] mo_b Beta molecular orbitals (used and updated for ROHF).
+  !> @param[out] pfxc Exchange-correlation contribution to Fock matrix.
+  !> @param[out] eexc Exchange-correlation energy.
+  !> @param[out] totele Total electron density.
+  !> @param[out] totkin Total kinetic energy.
+  !> @param[inout] infos System information.
+  subroutine calc_dft_xc(basis, molgrid, mo_a, mo_b, pfxc, eexc, totele, totkin, infos)
+    use precision, only: dp
+    use types, only: information
+    use dft, only: dftexcor
+    use mod_dft_molgrid, only: dft_grid_t
+    use basis_tools, only: basis_set
+    implicit none
 
-  subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in, dens_in, mo_b_in)
+    type(basis_set), intent(in) :: basis
+    type(dft_grid_t), intent(in) :: molgrid
+    integer, intent(in) :: scf_type
+    integer, intent(in) :: nbf
+    integer, intent(in) :: nbf_tri
+    real(kind=dp), intent(in) :: mo_a(:,:)
+    real(kind=dp), intent(inout) :: mo_b(:,:)
+    real(kind=dp), intent(out) :: pfxc(:,:)
+    real(kind=dp), intent(out) :: eexc
+    real(kind=dp), intent(out) :: totele
+    real(kind=dp), intent(out) :: totkin
+    type(information), intent(inout) :: infos
+
+    ! Local parameters for SCF type
+    integer, parameter :: scf_rhf = 1, scf_uhf = 2, scf_rohf = 3
+
+    ! Initialize exchange-correlation contribution
+    pfxc = 0.0_dp
+    eexc = 0.0_dp
+    totele = 0.0_dp
+    totkin = 0.0_dp
+    scf_type = infos%control%scftype
+    nbf = basis%nbf
+    nbf_tri = nbf*(nbf+1)/2
+
+    ! Calculate exchange-correlation based on SCF type
+    if (scf_type == scf_rhf) then
+      ! Restricted calculation - same matrix for alpha and beta
+      call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+                    nbf, nbf_tri, eexc, totele, totkin, infos)
+    else if (scf_type == scf_uhf) then
+      ! Unrestricted calculation - separate matrices for alpha and beta
+      call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                    nbf, nbf_tri, eexc, totele, totkin, infos)
+    else if (scf_type == scf_rohf) then
+      ! Restricted open-shell calculation
+      ! ROHF does not have MO_B, so we copy MO_A to MO_B
+      mo_b = mo_a
+      call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                    nbf, nbf_tri, eexc, totele, totkin, infos)
+    end if
+
+  end subroutine calc_dft_xc
+
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in, mo_b_in, dens_in)
     use precision, only: dp
     use oqp_tagarray_driver
     use types, only: information

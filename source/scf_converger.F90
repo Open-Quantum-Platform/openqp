@@ -3225,7 +3225,7 @@ contains
       end do
 
     case (SCF_ROHF)
-      ! ---- UHF α block ----
+      ! ---- ROHF α block ----
       allocate(ugd(nocc_a * nvir_a + nocc_b * nvir_b))
       allocate(uh(nocc_a * nvir_a + nocc_b * nvir_b))
 
@@ -3239,7 +3239,7 @@ contains
       do i = nocc_a+1, nbf
         do a = 1, nocc_a
           k = k + 1
-          grad(k)  = w3(i,a)
+          ugd(k)  = w3(i,a)
         end do
       end do
 
@@ -3247,7 +3247,7 @@ contains
       do i = nocc_a+1, nbf
         do a = 1, nocc_a
           k = k + 1
-          h_diag(k) = ( w3(i,i) - w3(a,a) )
+          uh(k) = ( w3(i,i) - w3(a,a) )
         end do
       end do
 
@@ -3755,7 +3755,7 @@ contains
     call skew_sym_k(self, step, K, nocc)
 
     if (self%scf_type == 3) then! ROHF
-      second_term = .false.
+      second_term = .true.
     end if
     call exp_scaling(self%work1, K, second_term)
 

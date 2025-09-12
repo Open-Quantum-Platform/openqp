@@ -40,8 +40,8 @@ contains
     molgrid => molgrid_in
     conv => conv_in
 
-!    basis => infos_in%basis
-
+    basis => infos%basis
+    basis => infos%basis
     n_param = conv%n_param
     max_iter = int(infos%control%maxit, kind=int32)
     conv_tol = infos%control%conv
@@ -51,8 +51,9 @@ contains
 !    case (1)
 !      call get_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens)
 !    case (2)
-!     call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
-!     call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
+     conv%mo_b = conv%mo_a
+     call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
+     call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
 
 !    case (3)
 !      self%mo_a = self%mo_b
@@ -145,13 +146,11 @@ contains
       call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens, work2)
       val = compute_energy(infos)
     case (3)
-
       work1 = conv%mo_a
       work2 = conv%mo_b
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
-
-      call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
       work2 = work1
+      call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
       call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens, work2)
       val = compute_energy(infos)
     end select
