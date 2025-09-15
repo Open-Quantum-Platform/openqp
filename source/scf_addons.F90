@@ -224,6 +224,7 @@ module scf_addons
   public :: calc_fock
   public :: compute_energy
   public :: calc_jk_xc
+  public :: vind_rhf_packed
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
   !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
@@ -1017,6 +1018,89 @@ contains
     call int2_driver%clean()
 
   end subroutine fock_jk
+
+
+  subroutine vind_rhf_packed(basis, infos, molGrid, mo_a, dm1_tri, v1_tri, mo_b)
+      use precision,           only: dp
+      use basis_tools,         only: basis_set
+      use types,               only: information
+      use mathlib,             only: unpack_matrix, pack_matrix
+      use mod_dft_molgrid,     only: dft_grid_t
+      use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
+      implicit none
+
+    type(basis_set),   intent(in)    :: basis
+    type(information), intent(inout) :: infos
+    type(dft_grid_t),  intent(in)    :: molGrid
+    real(dp),          intent(inout)    :: mo_a(:,:)      ! nbf x nbf  (AO->MO)
+    real(dp),          intent(in)    :: dm1_tri(:,:)     ! nbf*(nbf+1)/2  (packed)
+    real(dp),          intent(out)   :: v1_tri(:,:)      ! packed AO response
+    real(dp), optional, intent(inout) :: mo_b(:,:)
+
+    integer :: nbf, nbf2, ok
+    logical :: is_dft
+
+    ! Packed work for int2
+    real(dp), allocatable :: d_pack(:,:), f_pack(:,:)
+
+    ! Full AO work for XC response
+    real(dp), allocatable :: dm1_full(:,:), fx_full(:,:), fx_pack(:)
+    real(dp), allocatable :: dx3(:,:,:), fx3(:,:,:)  ! rank-3 wrappers for tddft_fxc
+    real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:)
+    real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:)
+    real(dp) :: scalefactor
+
+    nbf   = basis%nbf
+    nbf2  = nbf*(nbf+1)/2
+    is_dft = (infos%control%hamilton == 20)
+
+    if (is_dft) then
+      scalefactor = infos%dft%HFscale
+    else
+      scalefactor = 1.0_dp
+    end if
+
+    ! --- (1) Two-electron part: J - 0.5*K in PACKED form ---
+    allocate(d_pack(nbf2,1), f_pack(nbf2,1), stat=ok); if (ok/=0) stop "alloc fail d/f_pack"
+    d_pack(:,1) = dm1_tri(:,1)
+    call fock_jk(basis, d=d_pack, f=f_pack, scalefactor=scalefactor, infos=infos)
+
+    v1_tri(:,1) = f_pack(:,1)
+
+
+    ! --- (2) XC-kernel part (DFT only): v_xc^(1) ---
+    if (is_dft) then
+      select case (infos%control%scftype)
+      case (1)
+        allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok); if (ok/=0) stop "alloc fail full"
+        call unpack_matrix(dm1_tri(:,1), dm1_full)
+        allocate(dx3(nbf,nbf,1), fx3(nbf,nbf,1), stat=ok); if (ok/=0) stop "alloc fail dx3/fx3"
+        dx3(:,:,1) = dm1_full
+        fx3(:,:,1) = 0.0_dp
+        call tddft_fxc( basis=basis, molGrid=molGrid, isVecs=.true., wf=mo_a, &
+                        fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos )
+        fx_full = fx3(:,:,1)*(1-scalefactor)
+        call pack_matrix(fx_full, fx_pack)
+        v1_tri(:,1) = v1_tri(:,1) + fx_pack
+      case (2,3)
+        allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok); if (ok/=0) stop "alloc fail full"
+        call unpack_matrix(dm1_tri(:,1), dxa(:,:,1))
+        call unpack_matrix(dm1_tri(:,2), dxb(:,:,1))
+        call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+                   wfa=mo_a, wfb=mo_b, &
+                   fxa=fxa, fxb=fxb, &
+                   dxa=dxa, dxb=dxb, &
+                   nMtx=1, threshold=0.0_dp, infos=infos)
+        fx_full = fxa(:,:,1)*(1-scalefactor)
+        call pack_matrix(fx_full, fx_pack)
+        v1_tri(:,1) = v1_tri(:,1) + fx_pack
+        fx_full = fxb(:,:,1)*(1-scalefactor)
+        call pack_matrix(fx_full, fx_pack)
+        v1_tri(:,2) = v1_tri(:,2) + fx_pack
+      end select
+
+    end if
+  end subroutine vind_rhf_packed
 
 
   subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)

@@ -3295,7 +3295,7 @@ contains
     use precision,  only: dp
     use types, only: information
     use mathlib,    only: pack_matrix, unpack_matrix
-    use scf_addons, only: fock_jk
+    use scf_addons, only: calc_jk_xc, fock_jk,vind_rhf_packed
     implicit none
     class(trah_converger), intent(inout) :: self
     class(information), intent(inout), target :: infos
@@ -3365,7 +3365,8 @@ contains
         end do
       end do
       call pack_matrix(dm,dm_tri(:,1))
-      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
+!      call calc_jk_xc(basis=infos%basis, infos=infos, d=dm_tri, f=pfock, molgrid=self%molgrid, mo_a=mo, mo_b=mo)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3484,7 +3485,8 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
 ! end of dm calculation
-      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+!      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
 ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
