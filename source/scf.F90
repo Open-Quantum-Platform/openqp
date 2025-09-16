@@ -758,7 +758,7 @@ contains
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
       if (scf_type == scf_rohf) then
-        if (.not. use_soscf .or. iter ==1 ) then
+        if (.not. use_soscf .and. .not. use_trah .or. iter ==1 ) then
           ! Store the original alpha Fock matrix before ROHF transformation
           ! This is needed to preserve it for energy evaluation and printing
           rohf_bak(:,1) = pfock(:,1)
