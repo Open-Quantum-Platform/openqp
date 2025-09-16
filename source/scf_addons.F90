@@ -1098,12 +1098,10 @@ contains
                    dxa=dxa, dxb=dxb, &
                    nMtx=1, threshold=0.0_dp, infos=infos)
         fx_full = fxa(:,:,1)
-!        call symmetrize_matrix(fx_full,nbf)
         fx_pack = 0.0_dp
         call pack_matrix(fx_full, fx_pack)
         v1_tri(:,1) = v1_tri(:,1) + fx_pack
         fx_full = fxb(:,:,1)
-        !call symmetrize_matrix(fx_full,nbf)
         fx_pack = 0.0_dp
         call pack_matrix(fx_full, fx_pack)
         v1_tri(:,2) = v1_tri(:,2) + fx_pack
