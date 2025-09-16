@@ -958,7 +958,7 @@ contains
   !> @param[inout] f Fock matrices to be updated (triangular format).
   !> @param[in] scalefactor Optional scaling factor for exchange (default = 1.0).
   !> @param[inout] infos System information.
-  subroutine fock_jk(basis, d, f, scalefactor, infos)
+  subroutine fock_jk(basis, d, f, infos, scale_exch, scale_coul)
     use precision, only: dp
     use io_constants, only: iw
     use util, only: measure_time
@@ -971,10 +971,11 @@ contains
 
     type(basis_set), intent(in) :: basis
     type(information), intent(inout) :: infos
-    real(kind=dp), optional, intent(in) :: scalefactor
+    real(kind=dp), optional, intent(in) :: scale_exch
+    real(kind=dp), optional, intent(in) :: scale_coul
 
     integer :: i, ii, nf, nschwz
-    real(kind=dp) :: scalef
+    real(kind=dp) :: scale_e, scale_c
     real(kind=dp), target, intent(in) :: d(:,:)
     real(kind=dp), intent(inout) :: f(:,:)
 
@@ -982,8 +983,10 @@ contains
     class(int2_fock_data_t), allocatable :: int2_data
 
     ! Initial Settings
-    scalef = 1.0d0
-    if (present(scalefactor)) scalef = scalefactor
+    scale_e = 1.0d0
+    scale_c = 1.0d0
+    if (present(scale_exch)) scale_e = scale_exch
+    if (present(scale_coul)) scale_c = scale_coul
 
 
 
@@ -993,11 +996,11 @@ contains
 
     select case (infos%control%scftype)
     case (1)
-      int2_data = int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scalefactor)
+      int2_data = int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
     case (2)
-      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scalefactor)
+      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
     case (3)
-      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scalefactor)
+      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
     end select
 
 
@@ -1024,7 +1027,7 @@ contains
       use precision,           only: dp
       use basis_tools,         only: basis_set
       use types,               only: information
-      use mathlib,             only: unpack_matrix, pack_matrix
+      use mathlib,             only: unpack_matrix, pack_matrix,symmetrize_matrix
       use mod_dft_molgrid,     only: dft_grid_t
       use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
       implicit none
@@ -1041,7 +1044,7 @@ contains
     logical :: is_dft
 
     ! Packed work for int2
-    real(dp), allocatable :: d_pack(:,:), f_pack(:,:)
+    real(dp), allocatable :: d_pack(:,:)
 
     ! Full AO work for XC response
     real(dp), allocatable :: dm1_full(:,:), fx_full(:,:), fx_pack(:)
@@ -1061,17 +1064,15 @@ contains
     end if
 
     ! --- (1) Two-electron part: J - 0.5*K in PACKED form ---
-    allocate(d_pack(nbf2,1), f_pack(nbf2,1), stat=ok); if (ok/=0) stop "alloc fail d/f_pack"
-    d_pack(:,1) = dm1_tri(:,1)
-    call fock_jk(basis, d=d_pack, f=f_pack, scalefactor=scalefactor, infos=infos)
+!    allocate(f_pack(nbf2,1), stat=ok); if (ok/=0) stop "alloc fail d/f_pack"
 
-    v1_tri(:,1) = f_pack(:,1)
 
 
     ! --- (2) XC-kernel part (DFT only): v_xc^(1) ---
-    if (is_dft) then
-      select case (infos%control%scftype)
-      case (1)
+    select case (infos%control%scftype)
+    case (1)
+      call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+      if (is_dft) then
         allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok); if (ok/=0) stop "alloc fail full"
         call unpack_matrix(dm1_tri(:,1), dm1_full)
         allocate(dx3(nbf,nbf,1), fx3(nbf,nbf,1), stat=ok); if (ok/=0) stop "alloc fail dx3/fx3"
@@ -1079,27 +1080,37 @@ contains
         fx3(:,:,1) = 0.0_dp
         call tddft_fxc( basis=basis, molGrid=molGrid, isVecs=.true., wf=mo_a, &
                         fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos )
-        fx_full = fx3(:,:,1)*(1-scalefactor)
+        fx_full = fx3(:,:,1)*0.5
         call pack_matrix(fx_full, fx_pack)
         v1_tri(:,1) = v1_tri(:,1) + fx_pack
-      case (2,3)
+      end if
+    case (2,3)
+      call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+      if (is_dft) then
         allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok); if (ok/=0) stop "alloc fail full"
         call unpack_matrix(dm1_tri(:,1), dxa(:,:,1))
         call unpack_matrix(dm1_tri(:,2), dxb(:,:,1))
+        fxa = 0
+        fxb = 0
         call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
                    wfa=mo_a, wfb=mo_b, &
                    fxa=fxa, fxb=fxb, &
                    dxa=dxa, dxb=dxb, &
                    nMtx=1, threshold=0.0_dp, infos=infos)
-        fx_full = fxa(:,:,1)*(1-scalefactor)
+        fx_full = fxa(:,:,1)
+!        call symmetrize_matrix(fx_full,nbf)
+        fx_pack = 0.0_dp
         call pack_matrix(fx_full, fx_pack)
         v1_tri(:,1) = v1_tri(:,1) + fx_pack
-        fx_full = fxb(:,:,1)*(1-scalefactor)
+        fx_full = fxb(:,:,1)
+        !call symmetrize_matrix(fx_full,nbf)
+        fx_pack = 0.0_dp
         call pack_matrix(fx_full, fx_pack)
         v1_tri(:,2) = v1_tri(:,2) + fx_pack
-      end select
+        deallocate(dxa,dxb,fxa,fxb,fx_pack,fx_full)
+      end if
+    end select
 
-    end if
   end subroutine vind_rhf_packed
 
 
@@ -1191,7 +1202,7 @@ contains
     end if
 
     ! HF JK part (uses your existing fock_jk unchanged) ----
-    call fock_jk(basis, d, f, scale_factor, infos)
+    call fock_jk(basis, d, f, infos, scale_factor)
 
     ! DFT XC part (only if Hamiltonian requests DFT) ----
     eexc_loc   = 0.0_dp

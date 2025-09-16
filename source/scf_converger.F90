@@ -3628,7 +3628,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
 ! end of dm calculation
-      call fock_jk(infos%basis, dm_tri, pfock, self%hf_scale, infos)
+      call fock_jk(infos%basis, dm_tri, pfock, infos, self%hf_scale)
 ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
