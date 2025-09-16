@@ -8,7 +8,7 @@ module otr_interface
   use, intrinsic :: iso_fortran_env, only: int32
   use opentrustregion, only: solver, update_orbs_type, obj_func_type, hess_x_type, logger_type
   use mathlib, only: unpack_matrix
-  use scf_converger, only: trah_converger
+  use scf_converger, only: trah_converger, scf_conv_trah_result, scf_conv_result
   use scf_addons,only: calc_fock,compute_energy
   use precision, only: dp
   use types, only:information
@@ -26,6 +26,7 @@ module otr_interface
   integer(int32)            :: max_iter     ! macro iteration limit
   real(dp)                  :: conv_tol     ! convergence tolerance
   integer(int32)            :: verbose      ! verbosity level
+
 
 contains
 
@@ -47,26 +48,15 @@ contains
     conv_tol = infos%control%conv
     verbose  = int(3, kind=int32)
     allocate(work1(conv%nbf,conv%nbf), work2(conv%nbf,conv%nbf))
-!    select case (infos%control%scftype)
-!    case (1)
-!      call get_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens)
-!    case (2)
-!     conv%mo_b = conv%mo_a
-!     call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
-!     call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
-!
-!    case (3)
-!      self%mo_a = self%mo_b
-!      call get_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
-!    end select
 
   end subroutine init_trah_solver
 
-  subroutine run_trah_solver()
+  subroutine run_trah_solver(res)
     logical(kind=4) :: error
     procedure(update_orbs_type), pointer :: p_update
     procedure(obj_func_type),   pointer :: p_obj
     procedure(logger_type),     pointer :: p_log
+    class(scf_conv_result), intent(inout) :: res
 
     ! Bind callbacks
     p_update => update_orbs
@@ -77,8 +67,21 @@ contains
     call solver(p_update, p_obj, n_param, error, &
 !                conv_tol=conv_tol, n_macro=max_iter, &
                 verbose=verbose)! , logger=p_log)
+
+    conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
+    conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
+    if (infos%control%scftype>1) then
+      conv%dat%buffer(conv%dat%slot)%mo_b = conv%mo_b
+      select type (res)
+      class is (scf_conv_trah_result)
+        res%etot = conv%etot
+      end select
+
+    end if
+    res%error = 0
     if (error) then
       write(*,*) 'OpenTrustRegion solver failed.'
+      res%error = 4
     end if
   end subroutine run_trah_solver
 
@@ -111,6 +114,7 @@ contains
       call conv%calc_g_h(grad, h_diag)
     end select
     func = compute_energy(infos)
+    conv%etot = func
     hess_x_funptr => hess_x_cb
     h_diag = 2.0_dp * h_diag
     grad = 2.0_dp * grad

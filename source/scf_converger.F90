@@ -418,6 +418,7 @@ module scf_converger
   private
   public :: scf_conv
   public :: scf_conv_result
+  public :: scf_conv_trah_result
   public :: soscf_converger ! Used to provide parametres for soscf
   public :: trah_converger  ! Used to provide parametres dor trah
 
@@ -510,6 +511,7 @@ module scf_converger
     procedure, pass :: get_mo_e_b  => conv_result_dummy_get_mo_e_b
     procedure, pass :: get_rms_grad => conv_result_dummy_get_rms_g
     procedure, pass :: get_rms_dp  => conv_result_dummy_get_rms_dp
+    procedure, pass :: get_etot  => conv_result_dummy_get_etot
   end type scf_conv_result
 
   !> @brief SCF converger results for interpolation methods like DIIS
@@ -537,6 +539,14 @@ module scf_converger
     procedure, pass :: get_rms_dp  => conv_result_soscf_get_rms_dp
   end type scf_conv_soscf_result
 
+  type, extends(scf_conv_result) :: scf_conv_trah_result
+    real(kind=dp) :: etot = 0
+  contains
+    procedure, pass :: get_mo_a    => conv_result_trah_get_mo_a
+    procedure, pass :: get_mo_b    => conv_result_trah_get_mo_b
+    procedure, pass :: get_fock    => conv_result_trah_get_fock
+    procedure, pass :: get_etot  => conv_result_trah_get_etot
+  end type scf_conv_trah_result
   !> @brief Base type for real SCF convergers (subconvergers)
   !> @detail Used by main SCF convergence driver `scf_conv`.
   !>  The extending type should provide the following interfaces:
@@ -746,6 +756,7 @@ module scf_converger
     integer :: nvir_b     = 0
     integer :: nfocks     = 1
     integer :: verbose = 0
+    real(dp) :: etot = 0
     integer(int32) :: n_param     = 0
     logical :: is_dft     = .false.
     real(dp) :: hf_scale  = 1.0_dp
@@ -1152,6 +1163,13 @@ contains
     istat = 0
   end function conv_result_dummy_get_rms_dp
 
+  function conv_result_dummy_get_etot(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_etot
+
   !> @brief Form the interpolated Fock matrix
   !> @detail F_n = \sum_{i=start}^{end} F_i * c_i
   subroutine conv_result_interp_get_fock(self, matrix, istat)
@@ -1304,6 +1322,60 @@ contains
     rms = self%rms_dp
   end function conv_result_soscf_get_rms_dp
 
+!==============================================================================
+! TRAH Result Methods
+!==============================================================================
+
+  !> @brief Get alpha MO coefficients from TRAH result
+  subroutine conv_result_trah_get_mo_a(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_a
+    istat = 0
+  end subroutine conv_result_trah_get_mo_a
+
+  !> @brief Get beta MO coefficients from TRAH result
+  subroutine conv_result_trah_get_mo_b(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_b
+    istat = 0
+  end subroutine conv_result_trah_get_mo_b
+
+  subroutine conv_result_trah_get_fock(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%focks
+    istat = 0
+  end subroutine conv_result_trah_get_fock
+
+  function conv_result_trah_get_etot(self) result(etot)
+    class(scf_conv_trah_result), intent(in) :: self
+    real(kind=dp) :: etot
+
+    etot = self%etot
+  end function conv_result_trah_get_etot
 
 !==============================================================================
 ! scf_conv Methods
@@ -3120,7 +3192,7 @@ contains
       self%mo_b = self%dat%get_mo_b(-1)
       self%dens(:,2) = self%dat%get_density(-1, 2)
     end if
-    allocate(scf_conv_soscf_result :: res)
+    allocate(scf_conv_trah_result :: res)
     res%dat => self%dat
     res%active_converger_name = self%conv_name
 

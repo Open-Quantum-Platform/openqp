@@ -628,6 +628,11 @@ contains
             &  3x,107('='),/ &
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
+    elseif(infos%control%soscf_type == 2) then
+      write(IW,"(/, &
+            5x,'Using OpenTrustRegion library for SCF convergence.',/, &
+            5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
+
     else
       write(IW,fmt="&
             &(/3x,'Direct SCF iterations begin.'/, &
@@ -909,8 +914,20 @@ contains
       !----------------------------------------------------------------------------
       call conv%run(conv_res)
       if (use_trah .and. iter >1 ) then
-        call run_otr(infos, molgrid, conv)
-        exit
+        call run_otr(infos, molgrid, conv , conv_res)
+        call conv_res%get_fock(pfock,istat=stat)
+        call conv_res%get_mo_a(mo_a, istat=stat)
+        etot = conv_res%get_etot()
+        ! Retrieve updated Energies of Alpha Orbitals
+        call conv_res%get_mo_e_a(mo_energy_a, istat=stat)
+        if (scf_type == scf_uhf .and. nelec_b /= 0) then
+          ! Retrieve updated Beta Orbitals and its Energies
+          call conv_res%get_mo_b(mo_b, stat)
+          call conv_res%get_mo_e_b(mo_energy_b, stat)
+        elseif (scf_type == scf_rohf) then
+          mo_b = mo_a
+          mo_energy_b = mo_energy_a
+        end if
       end if
 
       diis_error = conv_res%get_error()
@@ -933,6 +950,8 @@ contains
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
               iter, etot, etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
               trim(conv_res%active_converger_name)
+      elseif(use_trah) then
+!              write(IW, "(10x, '')")
       else
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
               iter, etot, etot - e_old, nschwz, diis_error, vshift, &
@@ -966,7 +985,7 @@ contains
           end if
         else
           if (vshift_last_iter) vshift = 0.0_dp
-          if (use_soscf) then
+          if (use_soscf .or. use_trah) then
              if(scf_type == scf_rohf) then
                rohf_bak(:,1) = pfock(:,1)
                rohf_bak(:,2) = pfock(:,2)
@@ -1037,7 +1056,7 @@ contains
       !----------------------------------------------------------------------------
       ! Update Fock or Orbitals and Eigenvalues Based on Active Converger
       !----------------------------------------------------------------------------
-      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
+      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF' .or. use_trah) then
         ! SOSCF: Retrieve updated MOs and energies directly
         ! Note: Fock matrix is fixed in SOSCF;
         !       rebuilt in next iteration,
@@ -1253,7 +1272,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Molecular Orbitals
     !----------------------------------------------------------------------------
-!    call print_mo_range(basis, infos, mostart=1, moend=nbf)
+    call print_mo_range(basis, infos, mostart=1, moend=nbf)
 
     !----------------------------------------------------------------------------
     ! Calculate Final Energy Components
@@ -1275,7 +1294,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Final Energy Components
     !----------------------------------------------------------------------------
-!    call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
+    call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
 
     !----------------------------------------------------------------------------
     ! Save Results to infos Structure
@@ -1400,15 +1419,16 @@ contains
 
   end subroutine set_trah_parametres
 
-    subroutine run_otr(infos, mol_grid, conv)
+    subroutine run_otr(infos, mol_grid, conv, res)
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
-    use scf_converger, only: scf_conv, trah_converger
+    use scf_converger, only: scf_conv, trah_converger, scf_conv_result
     use otr_interface, only: init_trah_solver, run_trah_solver
 
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), target, intent(in) :: mol_grid
     type(scf_conv) :: conv
+    class(scf_conv_result), intent(inout) :: res
 
     integer :: i
 
@@ -1417,7 +1437,7 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
           call init_trah_solver(infos, mol_grid, sc)
-          call run_trah_solver()
+          call run_trah_solver(res)
       end select
     end do
 
