@@ -72,12 +72,13 @@ contains
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
     if (infos%control%scftype>1) then
       conv%dat%buffer(conv%dat%slot)%mo_b = conv%mo_b
-      select type (res)
-      class is (scf_conv_trah_result)
-        res%etot = conv%etot
-      end select
-
     end if
+
+    select type (res)
+    class is (scf_conv_trah_result)
+      res%etot = conv%etot
+    end select
+
     res%error = 0
     if (error) then
       write(*,*) 'OpenTrustRegion solver failed.'
