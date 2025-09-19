@@ -3298,63 +3298,43 @@ contains
 
     case (SCF_ROHF)
       ! ---- ROHF α block ----
-      allocate(ugd(nocc_a * nvir_a + nocc_b * nvir_b))
-      allocate(uh(nocc_a * nvir_a + nocc_b * nvir_b))
+      if (.not. allocated(ugd)) allocate(ugd(nocc_a * nvir_a + nocc_b * nvir_b), source=0.0_dp)
+      if (.not. allocated(uh)) allocate(uh(nocc_a * nvir_a + nocc_b * nvir_b), source=0.0_dp)
 
       call unpack_matrix(fock_ao(:,1), w1)
       w2 = 0.0_dp
-      w3 = 0.0_dp
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w1, nbf)
 
-      k = 0
-      do i = nocc_a+1, nbf
-        do a = 1, nocc_a
-          k = k + 1
-          ugd(k)  = w3(i,a)
-        end do
-      end do
-
-      k = 0
-      do i = nocc_a+1, nbf
-        do a = 1, nocc_a
-          k = k + 1
-          uh(k) = ( w3(i,i) - w3(a,a) )
-        end do
-      end do
-
-      call unpack_matrix(fock_ao(:,2), w1)
+      call unpack_matrix(fock_ao(:,2), w3)
       w2 = 0.0_dp
-      w3 = 0.0_dp
-      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w3,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
-
-      k = self%nvir_a * nocc_a
-      do i = nocc_b+1, nbf
+      k = 0
+      do i = nocc_b+1, nocc_a
         do a = 1, nocc_b
           k = k + 1
-          ugd(k)  = w3(i,a)
+          grad(k)   = w3(i, a)
+          h_diag(k) = w3(i,i) - w3(a,a)
         end do
       end do
 
-      k = self%nvir_a * nocc_a
-      do i = nocc_b+1, nbf
+      do i = nocc_a+1, nbf
         do a = 1, nocc_b
           k = k + 1
-          uh(k) = ( w3(i,i) - w3(a,a) )
+          grad(k)   = w3(i, a) + w1(i, a)
+          h_diag(k) = (w3(i,i) - w3(a,a)) + (w1(i,i) - w1(a,a))
         end do
       end do
-      grad = 0
-      k = nocc_b * (nvir_b - nvir_a)
-      k_rohf   = k + nvir_a*nocc_a
-      grad(1:nvir_b*nocc_b) = ugd(nvir_a*nocc_a+1:)
-      grad(k+1:k_rohf) = grad(k+1:k_rohf) + ugd(1:nvir_a*nocc_a)
 
-      h_diag = 0
-      k = nocc_b * (nvir_b - nvir_a)
-      k_rohf   = k + nvir_a*nocc_a
-      h_diag(1:nvir_b*nocc_b) = uh(nvir_a*nocc_a+1:)
-      h_diag(k+1:k_rohf) = h_diag(k+1:k_rohf) + uh(1:nvir_a*nocc_a)
+      do i = nocc_a+1, nbf
+        do a = nocc_b+1, nocc_a
+          k = k + 1
+          grad(k)   = w1(i, a)
+          h_diag(k) = w1(i,i) - w1(a,a)
+        end do
+      end do
+
 
     case default
       error stop 'calc_g_h: unsupported scftype'
@@ -3604,13 +3584,7 @@ contains
       !#################### ROHF
     case (scf_ROHF)
 ! alpha
-      k = nocc_b * (nvir_b - nvir_a)
-      do i = 1, nvir_a
-        do a = 1, nocc_a
-          k= k+1
-          xmat(i,a) = x(k)
-        end do
-      end do
+      call unpack_rohf_trial(x, xmat, xmat_b, nbf, nocc_a, nocc_b)
       call unpack_matrix(fock_ao(:,1), work1)
 
       call dgemm('N','N', nbf, nbf, nbf, &
@@ -3652,13 +3626,6 @@ contains
       call pack_matrix(dm,dm_tri(:,1))
 
 ! beta
-      k = 0
-      do i = 1, nvir_b
-        do a = 1, nocc_b
-          k= k+1
-          xmat_b(i,a) = x(k)
-        end do
-      end do
       call unpack_matrix(fock_ao(:,2), work1)
 
       call dgemm('N','N', nbf, nbf, nbf, &
@@ -3727,39 +3694,102 @@ contains
                          mo_b, nbf, &
                  0.0_dp, work3,  nbf)
       x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
-      k = 0
-      x2 = 0
-      do i = 1, nvir_b
-        do a = 1, nocc_b
-          k= k+1
-          x2(k) = x2mat_b(i,a)
-        end do
-      end do
-      k = nocc_b * (nvir_b - nvir_a)
-      do i = 1, nvir_a
-        do a = 1, nocc_a
-          k= k+1
-          x2(k) = x2(k) + x2mat(i,a)
-        end do
-      end do
-
+      call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
     end select
-
-
     end associate
   end subroutine calc_h_op
+
+  subroutine pack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
+    use iso_fortran_env, only: dp => real64
+    implicit none
+    real(dp), intent(inout)   :: x(:)
+    real(dp), intent(in)    :: xa(:,:), xb(:,:)
+    integer,  intent(in)    :: nbf, nocc_a, nocc_b
+    integer :: nvir_a, nvir_b, offset, npar, k, iv, a
+
+    nvir_a = nbf - nocc_a
+    nvir_b = nbf - nocc_b
+    offset = nocc_a - nocc_b
+    npar = nocc_b*nvir_b + offset*nvir_a
+    x = 0.0_dp
+    k = 0
+
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, nocc_b
+          k    = k + 1
+          x(k) = xb(iv, a)
+        end do
+      end do
+    end if
+    do iv = 1, nvir_a
+      do a = 1, nocc_b
+        k    = k + 1
+        x(k) = xa(iv, a) + xb(offset + iv, a)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvir_a
+        do a = 1, offset
+          k    = k + 1
+          x(k) = xa(iv, nocc_b + a)
+        end do
+      end do
+    end if
+  end subroutine
+
+  subroutine unpack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
+    use precision, only: dp
+    implicit none
+    real(dp), intent(in)              :: x(:)
+    real(dp), intent(out)   :: xa(:,:), xb(:,:)
+    integer, intent(in)               :: nbf, nocc_a, nocc_b
+    integer :: nvir_a, nvir_b, ndocc, offset
+    integer :: k, iv, a
+
+    nvir_a = nbf - nocc_a
+    nvir_b = nbf - nocc_b
+    ndocc  = nocc_b
+    offset = nocc_a - nocc_b
+    xa = 0.0_dp
+    xb = 0.0_dp
+    k = 0
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, nocc_b
+          k = k + 1
+          xb(iv, a) = x(k)
+        end do
+      end do
+    end if
+    do iv = 1, nvir_a
+      do a = 1, nocc_b
+        k = k + 1
+        xa(iv, a)             = x(k)
+        xb(offset + iv, a)    = x(k)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvir_a
+        do a = 1, offset
+          k = k + 1
+          xa(iv, nocc_b + a) = x(k)
+        end do
+      end do
+    end if
+  end subroutine
 
   subroutine skew_sym_k(self, step, K, nocc)
     use precision, only : dp
     implicit none
 
     class(trah_converger), intent(inout) :: self
-    real(kind=dp),      intent(in)    :: step(:)
-    real(kind=dp),      intent(inout) :: K(:,:)
-    integer,            intent(in)    :: nocc
+    real(dp),      intent(in)            :: step(:)
+    real(dp),      intent(inout)         :: K(:,:)
+    integer,       intent(in),  optional :: nocc   ! used for non-ROHF paths
 
     integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b, scftype
-    integer :: virt, occ, idx, expected
+    integer :: i, a, idx, expected, offset
 
     nbf     = self%nbf
     nocc_a  = self%nocc_a
@@ -3768,45 +3798,69 @@ contains
     nvir_b  = self%nvir_b
     scftype = self%scf_type
 
-    if (size(K,1) /= nbf .or. size(K,2) /= nbf) error stop "unpack_x: bad K dims"
-    if (nocc_a + nvir_a /= nbf) error stop "unpack_x: nocc_a+nvir_a != nbf"
-    if (nocc_b + nvir_b /= nbf) error stop "unpack_x: nocc_b+nvir_b != nbf"
+    if (size(K,1) /= nbf .or. size(K,2) /= nbf) error stop "skew_sym_k: bad K dims"
+    if (nocc_a + nvir_a /= nbf) error stop "skew_sym_k: nocc_a+nvir_a != nbf"
+    if (nocc_b + nvir_b /= nbf) error stop "skew_sym_k: nocc_b+nvir_b != nbf"
 
     K   = 0.0_dp
     idx = 0
 
     if (scftype == 3) then
-      expected = (nocc_a - nocc_b)*nocc_b + nvir_a*nocc_a
-      if (size(step) /= expected) error stop "unpack_x(ROHF): step length mismatch"
-      do virt = nocc_b+1, nocc_a
-        do occ = 1, nocc_b
+      ! ---------------- ROHF (single spatial K), assume nocc_a >= nocc_b ----------------
+      ! Subspaces: D=1..nocc_b, S=nocc_b+1..nocc_a, V=nocc_a+1..nbf
+      !
+      ! step packing (length npar):
+      !  1) S<->D (β-only extras):      size = nocc_b*(nocc_a - nocc_b)
+      !  2) V<->D (common spin-sum):    size = nocc_b*nvir_a
+      !  3) V<->S (α-only extras):      size = (nocc_a - nocc_b)*nvir_a
+      !
+      offset   = nocc_a - nocc_b
+      expected = nocc_b*offset + nocc_b*nvir_a + offset*nvir_a
+      if (size(step) /= expected) error stop "skew_sym_k(ROHF): step length mismatch"
+      if (offset > 0) then
+        do i = nocc_b+1, nocc_a
+          do a = 1, nocc_b
+            idx = idx + 1
+            K(i, a) =  step(idx)
+            K(a, i) = -step(idx)
+          end do
+        end do
+      end if
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_b
           idx = idx + 1
-          K(virt, occ) =  step(idx)
-          K(occ,  virt) = -step(idx)
+          K(i, a) =  step(idx)
+          K(a, i) = -step(idx)
         end do
       end do
-      do virt = nocc_a+1, nbf
-        do occ = 1, nocc_a
-          idx = idx + 1
-          K(virt, occ) =  step(idx)
-          K(occ,  virt) = -step(idx)
+      if (offset > 0) then
+        do i = nocc_a+1, nbf
+          do a = nocc_b+1, nocc_a
+            idx = idx + 1
+            K(i, a) =  step(idx)
+            K(a, i) = -step(idx)
+          end do
         end do
-      end do
+      end if
+
     else
-      if (nocc < 0 .or. nocc > nbf) error stop "unpack_x: nocc out of range"
+      ! ---------------- RHF / UHF path (single block V<->Occ) ----------------
+      if (.not. present(nocc)) error stop "skew_sym_k: nocc required for non-ROHF"
+      if (nocc < 0 .or. nocc > nbf) error stop "skew_sym_k: nocc out of range"
       expected = (nbf - nocc) * nocc
-      if (size(step) /= expected) error stop "unpack_x: step length mismatch"
-      do virt = nocc+1, nbf
-        do occ = 1, nocc
+      if (size(step) /= expected) error stop "skew_sym_k: step length mismatch"
+
+      do i = nocc+1, nbf
+        do a = 1, nocc
           idx = idx + 1
-          K(virt, occ) =  step(idx)
-          K(occ,  virt) = -step(idx)
+          K(i, a) =  step(idx)
+          K(a, i) = -step(idx)
         end do
       end do
     end if
 
-    if (idx /= size(step)) error stop "unpack_x: not all elements consumed"
-  end subroutine skew_sym_k
+    if (idx /= size(step)) error stop "skew_sym_k: not all elements consumed"
+  end subroutine
 
   subroutine rotate_orbs_trah(self, step, nbf, nocc, mo)
     implicit none

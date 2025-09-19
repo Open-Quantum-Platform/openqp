@@ -65,7 +65,7 @@ contains
 
     ! Call OpenTrustRegion solver
     call solver(p_update, p_obj, n_param, error, &
-!                conv_tol=conv_tol, n_macro=max_iter, &
+                conv_tol=conv_tol, n_macro=max_iter, &
                 verbose=verbose)! , logger=p_log)
 
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a

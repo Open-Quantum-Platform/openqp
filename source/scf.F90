@@ -758,7 +758,7 @@ contains
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
       if (scf_type == scf_rohf) then
-        if (.not. use_soscf .and. .not. use_trah .or. iter ==1 ) then
+        if (.not.(use_soscf .or. use_trah) .or. iter == 1) then
           ! Store the original alpha Fock matrix before ROHF transformation
           ! This is needed to preserve it for energy evaluation and printing
           rohf_bak(:,1) = pfock(:,1)
@@ -1056,7 +1056,7 @@ contains
       !----------------------------------------------------------------------------
       ! Update Fock or Orbitals and Eigenvalues Based on Active Converger
       !----------------------------------------------------------------------------
-      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF' .or. use_trah) then
+      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
         ! SOSCF: Retrieve updated MOs and energies directly
         ! Note: Fock matrix is fixed in SOSCF;
         !       rebuilt in next iteration,
