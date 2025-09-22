@@ -125,14 +125,24 @@ module types
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
-
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
-    ! SOSCF parameters
+    ! SOSCF Parameters
     integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
+    logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
+    ! Opentrustregion Parameter
+    logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
+    logical(c_bool)        :: trh_dav  = .true.     !< Use level-shifted Davidson as inner solver
+    logical(c_bool)        :: trh_jd   = .false.    !< Allow Jacobi–Davidson switching for inner solve
+    logical(c_bool)        :: trh_pjd  = .false.    !< Prefer JD over Davidson when switching is allowed 
+    integer(c_int64_t)     :: trh_nrtv = 1          !< # of random trial vectors for initial subspace
+    real(c_double)         :: trh_r0   = 0.4d0      !< Initial trust-region radius
+    integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
+    real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
+    real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

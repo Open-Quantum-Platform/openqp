@@ -105,7 +105,7 @@ ExternalProject_Add(libecpint
         )
 ExternalProject_Add(libopentrustregion
     PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
-    GIT_REPOSITORY git@github.com:mohsenkor/opentrustregion.git#https://github.com/eriksen-lab/opentrustregion.git
+    GIT_REPOSITORY https://github.com/mohsenkor/opentrustregion.git#https://github.com/eriksen-lab/opentrustregion.git
     GIT_TAG main  # or a specific commit/tag if needed
     UPDATE_COMMAND ""
     CMAKE_ARGS

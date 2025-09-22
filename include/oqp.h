@@ -16,6 +16,7 @@ typedef struct oqp_handle_t {
     struct control_parameters *control;
     struct mpi_communicator *mpiinfo;
     struct electron_shell *elshell;
+    struct trah_control *trah;
 } oqp_handle_t;
 
 struct Cstring{
@@ -132,11 +133,20 @@ struct control_parameters {
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
-    // SOSCF parameters
     int64_t   soscf_type;
     double    soscf_lvl_shift;
     int64_t   soscf_reset_mod;
     int64_t   verbose;
+    bool      trh_stab;
+    bool      trh_ls;
+    bool      trh_dav;
+    bool      trh_jd;
+    bool      trh_pjd;
+    int64_t   trh_nrtv;
+    double    trh_r0;
+    int64_t   trh_nmic;
+    double    trh_gred;
+    double    trh_lred;
 };
 
 struct mpi_communicator {

@@ -89,7 +89,7 @@ OQP_CONFIG_SCHEMA = {
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '15'},
-        'init_conv': {'type': float, 'default': '0.001'}, 
+        'init_conv': {'type': float, 'default': '0.001'},
         'init_converger': {'type': int, 'default': '0'},
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
@@ -98,7 +98,18 @@ OQP_CONFIG_SCHEMA = {
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
+        'trh_stab': {'type': bool,  'default': 'False'},
+        'trh_ls': {'type': bool,  'default': 'False'},
+        'trh_dav': {'type': bool,  'default': 'True'},
+        'trh_jd': {'type': bool,  'default': 'False'},
+        'trh_pjd': {'type': bool,  'default': 'False'},
+        'trh_nrtv': {'type': int,   'default': '1'},
+        'trh_r0': {'type': float, 'default': '0.4'},
+        'trh_nmic': {'type': int,   'default': '50'},
+        'trh_gred': {'type': float, 'default': '0.001'},
+        'trh_lred': {'type': float, 'default': '0.0001'},
     },
+
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_flag': {'type': bool, 'default': 'False'},
@@ -260,6 +271,16 @@ class OQPData:
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
+            "trh_stab": "set_trah_stability",
+            "trh_ls": "set_trah_line_search",
+            "trh_dav": "set_trah_davidson",
+            "trh_jd": "set_trah_jacobi_davidson",
+            "trh_pjd": "set_trah_prefer_jacobi_davidson",
+            "trh_nrtv": "set_trah_n_random_trial_vectors",
+            "trh_r0": "set_trah_start_trust_radius",
+            "trh_nmic": "set_trah_n_micro",
+            "trh_gred": "set_trah_global_red_factor",
+            "trh_lred": "set_trah_local_red_factor",
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -398,7 +419,7 @@ class OQPData:
             try:
                 _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)
             except Exception as e:
-                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e            
+                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e
         else:
             _value = np.array(value)
 
@@ -511,7 +532,7 @@ class OQPData:
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
 
-    def set_scf_rstctmo(self, rstctmo): 
+    def set_scf_rstctmo(self, rstctmo):
         """restrict MO """
         self._data.control.rstctmo = rstctmo
 
@@ -554,6 +575,56 @@ class OQPData:
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""
         self._data.control.verbose = verbose
+
+    def set_trah_stability(self, flag: bool):
+        """Enable/disable Hessian/eigenspectrum stability analysis before TRAH."""
+        self._data.control.trh_stab = bool(flag)
+
+    def set_trah_line_search(self, flag: bool):
+        """Enable line search within TRAH micro-iterations."""
+        self._data.control.trh_ls = bool(flag)
+
+    def set_trah_davidson(self, flag: bool):
+        """Prefer (plain) Davidson eigensolver for inner linear solves."""
+        self._data.control.trh_dav = bool(flag)
+
+    def set_trah_jacobi_davidson(self, flag: bool):
+        """Enable Jacobi–Davidson eigensolver for inner linear solves."""
+        self._data.control.trh_jd = bool(flag)
+
+    def set_trah_prefer_jacobi_davidson(self, flag: bool):
+        """Prefer Jacobi–Davidson over Davidson when both available."""
+        self._data.control.trh_pjd = bool(flag)
+
+    def set_trah_n_random_trial_vectors(self, n: int):
+        """Number of random trial vectors for initial subspace."""
+        if n < 0:
+            raise ValueError("n_random_trial_vectors must be non-negative")
+        self._data.control.trh_nrtv = int(n)
+
+    def set_trah_start_trust_radius(self, r0: float):
+        """Initial trust-region radius."""
+        if r0 <= 0.0:
+            raise ValueError("start_trust_radius must be > 0")
+        self._data.control.trh_r0 = float(r0)
+
+    def set_trah_n_micro(self, k: int):
+        """Max micro-iterations per macro step."""
+        if k <= 0:
+            raise ValueError("n_micro must be > 0")
+        self._data.control.trh_nmic = int(k)
+
+    def set_trah_global_red_factor(self, f: float):
+        """Global trust-radius reduction factor (0 < f < 1)."""
+        if not (0.0 < f < 1.0):
+            raise ValueError("global_red_factor must be in (0,1)")
+        self._data.control.trh_gred = float(f)
+
+    def set_trah_local_red_factor(self, f: float):
+        """Local trust-radius reduction factor (0 < f < 1)."""
+        if not (0.0 < f < 1.0):
+            raise ValueError("local_red_factor must be in (0,1)")
+        self._data.control.trh_lred = float(f)
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
