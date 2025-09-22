@@ -5,8 +5,9 @@
 !==============================================================================
 module otr_interface
 
-  use, intrinsic :: iso_fortran_env, only: int32
-  use opentrustregion, only: solver, update_orbs_type, obj_func_type, hess_x_type, logger_type
+  use, intrinsic :: iso_c_binding, only: c_bool
+  use opentrustregion, only: solver, update_orbs_type,&
+          obj_func_type, hess_x_type, logger_type, rp, ip
   use mathlib, only: unpack_matrix
   use scf_converger, only: trah_converger, scf_conv_trah_result, scf_conv_result
   use scf_addons,only: calc_fock,compute_energy
@@ -22,10 +23,6 @@ module otr_interface
   type(dft_grid_t), pointer :: molgrid
   type(trah_converger), pointer :: conv
   real(dp), allocatable :: work1(:,:), work2(:,:)
-  integer(int32)            :: n_param      ! number of parameters = nocc*nvir
-  integer(int32)            :: max_iter     ! macro iteration limit
-  real(dp)                  :: conv_tol     ! convergence tolerance
-  integer(int32)            :: verbose      ! verbosity level
 
 
 contains
@@ -43,30 +40,56 @@ contains
 
     basis => infos%basis
     basis => infos%basis
-    n_param = conv%n_param
-    max_iter = int(infos%control%maxit, kind=int32)
-    conv_tol = infos%control%conv
-    verbose  = int(3, kind=int32)
     allocate(work1(conv%nbf,conv%nbf), work2(conv%nbf,conv%nbf))
 
   end subroutine init_trah_solver
 
   subroutine run_trah_solver(res)
-    logical(kind=4) :: error
     procedure(update_orbs_type), pointer :: p_update
     procedure(obj_func_type),   pointer :: p_obj
     procedure(logger_type),     pointer :: p_log
     class(scf_conv_result), intent(inout) :: res
+    logical(kind=4) :: error, stability, line_search, davidson,&
+                         jacobi_davidson, prefer_jacobi_davidson
+    integer(ip) :: n_random_trial_vectors, n_micro,&
+                        n_param, max_iter, verbose
+    real(dp) :: start_trust_radius, global_red_factor,&
+                          local_red_factor, conv_tol
+
+    n_param = conv%n_param
+    max_iter = int(infos%control%maxit, kind=ip)
+    conv_tol = real(infos%control%conv, kind=rp)
+    verbose  = int(3, kind=ip)
+    stability              = (infos%control%trh_stab .eqv. .true._c_bool)
+    line_search            = (infos%control%trh_ls   .eqv. .true._c_bool)
+    davidson               = (infos%control%trh_dav  .eqv. .true._c_bool)
+    jacobi_davidson        = (infos%control%trh_jd   .eqv. .true._c_bool)
+    prefer_jacobi_davidson = (infos%control%trh_pjd  .eqv. .true._c_bool)
+
+    n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
+    start_trust_radius     = real(infos%control%trh_r0, kind=ip)
+    n_micro                = int(infos%control%trh_nmic, kind=ip)
+    global_red_factor      = real(infos%control%trh_gred, kind=ip)
+    local_red_factor       = real(infos%control%trh_lred, kind=ip)
 
     ! Bind callbacks
     p_update => update_orbs
     p_obj    => obj_func
     p_log    => logger
 
-    ! Call OpenTrustRegion solver
-    call solver(p_update, p_obj, n_param, error, &
-                conv_tol=conv_tol, n_macro=max_iter, &
-                verbose=verbose)! , logger=p_log)
+    call solver(p_update, p_obj, n_param, error=error, &
+                stability=stability, line_search=line_search, davidson=davidson, &
+                jacobi_davidson=jacobi_davidson, &
+                prefer_jacobi_davidson=prefer_jacobi_davidson, &
+                conv_tol=conv_tol, n_random_trial_vectors=n_random_trial_vectors, &
+                start_trust_radius=start_trust_radius, n_macro=max_iter, &
+                n_micro=n_micro, global_red_factor=global_red_factor, &
+                local_red_factor=local_red_factor, verbose=verbose)
+
+!    ! Call OpenTrustRegion solver
+!    call solver(p_update, p_obj, n_param, error, &
+!                conv_tol=conv_tol, n_macro=max_iter, &
+!                verbose=verbose)! , logger=p_log)
 
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
