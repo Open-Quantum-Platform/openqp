@@ -32,13 +32,11 @@ contains
     type(dft_grid_t), intent(in), target :: molgrid_in
     class(trah_converger), intent(inout), target :: conv_in
     type(basis_set), pointer :: basis
-!    character(len=*), intent(in)          :: print_level
     ! Initialize module state
     infos   => infos_in
     molgrid => molgrid_in
     conv => conv_in
 
-    basis => infos%basis
     basis => infos%basis
     allocate(work1(conv%nbf,conv%nbf), work2(conv%nbf,conv%nbf))
 
@@ -86,11 +84,6 @@ contains
                 n_micro=n_micro, global_red_factor=global_red_factor, &
                 local_red_factor=local_red_factor, verbose=verbose)
 
-!    ! Call OpenTrustRegion solver
-!    call solver(p_update, p_obj, n_param, error, &
-!                conv_tol=conv_tol, n_macro=max_iter, &
-!                verbose=verbose)! , logger=p_log)
-
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
     if (infos%control%scftype>1) then
@@ -107,6 +100,10 @@ contains
       write(*,*) 'OpenTrustRegion solver failed.'
       res%error = 4
     end if
+
+    if (allocated(work1)) deallocate(work1)
+    if (allocated(work2)) deallocate(work2)
+
   end subroutine run_trah_solver
 
   subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr)

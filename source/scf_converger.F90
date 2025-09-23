@@ -3873,6 +3873,8 @@ contains
     integer            :: i, idx, occ, virt, istart
     logical :: second_term
 
+    if (all(step == 0.0d0)) return
+
     allocate(K(nbf,nbf),    source=0.0_dp)
     self%work1 = 0
     self%work2 = 0
@@ -3889,6 +3891,7 @@ contains
     call orthonormalize(self%work1, nbf)
     call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work1, nbf, 0.0_dp, self%work2, nbf)
     mo = self%work2
+    if(allocated(K)) deallocate(K)
 
   contains
 
