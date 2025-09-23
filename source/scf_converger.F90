@@ -3195,6 +3195,7 @@ contains
     allocate(scf_conv_trah_result :: res)
     res%dat => self%dat
     res%active_converger_name = self%conv_name
+    res%ierr=0
 
 !    res%error = 0.1_dp
 !    call init_trah_solver(self, self%infos, self%molgrid)

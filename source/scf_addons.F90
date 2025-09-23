@@ -251,6 +251,22 @@ module scf_addons
     procedure :: build_density => pfon_build_density
   end type pfon_t
 
+  type :: scf_energy_t
+    real(dp) :: eexc    = 0.0_dp   ! XC energy
+    real(dp) :: totele  = 0.0_dp   ! DFT density integral
+    real(dp) :: nelec   = 0.0_dp   ! electron count
+    real(dp) :: etot    = 0.0_dp   ! total energy
+    real(dp) :: psinrm  = 1.0_dp   ! wavefunction norm
+    real(dp) :: ehf1    = 0.0_dp   ! one-electron energy
+    real(dp) :: vee     = 0.0_dp   ! two-electron energy
+    real(dp) :: nenergy = 0.0_dp   ! nuclear repulsion
+    real(dp) :: vne     = 0.0_dp   ! electron–nuclear
+    real(dp) :: vnn     = 0.0_dp   ! nucleus–nucleus (== nenergy)
+    real(dp) :: vtot    = 0.0_dp   ! total potential
+    real(dp) :: tkin    = 0.0_dp   ! kinetic energy
+    real(dp) :: virial  = 0.0_dp   ! V/T
+  end type scf_energy_t
+
 contains
 
   !> @brief Applies the Maximum Overlap Method (MOM) to reorder orbitals.
@@ -973,12 +989,12 @@ contains
     type(information), intent(inout) :: infos
     real(kind=dp), optional, intent(in) :: scale_exch
     real(kind=dp), optional, intent(in) :: scale_coul
-
-    integer :: i, ii, nf, nschwz
-    real(kind=dp) :: scale_e, scale_c
     real(kind=dp), target, intent(in) :: d(:,:)
     real(kind=dp), intent(inout) :: f(:,:)
 
+    integer :: i, ii, nf, nschwz
+    real(kind=dp) :: scale_e, scale_c
+    logical :: is_dft
     type(int2_compute_t) :: int2_driver
     class(int2_fock_data_t), allocatable :: int2_data
 
@@ -987,7 +1003,7 @@ contains
     scale_c = 1.0d0
     if (present(scale_exch)) scale_e = scale_exch
     if (present(scale_coul)) scale_c = scale_coul
-
+    is_dft = (infos%control%hamilton == 20)
 
 
     ! Initialize ERI calculations
@@ -1005,7 +1021,12 @@ contains
 
 
     ! Constructing two electron Fock matrix
-    call int2_driver%run(int2_data)
+    call int2_driver%run(int2_data, &
+                           cam=is_dft.and.infos%dft%cam_flag, &
+                           alpha=infos%dft%cam_alpha, &
+                           beta=infos%dft%cam_beta,&
+                           mu=infos%dft%cam_mu)
+
     nschwz = int2_driver%skipped
 
     ! Scaling (everything except diagonal is halved)
@@ -1032,82 +1053,79 @@ contains
       use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
       implicit none
 
-    type(basis_set),   intent(in)    :: basis
-    type(information), intent(inout) :: infos
-    type(dft_grid_t),  intent(in)    :: molGrid
-    real(dp),          intent(inout)    :: mo_a(:,:)      ! nbf x nbf  (AO->MO)
-    real(dp),          intent(in)    :: dm1_tri(:,:)     ! nbf*(nbf+1)/2  (packed)
-    real(dp),          intent(out)   :: v1_tri(:,:)      ! packed AO response
-    real(dp), optional, intent(inout) :: mo_b(:,:)
+      type(basis_set),   intent(in)    :: basis
+      type(information), intent(inout) :: infos
+      type(dft_grid_t),  intent(in)    :: molGrid
+      real(dp),          intent(inout)    :: mo_a(:,:)      ! nbf x nbf  (AO->MO)
+      real(dp),          intent(in)    :: dm1_tri(:,:)     ! nbf*(nbf+1)/2  (packed)
+      real(dp),          intent(out)   :: v1_tri(:,:)      ! packed AO response
+      real(dp), optional, intent(inout) :: mo_b(:,:)
 
-    integer :: nbf, nbf2, ok
-    logical :: is_dft
+      integer :: nbf, nbf2, ok
+      logical :: is_dft
 
-    ! Packed work for int2
-    real(dp), allocatable :: d_pack(:,:)
+      ! Packed work for int2
+      real(dp), allocatable :: d_pack(:,:)
 
-    ! Full AO work for XC response
-    real(dp), allocatable :: dm1_full(:,:), fx_full(:,:), fx_pack(:)
-    real(dp), allocatable :: dx3(:,:,:), fx3(:,:,:)  ! rank-3 wrappers for tddft_fxc
-    real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:)
-    real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:)
-    real(dp) :: scalefactor
+      ! Full AO work for XC response
+      real(dp), allocatable :: dm1_full(:,:), fx_full(:,:), fx_pack(:)
+      real(dp), allocatable :: dx3(:,:,:), fx3(:,:,:)  ! rank-3 wrappers for tddft_fxc
+      real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:)
+      real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:)
+      real(dp) :: scalefactor
 
-    nbf   = basis%nbf
-    nbf2  = nbf*(nbf+1)/2
-    is_dft = (infos%control%hamilton == 20)
+      nbf   = basis%nbf
+      nbf2  = nbf*(nbf+1)/2
+      is_dft = (infos%control%hamilton == 20)
 
-    if (is_dft) then
-      scalefactor = infos%dft%HFscale
-    else
-      scalefactor = 1.0_dp
-    end if
-
-    ! --- (1) Two-electron part: J - 0.5*K in PACKED form ---
-!    allocate(f_pack(nbf2,1), stat=ok); if (ok/=0) stop "alloc fail d/f_pack"
-
-
-
-    ! --- (2) XC-kernel part (DFT only): v_xc^(1) ---
-    select case (infos%control%scftype)
-    case (1)
-      call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
       if (is_dft) then
-        allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok); if (ok/=0) stop "alloc fail full"
-        call unpack_matrix(dm1_tri(:,1), dm1_full)
-        allocate(dx3(nbf,nbf,1), fx3(nbf,nbf,1), stat=ok); if (ok/=0) stop "alloc fail dx3/fx3"
-        dx3(:,:,1) = dm1_full
-        fx3(:,:,1) = 0.0_dp
-        call tddft_fxc( basis=basis, molGrid=molGrid, isVecs=.true., wf=mo_a, &
-                        fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos )
-        fx_full = fx3(:,:,1)*0.5
-        call pack_matrix(fx_full, fx_pack)
-        v1_tri(:,1) = v1_tri(:,1) + fx_pack
+        scalefactor = infos%dft%HFscale
+      else
+        scalefactor = 1.0_dp
       end if
-    case (2,3)
-      call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
-      if (is_dft) then
-        allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok); if (ok/=0) stop "alloc fail full"
-        call unpack_matrix(dm1_tri(:,1), dxa(:,:,1))
-        call unpack_matrix(dm1_tri(:,2), dxb(:,:,1))
-        fxa = 0
-        fxb = 0
-        call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
-                   wfa=mo_a, wfb=mo_b, &
-                   fxa=fxa, fxb=fxb, &
-                   dxa=dxa, dxb=dxb, &
-                   nMtx=1, threshold=0.0_dp, infos=infos)
-        fx_full = fxa(:,:,1)
-        fx_pack = 0.0_dp
-        call pack_matrix(fx_full, fx_pack)
-        v1_tri(:,1) = v1_tri(:,1) + fx_pack
-        fx_full = fxb(:,:,1)
-        fx_pack = 0.0_dp
-        call pack_matrix(fx_full, fx_pack)
-        v1_tri(:,2) = v1_tri(:,2) + fx_pack
-        deallocate(dxa,dxb,fxa,fxb,fx_pack,fx_full)
-      end if
-    end select
+
+      ! --- (2) XC-kernel part (DFT only): v_xc^(1) ---
+      select case (infos%control%scftype)
+      case (1)
+        call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+        if (is_dft) then
+          allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok)
+          if (ok/=0) stop "alloc fail full"
+          call unpack_matrix(dm1_tri(:,1), dm1_full)
+          allocate(dx3(nbf,nbf,1), fx3(nbf,nbf,1), stat=ok); if (ok/=0) stop "alloc fail dx3/fx3"
+          dx3(:,:,1) = dm1_full
+          fx3(:,:,1) = 0.0_dp
+          call tddft_fxc( basis=basis, molGrid=molGrid, isVecs=.true., wf=mo_a, &
+                          fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos )
+          fx_full = fx3(:,:,1)*0.5
+          call pack_matrix(fx_full, fx_pack)
+          v1_tri(:,1) = v1_tri(:,1) + fx_pack
+        end if
+      case (2,3)
+        call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+        if (is_dft) then
+          allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok)
+          if (ok/=0) stop "alloc fail full"
+          call unpack_matrix(dm1_tri(:,1), dxa(:,:,1))
+          call unpack_matrix(dm1_tri(:,2), dxb(:,:,1))
+          fxa = 0
+          fxb = 0
+          call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+                     wfa=mo_a, wfb=mo_b, &
+                     fxa=fxa, fxb=fxb, &
+                     dxa=dxa, dxb=dxb, &
+                     nMtx=1, threshold=0.0_dp, infos=infos)
+          fx_full = fxa(:,:,1)
+          fx_pack = 0.0_dp
+          call pack_matrix(fx_full, fx_pack)
+          v1_tri(:,1) = v1_tri(:,1) + fx_pack
+          fx_full = fxb(:,:,1)
+          fx_pack = 0.0_dp
+          call pack_matrix(fx_full, fx_pack)
+          v1_tri(:,2) = v1_tri(:,2) + fx_pack
+          deallocate(dxa,dxb,fxa,fxb,fx_pack,fx_full)
+        end if
+      end select
 
   end subroutine vind_rhf_packed
 
@@ -1479,6 +1497,7 @@ contains
 
     fock_ao(:,1) = pfock(:,1)
     infos%mol_energy%energy = etot
+
     call int2_driver%clean()
 
   end subroutine calc_fock

@@ -84,6 +84,7 @@ contains
                 n_micro=n_micro, global_red_factor=global_red_factor, &
                 local_red_factor=local_red_factor, verbose=verbose)
 
+
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
     if (infos%control%scftype>1) then
