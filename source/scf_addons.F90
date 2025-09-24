@@ -252,19 +252,21 @@ module scf_addons
   end type pfon_t
 
   type :: scf_energy_t
-    real(dp) :: eexc    = 0.0_dp   ! XC energy
-    real(dp) :: totele  = 0.0_dp   ! DFT density integral
-    real(dp) :: nelec   = 0.0_dp   ! electron count
-    real(dp) :: etot    = 0.0_dp   ! total energy
-    real(dp) :: psinrm  = 1.0_dp   ! wavefunction norm
-    real(dp) :: ehf1    = 0.0_dp   ! one-electron energy
-    real(dp) :: vee     = 0.0_dp   ! two-electron energy
-    real(dp) :: nenergy = 0.0_dp   ! nuclear repulsion
-    real(dp) :: vne     = 0.0_dp   ! electron–nuclear
-    real(dp) :: vnn     = 0.0_dp   ! nucleus–nucleus (== nenergy)
-    real(dp) :: vtot    = 0.0_dp   ! total potential
-    real(dp) :: tkin    = 0.0_dp   ! kinetic energy
-    real(dp) :: virial  = 0.0_dp   ! V/T
+    real(kind=dp) :: ehf      ! Electronic energy (HF part)
+    real(kind=dp) :: ehf1     ! One-electron energy
+    real(kind=dp) :: nenergy  ! Nuclear repulsion energy
+    real(kind=dp) :: etot     ! Total SCF energy
+    real(kind=dp) :: e_old    ! Energy from previous iteration
+    real(kind=dp) :: psinrm   ! Wavefunction normalization
+    real(kind=dp) :: vne      ! Nucleus-electron potential energy
+    real(kind=dp) :: vnn      ! Nucleus-nucleus potential energy
+    real(kind=dp) :: vee      ! Electron-electron potential energy
+    real(kind=dp) :: vtot     ! Total potential energy
+    real(kind=dp) :: virial   ! Virial ratio (V/T)
+    real(kind=dp) :: tkin     ! Kinetic energy
+    real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
+    real(kind=dp) :: totele   ! Total electron density for DFT
+    real(kind=dp) :: totkin   ! Total kinetic energy for DFT
   end type scf_energy_t
 
 contains
@@ -1179,51 +1181,62 @@ contains
 
   end subroutine calc_dft_xc
 
-  subroutine calc_jk_xc(basis, infos, d, f, &
-                               molgrid, mo_a, mo_b, &
-                               eexc, totele, totkin, scalefactor)
+  subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
+                               molgrid, mo_a, mo_b)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
     use mod_dft_molgrid, only : dft_grid_t
+    use mathlib,          only : traceprod_sym_packed
     implicit none
 
     type(basis_set),   intent(in)    :: basis
     type(information), intent(inout) :: infos
     real(dp),          intent(in)    :: d(:,:)              ! (nbf_tri, nfocks)
+    real(dp),          intent(in)    :: hcore(:)
+    type(scf_energy_t), intent(inout)        :: E
     type(dft_grid_t),  intent(in),   optional :: molgrid
     real(dp),          intent(inout),optional :: mo_a(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
-    real(dp),          intent(in),   optional :: scalefactor
-
     real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
+    integer, intent(in) :: nfocks
 
-    real(dp),          intent(out),  optional :: eexc, totele, totkin
     real(dp) :: scale_factor
 
-    integer  :: scf_type, nfocks, nbf
-    real(dp) :: eexc_loc, totele_loc, totkin_loc
+    integer  :: scf_type, nbf
+    integer :: ii
     real(dp), allocatable :: pfxc(:,:)
     logical :: is_dft = .false.
 
     is_dft = infos%control%hamilton >= 20
-    if(.not. present(scalefactor)) then
-      if (is_dft) then
-        scale_factor = infos%dft%HFscale
-      else
-        scale_factor = 1.0_dp
-      end if
+    if (is_dft) then
+      scale_factor = infos%dft%HFscale
     else
-      scale_factor = scalefactor
+      scale_factor = 1.0_dp
     end if
+
+    nbf      = basis%nbf
 
     ! HF JK part (uses your existing fock_jk unchanged) ----
     call fock_jk(basis, d, f, infos, scale_factor)
+    ii = 0
+    do ii = 1, nfocks
+      f(:,ii) =  f(:,ii) + hcore
+    end do
+    !----------------------------------------------------------------------------
+    ! Compute HF Energy Components
+    !----------------------------------------------------------------------------
+    E%ehf = 0.0_dp
+    E%ehf1 = 0.0_dp
 
-    ! DFT XC part (only if Hamiltonian requests DFT) ----
-    eexc_loc   = 0.0_dp
-    totele_loc = 0.0_dp
-    totkin_loc = 0.0_dp
+    ! compute one and two-electron energies
+    do ii = 1, nfocks
+      E%ehf1 = E%ehf1 + traceprod_sym_packed(d(:,ii), hcore, nbf)
+      E%ehf = E%ehf + traceprod_sym_packed(d(:,ii), f(:,ii), nbf)
+    end do
+
+    E%ehf = 0.5_dp * (E%ehf + E%ehf1)
+    E%etot = E%ehf + E%nenergy
 
     if (.not. is_dft) return
 
@@ -1231,22 +1244,107 @@ contains
       error stop 'calc_jk_xc: DFT requested but molgrid/mo_a/mo_b not provided.'
     end if
 
-    scf_type = infos%control%scftype
-    nfocks   = merge(1, 2, scf_type == 1)
-    nbf      = basis%nbf
 
     allocate(pfxc(nbf*(nbf+1)/2, nfocks))
     pfxc = 0.0_dp
 
-    call calc_dft_xc(infos, basis, molgrid, pfxc, eexc_loc, totele_loc, totkin_loc, mo_a, mo_b)
+    call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
 
     f = f + pfxc
+    E%etot=E%etot + E%eexc
+
     deallocate(pfxc)
 
-    if (present(eexc))   eexc   = eexc_loc
-    if (present(totele)) totele = totele_loc
-    if (present(totkin)) totkin = totkin_loc
   end subroutine calc_jk_xc
+
+  subroutine calc_fock2(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in)
+    use precision,       only : dp
+    use oqp_tagarray_driver
+    use types,           only : information
+    use mod_dft_molgrid, only : dft_grid_t
+    use basis_tools,     only : basis_set
+    use util,            only : e_charge_repulsion
+    use mathlib,         only : traceprod_sym_packed, unpack_matrix
+    implicit none
+
+    type(basis_set), intent(in)              :: basis
+    type(information), target, intent(inout) :: infos
+    type(dft_grid_t), intent(in)             :: molgrid
+    real(dp), intent(inout), target          :: fock_ao(:,:)
+    type(scf_energy_t), intent(inout)        :: E
+
+    ! optionals
+    real(dp), intent(inout), optional        :: mo_a_in(:,:)
+    real(dp), intent(inout), optional        :: mo_b_in(:,:)
+    real(dp), intent(inout), optional        :: dens_in(:,:)
+
+    ! locals
+    integer :: nbf, nbf_tri, nfocks, nelec, scf_type, ii
+    logical :: is_dft
+    real(dp), allocatable :: pdmat(:,:), pfock(:,:)
+    real(dp), contiguous, pointer :: hcore(:), tmat(:), smat(:)
+    real(dp), contiguous, pointer :: dmat_a(:), dmat_b(:), fock_a(:), fock_b(:)
+    real(dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
+
+    ! SCF type & sizes
+    select case (infos%control%scftype)
+    case (1); scf_type = 1; nfocks = 1
+    case (2,3); scf_type = 2; nfocks = 2
+    end select
+    nelec   = infos%mol_prop%nelec
+    nbf     = basis%nbf
+    nbf_tri = nbf*(nbf+1)/2
+    is_dft  = infos%control%hamilton >= 20
+    ! tag arrays
+    call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
+    call tagarray_get_data(infos%dat, OQP_TM,    tmat)
+    call tagarray_get_data(infos%dat, OQP_SM, smat)
+    call tagarray_get_data(infos%dat, OQP_DM_A,  dmat_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A,fock_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    if (nfocks > 1) then
+      call tagarray_get_data(infos%dat, OQP_DM_B,  dmat_b)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B,fock_b)
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    end if
+
+    if (present(mo_a_in)) mo_a = mo_a_in
+    if (present(mo_b_in) .and. nfocks>1) mo_b = mo_b_in
+
+    allocate(pdmat(nbf_tri,nfocks)); pdmat(:,1) = dmat_a
+    if (nfocks > 1) pdmat(:,2) = dmat_b
+    if (present(dens_in)) pdmat = dens_in
+
+    E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
+
+    fock_ao = 0.0_dp
+    call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                    fock_ao, E, molgrid, mo_a, mo_b)
+
+    E%psinrm    = 0.0_dp
+    E%tkin = 0.0_dp
+    do ii = 1, nfocks
+      E%psinrm   = E%psinrm    + traceprod_sym_packed(pdmat(:,ii), smat, nbf)/nelec
+      E%tkin = E%tkin + traceprod_sym_packed(pdmat(:,ii), tmat,  nbf)
+    end do
+    E%vne    = E%ehf1 - E%tkin
+    E%vee    = E%etot - E%ehf1 - E%nenergy
+    E%vnn    = E%nenergy
+    E%vtot   = E%vne + E%vnn + E%vee
+    E%virial = - E%vtot / E%tkin
+
+    ! store Fock back
+    fock_a = fock_ao(:,1)
+    if (nfocks > 1) then
+      fock_b = fock_ao(:,2)
+    end if
+
+    infos%mol_energy%energy = E%etot
+
+    deallocate(pdmat)
+
+  end subroutine calc_fock2
+
 
   subroutine calc_fock(basis, infos, molgrid, fock_ao, mo_a_in,dens_in, mo_b_in)
     use precision, only: dp
@@ -1417,7 +1515,12 @@ contains
       allocate(int2_urohf_data_t :: int2_data)
       int2_data = int2_urohf_data_t(nfocks=2, d=pdmat, scale_exchange=scalefactor)
     end select
-    call int2_driver%run(int2_data)
+    call int2_driver%run(int2_data, &
+                        cam=is_dft.and.infos%dft%cam_flag, &
+                        alpha=infos%dft%cam_alpha, &
+                        beta=infos%dft%cam_beta,&
+                        mu=infos%dft%cam_mu)
+
 
     ! 9. --- SCALE TWO-ELECTRON TERMS ---
     pfock(:,:) = 0.5_dp * int2_data%f(:,:,1)
