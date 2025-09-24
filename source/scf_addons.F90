@@ -222,6 +222,8 @@ module scf_addons
   public :: level_shift_fock
   public :: fock_jk
   public :: calc_fock
+  public :: calc_fock2
+  public :: scf_energy_t
   public :: compute_energy
   public :: calc_jk_xc
   public :: vind_rhf_packed
@@ -976,7 +978,7 @@ contains
   !> @param[inout] f Fock matrices to be updated (triangular format).
   !> @param[in] scalefactor Optional scaling factor for exchange (default = 1.0).
   !> @param[inout] infos System information.
-  subroutine fock_jk(basis, d, f, infos, scale_exch, scale_coul)
+  subroutine fock_jk(basis, d, f, infos, scale_exch, nschwz, f_old, scale_coul)
     use precision, only: dp
     use io_constants, only: iw
     use util, only: measure_time
@@ -990,11 +992,14 @@ contains
     type(basis_set), intent(in) :: basis
     type(information), intent(inout) :: infos
     real(kind=dp), optional, intent(in) :: scale_exch
+    integer, optional, intent(inout) :: nschwz
     real(kind=dp), optional, intent(in) :: scale_coul
     real(kind=dp), target, intent(in) :: d(:,:)
     real(kind=dp), intent(inout) :: f(:,:)
+    real(kind=dp), optional ,intent(inout) :: f_old(:,:)
 
-    integer :: i, ii, nf, nschwz
+
+    integer :: i, ii, nf
     real(kind=dp) :: scale_e, scale_c
     logical :: is_dft
     type(int2_compute_t) :: int2_driver
@@ -1029,9 +1034,13 @@ contains
                            beta=infos%dft%cam_beta,&
                            mu=infos%dft%cam_mu)
 
-    nschwz = int2_driver%skipped
+    if (present(nschwz)) nschwz = int2_driver%skipped
 
     ! Scaling (everything except diagonal is halved)
+    if (present(f_old)) then
+      int2_data%f(:,:,1) = int2_data%f(:,:,1) + f_old
+      f_old = int2_data%f(:,:,1)
+    end if
     f =  0.5 * int2_data%f(:,:,1)
     do nf = 1, ubound(f,2)
       ii = 0
@@ -1182,7 +1191,7 @@ contains
   end subroutine calc_dft_xc
 
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
-                               molgrid, mo_a, mo_b)
+                               molgrid, mo_a, mo_b, nschwz, f_old, d_old)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
@@ -1192,13 +1201,15 @@ contains
 
     type(basis_set),   intent(in)    :: basis
     type(information), intent(inout) :: infos
-    real(dp),          intent(in)    :: d(:,:)              ! (nbf_tri, nfocks)
+    real(dp),          intent(inout)    :: d(:,:)              ! (nbf_tri, nfocks)
     real(dp),          intent(in)    :: hcore(:)
     type(scf_energy_t), intent(inout)        :: E
     type(dft_grid_t),  intent(in),   optional :: molgrid
     real(dp),          intent(inout),optional :: mo_a(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
+    real(dp), intent(inout), optional        :: d_old(:,:), f_old(:,:)
+    integer,  intent(inout)    :: nschwz
     integer, intent(in) :: nfocks
 
     real(dp) :: scale_factor
@@ -1216,9 +1227,12 @@ contains
     end if
 
     nbf      = basis%nbf
-
-    ! HF JK part (uses your existing fock_jk unchanged) ----
-    call fock_jk(basis, d, f, infos, scale_factor)
+    if(present(d_old) .and. present(f_old)) then
+      d = d - d_old
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old)
+      d = d + d_old
+      d_old = d
+    end if
     ii = 0
     do ii = 1, nfocks
       f(:,ii) =  f(:,ii) + hcore
@@ -1257,7 +1271,7 @@ contains
 
   end subroutine calc_jk_xc
 
-  subroutine calc_fock2(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in)
+  subroutine calc_fock2(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
     use precision,       only : dp
     use oqp_tagarray_driver
     use types,           only : information
@@ -1277,6 +1291,9 @@ contains
     real(dp), intent(inout), optional        :: mo_a_in(:,:)
     real(dp), intent(inout), optional        :: mo_b_in(:,:)
     real(dp), intent(inout), optional        :: dens_in(:,:)
+    real(dp), intent(inout), optional        :: dens_old(:,:)
+    real(dp), intent(inout), optional        :: f_old(:,:)
+    integer,  intent(inout), optional        :: nschwz
 
     ! locals
     integer :: nbf, nbf_tri, nfocks, nelec, scf_type, ii
@@ -1318,8 +1335,13 @@ contains
     E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     fock_ao = 0.0_dp
-    call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b)
+    if (present(dens_old)) then
+      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
+    else
+      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz)
+    end if
 
     E%psinrm    = 0.0_dp
     E%tkin = 0.0_dp

@@ -63,7 +63,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
-    use scf_addons, only: pfon_t, apply_mom, level_shift_fock
+    use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock2, scf_energy_t
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -127,6 +127,7 @@ contains
     real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
+    type(scf_energy_t) :: energy
 
     !==============================================================================
     ! DIIS Convergence Acceleration Parameters
@@ -670,89 +671,94 @@ contains
       !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
-      !----------------------------------------------------------------------------
-      ! Compute Difference Density Matrix for Incremental Fock Build
-      !----------------------------------------------------------------------------
-      ! This is the main advantage of direct SCF - allows better ERI screening
-      if (infos%control%scf_incremental /= 0) then
-        pdmat = pdmat - dold
-      end if
-
-      !----------------------------------------------------------------------------
-      ! Compute Two-Electron Contribution to Fock Matrix
-      !----------------------------------------------------------------------------
-      call int2_driver%run(int2_data, &
-                           cam=is_dft.and.infos%dft%cam_flag, &
-                           alpha=infos%dft%cam_alpha, &
-                           beta=infos%dft%cam_beta,&
-                           mu=infos%dft%cam_mu)
-      nschwz = int2_driver%skipped
-
-      !----------------------------------------------------------------------------
-      ! Recover Full Fock and Density from Difference Matrices (if incremental)
-      !----------------------------------------------------------------------------
-      if (infos%control%scf_incremental /= 0) then
-        pdmat = pdmat + dold
-        int2_data%f(:,:,1) = int2_data%f(:,:,1) + fold
-        fold = int2_data%f(:,:,1)
-        dold = pdmat
-      end if
-
-      !----------------------------------------------------------------------------
-      ! Scale Two-Electron Terms in Fock Matrix
-      !----------------------------------------------------------------------------
-      ! Scale off-diagonal elements by 0.5, diagonal by 1.0
-      pfock(:,:) = 0.5_dp * int2_data%f(:,:,1)
-      ii = 0
-      do i = 1, nbf
-        ii = ii + i
-        pfock(ii,1:nfocks) = 2.0_dp * pfock(ii,1:nfocks)
-      end do
-
-      !----------------------------------------------------------------------------
-      ! Add One-Electron Core Hamiltonian to Fock Matrix
-      !----------------------------------------------------------------------------
-      do i = 1, nfocks
-        pfock(:,i) = pfock(:,i) + hcore
-      end do
-
-      !----------------------------------------------------------------------------
-      ! Compute HF Energy Components
-      !----------------------------------------------------------------------------
-      ehf = 0.0_dp
-      ehf1 = 0.0_dp
-
-      ! Compute one and two-electron energies
-      do i = 1, nfocks
-        ehf1 = ehf1 + traceprod_sym_packed(pdmat(:,i), hcore, nbf)
-        ehf = ehf + traceprod_sym_packed(pdmat(:,i), pfock(:,i), nbf)
-      end do
-
-      ! Total HF energy = 0.5*(E1 + E2) (to avoid double-counting)
-      ehf = 0.5_dp * (ehf + ehf1)
-      etot = ehf + nenergy
-
-      !----------------------------------------------------------------------------
-      ! Compute DFT Exchange-Correlation Contribution (if DFT)
-      !----------------------------------------------------------------------------
-      if (is_dft) then
-        if (scf_type == scf_rhf) then
-          call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
-                        nbf, nbf_tri, eexc, totele, totkin, infos)
-        else if (scf_type == scf_uhf) then
-          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
-                        nbf, nbf_tri, eexc, totele, totkin, infos)
-        else if (scf_type == scf_rohf) then
-          ! ROHF does not have MO_B. So we copy MO_A to MO_B.
-          mo_b = mo_a
-          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
-                        nbf, nbf_tri, eexc, totele, totkin, infos)
-        end if
-
-        ! Add XC contribution to Fock and total energy
-        pfock = pfock + pfxc
-        etot = etot + eexc
-      end if
+      call calc_fock2(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+!      !----------------------------------------------------------------------------
+!      ! Compute Difference Density Matrix for Incremental Fock Build
+!      !----------------------------------------------------------------------------
+!      ! This is the main advantage of direct SCF - allows better ERI screening
+!      if (infos%control%scf_incremental /= 0) then
+!        pdmat = pdmat - dold
+!      end if
+!
+!      !----------------------------------------------------------------------------
+!      ! Compute Two-Electron Contribution to Fock Matrix
+!      !----------------------------------------------------------------------------
+!      call int2_driver%run(int2_data, &
+!                           cam=is_dft.and.infos%dft%cam_flag, &
+!                           alpha=infos%dft%cam_alpha, &
+!                           beta=infos%dft%cam_beta,&
+!                           mu=infos%dft%cam_mu)
+!      nschwz = int2_driver%skipped
+!
+!      !----------------------------------------------------------------------------
+!      ! Recover Full Fock and Density from Difference Matrices (if incremental)
+!      !----------------------------------------------------------------------------
+!      if (infos%control%scf_incremental /= 0) then
+!        pdmat = pdmat + dold
+!        int2_data%f(:,:,1) = int2_data%f(:,:,1) + fold
+!        fold = int2_data%f(:,:,1)
+!        dold = pdmat
+!      end if
+!
+!      !----------------------------------------------------------------------------
+!      ! Scale Two-Electron Terms in Fock Matrix
+!      !----------------------------------------------------------------------------
+!      ! Scale off-diagonal elements by 0.5, diagonal by 1.0
+!      pfock(:,:) = 0.5_dp * int2_data%f(:,:,1)
+!      ii = 0
+!      do i = 1, nbf
+!        ii = ii + i
+!        pfock(ii,1:nfocks) = 2.0_dp * pfock(ii,1:nfocks)
+!      end do
+!
+!      !----------------------------------------------------------------------------
+!      ! Add One-Electron Core Hamiltonian to Fock Matrix
+!      !----------------------------------------------------------------------------
+!      do i = 1, nfocks
+!        pfock(:,i) = pfock(:,i) + hcore
+!      end do
+!
+!      !----------------------------------------------------------------------------
+!      ! Compute HF Energy Components
+!      !----------------------------------------------------------------------------
+!      ehf = 0.0_dp
+!      ehf1 = 0.0_dp
+!
+!      ! Compute one and two-electron energies
+!      do i = 1, nfocks
+!        ehf1 = ehf1 + traceprod_sym_packed(pdmat(:,i), hcore, nbf)
+!        ehf = ehf + traceprod_sym_packed(pdmat(:,i), pfock(:,i), nbf)
+!      end do
+!
+!      ! Total HF energy = 0.5*(E1 + E2) (to avoid double-counting)
+!      ehf = 0.5_dp * (ehf + ehf1)
+!      etot = ehf + nenergy
+!
+!      !----------------------------------------------------------------------------
+!      ! Compute DFT Exchange-Correlation Contribution (if DFT)
+!      !----------------------------------------------------------------------------
+!      if (is_dft) then
+!        if (scf_type == scf_rhf) then
+!          call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+!                        nbf, nbf_tri, eexc, totele, totkin, infos)
+!        else if (scf_type == scf_uhf) then
+!          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+!                        nbf, nbf_tri, eexc, totele, totkin, infos)
+!        else if (scf_type == scf_rohf) then
+!          ! ROHF does not have MO_B. So we copy MO_A to MO_B.
+!          mo_b = mo_a
+!          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+!                        nbf, nbf_tri, eexc, totele, totkin, infos)
+!        end if
+!
+!        ! Add XC contribution to Fock and total energy
+!        pfock = pfock + pfxc
+!        etot = etot + eexc
+!      end if
+      etot = energy%etot
+      eexc = energy%eexc
+      ehf = energy%ehf
+      ehf1 = energy%ehf1
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
@@ -1268,7 +1274,6 @@ contains
       mo_energy_b = mo_energy_a
 
     end select
-
     !----------------------------------------------------------------------------
     ! Print Molecular Orbitals
     !----------------------------------------------------------------------------
