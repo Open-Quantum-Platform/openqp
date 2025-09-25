@@ -95,6 +95,7 @@ contains
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
+    logical :: do_check = .false.
 
     !==============================================================================
     ! Electron Counting Parameters
@@ -112,21 +113,7 @@ contains
     !==============================================================================
     ! Energy Components
     !==============================================================================
-    real(kind=dp) :: ehf      ! Electronic energy (HF part)
-    real(kind=dp) :: ehf1     ! One-electron energy
-    real(kind=dp) :: nenergy  ! Nuclear repulsion energy
-    real(kind=dp) :: etot     ! Total SCF energy
     real(kind=dp) :: e_old    ! Energy from previous iteration
-    real(kind=dp) :: psinrm   ! Wavefunction normalization
-    real(kind=dp) :: vne      ! Nucleus-electron potential energy
-    real(kind=dp) :: vnn      ! Nucleus-nucleus potential energy
-    real(kind=dp) :: vee      ! Electron-electron potential energy
-    real(kind=dp) :: vtot     ! Total potential energy
-    real(kind=dp) :: virial   ! Virial ratio (V/T)
-    real(kind=dp) :: tkin     ! Kinetic energy
-    real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
-    real(kind=dp) :: totele   ! Total electron density for DFT
-    real(kind=dp) :: totkin   ! Total kinetic energy for DFT
     type(scf_energy_t) :: energy
 
     !==============================================================================
@@ -162,7 +149,6 @@ contains
     !==============================================================================
     real(kind=dp) :: vshift        ! Virtual orbital energy shift
     real(kind=dp) :: H_U_gap       ! HOMO-LUMO gap
-    real(kind=dp) :: H_U_gap_crit  ! HOMO-LUMO gap critical value
     logical :: vshift_last_iter    ! Flag for last iteration with vshift
 
     !==============================================================================
@@ -415,7 +401,6 @@ contains
     !==============================================================================
     vshift = infos%control%vshift
     vshift_last_iter = .false.
-    H_U_gap_crit = 0.02_dp   ! Small gap threshold (in a.u.)
 
     !==============================================================================
     ! Initialize SCF Calculation
@@ -426,7 +411,7 @@ contains
     call matrix_invsqrt(smat, qmat, nbf)
 
     ! Compute Nuclear-Nuclear energy
-    nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
+!    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     ! During guess, the Hcore, Q nd Overlap matrices were formed.
     ! Using these, the initial orbitals (VEC) and density (Dmat) were subsequently computed.
@@ -583,8 +568,8 @@ contains
 
 
     ! Initialize DFT exchange-correlation energy
-    eexc = 0.0_dp
-    e_old = 0.0_dp
+    energy%eexc = 0.0_dp
+    energy%e_old = 0.0_dp
 
     !==============================================================================
     ! Print SCF Options
@@ -654,17 +639,8 @@ contains
       !----------------------------------------------------------------------------
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
-      if (do_pfon) then
-        if (do_pfon_final) then
-          ! Extra iteration: set temperature to 1K
-          pfon%temp = 1.0_dp
-          pfon%beta = 1.0_dp / (kB_HaK * pfon%temp)
-          write(IW, "(10x, 'Extra SCF iteration with Temp = 1K')")
-        else
-          ! Normal temperature adjustment
-          call pfon%adjust_temperature(iter, maxit, diis_error, infos%control%conv)
-        end if
-      end if
+
+      call pfon%adjust_temperature(iter, maxit, diis_error, infos%control%conv, do_pfon ,do_pfon_final)
 
       !----------------------------------------------------------------------------
       ! Initialize Fock Matrices for Current Iteration
@@ -672,118 +648,22 @@ contains
       pfock = 0.0_dp
 
       call calc_fock2(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
-!      !----------------------------------------------------------------------------
-!      ! Compute Difference Density Matrix for Incremental Fock Build
-!      !----------------------------------------------------------------------------
-!      ! This is the main advantage of direct SCF - allows better ERI screening
-!      if (infos%control%scf_incremental /= 0) then
-!        pdmat = pdmat - dold
-!      end if
-!
-!      !----------------------------------------------------------------------------
-!      ! Compute Two-Electron Contribution to Fock Matrix
-!      !----------------------------------------------------------------------------
-!      call int2_driver%run(int2_data, &
-!                           cam=is_dft.and.infos%dft%cam_flag, &
-!                           alpha=infos%dft%cam_alpha, &
-!                           beta=infos%dft%cam_beta,&
-!                           mu=infos%dft%cam_mu)
-!      nschwz = int2_driver%skipped
-!
-!      !----------------------------------------------------------------------------
-!      ! Recover Full Fock and Density from Difference Matrices (if incremental)
-!      !----------------------------------------------------------------------------
-!      if (infos%control%scf_incremental /= 0) then
-!        pdmat = pdmat + dold
-!        int2_data%f(:,:,1) = int2_data%f(:,:,1) + fold
-!        fold = int2_data%f(:,:,1)
-!        dold = pdmat
-!      end if
-!
-!      !----------------------------------------------------------------------------
-!      ! Scale Two-Electron Terms in Fock Matrix
-!      !----------------------------------------------------------------------------
-!      ! Scale off-diagonal elements by 0.5, diagonal by 1.0
-!      pfock(:,:) = 0.5_dp * int2_data%f(:,:,1)
-!      ii = 0
-!      do i = 1, nbf
-!        ii = ii + i
-!        pfock(ii,1:nfocks) = 2.0_dp * pfock(ii,1:nfocks)
-!      end do
-!
-!      !----------------------------------------------------------------------------
-!      ! Add One-Electron Core Hamiltonian to Fock Matrix
-!      !----------------------------------------------------------------------------
-!      do i = 1, nfocks
-!        pfock(:,i) = pfock(:,i) + hcore
-!      end do
-!
-!      !----------------------------------------------------------------------------
-!      ! Compute HF Energy Components
-!      !----------------------------------------------------------------------------
-!      ehf = 0.0_dp
-!      ehf1 = 0.0_dp
-!
-!      ! Compute one and two-electron energies
-!      do i = 1, nfocks
-!        ehf1 = ehf1 + traceprod_sym_packed(pdmat(:,i), hcore, nbf)
-!        ehf = ehf + traceprod_sym_packed(pdmat(:,i), pfock(:,i), nbf)
-!      end do
-!
-!      ! Total HF energy = 0.5*(E1 + E2) (to avoid double-counting)
-!      ehf = 0.5_dp * (ehf + ehf1)
-!      etot = ehf + nenergy
-!
-!      !----------------------------------------------------------------------------
-!      ! Compute DFT Exchange-Correlation Contribution (if DFT)
-!      !----------------------------------------------------------------------------
-!      if (is_dft) then
-!        if (scf_type == scf_rhf) then
-!          call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
-!                        nbf, nbf_tri, eexc, totele, totkin, infos)
-!        else if (scf_type == scf_uhf) then
-!          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
-!                        nbf, nbf_tri, eexc, totele, totkin, infos)
-!        else if (scf_type == scf_rohf) then
-!          ! ROHF does not have MO_B. So we copy MO_A to MO_B.
-!          mo_b = mo_a
-!          call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
-!                        nbf, nbf_tri, eexc, totele, totkin, infos)
-!        end if
-!
-!        ! Add XC contribution to Fock and total energy
-!        pfock = pfock + pfxc
-!        etot = etot + eexc
-!      end if
-      etot = energy%etot
-      eexc = energy%eexc
-      ehf = energy%ehf
-      ehf1 = energy%ehf1
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
-      if (scf_type == scf_rohf) then
-        if (.not.(use_soscf .or. use_trah) .or. iter == 1) then
-          ! Store the original alpha Fock matrix before ROHF transformation
-          ! This is needed to preserve it for energy evaluation and printing
-          rohf_bak(:,1) = pfock(:,1)
-          rohf_bak(:,2) = pfock(:,2)
-
-          ! Turn off level shifting for the final iteration if requested
-          if (vshift_last_iter) vshift = 0.0_dp
-
-          ! Apply the Guest-Saunders ROHF Fock transformation
-          ! This creates a modified Fock matrix with proper coupling between
-          ! closed-shell, open-shell, and virtual orbital spaces
-          call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
-                              nelec_a, nelec_b, nbf, vshift, work1, work2)
-
-          ! Combine alpha and beta densities for ROHF
-          ! This is needed because ROHF uses a single set of MOs for both spins,
-          ! so we need the total density for the next iteration
-          pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
-        end if
+      do_check = (scf_type == scf_rohf) .and. &
+           ( .not.(use_soscf .or. use_trah) .or. iter == 1 )
+      if (do_check) then
+        ! Store the original alpha Fock matrix before ROHF transformation
+        rohf_bak = pfock
+        ! Turn off level shifting for the final iteration if requested
+        if (vshift_last_iter) vshift = 0.0_dp
+        ! Apply the Guest-Saunders ROHF Fock transformation
+        call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
+                                nelec_a, nelec_b, nbf, vshift, work1, work2)
+        ! Combine alpha and beta densities for ROHF
+        pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
       end if
 
       !----------------------------------------------------------------------------
@@ -815,84 +695,47 @@ contains
       ! Pass Fock and Density to Convergence Accelerator
       !----------------------------------------------------------------------------
       if (use_soscf) then
-        ! SOSCF: Pass MO coefficients and energies for orbital rotation
-        ! Note: Fock matrix is fixed in SOSCF;
-        !       rebuilt in next iteration,
-        !       Fock is not retrieved here.
-        if (do_pfon) then
-          select case (scf_type)
-          case (scf_rhf)
-            call conv%add_data( &
-                     f=pfock(:,1:diis_nfocks), &
-                     dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_e_a=mo_energy_a, &
-                     pfon=pfon)
-          case (scf_rohf)
-            call conv%add_data( &
-                     f=pfock(:,1:soscf_nfocks), &
-                     dens=pdmat(:,1:soscf_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_b=mo_b, &
-                     mo_e_a=mo_energy_a, &
-                     mo_e_b=mo_energy_b, &
-                     pfon=pfon)
-          case (scf_uhf)
-            call conv%add_data( &
-                     f=pfock(:,1:diis_nfocks), &
-                     dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_b=mo_b, &
-                     mo_e_a=mo_energy_a, &
-                     mo_e_b=mo_energy_b, &
-                     pfon=pfon)
-          end select
-        else
-          select case (scf_type)
-          case (scf_rhf)
-            call conv%add_data( &
-                     f=pfock(:,1:diis_nfocks), &
-                     dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_e_a=mo_energy_a)
-          case (scf_rohf)
-            call conv%add_data( &
-                     f=pfock(:,1:soscf_nfocks), &
-                     dens=pdmat(:,1:soscf_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_b=mo_b, &
-                     mo_e_a=mo_energy_a, &
-                     mo_e_b=mo_energy_b)
-          case (scf_uhf)
-            call conv%add_data( &
-                     f=pfock(:,1:diis_nfocks), &
-                     dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
-                     mo_a=mo_a, &
-                     mo_b=mo_b, &
-                     mo_e_a=mo_energy_a, &
-                     mo_e_b=mo_energy_b)
-          end select
-        end if
+        select case (scf_type)
+        case (scf_rhf)
+          call conv%add_data( &
+                   f=pfock(:,1:diis_nfocks), &
+                   dens=pdmat(:,1:diis_nfocks), &
+                   e=energy%etot, &
+                   mo_a=mo_a, &
+                   mo_e_a=mo_energy_a)
+        case (scf_rohf)
+          call conv%add_data( &
+                   f=pfock(:,1:soscf_nfocks), &
+                   dens=pdmat(:,1:soscf_nfocks), &
+                   e=energy%etot, &
+                   mo_a=mo_a, &
+                   mo_b=mo_b, &
+                   mo_e_a=mo_energy_a, &
+                   mo_e_b=mo_energy_b)
+        case (scf_uhf)
+          call conv%add_data( &
+                   f=pfock(:,1:diis_nfocks), &
+                   dens=pdmat(:,1:diis_nfocks), &
+                   e=energy%etot, &
+                   mo_a=mo_a, &
+                   mo_b=mo_b, &
+                   mo_e_a=mo_energy_a, &
+                   mo_e_b=mo_energy_b)
+        end select
       elseif (use_trah) then
           select case (scf_type)
           case (scf_rhf)
             call conv%add_data( &
                      f=pfock(:,1:diis_nfocks), &
                      dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
+                     e=energy%etot, &
                      mo_a=mo_a, &
                      mo_e_a=mo_energy_a)
           case (scf_rohf)
             call conv%add_data( &
                      f=pfock(:,1:soscf_nfocks), &
                      dens=pdmat(:,1:soscf_nfocks), &
-                     e=etot, &
+                     e=energy%etot, &
                      mo_a=mo_a, &
                      mo_b=mo_b, &
                      mo_e_a=mo_energy_a, &
@@ -901,7 +744,7 @@ contains
             call conv%add_data( &
                      f=pfock(:,1:diis_nfocks), &
                      dens=pdmat(:,1:diis_nfocks), &
-                     e=etot, &
+                     e=energy%etot, &
                      mo_a=mo_a, &
                      mo_b=mo_b, &
                      mo_e_a=mo_energy_a, &
@@ -912,7 +755,7 @@ contains
         call conv%add_data( &
                  f=pfock(:,1:diis_nfocks), &
                  dens=pdmat(:,1:diis_nfocks), &
-                 e=etot)
+                 e=energy%etot)
       end if
 
       !----------------------------------------------------------------------------
@@ -923,7 +766,7 @@ contains
         call run_otr(infos, molgrid, conv , conv_res)
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
-        etot = conv_res%get_etot()
+        energy%etot = conv_res%get_etot()
         ! Retrieve updated Energies of Alpha Orbitals
         call conv_res%get_mo_e_a(mo_energy_a, istat=stat)
         if (scf_type == scf_uhf .and. nelec_b /= 0) then
@@ -949,18 +792,18 @@ contains
       ! Print iteration information
       if (infos%control%pfon) then
         write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
-              iter, etot, etot - e_old, nschwz, diis_error, vshift, &
+              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       elseif (infos%control%soscf_type == 1) then
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, etot, etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
+              iter, energy%etot, energy%etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
               trim(conv_res%active_converger_name)
       elseif(use_trah) then
 !              write(IW, "(10x, '')")
       else
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, etot, etot - e_old, nschwz, diis_error, vshift, &
+              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
               trim(conv_res%active_converger_name)
       end if
       call flush(IW)
@@ -976,7 +819,7 @@ contains
         vshift = infos%control%vshift
       end if
 
-      e_old = etot
+      e_old = energy%etot
 
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
@@ -999,7 +842,7 @@ contains
                                    nelec_a, nelec_b, nbf, vshift, work1, work2)
             endif
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            if (scf_type == scf_rohf) mo_b = mo_a 
+            if (scf_type == scf_rohf) mo_b = mo_a
             if (scf_type == scf_uhf) &
               call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
             call get_ab_initio_density(dens_prev(:,1),mo_a,dens_prev(:,2),mo_b,infos,basis)
@@ -1055,7 +898,7 @@ contains
         ! After resetting DIIS, we need to skip SD
         call conv%add_data(f=pfock(:,1:diis_nfocks), &
                            dens=pdmat(:,1:diis_nfocks), &
-                           e=Etot)
+                           e=energy%Etot)
         call conv%run(conv_res)
       end if
 
@@ -1109,13 +952,7 @@ contains
       !----------------------------------------------------------------------------
       ! Calculate pFON Occupations (if enabled)
       !----------------------------------------------------------------------------
-      if (do_pfon) then
-        if (scf_type == scf_uhf) then
-          call pfon%compute_occupations(mo_energy_a, mo_energy_b)
-        else
-          call pfon%compute_occupations(mo_energy_a)
-        end if
-      end if
+      call pfon%compute_occupations(mo_energy_a, do_pfon, mo_energy_b)
 
       !----------------------------------------------------------------------------
       ! Apply MOM (Maximum Overlap Method) if enabled
@@ -1163,49 +1000,18 @@ contains
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-        if (do_pfon) then
-          ! pFON density build with fractional occupations
-          select case(scf_type)
-          case (scf_rhf)
-            call pfon%build_density(pdmat(:,1), mo_a, work1, work2)
-          case (scf_uhf)
-            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, pdmat(:,2), mo_b)
-          case (scf_rohf)
-            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, pdmat(:,2), mo_b)
-          end select
-        else
-          ! Standard density build with integer occupations
-          call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-        end if
+        call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
+        if (.not. do_pfon) &
+        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
       end if
       call int2_driver%pe%bcast(pdmat, size(pdmat))
 
       !----------------------------------------------------------------------------
       ! Check HOMO-LUMO Gap for Convergence Prediction
       !----------------------------------------------------------------------------
-      if ((iter > 10)) then
-        ! Calculate HOMO-LUMO gap
-        select case (scf_type)
-        case (scf_rhf)
-          H_U_gap = mo_energy_a(nelec/2) - mo_energy_a(nelec/2-1)
-        case (scf_uhf)
-          H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
-          if (nelec_b > 0) then
-            H_U_gap = min(H_U_gap, &
-                          mo_energy_b(nelec_b+1) - mo_energy_b(nelec_b))
-          end if
-        case (scf_rohf)
-          H_U_gap = mo_energy_a(nelec_a+1) - mo_energy_a(nelec_a)
-        end select
-
-        if (H_U_gap < H_U_gap_crit .and. vshift>0) then
-          ! Small gap detected, enable level shifting
-          write(IW,"(3x,64('-')/10x,&
-                   &'Small HOMO-LUMO gap detected (',&
-                   &F8.5,' au). Apply level vshift=',F6.4)") H_U_gap, vshift
-        end if
-      end if
-
+      call handle_homo_lumo_gap(iter, scf_type, nelec, nelec_a, nelec_b, &
+                                mo_energy_a, mo_energy_b, vshift, IW, &
+                                H_U_gap, modify_vshift=.false., do_print=.true.)
     ! End of Main SCF Iteration Loop
     end do
 
@@ -1229,15 +1035,15 @@ contains
       infos%mol_energy%SCF_converged = .true.
     end if
 
-    write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), etot, iter
+    write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), energy%etot, iter
 
     !----------------------------------------------------------------------------
     ! Print DFT-Specific Information (if DFT)
     !----------------------------------------------------------------------------
     if (is_dft) then
       write(IW,*)
-      write(IW,"(' DFT: XC energy              = ',F20.10)") eexc
-      write(IW,"(' DFT: total electron density = ',F20.10)") totele
+      write(IW,"(' DFT: XC energy              = ',F20.10)") energy%eexc
+      write(IW,"(' DFT: total electron density = ',F20.10)") energy%totele
       write(IW,"(' DFT: number of electrons    = ',I9,/)") nelec
     end if
 
@@ -1282,39 +1088,39 @@ contains
     !----------------------------------------------------------------------------
     ! Calculate Final Energy Components
     !----------------------------------------------------------------------------
-    psinrm = 0.0_dp
-    tkin = 0.0_dp
+    energy%psinrm = 0.0_dp
+    energy%tkin = 0.0_dp
     do i = 1, diis_nfocks
-      psinrm = psinrm + traceprod_sym_packed(pdmat(:,i),smat,nbf)/nelec
-      tkin = tkin + traceprod_sym_packed(pdmat(:,i),tmat,nbf)
+      energy%psinrm = energy%psinrm + traceprod_sym_packed(pdmat(:,i),smat,nbf)/nelec
+      energy%tkin = energy%tkin + traceprod_sym_packed(pdmat(:,i),tmat,nbf)
     end do
 
     ! Calculate energy components
-    vne = ehf1 - tkin
-    vee = etot - ehf1 - nenergy
-    vnn = nenergy
-    vtot = vne + vnn + vee
-    virial = - vtot/tkin
+    energy%vne = energy%ehf1 - energy%tkin
+    energy%vee = energy%etot - energy%ehf1 - energy%nenergy
+    energy%vnn = energy%nenergy
+    energy%vtot = energy%vne + energy%vnn + energy%vee
+    energy%virial = - energy%vtot/ energy%tkin
 
     !----------------------------------------------------------------------------
     ! Print Final Energy Components
     !----------------------------------------------------------------------------
-    call print_scf_energy(psinrm, ehf1, nenergy, etot, vee, vne, vnn, vtot, tkin, virial)
+    call energy%print_e()
 
     !----------------------------------------------------------------------------
     ! Save Results to infos Structure
     !----------------------------------------------------------------------------
-    infos%mol_energy%energy = etot
-    infos%mol_energy%psinrm = psinrm
-    infos%mol_energy%ehf1 = ehf1
-    infos%mol_energy%vee = vee
-    infos%mol_energy%nenergy = nenergy
-    infos%mol_energy%vne = vne
-    infos%mol_energy%vnn = vnn
-    infos%mol_energy%vtot = vtot
-    infos%mol_energy%tkin = tkin
-    infos%mol_energy%virial = virial
-    infos%mol_energy%energy = etot
+    infos%mol_energy%energy = energy%etot
+    infos%mol_energy%psinrm = energy%psinrm
+    infos%mol_energy%ehf1 = energy%ehf1
+    infos%mol_energy%vee = energy%vee
+    infos%mol_energy%nenergy = energy%nenergy
+    infos%mol_energy%vne = energy%vne
+    infos%mol_energy%vnn = energy%vnn
+    infos%mol_energy%vtot = energy%vtot
+    infos%mol_energy%tkin = energy%tkin
+    infos%mol_energy%virial = energy%virial
+    infos%mol_energy%energy = energy%etot
 
     !----------------------------------------------------------------------------
     ! Clean Up Resources
@@ -1333,45 +1139,53 @@ contains
     end if
   end subroutine scf_driver
 
-  !> @brief Prints the final energy components of the SCF calculation.
-  !> @detail Outputs a detailed breakdown of energy terms, including one-electron,
-  !>         two-electron, nuclear repulsion, and total energies, as well as potential
-  !>         (electron-electron, nucleus-electron, nucleus-nucleus, total) and
-  !>         kinetic contributions, and the virial ratio.
-  !> @param[in] psinrm Wavefunction normalization factor.
-  !> @param[in] ehf1 One-electron energy.
-  !> @param[in] enuclear Nuclear repulsion energy.
-  !> @param[in] etot Total SCF energy.
-  !> @param[in] vee Electron-electron potential energy.
-  !> @param[in] vne Nucleus-electron potential energy.
-  !> @param[in] vnn Nucleus-nucleus potential energy.
-  !> @param[in] vtot Total potential energy.
-  !> @param[in] tkin Kinetic energy.
-  !> @param[in] virial Virial ratio (V/T).
-  subroutine print_scf_energy(psinrm, ehf1, enuclear, etot, vee, vne, vnn, vtot, tkin, virial)
-     use precision, only: dp
-     use io_constants, only: iw
-     implicit none
-     real(kind=dp) :: psinrm, ehf1, enuclear, etot, vee, vne, vnn, vtot, tkin, virial
+  subroutine handle_homo_lumo_gap(iter, scf_type, nelec, nelec_a, nelec_b, &
+                                  mo_e_a, mo_e_b, vshift, IW, &
+                                  gap_out, &
+                                  modify_vshift, do_print)
+    use precision, only : dp
+    implicit none
+    integer,     intent(in)            :: iter, scf_type
+    integer,     intent(in)            :: nelec, nelec_a, nelec_b
+    real(dp),    intent(in)            :: mo_e_a(:)
+    real(dp),    intent(in), optional  :: mo_e_b(:)
+    real(dp),    intent(inout)         :: vshift
+    integer,     intent(in)            :: IW
+    real(dp),    intent(inout)         :: gap_out
+    logical,     intent(in)            :: modify_vshift, do_print
+    integer, PARAMETER :: iter_min = 20
+    real(dp), PARAMETER :: gap_crit = 0.02_dp
+    integer :: nocc, nocc_a, nocc_b
+    real(dp) :: ga, gb
 
-     write(IW,"(/10X,17('=')/10X,'Energy components'/10X,17('=')/)")
-     write(IW,"('         Wavefunction normalization =',F19.10)") psinrm
-     write(IW,*)
-     write(IW,"('                One electron energy =',F19.10)") ehf1
-     write(IW,"('                Two electron energy =',F19.10)") vee
-     write(IW,"('           Nuclear repulsion energy =',F19.10)") enuclear
-     write(IW,"(38X,18('-'))")
-     write(IW,"('                       TOTAL energy =',F19.10)") etot
-     write(IW,*)
-     write(IW,"(' Electron-electron potential energy =',F19.10)") vee
-     write(IW,"('  Nucleus-electron potential energy =',F19.10)") vne
-     write(IW,"('   Nucleus-nucleus potential energy =',F19.10)") vnn
-     write(IW,"(38X,18('-'))")
-     write(IW,"('             TOTAL potential energy =',F19.10)") vtot
-     write(IW,"('               TOTAL kinetic energy =',F19.10)") tkin
-     write(IW,"('                 Virial ratio (V/T) =',F19.10)") virial
-     write(IW,*)
-  end subroutine print_scf_energy
+    gap_out = -1.0_dp
+    if (iter <= iter_min) return
+
+    select case (scf_type)
+    case (1) !RHF
+      nocc = nelec/2
+      gap_out = mo_e_a(nocc+1) - mo_e_a(nocc)
+
+    case (2) !UHF
+      ga = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+      gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
+      gap_out = min(ga, gb)
+
+    case (3) !ROHF
+      gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+    end select
+
+    if (gap_out >= 0.0_dp .and. gap_out < gap_crit .and. vshift > 0.0_dp) then
+      if (modify_vshift) then
+  !   experimental vshift tweak (replace with your policy as needed)
+        vshift = max(vshift, 0.5_dp*vshift + 0.01_dp)
+      end if
+      if (do_print) then
+        write(IW,"(3x,64('-')/10x,'Small HOMO-LUMO gap detected (',F10.6,' au).',/ &
+                   10x,'Applying level shift vshift = ',F10.6,' au.')") gap_out, vshift
+      end if
+    end if
+  end subroutine handle_homo_lumo_gap
 
   !> @In this implementation, we don’t need these parameters— they were added,
   !> @but they appear to be unnecessary right now.

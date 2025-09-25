@@ -269,9 +269,40 @@ module scf_addons
     real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
+  contains
+    procedure :: print_e => print_scf_energy
   end type scf_energy_t
 
 contains
+
+  !> @brief Prints the final energy components of the SCF calculation.
+  !> @detail Outputs a detailed breakdown of energy terms, including one-electron,
+  !>         two-electron, nuclear repulsion, and total energies, as well as potential
+  !>         (electron-electron, nucleus-electron, nucleus-nucleus, total) and
+  !>         kinetic contributions, and the virial ratio.
+  subroutine print_scf_energy(this)
+     use precision, only: dp
+     use io_constants, only: iw
+     implicit none
+     class(scf_energy_t), intent(in) :: this
+     write(IW,"(/10X,17('=')/10X,'Energy components'/10X,17('=')/)")
+     write(IW,"('         Wavefunction normalization =',F19.10)") this%psinrm
+     write(IW,*)
+     write(IW,"('                One electron energy =',F19.10)") this%ehf1
+     write(IW,"('                Two electron energy =',F19.10)") this%vee
+     write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
+     write(IW,"(38X,18('-'))")
+     write(IW,"('                       TOTAL energy =',F19.10)") this%etot
+     write(IW,*)
+     write(IW,"(' Electron-electron potential energy =',F19.10)") this%vee
+     write(IW,"('  Nucleus-electron potential energy =',F19.10)") this%vne
+     write(IW,"('   Nucleus-nucleus potential energy =',F19.10)") this%vnn
+     write(IW,"(38X,18('-'))")
+     write(IW,"('             TOTAL potential energy =',F19.10)") this%vtot
+     write(IW,"('               TOTAL kinetic energy =',F19.10)") this%tkin
+     write(IW,"('                 Virial ratio (V/T) =',F19.10)") this%virial
+     write(IW,*)
+  end subroutine print_scf_energy
 
   !> @brief Applies the Maximum Overlap Method (MOM) to reorder orbitals.
   !> @detail Reorders the current iteration’s orbitals to maximize overlap
@@ -861,13 +892,22 @@ contains
   !> @param[in] maxit Maximum number of SCF iterations
   !> @param[in] diis_error Current DIIS error
   !> @param[in] conv Convergence threshold
-  subroutine pfon_adjust_temperature(this, iter, maxit, diis_error, conv)
+  subroutine pfon_adjust_temperature(this, iter, maxit, diis_error, conv, do_pfon ,do_final)
     use constants, only: kB_HaK
+    use io_constants, only: iw
     class(pfon_t), intent(inout) :: this
     integer, intent(in) :: iter, maxit
     real(dp), intent(in) :: diis_error, conv
+    logical, intent(in) :: do_final, do_pfon
+
+    if (.not. do_pfon) return
 
     if (.not. this%active) return
+    if (do_final) then
+      this%temp = 1.0_dp
+      this%beta = 1.0_dp / (kB_HaK * this%temp)
+      write(IW, "(10x, 'Extra SCF iteration with Temp = 1K')")
+    end if
 
     if (iter == maxit) then
       ! Final iteration: set temperature to zero for pure integer occupations
@@ -903,10 +943,13 @@ contains
   !>         via a Fermi-Dirac distribution.
   !> @param[in] mo_energy_a Alpha orbital energies
   !> @param[in] mo_energy_b Beta orbital energies (only for UHF)
-  subroutine pfon_compute_occupations(this, mo_energy_a, mo_energy_b)
+  subroutine pfon_compute_occupations(this, mo_energy_a, do_pfon, mo_energy_b)
     class(pfon_t), intent(inout) :: this
     real(dp), intent(in) :: mo_energy_a(:)
     real(dp), intent(in), optional :: mo_energy_b(:)
+    logical, intent(in) :: do_pfon
+
+    if (.not. do_pfon) return
 
     if (.not. this%active) return
 
@@ -940,7 +983,7 @@ contains
   !> @param[inout] work1 Work array 1.
   !> @param[inout] work2 Work array 2.
   !> @param[in] mo_b Beta MO coefficients (optional for UHF).
-  subroutine pfon_build_density(this, pdmat_a, mo_a, work1, work2, pdmat_b, mo_b)
+  subroutine pfon_build_density(this, pdmat_a, mo_a, work1, work2, do_pfon, pdmat_b, mo_b)
     class(pfon_t), intent(inout) :: this
     real(kind=dp), intent(out) :: pdmat_a(:)
     real(kind=dp), intent(in) :: mo_a(:,:)
@@ -948,6 +991,9 @@ contains
     real(kind=dp), intent(inout) :: work2(:,:)
     real(kind=dp), intent(out), optional :: pdmat_b(:)
     real(kind=dp), intent(in), optional :: mo_b(:,:)
+    logical , intent(in) :: do_pfon
+
+    if (.not. do_pfon) return
 
     if (.not. this%active) return
 
