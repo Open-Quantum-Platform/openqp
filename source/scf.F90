@@ -63,7 +63,8 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
-    use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock2, scf_energy_t
+    use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock2, &
+                          scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -89,9 +90,6 @@ contains
     ! SCF Type Parameters
     !==============================================================================
     integer :: scf_type                 ! Type of SCF calculation
-    integer, parameter :: scf_rhf  = 1  ! Restricted Hartree-Fock
-    integer, parameter :: scf_uhf  = 2  ! Unrestricted Hartree-Fock
-    integer, parameter :: scf_rohf = 3  ! Restricted Open-Shell Hartree-Fock
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
@@ -226,23 +224,21 @@ contains
     select case (infos%control%scftype)
     case (1)
       scf_type = scf_rhf
-      scf_name = "RHF"
       nfocks = 1
       diis_nfocks = 1
       soscf_nfocks = 1
     case (2)
       scf_type = scf_uhf
-      scf_name = "UHF"
       nfocks = 2
       diis_nfocks = 2
       soscf_nfocks = 2
     case (3)
       scf_type = scf_rohf
-      scf_name = "ROHF"
       nfocks = 2
       diis_nfocks = 1
       soscf_nfocks = 2
     end select
+    scf_name = get_scf_name(scf_type)
 
     ! Get electron counts
     nelec = infos%mol_prop%nelec
@@ -957,6 +953,13 @@ contains
       !----------------------------------------------------------------------------
       ! Apply MOM (Maximum Overlap Method) if enabled
       !----------------------------------------------------------------------------
+      call handle_mom(infos, do_mom, diis_error, scf_type, &
+                      nelec_a, nelec_b,mo_a, mo_energy_a, &
+                      mo_b, mo_energy_b, mo_a_prev, mo_e_a_prev, &
+                      mo_b_prev, mo_e_b_prev,&
+                      smat_full, work1, work2,&
+                      mom_active, initial_mom_iter, &
+                      .false., IW)
       if (do_mom) then
         ! Check if MOM should be activated based on convergence
         if (diis_error < infos%control%mom_switch) then
@@ -1139,11 +1142,74 @@ contains
     end if
   end subroutine scf_driver
 
+  subroutine handle_mom(infos, do_mom, diis_error, scf_type,          &
+                        nelec_a, nelec_b,                                          &
+                        mo_a, mo_energy_a,                                         &
+                        mo_b, mo_energy_b,                                         &
+                        mo_a_prev, mo_e_a_prev,                                    &
+                        mo_b_prev, mo_e_b_prev,                                    &
+                        smat_full, work1, work2,                                   &
+                        mom_active, initial_mom_iter,                              &
+                        do_print, IW)
+    use precision, only : dp
+    use types,     only : information
+    use scf_addons, only: apply_mom, scf_rhf, scf_uhf, scf_rohf
+    implicit none
+    type(information), intent(inout)        :: infos
+    logical,          intent(in)            :: do_mom
+    real(dp),         intent(in)            :: diis_error
+    integer,          intent(in)            :: scf_type, nelec_a, nelec_b
+    real(dp),         intent(inout)         :: mo_a(:,:), mo_energy_a(:)
+    real(dp),         intent(inout), optional :: mo_b(:,:), mo_energy_b(:)
+    real(dp),         intent(in)            :: smat_full(:,:)
+    real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
+    logical,          intent(inout)         :: mom_active, initial_mom_iter
+    logical,          intent(in)            :: do_print
+    integer,          intent(in)            :: IW
+    real(dp),         intent(inout)         :: mo_a_prev(:,:), mo_e_a_prev(:)
+    real(dp),         intent(inout), optional :: mo_b_prev(:,:), mo_e_b_prev(:)
+
+    if (.not. do_mom) return
+
+    if (diis_error < infos%control%mom_switch) then
+      if (.not. mom_active .and. do_print) then
+        write(IW,"(3x,'MOM activated: diis_error=',ES12.5,' < mom_switch=',ES12.5)") diis_error, infos%control%mom_switch
+      end if
+      mom_active = .true.
+    end if
+
+    if (mom_active .and. .not. initial_mom_iter) then
+      ! Alpha 
+      call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
+                     mo_a, mo_energy_a, smat_full, nelec_a, &
+                     "Alpha", work1, work2)
+
+      ! Beta channel only for UHF with electrons and if arrays are present
+      if (scf_type == scf_uhf .and. nelec_b > 0 .and. present(mo_b) .and. present(mo_energy_b) &
+          .and. present(mo_b_prev) .and. present(mo_e_b_prev)) then
+        call apply_mom(infos, mo_b_prev, mo_e_b_prev, &
+                       mo_b, mo_energy_b, smat_full, nelec_b, &
+                       "Beta", work1, work2)
+      end if
+    end if
+
+    mo_a_prev  = mo_a
+    mo_e_a_prev = mo_energy_a
+    if (scf_type == scf_uhf .and. present(mo_b) .and. present(mo_b_prev) .and. present(mo_energy_b) .and. present(mo_e_b_prev)) then
+      mo_b_prev  = mo_b
+      mo_e_b_prev = mo_energy_b
+    end if
+
+    initial_mom_iter = .false.
+  end subroutine handle_mom
+
+
   subroutine handle_homo_lumo_gap(iter, scf_type, nelec, nelec_a, nelec_b, &
                                   mo_e_a, mo_e_b, vshift, IW, &
                                   gap_out, &
                                   modify_vshift, do_print)
     use precision, only : dp
+    use scf_addons, only: scf_rhf, scf_uhf, scf_rohf
     implicit none
     integer,     intent(in)            :: iter, scf_type
     integer,     intent(in)            :: nelec, nelec_a, nelec_b
@@ -1162,16 +1228,16 @@ contains
     if (iter <= iter_min) return
 
     select case (scf_type)
-    case (1) !RHF
+    case (scf_rhf) !RHF
       nocc = nelec/2
       gap_out = mo_e_a(nocc+1) - mo_e_a(nocc)
 
-    case (2) !UHF
+    case (scf_uhf) !UHF
       ga = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
       gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
       gap_out = min(ga, gb)
 
-    case (3) !ROHF
+    case (scf_rohf) !ROHF
       gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
     end select
 

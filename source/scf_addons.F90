@@ -227,6 +227,10 @@ module scf_addons
   public :: compute_energy
   public :: calc_jk_xc
   public :: vind_rhf_packed
+  public :: get_scf_name
+  integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
+  integer, parameter, public :: scf_uhf  = 2  ! Unrestricted HF
+  integer, parameter, public :: scf_rohf = 3  ! ROHF
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
   !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
@@ -274,6 +278,17 @@ module scf_addons
   end type scf_energy_t
 
 contains
+
+  pure function get_scf_name(code) result(name)
+    integer, intent(in) :: code
+    character(len=:), allocatable :: name
+    select case (code)
+    case (scf_rhf);  name = 'RHF'
+    case (scf_uhf);  name = 'UHF'
+    case (scf_rohf); name = 'ROHF'
+    case default;    name = 'UNKNOWN'
+    end select
+  end function get_scf_name
 
   !> @brief Prints the final energy components of the SCF calculation.
   !> @detail Outputs a detailed breakdown of energy terms, including one-electron,
