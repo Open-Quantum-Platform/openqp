@@ -830,32 +830,11 @@ contains
           end if
         else
           if (vshift_last_iter) vshift = 0.0_dp
-          if (use_soscf .or. use_trah) then
-             if(scf_type == scf_rohf) then
-               rohf_bak(:,1) = pfock(:,1)
-               rohf_bak(:,2) = pfock(:,2)
-               call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
-                                   nelec_a, nelec_b, nbf, vshift, work1, work2)
-            endif
-            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            if (scf_type == scf_rohf) mo_b = mo_a
-            if (scf_type == scf_uhf) &
-              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-            call get_ab_initio_density(dens_prev(:,1),mo_a,dens_prev(:,2),mo_b,infos,basis)
-            if (scf_type == scf_rohf) then
-              delta_dens_a = 0
-              delta_dens_b = 0
-              do i=1, nbf_tri
-                 delta_dens_a = delta_dens_a + abs(dens_prev(i,1) - pdmat(i,1) )
-                 delta_dens_b = delta_dens_b + abs(dens_prev(i,2) - pdmat(i,2) )
-              end do
-              if (delta_dens_a>0.1) &
-                call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
-              if (delta_dens_b>0.1) &
-                call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
-              pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
-            end if
-          end if
+          call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
+                                      mo_a, mo_b, mo_energy_a, mo_energy_b, &
+                                      qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
+                                      work1, work2, infos, basis, &
+                                      dens_prev, pdmat)
           exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
@@ -960,38 +939,6 @@ contains
                       smat_full, work1, work2,&
                       mom_active, initial_mom_iter, &
                       .false., IW)
-      if (do_mom) then
-        ! Check if MOM should be activated based on convergence
-        if (diis_error < infos%control%mom_switch) then
-          mom_active = .true.
-        end if
-
-        ! Apply MOM if active and not the first iteration
-        if (mom_active .and. .not. initial_mom_iter) then
-          ! Apply MOM for alpha spin channel
-          call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
-                         mo_a, mo_energy_a, smat_full, nelec_a, &
-                         "Alpha", work1, work2)
-
-          ! Apply MOM for beta spin channel (UHF only)
-          if (scf_type == scf_uhf .and. nelec_b > 0) then
-            call apply_mom(infos, mo_b_prev, mo_e_b_prev, &
-                           mo_b, mo_energy_b, smat_full, nelec_b, &
-                           "Beta", work1, work2)
-          end if
-        end if
-
-        ! Store current orbitals for next iteration
-        mo_a_prev = mo_a
-        mo_e_a_prev = mo_energy_a
-
-        if (scf_type == scf_uhf) then
-           mo_b_prev = mo_b
-           mo_e_b_prev = mo_energy_b
-        end if
-
-        initial_mom_iter = .false.
-      end if
       !----------------------------------------------------------------------------
       ! Apply XAS if enabled
       !----------------------------------------------------------------------------
@@ -1142,6 +1089,86 @@ contains
     end if
   end subroutine scf_driver
 
+  subroutine handle_soscf_trah_rohf(use_soscf, use_trah, scf_type,                 &
+                                    pfock, rohf_bak,                               &
+                                    mo_a, mo_b, mo_energy_a, mo_energy_b,          &
+                                    qmat, smat_full,                                &
+                                    nelec_a, nelec_b, nbf, nbf_tri, vshift,        &
+                                    work1, work2,                                   &
+                                    infos, basis,                                   &
+                                    dens_prev, pdmat)
+    use precision,   only : dp
+    use types,       only : information 
+    use scf_addons,  only : scf_rhf, scf_uhf, scf_rohf
+    use basis_tools, only : basis_set
+    use guess, only: get_ab_initio_density, get_ab_initio_orbital
+    implicit none
+    ! Inputs / inouts mirroring your code
+    logical,          intent(in)            :: use_soscf, use_trah
+    integer,          intent(in)            :: scf_type, nelec_a, nelec_b, nbf, nbf_tri
+    real(dp),         intent(inout)         :: pfock(:,:)        ! (nbf, 2)
+    real(dp),         intent(inout)         :: rohf_bak(:,:)     ! (nbf, 2)
+    real(dp),         intent(inout)         :: mo_a(:,:), mo_b(:,:)
+    real(dp),         intent(inout)         :: mo_energy_a(:), mo_energy_b(:)
+    real(dp),         intent(inout)         :: qmat(:,:), smat_full(:,:)
+    real(dp),         intent(inout)         :: vshift
+    real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
+    type(information),intent(inout)         :: infos
+    type(basis_set),  intent(in)            :: basis
+    real(dp),         intent(inout)         :: dens_prev(:,:)    ! (nbf_tri, 2)
+    real(dp),         intent(inout)         :: pdmat(:,:)        ! (nbf_tri, 2)
+
+    ! locals
+    integer :: i
+    real(dp) :: delta_dens_a, delta_dens_b
+
+    if (.not.(use_soscf .or. use_trah)) return
+
+    if (scf_type == scf_rohf) then
+      rohf_bak(:,1) = pfock(:,1)
+      rohf_bak(:,2) = pfock(:,2)
+
+      ! Build ROHF effective Fock(s)
+      call form_rohf_fock(pfock(:,1), pfock(:,2), mo_a, smat_full,                 &
+                          nelec_a, nelec_b, nbf, vshift, work1, work2)
+    end if
+
+    ! Diagonalize alpha Fock
+    call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+
+    ! Spin treatment
+    if (scf_type == scf_rohf) then
+      mo_b = mo_a
+      mo_energy_b = mo_energy_a
+    else if (scf_type == scf_uhf) then
+      call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+    end if
+
+    ! Build densities from MOs (both spins)
+    call get_ab_initio_density(dens_prev(:,1), mo_a,                               &
+                               dens_prev(:,2), mo_b, infos, basis)
+
+    ! ROHF post-fix based on density delta
+    if (scf_type == scf_rohf) then
+      delta_dens_a = 0.0_dp
+      delta_dens_b = 0.0_dp
+      do i = 1, nbf_tri
+        delta_dens_a = delta_dens_a + abs(dens_prev(i,1) - pdmat(i,1))
+        delta_dens_b = delta_dens_b + abs(dens_prev(i,2) - pdmat(i,2))
+      end do
+
+      if (delta_dens_a > 0.1_dp) then
+        call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
+      end if
+      if (delta_dens_b > 0.1_dp) then
+        call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
+      end if
+
+      ! Combine spin densities
+      pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+    end if
+  end subroutine handle_soscf_trah_rohf
+
   subroutine handle_mom(infos, do_mom, diis_error, scf_type,          &
                         nelec_a, nelec_b,                                          &
                         mo_a, mo_energy_a,                                         &
@@ -1179,7 +1206,7 @@ contains
     end if
 
     if (mom_active .and. .not. initial_mom_iter) then
-      ! Alpha 
+      ! Alpha
       call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
                      mo_a, mo_energy_a, smat_full, nelec_a, &
                      "Alpha", work1, work2)
