@@ -773,6 +773,7 @@ contains
           mo_b = mo_a
           mo_energy_b = mo_energy_a
         end if
+        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
       end if
 
       diis_error = conv_res%get_error()
