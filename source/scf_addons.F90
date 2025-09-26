@@ -1293,6 +1293,8 @@ contains
       call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old)
       d = d + d_old
       d_old = d
+    else
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz)
     end if
     ii = 0
     do ii = 1, nfocks

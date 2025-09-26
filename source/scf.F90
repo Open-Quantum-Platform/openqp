@@ -759,7 +759,7 @@ contains
       !----------------------------------------------------------------------------
       call conv%run(conv_res)
       if (use_trah .and. iter >1 ) then
-        call run_otr(infos, molgrid, conv , conv_res)
+        call run_otr(infos, molgrid, conv , conv_res, energy)
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
         energy%etot = conv_res%get_etot()
@@ -1311,6 +1311,7 @@ contains
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger
+    implicit none
 
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), target, intent(in) :: mol_grid
@@ -1318,7 +1319,7 @@ contains
 
     integer :: i
 
-    ! Through accessing the SOSCF converger set its parameters:
+    ! Through accessing the TRAH converger set its parameters:
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
@@ -1331,24 +1332,28 @@ contains
 
   end subroutine set_trah_parametres
 
-    subroutine run_otr(infos, mol_grid, conv, res)
+  subroutine run_otr(infos, mol_grid, conv, res, energy)
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger, scf_conv_result
     use otr_interface, only: init_trah_solver, run_trah_solver
+    use scf_addons, only: scf_energy_t
 
+    implicit none
+     
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), target, intent(in) :: mol_grid
-    type(scf_conv) :: conv
+    type(scf_conv), intent(inout) :: conv
     class(scf_conv_result), intent(inout) :: res
+    type(scf_energy_t), intent(inout) :: energy 
 
     integer :: i
 
-    ! Through accessing the SOSCF converger set its parameters:
+    ! Through accessing the TRAH converger set its parameters:
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
-          call init_trah_solver(infos, mol_grid, sc)
+          call init_trah_solver(infos, mol_grid, sc , energy)
           call run_trah_solver(res)
       end select
     end do
