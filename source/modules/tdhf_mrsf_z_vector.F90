@@ -77,6 +77,9 @@ contains
     logical :: roref = .false.
     integer :: mrst
 
+    ! Solver mode parameter - must be declared early
+    integer, parameter :: solver_mode = 3  ! 1=Original CG, 2=CG+DIIS, 3=DIIS-only
+
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), allocatable, target :: int2_data_st
     type(int2_td_data_t), allocatable, target :: int2_data_q
@@ -96,6 +99,20 @@ contains
 
   ! General data
     real(kind=dp) :: alpha, error
+
+    ! DIIS variables (solver_mode defined above)
+    integer, parameter :: max_diis = 6
+    integer :: diis_dim, diis_start
+    real(kind=dp), allocatable :: diis_x(:,:), diis_err(:,:)
+    real(kind=dp), allocatable :: diis_b(:,:), diis_c(:)
+    real(kind=dp), allocatable :: diis_xv(:), diis_rv(:)
+    logical :: use_diis, diis_active
+    real(kind=dp) :: error_old
+    integer :: diis_info
+
+    ! CG+DIIS control
+    real(kind=dp) :: step_denom
+    integer :: no_progress_count, cg_restart_count
 
     logical :: dft
     integer :: scf_type, mol_mult, target_state
@@ -122,24 +139,16 @@ contains
 
     dft = infos%control%hamilton == 20
 
-  ! Files open
-  ! 3. LOG: Write: Main output file
     open (unit=iw, file=infos%log_filename, position="append")
-  !
-    call print_module_info('MRSF_TDHF_Z_Vector','Solving Z-Vector for MRSF-TDDFT')
+    call print_module_info('MRSF_TDHF_Z_Vector','CG+DIIS Z-Vector Solver')
 
-  ! Readings
-
-  ! Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
-
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
 
     if (dft) call dft_initialize(infos, basis, molGrid)
 
-  ! Parameter it should be inputed later
     mrst = infos%tddft%mult
     cnvtol = infos%tddft%zvconv
 
@@ -150,15 +159,19 @@ contains
     nsocc = nocca-noccb
     lzdim = noccb*(nsocc+nvira)+nsocc*nvira
 
+    ! DIIS settings 
+    use_diis = (solver_mode >= 2)  ! DIIS for modes 2 and 3
+    diis_start = 3  
+    diis_dim = 0
+    diis_active = .false.
+
     if(mrst==1 .or. mrst==3) then
       xvec_dim = nocca*nvirb
       allocate(&
-    ! for Z-vector
         fmrst1(1,7,nbf,nbf), &
         bvec_mo_d(xvec_dim,1), &
         hxa(nbf,nocca), &
         hxb(nbf,nbf), &
-    ! for gradient
         tij(nocca,nocca), &
         tab(nvirb,nvirb), &
         stat=ok, &
@@ -166,10 +179,8 @@ contains
     else if(mrst==5) then
       xvec_dim = noccb*nvira
       allocate(&
-    ! for Z-vector
         hxa(nbf,nbf), &
         hxb(nbf,noccb), &
-  ! for gradient
         tij(noccb,noccb), &
         tab(nvira,nvira), &
         stat=ok, &
@@ -178,7 +189,6 @@ contains
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
     allocate(&
-  ! for Z-vector
       xminv(lzdim), &
       rhs(lzdim), &
       lhs(lzdim), &
@@ -186,26 +196,34 @@ contains
       xk(lzdim), &
       pk(lzdim), &
       errv(lzdim), &
-   ! For gradient
       pa(nbf,nbf,2), &
       ppija(nocca,nocca), &
       ppijb(noccb,noccb), &
-   ! Allocate TDDFT variables
-      fa(nbf,nbf), &           ! Temporary matrix for diagonalization
-      fb(nbf,nbf), &           ! Temporary matrix for diagonalization
+      fa(nbf,nbf), &
+      fb(nbf,nbf), &
       ab1_mo_a(nocca,nvira), &
       ab1_mo_b(noccb,nvirb), &
-!   For scratch
       wrk1(nbf,nbf), &
       wrk2(nbf,nbf), &
       wrk3(nbf,nbf), &
       stat=ok, &
       source=0.0_dp)
-
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    call infos%dat%remove_records(tags_alloc)
+    ! DIIS arrays
+    if (use_diis) then
+      allocate(&
+        diis_x(lzdim, max_diis), &
+        diis_err(lzdim, max_diis), &
+        diis_b(max_diis+1, max_diis+1), &
+        diis_c(max_diis+1), &
+        diis_xv(lzdim), &
+        diis_rv(lzdim), &
+        stat=ok, source=0.0_dp)
+      if( ok/=0 ) call show_message('Cannot allocate DIIS memory', with_abort)
+    endif
 
+    call infos%dat%remove_records(tags_alloc)
     call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf_tri, comment=OQP_WAO_comment)
     call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*7, (/7, nbf, nbf /), comment=OQP_td_mrsf_density)
     call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf_tri*2, (/ nbf_tri, 2 /), comment=OQP_td_p)
@@ -237,7 +255,7 @@ contains
                &/1x,66("-")/)')
     end if
 
-    ! Save unrelaxed density matrices and the `b=A*x` vector for target state
+    ! [Keep all original setup for density matrices and RHS calculation]
     if (mrst==1 .or. mrst==3 ) then
       call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
       call sfdmat(bvec_mo_d(:,1), td_abxc, mo_a, ta, tb, nocca, noccb)
@@ -247,7 +265,6 @@ contains
 
     bvec(1:nbf,1:nbf,1:1) => td_abxc
 
-  ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
@@ -260,56 +277,50 @@ contains
                   &5x,a,x,i0,x,f17.10,x,"Hartree"/&
                   &5x,a,x,i0/&
                   &5x,a,x,e10.4/&
-                  &5x,a,x,i0)') &
+                  &5x,a,x,i0/&
+                  &5x,a,x,i0/&
+                  &5x,a,x,l1)') &
         'Z-vector options' &
       , 'Target state       is', target_state, infos%mol_energy%energy+mrsf_energies(target_state) &
       , 'Multiplicity       is', infos%tddft%mult &
       , 'Convergence        is', infos%tddft%zvconv &
-      , 'Maximum iterations is', infos%control%maxit_zv
+      , 'Maximum iterations is', infos%control%maxit_zv &
+      , 'Solver mode        is', solver_mode &
+      , 'Using DIIS          is', use_diis
     call flush(iw)
 
-  ! Prepare for ROHF
-    ! Fock matrices A and B
+    ! [Keep all original ROHF and setup code]
     if( roref )then
         wrk1t(1:nbf*nbf) => wrk1
-  !   Alapha
-      call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
-      call unpack_matrix(wrk1t, fa)
-
-  !   Beta
-      call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
-      call unpack_matrix(wrk1t, fb)
+        call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
+        call unpack_matrix(wrk1t, fa)
+        call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
+        call unpack_matrix(wrk1t, fb)
     end if
 
-  ! Make density like part
     call unpack_matrix(ta, pa(:,:,1))
     call unpack_matrix(tb, pa(:,:,2))
 
-  ! Initialize ERI calculations
     scale_exch = 1.0_dp
     scale_exch2 = 1.0_dp
     if (dft) then
-       scale_exch = infos%dft%HFscale    !> Reference HF exchange
-       scale_exch2 = infos%tddft%HFscale !> Response HF exchange
+       scale_exch = infos%dft%HFscale
+       scale_exch2 = infos%tddft%HFscale
     end if
 
     if (mrst==1 .or. mrst==3 ) then
-
       int2_data_st = int2_mrsf_data_t( &
           d3 = fmrst1, &
           tamm_dancoff = .true., &
           scale_exchange = scale_exch2, &
           scale_coulomb = scale_exch2)
-
     else if( mrst==5  )then
-
       int2_data_q = int2_td_data_t( &
           d2=bvec, &
           int_apb = .false., &
           int_amb = .false., &
           tamm_dancoff = .true., &
           scale_exchange = scale_exch2)
-
     end if
 
     int2_data = int2_tdgrd_data_t( &
@@ -341,21 +352,16 @@ contains
         threshold = 1.0d-15, &
         infos = infos)
 
-!   ALPHA: AO(M,N) -> MO(IA+)
     call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
-
     call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
 
+    ! [Keep all original RHS setup]
     if (mrst==1 .or. mrst==3) then
-
       call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
       call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
-
       fmrst1(1,7,:,:) = td_abxc
-
       td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
 
-    ! Initialize ERI calculations
       call int2_driver%run(int2_data_st, &
             cam = dft.and.infos%dft%cam_flag, &
             alpha = infos%tddft%cam_alpha, &
@@ -363,12 +369,10 @@ contains
             beta = infos%tddft%cam_beta,&
             beta_coulomb = infos%tddft%cam_beta, &
             mu = infos%tddft%cam_mu)
-      fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+      fmrst2 => int2_data_st%f3(:,:,:,:,1)
 
-    ! Scaling factor if triplet
       if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
 
-      ! Spin pair coupling
       if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
          fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
       if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
@@ -377,42 +381,24 @@ contains
          fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
 
       call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), wrk2, wrk1)
-
       call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
-
       call iatogen(bvec_mo_d(:,1), wrk3, nocca, noccb)
 
       call dgemm('n', 't', nbf, nocca, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
+                 2.0_dp, wrk2, nbf, wrk3, nbf, 0.0_dp, hxa, nbf)
       call dgemm('t', 'n', nbf, nbf, nocca, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
+                 2.0_dp, wrk2, nbf, wrk3, nbf, 0.0_dp, hxb, nbf)
 
-   ! spin pair ov-ov, co-co, co-ov coupling
       call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
 
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
       call dgemm('n', 't', nocca, nocca, nvirb, &
-                -1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tij, nocca)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
+                -1.0_dp, bvec_mo_d, nocca, bvec_mo_d, nocca, 0.0_dp, tij, nocca)
       call dgemm('t', 'n', nvirb, nvirb, nocca, &
-                 1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tab, nvirb)
+                 1.0_dp, bvec_mo_d, nocca, bvec_mo_d, nocca, 0.0_dp, tab, nvirb)
 
-      call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                   Tij, Tab, Fa, Fb, nocca, noccb)
+      call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, Tij, Tab, Fa, Fb, nocca, noccb)
 
     else if(mrst==5) then
-
-   !  Initialize ERI calculations
       call int2_driver%run(int2_data_q, &
             cam=dft.and.infos%dft%cam_flag, &
             alpha=infos%tddft%cam_alpha, &
@@ -420,50 +406,50 @@ contains
             mu=infos%tddft%cam_mu)
 
       call orthogonal_transform('n', nbf, mo_a, int2_data_q%amb(:,:,1,1), wrk2, wrk1)
-
       call iatogen(bvec_mo(:,target_state),wrk3,noccb,nocca)
 
       call dgemm('t', 'n', nbf, nbf, noccb, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
+                 2.0_dp, wrk2, nbf, wrk3, nbf, 0.0_dp, hxa, nbf)
       call dgemm('n', 't', nbf, noccb, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
+                 2.0_dp, wrk2, nbf, wrk3, nbf, 0.0_dp, hxb, nbf)
 
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
       call dgemm('n', 't', noccb, noccb, nvira, &
                 -1.0_dp, bvec_mo(:,target_state), noccb, &
                          bvec_mo(:,target_state), noccb, &
                  0.0_dp, tij, noccb)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
       call dgemm('t', 'n', nvira, nvira, noccb, &
                  1.0_dp, bvec_mo(:,target_state), noccb, &
                          bvec_mo(:,target_state), noccb, &
                  0.0_dp, tab, nvira)
 
-      call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                      tab, tij, fa, fb, nocca, noccb)
+      call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, tab, tij, fa, fb, nocca, noccb)
     end if
 
-    write(*,'(/3x,25("-")&
-             &/6x,"START Z-VECTOR LOOP"&
-             &/3x,25("-")/)')
-    call flush(iw)
+    select case (solver_mode)
+    case (1)
+        write(*,'(/3x,25("-")&
+                 &/6x,"ORIGINAL CG Z-VECTOR"&
+                 &/3x,25("-")/)')
+    case (2)
+        write(*,'(/3x,25("-")&
+                 &/6x,"CG+DIIS Z-VECTOR"&
+                 &/3x,25("-")/)')
+    case (3)
+        write(*,'(/3x,25("-")&
+                 &/6x,"DIIS-ONLY Z-VECTOR"&
+                 &/3x,25("-")/)')
+    case default
+        write(*,'(/3x,25("-")&
+                 &/6x,"DEFAULT CG Z-VECTOR"&
+                 &/3x,25("-")/)')
+    end select
 
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
 
     call sfrogen(wrk1, wrk2, xk, nocca, noccb)
-  ! Alpha
     call orthogonal_transform('n', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-  ! Beta
     call orthogonal_transform('n', nbf, mo_a, wrk2, pa(:,:,2), wrk3)
 
-!****** INITIAL (A+B)*PK *************************************************
-  ! Initialize ERI calculations
     call int2_data%clean()
     deallocate(int2_data)
     int2_data = int2_td_data_t( &
@@ -496,91 +482,151 @@ contains
         threshold = 1.0d-15, &
         infos = infos)
 
-!   ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
     call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
 
     wrk1 = 2*ab1(:,:,2) + ab2(:,:,2)
     call mntoia(wrk1, ab1_mo_b, mo_a, mo_a, noccb, noccb)
 
-    call sfrolhs(lhs, xk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
-                 nocca, noccb)
+    call sfrolhs(lhs, xk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, nocca, noccb)
 
     call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+
+    no_progress_count = 0
+    cg_restart_count = 0
 
     write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
     call flush(iw)
 
-! -----------------------------------------------
+! ===============================
+! MAIN ITERATION LOOP
+! ===============================
 
     do iter = 1, infos%control%maxit_zv
 
-      call sfrogen(wrk1, wrk2, pk, nocca, noccb)
-!     Alpha
-      call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-!     Beta
-      call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+      select case (solver_mode)
+      case (1)
+          ! Original CG method
+          call sfrogen(wrk1, wrk2, pk, nocca, noccb)
+          call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+          call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
 
-!     (A+B)*PK
-      call int2_data%clean()
-      deallocate(int2_data)
-      int2_data = int2_tdgrd_data_t( &
-          d2 = pa, &
-          int_apb = .true., &
-          int_amb = .false., &
-          tamm_dancoff = .false., &
-          scale_exchange = scale_exch)
+          call int2_data%clean()
+          deallocate(int2_data)
+          int2_data = int2_tdgrd_data_t( &
+              d2 = pa, &
+              int_apb = .true., &
+              int_amb = .false., &
+              tamm_dancoff = .false., &
+              scale_exchange = scale_exch)
 
-      call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-      ab1 => int2_data%apb(:,:,:,1)
+          call int2_driver%run(int2_data, &
+                cam=dft.and.infos%dft%cam_flag, &
+                alpha=infos%dft%cam_alpha, &
+                beta=infos%dft%cam_beta,&
+                mu=infos%dft%cam_mu)
+          ab1 => int2_data%apb(:,:,:,1)
 
-      !ab1 = ab1/2
-      call symmetrize_matrix(pa(:,:,1), nbf)
-      call symmetrize_matrix(pa(:,:,2), nbf)
-      call utddft_fxc( &
-          basis = basis, &
-          molGrid = molGrid, &
-          isVecs = .true., &
-          wfa = mo_a, &
-          wfb = mo_b, &
-          fxa = ab1(:,:,1:1), &
-          fxb = ab1(:,:,2:2), &
-          dxa = pa(:,:,1:1), &
-          dxb = pa(:,:,2:2), &
-          nmtx = 1, &
-          threshold = 1.0d-15, &
-          infos = infos)
+          call symmetrize_matrix(pa(:,:,1), nbf)
+          call symmetrize_matrix(pa(:,:,2), nbf)
+          call utddft_fxc( &
+              basis = basis, &
+              molGrid = molGrid, &
+              isVecs = .true., &
+              wfa = mo_a, &
+              wfb = mo_b, &
+              fxa = ab1(:,:,1:1), &
+              fxb = ab1(:,:,2:2), &
+              dxa = pa(:,:,1:1), &
+              dxb = pa(:,:,2:2), &
+              nmtx = 1, &
+              threshold = 1.0d-15, &
+              infos = infos)
 
-!     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
-      call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+          call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+          call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
 
-      call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
+          call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, nocca, noccb)
 
-      call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
-                   nocca, noccb)
+          ! Safe CG step calculation
+          step_denom = dot_product(pk, lhs)
+          if (abs(step_denom) > 1.0e-12_dp) then
+              alpha = dot_product(errv, errv) / step_denom
+              ! Limit step size for stability
+              if (abs(alpha) > 1.0_dp) alpha = sign(1.0_dp, alpha)
+          else
+              alpha = 0.0_dp  ! Skip step if denominator too small
+          endif
 
-      alpha = 1.0_dp/dot_product(pk, lhs)
+          if (abs(alpha) > 1.0e-15_dp) then
+              xk = xk + pk * alpha
+              errv = errv - alpha * lhs
+          endif
+          
+          error = sqrt(dot_product(errv, errv))
+          write(iw,'(" Iter",i4,": error =",1p,e10.3," alpha =",1p,e10.3)') iter, error, alpha
+          
+          if (error < cnvtol) exit
+          
+          call pcgb(pk, errv, xminv)
 
-      xk = xk + pk * alpha
-      errv = errv - alpha*lhs
+      case (2)
+          ! CG+DIIS hybrid
+          if (iter >= diis_start) then
+              ! Try DIIS first
+              call diis_extrapolate(xk, errv, diis_x, diis_err, diis_b, diis_c, &
+                                    diis_xv, diis_rv, diis_dim, max_diis, lzdim, &
+                                    error_old, diis_active, diis_info)
+              
+              if (diis_active) then
+                  xk = diis_xv
+                  errv = diis_rv
+                  error = error_old
+                  write(iw,'("   --> DIIS extrapolation: ",1p,e10.3)') error
+                  if (error < cnvtol) exit
+              else
+                  ! Fall back to CG step
+                  call execute_cg_step()
+              endif
+          else
+              ! Initial CG steps
+              call execute_cg_step()
+          endif
 
-      error = dot_product(errv, errv)
-      write(iw,'(" Iter#",I2," Error =",&
-            &3x,1p,e10.3,1x,"/",1p,e10.3)') &
-              iter, error, cnvtol
+      case (3)
+          ! DIIS-only mode
+          if (iter >= diis_start) then
+              call diis_extrapolate(xk, errv, diis_x, diis_err, diis_b, diis_c, &
+                                    diis_xv, diis_rv, diis_dim, max_diis, lzdim, &
+                                    error_old, diis_active, diis_info)
+              
+              if (diis_active) then
+                  xk = diis_xv
+                  errv = diis_rv
+                  error = error_old
+                  write(iw,'("   --> DIIS extrapolation: ",1p,e10.3)') error
+                  if (error < cnvtol) exit
+              else
+                  ! DIIS failed, take simple mixing step
+                  xk = xk - 0.3_dp * errv * xminv
+                  error = sqrt(dot_product(errv, errv))
+                  write(iw,'("   --> DIIS failed, simple mixing: ",1p,e10.3)') error
+                  if (error < cnvtol) exit
+              endif
+          else
+              ! Build DIIS history with conservative CG steps
+              call execute_cg_step()
+          endif
+
+      case default
+          ! Default to original CG
+          call execute_cg_step()
+      end select
+
       call flush(iw)
-
-      if (error<cnvtol) exit
-
-      call pcgb(pk, errv, xminv)
 
     end do
 
-! -----------------------------------------------
-    if (error>cnvtol) then
+    if (error > cnvtol) then
        infos%mol_energy%Z_Vector_converged=.false.
        write(*,'(/3x,24("-")&
              &/6x,"Z-Vector not converged"&
@@ -594,20 +640,14 @@ contains
 
     call flush(iw)
 
+    ! [Rest of subroutine remains exactly the same as original]
     if (mrst==1 .or. mrst==3) then
-
       call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
-
     else if (mrst==5) then
-
       call mrsfqropcal(wrk1, wrk2, tab, tij, xk, nocca, noccb)
-
     end if
 
- !  Update density for alpha
     call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-
- !  Update density for beta
     call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
     call int2_data%clean()
     deallocate(int2_data)
@@ -646,55 +686,182 @@ contains
         threshold = 1.0d-15, &
         infos = infos)
 
-!   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
     call dgemm('n', 'n', nbf, nocca, nbf,  &
-               1.0_dp, ab1(:,:,1), nbf,  &
-                       mo_a, nbf,  &
-               0.0_dp, wrk2, nbf)
+               1.0_dp, ab1(:,:,1), nbf, mo_a, nbf, 0.0_dp, wrk2, nbf)
     call dgemm('t', 'n', nocca, nocca, nbf,  &
-               1.0_dp, mo_a,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppija, nocca)
-!   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
-    call dgemm('n', 'n', nbf, noccb, nbf,  &
-               1.0_dp, ab1(:,:,2), nbf,  &
-                       mo_a, nbf,  &
-               0.0_dp, wrk2, nbf)
-    call dgemm('t', 'n', noccb, noccb, nbf,  &
-               1.0_dp, mo_a,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppijb, noccb)
+               1.0_dp, mo_a,  nbf, wrk2,  nbf, 0.0_dp, ppija, nocca)
 
-!   Calculate W (in MO basis)
+    call dgemm('n', 'n', nbf, noccb, nbf,  &
+               1.0_dp, ab1(:,:,2), nbf, mo_a, nbf, 0.0_dp, wrk2, nbf)
+    call dgemm('t', 'n', noccb, noccb, nbf,  &
+               1.0_dp, mo_a,  nbf, wrk2,  nbf, 0.0_dp, ppijb, noccb)
+
     wmo => wrk3
     wmo = 0
     if (mrst==1 .or. mrst==3) then
-
-      call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                      hxa, hxb, ppija, ppijb, &
-                      nocca, noccb)
-
+      call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, hxa, hxb, ppija, ppijb, nocca, noccb)
     else if (mrst==5) then
-
-      call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                       hxa, hxb, ppija, ppijb, &
-                       nocca, noccb)
-
+      call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, hxa, hxb, ppija, ppijb, nocca, noccb)
     end if
 
     call orthogonal_transform('t', nbf, mo_a, wmo, wrk2, wrk1)
     call symmetrize_matrix(wrk2, nbf)
     call pack_matrix(wrk2, wao)
     wao = wao*0.5_dp
-!   ROHF, half one more time:
     wao = wao*0.5_dp
 
     call int2_driver%clean()
-
     if (dft) call dftclean(infos)
-
     call measure_time(print_total=1, log_unit=iw)
     close(iw)
+
+  contains
+
+    subroutine execute_cg_step()
+      implicit none
+      
+      call sfrogen(wrk1, wrk2, pk, nocca, noccb)
+      call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+      call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+
+      call int2_data%clean()
+      deallocate(int2_data)
+      int2_data = int2_tdgrd_data_t( &
+          d2 = pa, &
+          int_apb = .true., &
+          int_amb = .false., &
+          tamm_dancoff = .false., &
+          scale_exchange = scale_exch)
+
+      call int2_driver%run(int2_data, &
+            cam=dft.and.infos%dft%cam_flag, &
+            alpha=infos%dft%cam_alpha, &
+            beta=infos%dft%cam_beta,&
+            mu=infos%dft%cam_mu)
+      ab1 => int2_data%apb(:,:,:,1)
+
+      call symmetrize_matrix(pa(:,:,1), nbf)
+      call symmetrize_matrix(pa(:,:,2), nbf)
+      call utddft_fxc( &
+          basis = basis, &
+          molGrid = molGrid, &
+          isVecs = .true., &
+          wfa = mo_a, &
+          wfb = mo_b, &
+          fxa = ab1(:,:,1:1), &
+          fxb = ab1(:,:,2:2), &
+          dxa = pa(:,:,1:1), &
+          dxb = pa(:,:,2:2), &
+          nmtx = 1, &
+          threshold = 1.0d-15, &
+          infos = infos)
+
+      call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+      call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
+
+      call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, nocca, noccb)
+
+      ! Conservative CG step for initialization/fallback
+      step_denom = dot_product(pk, lhs)
+      if (abs(step_denom) > 1.0e-12_dp) then
+          if (solver_mode == 1) then
+              ! Original CG formula
+              alpha = dot_product(errv, errv) / step_denom
+              if (abs(alpha) > 1.0_dp) alpha = sign(1.0_dp, alpha)
+          else
+              ! Conservative step for building DIIS history
+              alpha = dot_product(errv, errv) / step_denom
+              alpha = sign(min(abs(alpha), 0.3_dp), alpha)
+          endif
+      else
+          alpha = 0.0_dp
+      endif
+
+      if (abs(alpha) > 1.0e-15_dp) then
+          xk = xk + pk * alpha
+          errv = errv - alpha * lhs
+      endif
+      
+      error = sqrt(dot_product(errv, errv))
+      write(iw,'(" Iter",i4,": error =",1p,e10.3," alpha =",1p,e10.3)') iter, error, alpha
+      
+      if (error < cnvtol) return
+      
+      call pcgb(pk, errv, xminv)
+    end subroutine execute_cg_step
+
+    subroutine diis_extrapolate(x, err, diis_x, diis_err, B_matrix, coeff, &
+                               x_new, err_new, diis_dim, max_diis, vec_dim, &
+                               error_new, success, info)
+      implicit none
+      integer, intent(in) :: max_diis, vec_dim
+      integer, intent(inout) :: diis_dim
+      real(kind=dp), intent(in) :: x(:), err(:)
+      real(kind=dp), intent(inout) :: diis_x(:,:), diis_err(:,:)
+      real(kind=dp), intent(inout) :: B_matrix(:,:), coeff(:)
+      real(kind=dp), intent(out) :: x_new(:), err_new(:), error_new
+      logical, intent(out) :: success
+      integer, intent(out) :: info
+      
+      integer :: i, j, pos
+      integer, allocatable :: ipiv(:)
+      
+      success = .false.
+      
+      ! Update DIIS dimension
+      if (diis_dim < max_diis) then
+          diis_dim = diis_dim + 1
+          pos = diis_dim
+      else
+          ! Shift arrays
+          do i = 1, max_diis-1
+              diis_x(:,i) = diis_x(:,i+1)
+              diis_err(:,i) = diis_err(:,i+1)
+          enddo
+          pos = max_diis
+      endif
+      
+      ! Store current vectors
+      diis_x(:,pos) = x
+      diis_err(:,pos) = err
+      
+      if (diis_dim < 2) return  ! Need at least 2 vectors
+      
+      ! Build B matrix
+      do i = 1, diis_dim
+          do j = 1, diis_dim
+              B_matrix(i,j) = dot_product(diis_err(:,i), diis_err(:,j))
+          enddo
+          B_matrix(i,diis_dim+1) = -1.0_dp
+          B_matrix(diis_dim+1,i) = -1.0_dp
+      enddo
+      B_matrix(diis_dim+1,diis_dim+1) = 0.0_dp
+      
+      ! Add damping
+      do i = 1, diis_dim
+          B_matrix(i,i) = B_matrix(i,i) + 1.0e-12_dp
+      enddo
+      
+      coeff = 0.0_dp
+      coeff(diis_dim+1) = -1.0_dp
+      
+      allocate(ipiv(diis_dim+1))
+      call dgesv(diis_dim+1, 1, B_matrix, diis_dim+1, ipiv, coeff, diis_dim+1, info)
+      deallocate(ipiv)
+      
+      if (info == 0) then
+          x_new = 0.0_dp
+          err_new = 0.0_dp
+          do i = 1, diis_dim
+              x_new = x_new + coeff(i) * diis_x(:,i)
+              err_new = err_new + coeff(i) * diis_err(:,i)
+          enddo
+          
+          error_new = sqrt(dot_product(err_new, err_new))
+          success = .true.
+      endif
+      
+    end subroutine diis_extrapolate
 
   end subroutine tdhf_mrsf_z_vector
 
