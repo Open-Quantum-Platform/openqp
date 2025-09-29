@@ -25,6 +25,8 @@ module otr_interface
   type(dft_grid_t), pointer :: molgrid
   type(trah_converger), pointer :: conv
   type(scf_energy_t), pointer :: energy
+  integer :: iter_otr
+  real(dp) :: grad_norm
 
   real(dp), allocatable :: work1(:,:), work2(:,:)
 
@@ -42,6 +44,7 @@ contains
     molgrid => molgrid_in
     conv => conv_in
     energy => energy_in
+    iter_otr = 0
 
     basis => infos%basis
     allocate(work1(conv%nbf,conv%nbf), work2(conv%nbf,conv%nbf))
@@ -101,10 +104,10 @@ contains
 
     select type (res)
     class is (scf_conv_trah_result)
-      res%etot = conv%etot
+      res%iter = iter_otr
     end select
 
-    res%error = 0
+    res%error = grad_norm
     if (error) then
       write(*,*) 'OpenTrustRegion solver failed.'
       res%error = 4
@@ -124,6 +127,7 @@ contains
     integer :: nschwz
 
     basis => infos%basis
+    iter_otr = iter_otr + 1
     ! Rotate orbitals
     select case (infos%control%scftype)
     case (1)
@@ -144,6 +148,7 @@ contains
       call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz, conv%f_old, conv%d_old)
       call conv%calc_g_h(grad, h_diag)
     end select
+    grad_norm = sqrt(dot_product(grad, grad)/conv%n_param)
     func = compute_energy(energy)
     conv%etot = func
     hess_x_funptr => hess_x_cb

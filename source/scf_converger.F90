@@ -510,6 +510,7 @@ module scf_converger
     procedure, pass :: get_mo_e_a  => conv_result_dummy_get_mo_e_a
     procedure, pass :: get_mo_e_b  => conv_result_dummy_get_mo_e_b
     procedure, pass :: get_rms_grad => conv_result_dummy_get_rms_g
+    procedure, pass :: get_iter     => conv_result_dummy_get_iter
     procedure, pass :: get_rms_dp  => conv_result_dummy_get_rms_dp
     procedure, pass :: get_etot  => conv_result_dummy_get_etot
   end type scf_conv_result
@@ -540,12 +541,14 @@ module scf_converger
   end type scf_conv_soscf_result
 
   type, extends(scf_conv_result) :: scf_conv_trah_result
-    real(kind=dp) :: etot = 0
+    integer :: iter = 0
+    real(kind=dp) :: rms_grad = 1
   contains
-    procedure, pass :: get_mo_a    => conv_result_trah_get_mo_a
-    procedure, pass :: get_mo_b    => conv_result_trah_get_mo_b
-    procedure, pass :: get_fock    => conv_result_trah_get_fock
-    procedure, pass :: get_etot  => conv_result_trah_get_etot
+    procedure, pass :: get_mo_a     => conv_result_trah_get_mo_a
+    procedure, pass :: get_mo_b     => conv_result_trah_get_mo_b
+    procedure, pass :: get_fock     => conv_result_trah_get_fock
+    procedure, pass :: get_rms_grad => conv_result_trah_get_rms_g
+    procedure, pass :: get_iter     => conv_result_trah_get_iter
   end type scf_conv_trah_result
   !> @brief Base type for real SCF convergers (subconvergers)
   !> @detail Used by main SCF convergence driver `scf_conv`.
@@ -1158,6 +1161,12 @@ contains
     istat = 0
   end function conv_result_dummy_get_rms_g
 
+  function conv_result_dummy_get_iter(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+    istat = 0
+  end function conv_result_dummy_get_iter
+
   function conv_result_dummy_get_rms_dp(self) result(istat)
     class(scf_conv_result), intent(in) :: self
     real(kind=dp) :: istat
@@ -1372,13 +1381,19 @@ contains
     istat = 0
   end subroutine conv_result_trah_get_fock
 
-  function conv_result_trah_get_etot(self) result(etot)
+  function conv_result_trah_get_rms_g(self) result(rms)
     class(scf_conv_trah_result), intent(in) :: self
-    real(kind=dp) :: etot
+    real(kind=dp) :: rms
 
-    etot = self%etot
-  end function conv_result_trah_get_etot
+    rms = self%rms_grad
+  end function conv_result_trah_get_rms_g
 
+  function conv_result_trah_get_iter(self) result(rms)
+    class(scf_conv_trah_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%iter
+  end function conv_result_trah_get_iter
 !==============================================================================
 ! scf_conv Methods
 !==============================================================================

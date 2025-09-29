@@ -762,7 +762,6 @@ contains
         call run_otr(infos, molgrid, conv , conv_res, energy)
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
-        energy%etot = conv_res%get_etot()
         ! Retrieve updated Energies of Alpha Orbitals
         call conv_res%get_mo_e_a(mo_energy_a, istat=stat)
         if (scf_type == scf_uhf .and. nelec_b /= 0) then
@@ -978,6 +977,7 @@ contains
     !----------------------------------------------------------------------------
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
+    if (use_trah) iter = conv_res%get_iter()
     if (iter > maxit) then
       write(IW,"(3x,64('-')/10x,'SCF is not converged ....')")
       infos%mol_energy%SCF_converged = .false.
