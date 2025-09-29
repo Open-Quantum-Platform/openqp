@@ -10,7 +10,7 @@ module otr_interface
           obj_func_type, hess_x_type, logger_type, rp, ip
   use mathlib, only: unpack_matrix
   use scf_converger, only: trah_converger, scf_conv_trah_result, scf_conv_result
-  use scf_addons,only: calc_fock,compute_energy,calc_fock2
+  use scf_addons,only: compute_energy,calc_fock2
   use precision, only: dp
   use types, only:information
   use mod_dft_molgrid, only: dft_grid_t
@@ -45,6 +45,9 @@ contains
 
     basis => infos%basis
     allocate(work1(conv%nbf,conv%nbf), work2(conv%nbf,conv%nbf))
+
+    conv%f_old = 0.0_dp
+    conv%d_old = 0.0_dp
 
   end subroutine init_trah_solver
 
@@ -90,7 +93,6 @@ contains
                 n_micro=n_micro, global_red_factor=global_red_factor, &
                 local_red_factor=local_red_factor, verbose=verbose)
 
-
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
     if (infos%control%scftype>1) then
@@ -127,26 +129,22 @@ contains
     case (1)
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, conv%mo_a)
       call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,1), conv%mo_a,infos,basis)
-      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, nschwz=nschwz)
-!      call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens)
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz, conv%f_old, conv%d_old)
       call conv%calc_g_h(grad, h_diag)
     case (2)
       call conv%rotate_orbs(kappa(1:conv%nocc_a*conv%nvir_a), conv%nbf, conv%nocc_a, conv%mo_a)
       call conv%rotate_orbs(kappa(conv%nocc_a*conv%nvir_a+1:), conv%nbf, conv%nocc_b, conv%mo_b)
       call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
-      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz=nschwz)
-
-!      call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz, conv%f_old, conv%d_old)
       call conv%calc_g_h(grad, h_diag)
     case (3)
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, conv%mo_a)
       conv%mo_b = conv%mo_a
       call get_ab_initio_density(conv%dens(:,1), conv%mo_a, conv%dens(:,2), conv%mo_b,infos,basis)
-      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz=nschwz)
-!      call calc_fock(basis, infos, molgrid, conv%fock_ao, conv%mo_a, conv%dens, conv%mo_b)
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, conv%mo_a, conv%dens, conv%mo_b, nschwz, conv%f_old, conv%d_old)
       call conv%calc_g_h(grad, h_diag)
     end select
-    func = energy%etot!compute_energy(infos)
+    func = compute_energy(energy)
     conv%etot = func
     hess_x_funptr => hess_x_cb
     h_diag = 2.0_dp * h_diag
@@ -166,33 +164,31 @@ contains
     real(dp), intent(in) :: kappa(:)
     real(dp)             :: val
     type(basis_set), pointer :: basis
+    integer :: nschwz
     basis => infos%basis
     select case(infos%control%scftype)
     case (1)
       work1 = conv%mo_a
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,1), work1,infos,basis)
-      call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens)
-      val = compute_energy(infos)
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work1, nschwz, conv%f_old, conv%d_old)
     case (2)
       work1 = conv%mo_a
       work2 = conv%mo_b
       call conv%rotate_orbs(kappa(1:conv%nvir_a*conv%nocc_a), conv%nbf, conv%nocc_a, work1)
       call conv%rotate_orbs(kappa(conv%nvir_a*conv%nocc_a+1:), conv%nbf, conv%nocc_b, work2)
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
-      call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens, work2)
-      val = compute_energy(infos)
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old)
     case (3)
       work1 = conv%mo_a
       work2 = conv%mo_b
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
       work2 = work1
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
-      call calc_fock(basis, infos, molgrid, conv%fock_ao, work1, conv%dens, work2)
-      val = compute_energy(infos)
-    end select
+      call calc_fock2(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old) 
+    end select 
+      val = compute_energy(energy)
   end function obj_func
-
 
   subroutine logger(message)
     use io_constants, only: IW

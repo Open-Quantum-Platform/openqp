@@ -761,8 +761,10 @@ module scf_converger
     logical :: is_dft     = .false.
     real(dp) :: hf_scale  = 1.0_dp
 
-    real(dp), allocatable :: fock_ao(:,:)   ! Fock matrix fock_ao (nbf_tri, nfock)
-    real(dp), allocatable :: dens(:,:)      ! Density matrix (nbf_tri, nfocks)
+    real(dp), allocatable :: fock_ao(:,:)   ! fock matrix fock_ao (nbf_tri, nfock)
+    real(dp), allocatable :: dens(:,:)      ! density matrix (nbf_tri, nfocks)
+    real(dp), allocatable :: f_old(:,:)
+    real(dp), allocatable :: d_old(:,:)
     real(kind=dp), pointer :: overlap(:, :) => null()
     real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
 
@@ -3133,6 +3135,9 @@ contains
     if (.not.allocated(self%pfock))   allocate(self%pfock(nbf_tri, self%nfocks))
     if (.not.allocated(self%dens))   allocate(self%dens(nbf_tri, self%nfocks))
     if (.not.allocated(self%fock_ao))   allocate(self%fock_ao(nbf_tri, self%nfocks))
+    if (.not.allocated(self%d_old))   allocate(self%d_old(nbf_tri, self%nfocks))
+    if (.not.allocated(self%f_old))   allocate(self%f_old(nbf_tri, self%nfocks))
+
     if (.not.allocated(self%dm_tri))  allocate(self%dm_tri(nbf_tri, self%nfocks))
 
     if (self%scf_type == SCF_RHF .or. self%scf_type == SCF_ROHF .or. self%scf_type == SCF_UHF) then
@@ -3169,6 +3174,10 @@ contains
     if (allocated(self%fvv_b))   deallocate(self%fvv_b)
     if (allocated(self%xmat_b))  deallocate(self%xmat_b)
     if (allocated(self%x2mat_b)) deallocate(self%x2mat_b)
+
+    if (allocated(self%d_old))   deallocate(self%d_old)
+    if (allocated(self%f_old))  deallocate(self%f_old)
+
   end subroutine trah_clean
 
   subroutine trah_setup(self)
