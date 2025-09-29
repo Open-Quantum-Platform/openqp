@@ -3197,10 +3197,6 @@ contains
     res%active_converger_name = self%conv_name
     res%ierr=0
 
-!    res%error = 0.1_dp
-!    call init_trah_solver(self, self%infos, self%molgrid)
-!    call run_trah_solver()
-
   end subroutine trah_run
 
   subroutine calc_g_h(self, grad, h_diag)
@@ -3224,7 +3220,9 @@ contains
                w3 => self%work3, &
                fock_ao  => self%fock_ao,&
                mo_a => self%mo_a, &
-               mo_b => self%mo_b)
+               mo_b => self%mo_b, &
+               foo => self%foo_a,  fvv => self%fvv_a,&
+               foo_b => self%foo_b,  fvv_b => self%fvv_b)
 
     select case (self%scf_type)
     case (SCF_RHF)
@@ -3235,18 +3233,14 @@ contains
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
 
-      k = 0
-      do i = nocc_a+1, nbf
-        do a = 1, nocc_a
-          k = k + 1
-          grad(k)  = 2.0_dp * w3(i,a)
-        end do
-      end do
+      foo = w3(1:nocc_a,1:nocc_a)
+      fvv = w3(nocc_a+1:nbf,nocc_a+1:nbf)
 
       k = 0
       do i = nocc_a+1, nbf
         do a = 1, nocc_a
           k = k + 1
+          grad(k)  = 2.0_dp * w3(i,a)
           h_diag(k) = 2.0_dp * ( w3(i,i) - w3(a,a) )
         end do
       end do
@@ -3258,59 +3252,55 @@ contains
       w3 = 0.0_dp
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+      foo = w3(1:nocc_a,1:nocc_a)
+      fvv = w3(nocc_a+1:nbf,nocc_a+1:nbf)
 
       k = 0
       do i = nocc_a+1, nbf
         do a = 1, nocc_a
           k = k + 1
           grad(k)  = w3(i,a)
-        end do
-      end do
-
-      k = 0
-      do i = nocc_a+1, nbf
-        do a = 1, nocc_a
-          k = k + 1
           h_diag(k) = ( w3(i,i) - w3(a,a) )
         end do
       end do
-
+      ! ---- UHF beta block ----
       call unpack_matrix(fock_ao(:,2), w1)
       w2 = 0.0_dp
       w3 = 0.0_dp
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
 
-      k = self%nvir_a * nocc_a
-      do i = nocc_b+1, nbf
-        do a = 1, nocc_b
-          k = k + 1
-          grad(k)  = w3(i,a)
-        end do
-      end do
+      foo_b = w3(1:nocc_b,1:nocc_b)
+      fvv_b = w3(nocc_b+1:nbf,nocc_b+1:nbf)
 
       k = self%nvir_a * nocc_a
       do i = nocc_b+1, nbf
         do a = 1, nocc_b
           k = k + 1
+          grad(k)  = w3(i,a)
           h_diag(k) = ( w3(i,i) - w3(a,a) )
         end do
       end do
 
     case (SCF_ROHF)
       ! ---- ROHF α block ----
-      if (.not. allocated(ugd)) allocate(ugd(nocc_a * nvir_a + nocc_b * nvir_b), source=0.0_dp)
-      if (.not. allocated(uh)) allocate(uh(nocc_a * nvir_a + nocc_b * nvir_b), source=0.0_dp)
 
       call unpack_matrix(fock_ao(:,1), w1)
       w2 = 0.0_dp
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w1, nbf)
 
+      foo = w1(1:nocc_a,1:nocc_a)
+      fvv = w1(nocc_a+1:nbf,nocc_a+1:nbf)
+
       call unpack_matrix(fock_ao(:,2), w3)
       w2 = 0.0_dp
       call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w3,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
       call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      foo_b = w3(1:nocc_b,1:nocc_b)
+      fvv_b = w3(nocc_b+1:nbf,nocc_b+1:nbf)
+
       k = 0
       do i = nocc_b+1, nocc_a
         do a = 1, nocc_b
@@ -3379,19 +3369,6 @@ contains
           xmat(i,a) = x(k)
         end do
       end do
-      call unpack_matrix(fock_ao(:,1), work1)
-
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work1, nbf,      &
-                         mo, nbf, &
-                 0.0_dp, work2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo, nbf, &
-                         work2,         nbf, &
-                 0.0_dp, work3,nbf)
-       foo = work3(1:nocc_a,1:nocc_a)
-       fvv = work3(nocc_a+1:nbf,nocc_a+1:nbf)
-
 
       call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
                  1.0_dp, fvv,  nvir_a, &
@@ -3419,7 +3396,6 @@ contains
       end do
       call pack_matrix(dm,dm_tri(:,1))
       call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
-!      call calc_jk_xc(basis=infos%basis, infos=infos, d=dm_tri, f=pfock, molgrid=self%molgrid, mo_a=mo, mo_b=mo)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3450,19 +3426,6 @@ contains
           xmat(i,a) = x(k)
         end do
       end do
-      call unpack_matrix(fock_ao(:,1), work1)
-
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work1, nbf,      &
-                         mo, nbf, &
-                 0.0_dp, work2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo, nbf, &
-                         work2,         nbf, &
-                 0.0_dp, work3,nbf)
-       foo = work3(1:nocc_a,1:nocc_a)
-       fvv = work3(nocc_a+1:nbf,nocc_a+1:nbf)
-
 
       call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
                  1.0_dp, fvv,  nvir_a, &
@@ -3498,18 +3461,6 @@ contains
           xmat_b(i,a) = x(k)
         end do
       end do
-      call unpack_matrix(fock_ao(:,2), work1)
-
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work1, nbf,      &
-                         mo_b, nbf, &
-                 0.0_dp, work2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo_b, nbf, &
-                         work2,         nbf, &
-                 0.0_dp, work3,nbf)
-      foo_b = work3(1:nocc_b,1:nocc_b)
-      fvv_b = work3(nocc_b+1:nbf,nocc_b+1:nbf)
 
       call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
                  1.0_dp, fvv_b,  nvir_b, &
@@ -3586,19 +3537,6 @@ contains
     case (scf_ROHF)
 ! alpha
       call unpack_rohf_trial(x, xmat, xmat_b, nbf, nocc_a, nocc_b)
-      call unpack_matrix(fock_ao(:,1), work1)
-
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work1, nbf,      &
-                         mo, nbf, &
-                 0.0_dp, work2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo, nbf, &
-                         work2,         nbf, &
-                 0.0_dp, work3,nbf)
-       foo = work3(1:nocc_a,1:nocc_a)
-       fvv = work3(nocc_a+1:nbf,nocc_a+1:nbf)
-
 
       call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
                  1.0_dp, fvv,  nvir_a, &
@@ -3627,18 +3565,6 @@ contains
       call pack_matrix(dm,dm_tri(:,1))
 
 ! beta
-      call unpack_matrix(fock_ao(:,2), work1)
-
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work1, nbf,      &
-                         mo_b, nbf, &
-                 0.0_dp, work2, nbf)
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo_b, nbf, &
-                         work2,         nbf, &
-                 0.0_dp, work3,nbf)
-      foo_b = work3(1:nocc_b,1:nocc_b)
-      fvv_b = work3(nocc_b+1:nbf,nocc_b+1:nbf)
 
       call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
                  1.0_dp, fvv_b,  nvir_b, &
