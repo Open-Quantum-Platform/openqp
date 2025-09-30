@@ -221,12 +221,11 @@ module scf_addons
   public :: apply_mom
   public :: level_shift_fock
   public :: fock_jk
-  public :: calc_fock
   public :: calc_fock2
   public :: scf_energy_t
   public :: compute_energy
   public :: calc_jk_xc
-  public :: vind_rhf_packed
+  public :: get_response_packed
   public :: get_scf_name
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
   integer, parameter, public :: scf_uhf  = 2  ! Unrestricted HF
@@ -1115,8 +1114,16 @@ contains
 
   end subroutine fock_jk
 
-
-  subroutine vind_rhf_packed(basis, infos, molGrid, mo_a, dm1_tri, v1_tri, mo_b)
+  !------------------------------------------------------------------------------
+  !  get_response_packed
+  !  Author : Mohsen Mazaherifar
+  !  Date   : 2025-09-30
+  !
+  !  Build AO-space linear response vector(s) in packed (triangular) form:
+  !    RHF : v1 = J/K(dm1) + f_xc(dm1)
+  !    U/R : v1a, v1b = J/K(dm1a,dm1b) + f_xc(dm1a,dm1b)
+  !------------------------------------------------------------------------------
+  subroutine get_response_packed(basis, infos, molGrid, mo_a, dm1_tri, v1_tri, mo_b)
       use precision,           only: dp
       use basis_tools,         only: basis_set
       use types,               only: information
@@ -1158,7 +1165,7 @@ contains
 
       ! --- (2) XC-kernel part (DFT only): v_xc^(1) ---
       select case (infos%control%scftype)
-      case (1)
+      case (scf_rhf)
         call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
         if (is_dft) then
           allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok)
@@ -1173,7 +1180,7 @@ contains
           call pack_matrix(fx_full, fx_pack)
           v1_tri(:,1) = v1_tri(:,1) + fx_pack
         end if
-      case (2,3)
+      case (scf_rohf, scf_uhf)
         call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
         if (is_dft) then
           allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok)
@@ -1199,7 +1206,7 @@ contains
         end if
       end select
 
-  end subroutine vind_rhf_packed
+  end subroutine get_response_packed
 
 
   subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)

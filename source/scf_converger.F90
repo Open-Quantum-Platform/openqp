@@ -3362,7 +3362,7 @@ contains
     use precision,  only: dp
     use types, only: information
     use mathlib,    only: pack_matrix, unpack_matrix
-    use scf_addons, only: calc_jk_xc, fock_jk,vind_rhf_packed
+    use scf_addons, only: get_response_packed
     implicit none
     class(trah_converger), intent(inout) :: self
     class(information), intent(inout), target :: infos
@@ -3419,7 +3419,7 @@ contains
         end do
       end do
       call pack_matrix(dm,dm_tri(:,1))
-      call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3513,7 +3513,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
 ! end of dm calculation
-      call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
 ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
@@ -3617,7 +3617,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
 ! end of dm calculation
-      call vind_rhf_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
 ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
