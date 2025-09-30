@@ -64,7 +64,8 @@ contains
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock2, &
-                          scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name
+                          scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
+                          scf_diis, scf_bfgs, scf_trah, get_solver_name
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -442,9 +443,9 @@ contains
     !==============================================================================
     ! Configure SCF Convergence Accelerator (DIIS/SOSCF)
     !==============================================================================
-    ! Configuration is determined by soscf_type, diis_type, and vshift:
+    ! Configuration is determined by converger_type, diis_type, and vshift:
     !
-    ! soscf_type = 0 (Pure DIIS):
+    ! converger_type = 0 (Pure DIIS):
     !   ├── diis_type = 5 (V-DIIS):
     !   │   ├── vshift unset (0.0): Sets vshift = 0.1
     !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
@@ -456,18 +457,11 @@ contains
     !       └── Uses: diis_type method (1=C-DIIS, 2=E-DIIS, 3=A-DIIS)
     !           Threshold: diis_method_threshold
     !
-    ! soscf_type = 1 (Pure SOSCF):
+    ! converger_type = 1 (Pure SOSCF):
     !   └── Uses: SOSCF
     !       Starts: From first iteration
     !
-    ! soscf_type = 2 (DIIS + SOSCF):
-    !   ├── diis_type = 5 (V-DIIS):
-    !   │   ├── vshift unset (0.0): Sets vshift = 0.1
-    !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS, SOSCF]
-    !   │       Thresholds: [2.0, 1.0, vdiis_cdiis_switch, soscf_conv]
-    !   └── Otherwise:
-    !       └── Uses: [diis_type method, SOSCF]
-    !           Thresholds: [diis_method_threshold, soscf_conv]
+    ! converger_type = 2 (Pure TRAH):
     !
     ! Additional Note:
     ! - MOM activates if mom = .true. and DIIS error < mom_switch, handled outside this block.
@@ -483,8 +477,8 @@ contains
     diis_reset = infos%control%diis_reset_mod
 
     ! Initialize SCF Convergence Accelerator
-    select case (infos%control%soscf_type)
-    case (0) ! Pure DIIS Accelerators
+    select case (infos%control%converger_type)
+    case (scf_diis) ! Pure DIIS Accelerators
       ! Set up DIIS convergence accelerator
       if (infos%control%diis_type == 5) then
         ! v-DIIS setup: combination of E-DIIS and C-DIIS with vshift
@@ -531,7 +525,7 @@ contains
                        verbose=infos%control%verbose)
       end if
 
-    case (1) ! Pure SOSCF Accelerator
+    case (scf_bfgs) ! Pure SOSCF Accelerator
       use_soscf = .true.
       ! Pure SOSCF strategy
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
@@ -545,7 +539,7 @@ contains
                      verbose=infos%control%verbose)
       ! Configure the SOSCF converger with SOSCF input parameters
       call set_soscf_parametres(infos, conv)
-    case (2) ! Pure TRAH Accelerator
+    case (scf_trah) ! Pure TRAH Accelerator
       use_trah = .true.
         call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
                        maxvec=infos%control%maxit, &
@@ -593,8 +587,8 @@ contains
     if (use_soscf) then
       write(IW,'(/5X,"SOSCF options"/ &
                  &5X,18("-"))')
-      write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",I1)') &
-             & use_soscf, infos%control%soscf_type
+      write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",A)') &
+             & use_soscf, trim(get_solver_name(infos%control%converger_type))
     end if
 
     ! Initial message for SCF iterations
@@ -604,13 +598,13 @@ contains
             &  3x,113('='),/ &
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'DIIS Error',5x,'Shift',5x,'Method',5x,'pFON'/ &
             &  3x,113('='))")
-    elseif (infos%control%soscf_type == 1) then
+    elseif (infos%control%converger_type == scf_bfgs) then
       write(IW,fmt="&
             &(/3x,'Direct SCF iterations begin.'/, &
             &  3x,107('='),/ &
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
-    elseif(infos%control%soscf_type == 2) then
+    elseif(infos%control%converger_type == scf_trah) then
       write(IW,"(/, &
             5x,'Using OpenTrustRegion library for SCF convergence.',/, &
             5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
@@ -791,7 +785,7 @@ contains
               iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
-      elseif (infos%control%soscf_type == 1) then
+      elseif (infos%control%converger_type == scf_bfgs) then
         write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
               iter, energy%etot, energy%etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
               trim(conv_res%active_converger_name)
@@ -856,7 +850,7 @@ contains
                               (modulo(iter,diis_reset) == 0) .and. &
                               (diis_error > infos%control%diis_reset_conv) .and. &
                               (infos%control%vshift == 0.0_dp) .and. &
-                              (infos%control%soscf_type /= 1))
+                              (infos%control%converger_type == scf_diis))
 
       if (diis_reset_condition) then
         ! Resetting DIIS for difficult cases

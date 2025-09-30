@@ -223,6 +223,7 @@ module scf_addons
   public :: fock_jk
   public :: calc_fock2
   public :: scf_energy_t
+  public :: get_solver_name
   public :: compute_energy
   public :: calc_jk_xc
   public :: get_response_packed
@@ -230,6 +231,7 @@ module scf_addons
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
   integer, parameter, public :: scf_uhf  = 2  ! Unrestricted HF
   integer, parameter, public :: scf_rohf = 3  ! ROHF
+  integer, parameter, public :: scf_diis = 0, scf_bfgs = 1, scf_trah = 2
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
   !> @detail Provides methods for managing fractional occupation numbers in SCF calculations,
@@ -277,6 +279,22 @@ module scf_addons
   end type scf_energy_t
 
 contains
+  function get_solver_name(solver_id) result(name)
+    implicit none
+    integer, intent(in) :: solver_id
+    character(len=16)   :: name
+
+    select case(solver_id)
+    case (scf_diis)
+       name = 'DIIS'
+    case (scf_bfgs)
+       name = 'BFGS/SOSCF'
+    case (scf_trah)
+       name = 'TRAH'
+    case default
+       name = 'UNKNOWN'
+    end select
+  end function get_solver_name
 
   pure function get_scf_name(code) result(name)
     integer, intent(in) :: code

@@ -209,8 +209,8 @@ class SinglePoint(Calculator):
             init_library = self.init_library
 
         init_converger = self.mol.config['scf']['init_converger']
-        target_converger = self.mol.config['scf']['soscf_type']
-        self.mol.data.set_scf_soscf_type(init_converger)
+        target_converger = self.mol.config['scf']['converger_type']
+        self.mol.data.set_scf_converger_type(init_converger)
         self.mol.data.set_scf_conv(self.init_conv)
 
         if init_basis:
@@ -272,7 +272,7 @@ class SinglePoint(Calculator):
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
         self.mol.config['input']['functional'] = self.functional
-        self.mol.data.set_scf_soscf_type(target_converger)
+        self.mol.data.set_scf_converger_type(target_converger)
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
@@ -397,7 +397,7 @@ class SinglePoint(Calculator):
 
             if self.alternative_scf:
                 dump_log(self.mol, title='PyOQP: Enable the SOSCF flag in SCF to improve convergence.', section='input')
-                self.mol.data.set_scf_soscf_type(1)
+                self.mol.data.set_scf_converger_type("soscf")
                 self.scf()
                 energy = [self.mol.mol_energy.energy]
                 scf_flag = self.mol.mol_energy.SCF_converged

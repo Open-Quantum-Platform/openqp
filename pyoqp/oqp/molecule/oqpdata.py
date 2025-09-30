@@ -85,15 +85,15 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
-        'init_scf': {'type': string, 'default': 'no'},
+        'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '15'},
         'init_conv': {'type': float, 'default': '0.001'},
-        'init_converger': {'type': int, 'default': '0'},
+        'init_converger': {'type': string, 'default': 'None'},
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
-        'soscf_type': {'type': int, 'default': '0'},
+        'converger_type': {'type': string, 'default': 'diis'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': bool, 'default': 'False'},
@@ -267,7 +267,7 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
-            "soscf_type": "set_scf_soscf_type",
+            "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
@@ -549,14 +549,19 @@ class OQPData:
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
 
-    def set_scf_soscf_type(self, soscf_type):
-        """Set SOSCF type for SCF convergence:
-            soscf_type (int): SOSCF algorithm type
-                0: SOSCF disabled
-                1: SOSCF only
-                2: SOSCF+DIIS combined mode
+    def set_scf_converger_type(self, converger_type):
+        """Set SCF solver for SCF convergence:
+            converger_type (int): SOSCF algorithm type
+                0: DIIS
+                1: BFGS/SOSCF
+                2: TRAH
         """
-        self._data.control.soscf_type = soscf_type
+        if converger_type == "diis":
+            self._data.control.converger_type = 0
+        elif converger_type == "soscf":
+            self._data.control.converger_type = 1
+        elif converger_type == "trah":
+            self._data.control.converger_type = 2
 
     def set_soscf_lvl_shift(self, soscf_lvl_shift):
         """Reset the orbital Hessian. If it is zero, we don't reset by default.

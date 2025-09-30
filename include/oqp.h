@@ -133,7 +133,7 @@ struct control_parameters {
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
-    int64_t   soscf_type;
+    int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   soscf_reset_mod;
     int64_t   verbose;

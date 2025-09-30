@@ -128,7 +128,7 @@ module types
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
     ! SOSCF Parameters
-    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
+    integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.

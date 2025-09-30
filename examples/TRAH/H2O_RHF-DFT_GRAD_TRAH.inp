@@ -18,7 +18,7 @@ save_mol=true
 
 [scf]
 type=rhf
-soscf_type=2
+converger_type=trah
 conv=1e-8
 
 [tdhf]
