@@ -828,6 +828,7 @@ contains
                                       qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
                                       work1, work2, infos, basis, &
                                       dens_prev, pdmat)
+          exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
         ! Converged but need one more iteration with vshift=0
