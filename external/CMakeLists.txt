@@ -103,6 +103,22 @@ ExternalProject_Add(libecpint
 		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
+ExternalProject_Add(libopentrustregion
+    PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
+    GIT_REPOSITORY https://github.com/mohsenkor/opentrustregion.git#https://github.com/eriksen-lab/opentrustregion.git
+    GIT_TAG main  # or a specific commit/tag if needed
+    UPDATE_COMMAND ""
+    CMAKE_ARGS
+            -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+	        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+		-DBUILD_SHARED_LIBS=OFF
+                -DBUILD_TESTS=OFF
+		-DCMAKE_Fortran_FLAGS=-fPIC
+		-DCMAKE_C_FLAGS=-fPIC
+    BINARY_DIR ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}
+    INSTALL_DIR ${CMAKE_BINARY_DIR}/external/install/opentrustregion
+    STEP_TARGETS build install
+)
 if(ENABLE_Formatter)
   find_package(Python3 REQUIRED)
   ExternalProject_Add(fprettify

@@ -17,7 +17,7 @@ save_mol=False
 type=rohf
 maxit=200
 multiplicity=3
-converger_type=soscf
+converger_type=trah
 conv=1e-8
 
 [tdhf]
