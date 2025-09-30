@@ -1317,7 +1317,7 @@ contains
 
     if (.not. is_dft) return
 
-    if (.not.present(molgrid) .or. .not.present(mo_a) .or. .not.present(mo_b)) then
+    if (.not.present(molgrid) .or. .not.present(mo_a)) then
       error stop 'calc_jk_xc: DFT requested but molgrid/mo_a/mo_b not provided.'
     end if
 

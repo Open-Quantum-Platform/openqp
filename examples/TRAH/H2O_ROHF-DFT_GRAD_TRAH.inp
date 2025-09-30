@@ -1,0 +1,34 @@
+# DFT/6-31G*/BHHLYP/ROHF/GRAD of H2O
+[input]
+system=
+   8   0.000000000   0.000000000   0.000000000
+   1   0.000000000  -0.757000000   0.587000000
+   1   0.000000000   0.757000000   0.587000000 
+charge=0
+runtype=grad
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+multiplicity=3
+type=rohf
+soscf_type=2
+conv=1e-8
+
+[tdhf]
+type=mrsf
+nstate=3
+
+[properties]
+grad=3
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
