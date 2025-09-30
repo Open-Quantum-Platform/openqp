@@ -3904,6 +3904,4 @@ contains
     end subroutine orthonormalize
   end subroutine rotate_orbs_trah
 
-
-
 end module scf_converger

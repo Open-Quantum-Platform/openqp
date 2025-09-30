@@ -142,7 +142,6 @@ contains
     ! TRAH Convergence Acceleration Parameters
     !==============================================================================
     logical :: use_trah = .false.
-
     !==============================================================================
      ! Virtual Orbital Shift Parameters (for ROHF)
     !==============================================================================
@@ -829,7 +828,6 @@ contains
                                       qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
                                       work1, work2, infos, basis, &
                                       dens_prev, pdmat)
-          exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
         ! Converged but need one more iteration with vshift=0
@@ -1023,7 +1021,7 @@ contains
       dmat_b = pdmat(:,2)
       mo_b = mo_a
       mo_energy_b = mo_energy_a
-
+      
     end select
     !----------------------------------------------------------------------------
     ! Print Molecular Orbitals
@@ -1522,6 +1520,7 @@ contains
 
   end subroutine mo_to_ao
 
+
   subroutine rohf_fix(Mo, E, D, S, na, l0, nbf)!, num_swaps)
 !! In/Out:
 !!   Mo(nbf,nbf) : MO coefficients (columns are MOs) — columns swapped in place
@@ -1586,3 +1585,4 @@ contains
      deallocate(WS, T, wrk)
    end subroutine rohf_fix
 end module scf
+
