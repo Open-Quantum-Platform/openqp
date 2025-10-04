@@ -4,7 +4,73 @@ module tdhf_mrsf_z_vector_mod
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
 
+  ! Module-level work arrays for GMRES to avoid repeated allocation
+  real(kind=8), allocatable, save :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
+  real(kind=8), allocatable, save, target :: gmres_pa(:,:,:)
+  real(kind=8), allocatable, save :: gmres_ab1_mo_a(:,:), gmres_ab1_mo_b(:,:)
+  logical, save :: gmres_work_allocated = .false.
+  integer, save :: gmres_nbf = 0
+  integer, save :: gmres_nocca = 0
+  integer, save :: gmres_noccb = 0
+
 contains
+
+  ! Initialize GMRES work arrays
+  subroutine init_gmres_work(nbf, nocca, noccb)
+    use messages, only: show_message, with_abort
+    implicit none
+    integer, intent(in) :: nbf, nocca, noccb
+    integer :: nvira, nvirb, ok
+    
+    if (gmres_work_allocated) then
+      ! Check if dimensions match
+      if (gmres_nbf == nbf .and. gmres_nocca == nocca .and. gmres_noccb == noccb) then
+        return  ! Arrays already allocated with correct size
+      else
+        ! Deallocate old arrays
+        call cleanup_gmres_work()
+      end if
+    end if
+    
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    
+    allocate(gmres_wrk1(nbf,nbf), &
+             gmres_wrk2(nbf,nbf), &
+             gmres_wrk3(nbf,nbf), &
+             gmres_pa(nbf,nbf,2), &
+             gmres_ab1_mo_a(nocca,nvira), &
+             gmres_ab1_mo_b(noccb,nvirb), &
+             stat=ok)
+    
+    if (ok /= 0) then
+      call show_message('Cannot allocate GMRES work arrays', with_abort)
+    end if
+    
+    gmres_work_allocated = .true.
+    gmres_nbf = nbf
+    gmres_nocca = nocca
+    gmres_noccb = noccb
+    
+  end subroutine init_gmres_work
+  
+  ! Cleanup GMRES work arrays
+  subroutine cleanup_gmres_work()
+    implicit none
+    
+    if (allocated(gmres_wrk1)) deallocate(gmres_wrk1)
+    if (allocated(gmres_wrk2)) deallocate(gmres_wrk2)
+    if (allocated(gmres_wrk3)) deallocate(gmres_wrk3)
+    if (allocated(gmres_pa)) deallocate(gmres_pa)
+    if (allocated(gmres_ab1_mo_a)) deallocate(gmres_ab1_mo_a)
+    if (allocated(gmres_ab1_mo_b)) deallocate(gmres_ab1_mo_b)
+    
+    gmres_work_allocated = .false.
+    gmres_nbf = 0
+    gmres_nocca = 0
+    gmres_noccb = 0
+    
+  end subroutine cleanup_gmres_work
 
   ! GMRES solver for the z-vector equation
   subroutine gmres_solve(apply_operator, apply_precond, b, x, n, restart, max_iter, tol, &
@@ -76,6 +142,9 @@ contains
     integer :: i, j, k, iter, m, restart_count
     logical :: converged
     
+    ! Initialize GMRES work arrays
+    call init_gmres_work(nbf, nocca, noccb)
+    
     ! Allocate workspace
     m = min(restart, n)
     allocate(V(n, m+1))
@@ -127,7 +196,7 @@ contains
       ! Check for convergence
       error = beta
       if (iter == 1) then
-        write(iw,'(I6,6x,"  0",3x,1p,e13.6,3x,e10.3)') &
+        write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
               restart_count, error, error/error_initial
       end if
       
@@ -193,7 +262,7 @@ contains
         
         ! Print progress every 5 inner iterations or at convergence
         if (mod(j, 5) == 0 .or. error < tol .or. j == m) then
-          write(iw,'(I6,6x,I3,3x,1p,e13.6,3x,e10.3)') &
+          write(iw,'(I6,8x,I3,2x,1p,F13.8,1x,F13.8)') &
                 restart_count, j, error, error/error_initial
           call flush(iw)
         end if
@@ -276,7 +345,7 @@ contains
     
   end subroutine gmres_solve
 
-  ! Apply the z-vector operator (A*x)
+  ! Apply the z-vector operator (A*x) - Modified to use module-level arrays
   subroutine apply_z_operator(x_in, x_out, infos, basis, molGrid, int2_driver, &
                               nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                               fa, fb, scale_exch, dft)
@@ -305,31 +374,33 @@ contains
     logical, intent(in) :: dft
     
     ! Local variables
-    real(kind=dp), allocatable :: wrk1(:,:), wrk2(:,:), wrk3(:,:)
-    real(kind=dp), allocatable, target :: pa(:,:,:)
-    real(kind=dp), allocatable :: ab1_mo_a(:,:), ab1_mo_b(:,:)
     real(kind=dp), pointer :: ab1(:,:,:)
     type(int2_tdgrd_data_t), allocatable, target :: int2_data
-    integer :: nvira, nvirb
     
-    nvira = nbf - nocca
-    nvirb = nbf - noccb
+    ! Ensure work arrays are initialized
+    if (.not. gmres_work_allocated) then
+      call init_gmres_work(nbf, nocca, noccb)
+    end if
     
-    allocate(wrk1(nbf,nbf), wrk2(nbf,nbf), wrk3(nbf,nbf))
-    allocate(pa(nbf,nbf,2))
-    allocate(ab1_mo_a(nocca,nvira), ab1_mo_b(noccb,nvirb))
+    ! Clear work arrays
+    gmres_wrk1 = 0.0_dp
+    gmres_wrk2 = 0.0_dp
+    gmres_wrk3 = 0.0_dp
+    gmres_pa = 0.0_dp
+    gmres_ab1_mo_a = 0.0_dp
+    gmres_ab1_mo_b = 0.0_dp
     
     ! Generate density matrices from x_in
-    call sfrogen(wrk1, wrk2, x_in, nocca, noccb)
+    call sfrogen(gmres_wrk1, gmres_wrk2, x_in, nocca, noccb)
     
     ! Transform to AO basis
-    call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-    call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+    call orthogonal_transform('t', nbf, mo_a, gmres_wrk1, gmres_pa(:,:,1), gmres_wrk3)
+    call orthogonal_transform('t', nbf, mo_b, gmres_wrk2, gmres_pa(:,:,2), gmres_wrk3)
     
     ! Initialize ERI calculation with proper allocation
     allocate(int2_data)
     int2_data = int2_tdgrd_data_t( &
-        d2 = pa, &
+        d2 = gmres_pa, &
         int_apb = .true., &
         int_amb = .false., &
         tamm_dancoff = .false., &
@@ -342,8 +413,8 @@ contains
           mu=infos%dft%cam_mu)
     ab1 => int2_data%apb(:,:,:,1)
     
-    call symmetrize_matrix(pa(:,:,1), nbf)
-    call symmetrize_matrix(pa(:,:,2), nbf)
+    call symmetrize_matrix(gmres_pa(:,:,1), nbf)
+    call symmetrize_matrix(gmres_pa(:,:,2), nbf)
     
     if (dft) then
       call utddft_fxc( &
@@ -354,24 +425,23 @@ contains
           wfb = mo_b, &
           fxa = ab1(:,:,1:1), &
           fxb = ab1(:,:,2:2), &
-          dxa = pa(:,:,1:1), &
-          dxb = pa(:,:,2:2), &
+          dxa = gmres_pa(:,:,1:1), &
+          dxb = gmres_pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
           infos = infos)
     end if
     
     ! Transform to MO basis
-    call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
-    call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
+    call mntoia(ab1(:,:,1), gmres_ab1_mo_a, mo_a, mo_a, nocca, nocca)
+    call mntoia(ab1(:,:,2), gmres_ab1_mo_b, mo_a, mo_a, noccb, noccb)
     
     ! Apply the operator
-    call sfrolhs(x_out, x_in, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
+    call sfrolhs(x_out, x_in, mo_energy_a, fa, fb, gmres_ab1_mo_a, gmres_ab1_mo_b, &
                  nocca, noccb)
     
     call int2_data%clean()
     deallocate(int2_data)
-    deallocate(wrk1, wrk2, wrk3, pa, ab1_mo_a, ab1_mo_b)
     
   end subroutine apply_z_operator
 
@@ -870,7 +940,7 @@ contains
           b = rhs, &
           x = xk, &
           n = lzdim, &
-          restart = min(30, lzdim), &
+          restart = min(50, lzdim), &
           max_iter = infos%control%maxit_zv, &
           tol = cnvtol, &
           infos = infos, &
@@ -896,6 +966,9 @@ contains
       write(iw,'(" Final error norm      : ", 1p,e13.6)') error
       write(iw,'(" Convergence criterion : ", 1p,e13.6)') cnvtol
       call flush(iw)
+      
+      ! Clean up GMRES work arrays
+      call cleanup_gmres_work()
       
     else
       
@@ -1146,7 +1219,7 @@ contains
     close(iw)
 
   contains
-    
+
     ! Lambda wrapper for preconditioner
     subroutine lambda_precond(x_in, x_out)
       real(kind=dp), intent(in) :: x_in(:)
@@ -1157,3 +1230,5 @@ contains
   end subroutine tdhf_mrsf_z_vector
 
 end module tdhf_mrsf_z_vector_mod
+    
+    !
