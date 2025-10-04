@@ -97,6 +97,7 @@ struct dft_parameters {
     double spc_coov;
     int32_t* ixcore;
     int64_t ixcore_len;
+    int64_t z_solver;
 };
 
 struct control_parameters {
