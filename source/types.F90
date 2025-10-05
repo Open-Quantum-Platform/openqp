@@ -133,6 +133,7 @@ module types
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
+    logical(c_bool) :: dyson_enabled = .false.        !< Global Dyson calculation flag
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
@@ -157,7 +158,66 @@ module types
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
     integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
+
+    ! ===== NEW DYSON ORBITAL PARAMETERS =====
+    
+    ! Core IP/EA computation flags
+    logical(c_bool) :: dyson_compute_ip = .true.      !< Compute ionization potentials
+    logical(c_bool) :: dyson_compute_ea = .false.     !< Compute electron affinities
+    integer(c_int64_t) :: dyson_target_state = 0      !< 0=TDHF target, >0=specific, -1=all states
+    
+    ! Computational parameters
+    real(c_double) :: dyson_pole_threshold = 1.0e-4_dp    !< Pole strength threshold
+    real(c_double) :: dyson_deflation_tol = 1.0e-8_dp     !< Natural orbital occupation threshold
+    integer(c_int64_t) :: dyson_max_orbitals = 0          !< Maximum orbitals (0=all)
+    
+    ! Output control
+    integer(c_int64_t) :: dyson_print_level = 1       !< 0=minimal, 1=normal, 2=detailed
+    integer(c_int64_t) :: dyson_max_print = 10        !< Maximum orbitals to print
+    
+    ! Export options
+    logical(c_bool) :: dyson_export = .false.         !< Export results to file
+    integer(c_int64_t) :: dyson_export_format = 1     !< 1=text, 2=csv, 3=json, 4=numpy
+    
+    ! Spectrum generation
+    logical(c_bool) :: dyson_spectrum = .false.       !< Generate spectrum plot
+    logical(c_bool) :: dyson_show_spectrum = .false.  !< Show spectrum interactively
+    
+    ! Advanced options
+    integer(c_int64_t) :: dyson_solver = 1            !< 1=dsygv, 2=dsyev
+    logical(c_bool) :: dyson_orbital_analysis = .false. !< Detailed orbital analysis
+    
   end type tddft_parameters
+
+  ! ================================================================================
+  ! Add Dyson-specific data type for results storage
+  ! ================================================================================
+  
+  type, public :: dyson_results_t
+    integer :: nstates = 0                            !< Number of states computed
+    integer :: nbf = 0                                !< Number of basis functions  
+    integer :: n_ip = 0                               !< Number of IPs found
+    integer :: n_ea = 0                               !< Number of EAs found
+    
+    ! Simplified storage - only significant results
+    real(dp), allocatable :: binding_energies(:,:)    !< Filtered binding energies
+    real(dp), allocatable :: pole_strengths(:,:)      !< Filtered pole strengths
+    
+    ! Optional full storage (only if needed)
+    real(dp), allocatable :: dyson_orbitals(:,:,:)    !< Dyson orbitals (nbf, nbf, nstates)
+    
+    ! For MRSF preparation
+    real(dp), allocatable :: density_relaxed(:,:,:)   !< Relaxed density (nbf, nbf, nstates)
+    real(dp), allocatable :: lagrangian_relaxed(:,:,:)!< Relaxed Lagrangian (nbf, nbf, nstates)
+    
+    ! Processed results for easy access
+    real(dp), allocatable :: ip_values(:)             !< Ionization potentials (eV)
+    real(dp), allocatable :: ea_values(:)             !< Electron affinities (eV)
+    real(dp), allocatable :: ip_poles(:)              !< IP pole strengths
+    real(dp), allocatable :: ea_poles(:)              !< EA pole strengths
+    
+    logical :: computed = .false.                     !< Results available flag
+  end type dyson_results_t
 
   type, public, bind(c) :: mpi_communicator
     integer(c_int) :: comm = MPI_COMM_NULL       !< MPI communicator
@@ -194,6 +254,7 @@ module types
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
     type(electron_shell) :: elshell
+    type(dyson_results_t) :: dyson_results            !< Dyson orbital calculation results
   contains
     generic :: set_atoms => set_atoms_arr, set_atoms_atm
     procedure, pass :: set_atoms_arr => info_set_atoms_arr

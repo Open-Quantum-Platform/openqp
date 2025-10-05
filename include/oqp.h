@@ -208,4 +208,18 @@ void get_states_overlap(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
+/* ============================================================================
+ * DYSON ORBITAL CALCULATIONS
+ * ============================================================================ */
 
+/* 
+ * Main Dyson orbital calculation driver
+ * Bound to: dyson_orbital_calculation_C in dyson_orbitals_mod
+ */
+void dyson_orbital_calculation(struct oqp_handle_t *inf);
+
+/* 
+ * MRSF-TDDFT specific Dyson calculation
+ * Bound to: dyson_mrsf_C in dyson_mrsf_mod
+ */
+void dyson_mrsf(struct oqp_handle_t *inf);

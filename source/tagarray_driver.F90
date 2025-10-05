@@ -45,6 +45,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  
+  ! Minimal Dyson tags - Only for Python data exchange
+  character(len=*), parameter, public :: OQP_binding_energies = OQP_prefix // "binding_energies"
+  character(len=*), parameter, public :: OQP_pole_strengths = OQP_prefix // "pole_strengths"
+  character(len=*), parameter, public :: OQP_density_relaxed = OQP_prefix // "density_relaxed"
+  character(len=*), parameter, public :: OQP_lagrangian_relaxed = OQP_prefix // "lagrangian_relaxed"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
@@ -75,6 +81,14 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
+  
+  ! Minimal Dyson comments
+  character(len=*), parameter, public :: OQP_binding_energies_comment = "Significant binding energies (1D array)"
+  character(len=*), parameter, public :: OQP_pole_strengths_comment = "Significant pole strengths (1D array)"
+  character(len=*), parameter, public :: OQP_density_relaxed_comment = "Relaxed density matrices"
+  character(len=*), parameter, public :: OQP_lagrangian_relaxed_comment = "Relaxed Lagrangian matrices"
+  
+  !
   character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
@@ -83,21 +97,25 @@ module oqp_tagarray_driver
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
     OQP_nac, OQP_td_states_phase, OQP_td_states_overlap /)
+    
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
     module procedure tagarray_get_data_real64_val, tagarray_get_data_real64_1d, tagarray_get_data_real64_2d, tagarray_get_data_real64_3d
     module procedure tagarray_get_data_char8_val, tagarray_get_data_char8_1d
   end interface
+  
   interface data_has_tags
     module procedure data_has_tags_location, data_has_tags_ms
   end interface
+  
   public :: data_has_tags, check_status
   public :: tagarray_get_data
   public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
   public :: ta_ok
+  
 contains
 
-    function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
+  function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
     type(c_ptr), intent(out) :: ptr
@@ -124,7 +142,6 @@ contains
 
   end function tagarray_get_cptr
 
-
   subroutine data_has_tags_location(container, tags, location, abort, status)
     use messages, only: show_message, WITHOUT_ABORT
     type(container_t), intent(inout) :: container
@@ -142,6 +159,7 @@ contains
         abort_)
     if (present(status)) status = status_
   end subroutine data_has_tags_location
+  
   subroutine data_has_tags_ms(container, tags, modulename, subroutinename, abort, status)
     use messages, only: show_message, WITHOUT_ABORT
     type(container_t), intent(inout) :: container
@@ -159,6 +177,7 @@ contains
         abort_)
     if (present(status)) status = status_
   end subroutine data_has_tags_ms
+  
   subroutine check_status(status, modulename, subroutinename, tag, abort)
     use messages, only: show_message, WITHOUT_ABORT
     integer(c_int32_t), intent(in) :: status
@@ -171,6 +190,7 @@ contains
         modulename // "::" // subroutinename // ": " // get_status_message(status, trim(tag)), &
         abort_)
   end subroutine check_status
+  
   subroutine tagarray_get_data_int64_val(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -180,6 +200,7 @@ contains
     TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_val
+  
   subroutine tagarray_get_data_int64_1d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -189,6 +210,7 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_1d
+  
   subroutine tagarray_get_data_int64_2d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -198,6 +220,7 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_2d
+  
   subroutine tagarray_get_data_int64_3d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -207,6 +230,7 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_3d
+  
   subroutine tagarray_get_data_real64_val(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -216,6 +240,7 @@ contains
     TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_val
+  
   subroutine tagarray_get_data_real64_1d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -225,6 +250,7 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_1d
+  
   subroutine tagarray_get_data_real64_2d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -234,6 +260,7 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_2d
+  
   subroutine tagarray_get_data_real64_3d(container, tag, ptr, status)
     type(container_t), intent(inout) :: container
     character(len=*), intent(in) :: tag
@@ -263,4 +290,5 @@ contains
     TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_1d
+
 end module oqp_tagarray_driver

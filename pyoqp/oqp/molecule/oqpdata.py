@@ -207,6 +207,38 @@ OQP_CONFIG_SCHEMA = {
         'exception': {'type': bool, 'default': False},
     },
 }
+#Dyson 
+OQP_CONFIG_SCHEMA['dyson'] = {
+    # Core IP/EA options
+    'ip': {'type': bool, 'default': 'True'},              # Compute ionization potentials
+    'ea': {'type': bool, 'default': 'False'},             # Compute electron affinities
+    
+    # Target state selection
+    'target_state': {'type': int, 'default': '0'},        # 0=use TDHF target, >0=specific state
+    
+    # Computational parameters
+    'threshold': {'type': float, 'default': '1.0e-4'},    # Pole strength threshold
+    'deflation_tol': {'type': float, 'default': '1.0e-8'}, # Natural orbital occupation threshold
+    'max_orbitals': {'type': int, 'default': '0'},        # Max orbitals to compute (0=all)
+    
+    # Output control
+    'print_level': {'type': int, 'default': '1'},         # 0=minimal, 1=normal, 2=detailed
+    'max_print': {'type': int, 'default': '10'},          # Max orbitals to print
+    
+    # Export options
+    'export': {'type': bool, 'default': 'False'},         # Export results to file
+    'export_format': {'type': string, 'default': 'text'},    # Use the existing string function
+    'export_name': {'type': string, 'default': 'dyson_results'}, # Use the existing string function
+    
+    # Spectrum generation
+    'spectrum': {'type': bool, 'default': 'False'},       # Generate spectrum plot
+    'spectrum_file': {'type': string, 'default': 'dyson_spectrum.png'}, # Use the existing string function
+    'show_spectrum': {'type': bool, 'default': 'False'},  # Display spectrum interactively
+    
+    # Advanced options
+    'solver': {'type': string, 'default': 'dsygv'},       # Use the existing string function
+    'orbital_analysis': {'type': bool, 'default': 'False'}, # Detailed orbital character analysis
+}
 
 TA_DIMENSIONS_LENGTH = 12
 
@@ -796,7 +828,40 @@ class OQPData:
 
         return basis
 
-
+    def set_dyson_ip(self, compute_ip):
+          """Enable/disable ionization potential calculation"""
+          self._data.dyson_compute_ip = compute_ip
+          if self.silent != 1:
+              print(f"Dyson IP calculation: {'enabled' if compute_ip else 'disabled'}")
+      
+    def set_dyson_ea(self, compute_ea):
+          """Enable/disable electron affinity calculation"""
+          self._data.dyson_compute_ea = compute_ea
+          if self.silent != 1:
+              print(f"Dyson EA calculation: {'enabled' if compute_ea else 'disabled'}")
+      
+    def set_dyson_target_state(self, target):
+          """Set target state for Dyson calculation"""
+          self._data.dyson_target_state = target
+          if self.silent != 1:
+              print(f"Dyson target state: {target}")
+      
+    def set_dyson_threshold(self, threshold):
+          """Set pole strength threshold"""
+          self._data.dyson_pole_threshold = threshold
+      
+    def set_dyson_deflation_tol(self, tol):
+          """Set deflation tolerance"""
+          self._data.dyson_deflation_tol = tol
+      
+    def set_dyson_print_level(self, level):
+          """Set print level"""
+          self._data.dyson_print_level = level
+      
+    def set_dyson_export(self, export):
+          """Enable/disable export"""
+          self._data.dyson_export = export
+      
 def compute_alpha_beta_electrons(n_e, mult):
     """
     Compute number of alpha and beta electrons for a given total electron number and multiplicity

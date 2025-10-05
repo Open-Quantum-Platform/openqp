@@ -98,6 +98,22 @@ def compute_thermo(mol):
     Hessian(mol).hessian()
 
 
+def compute_dyson(mol):
+    # compute energy
+    SinglePoint(mol).energy()
+
+    # compute gradient for relaxed density
+    Gradient(mol).gradient()
+
+    # compute dyson orbitals
+    dyson_config = mol.config.get('dyson', {})
+    compute_ip = dyson_config.get('ip', True)
+    compute_ea = dyson_config.get('ea', False)
+    target_state = dyson_config.get('target_state', mol.config.get('tdhf', {}).get('target', 1))
+    
+    oqp.compute_dyson_ekt(mol, target_state, compute_ip, compute_ea)
+
+
 def compute_geom(mol):
     # initialize optimizer
     optimizer = get_optimizer(mol)
