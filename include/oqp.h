@@ -98,6 +98,7 @@ struct dft_parameters {
     int32_t* ixcore;
     int64_t ixcore_len;
     int64_t z_solver;
+    int64_t gmres_dim;
 };
 
 struct control_parameters {

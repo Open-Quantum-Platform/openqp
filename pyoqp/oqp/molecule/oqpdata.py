@@ -134,6 +134,7 @@ OQP_CONFIG_SCHEMA = {
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type': string, 'default': '-1'},
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -296,6 +297,7 @@ class OQPData:
             "conf_threshold": "set_conf_threshold",
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
+            "gmres_dim": "set_tdhf_gmres_dim",
         },
     }
     _typemap = [np.void,
@@ -636,6 +638,13 @@ class OQPData:
             self.ixcore_array = arr  # keep reference!
             self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(arr))
             self._data.tddft.ixcore_len = arr.size
+
+    def set_tdhf_gmres_dim(self, gmres_dim):
+        """Set the restart dimension of GMRES during z-vector:
+           50 (default)
+        """
+        self._data.tddft.gmres_dim = gmres_dim
+
     def set_tdhf_z_solver(self, z_solver):
         """Set z-vector solver type:
            0: CG (Conjugate Gradient) only

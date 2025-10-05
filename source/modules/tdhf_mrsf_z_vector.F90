@@ -27,7 +27,7 @@ contains
       if (gmres_nbf == nbf .and. gmres_nocca == nocca .and. gmres_noccb == noccb) then
         return  ! Arrays already allocated with correct size
       else
-        ! Deallocate old arrays
+        ! Deallocate old arrays before reallocating
         call cleanup_gmres_work()
       end if
     end if
@@ -139,10 +139,10 @@ contains
     real(kind=dp), allocatable :: Ax(:)      ! A*x
     
     real(kind=dp) :: beta, h_ij, temp, error, error_initial
-    integer :: i, j, k, iter, m, restart_count
+    integer :: i, j, k, iter, m, restart_count, inner_iter
     logical :: converged
     
-    ! Initialize GMRES work arrays
+    ! Initialize GMRES work arrays ONCE at the beginning
     call init_gmres_work(nbf, nocca, noccb)
     
     ! Allocate workspace
@@ -211,8 +211,14 @@ contains
       g = 0.0_dp
       g(1) = beta
       
+      ! Reset H matrix for this restart
+      H = 0.0_dp
+      
       ! Arnoldi process
+      inner_iter = 0
       do j = 1, m
+        inner_iter = j
+        
         ! Apply operator to V_j
         call apply_operator(V(:,j), w, infos, basis, molGrid, int2_driver, &
                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
@@ -221,10 +227,17 @@ contains
         ! Apply preconditioner
         call apply_precond(w, V(:,j+1))
         
-        ! Orthogonalization
+        ! Modified Gram-Schmidt orthogonalization
         do i = 1, j
           H(i,j) = dot_product(V(:,j+1), V(:,i))
           V(:,j+1) = V(:,j+1) - H(i,j) * V(:,i)
+        end do
+        
+        ! Reorthogonalization for numerical stability
+        do i = 1, j
+          temp = dot_product(V(:,j+1), V(:,i))
+          H(i,j) = H(i,j) + temp
+          V(:,j+1) = V(:,j+1) - temp * V(:,i)
         end do
         
         H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))
@@ -232,7 +245,7 @@ contains
         ! Check for breakdown
         if (abs(H(j+1,j)) < 1.0d-12) then
           write(iw,'(" GMRES: Lucky breakdown at iteration ", I3)') j
-          m = j
+          inner_iter = j
           exit
         end if
         
@@ -257,7 +270,7 @@ contains
         g(j) = temp
         
         ! Check convergence
-        error = abs(g(j+1))
+        error = abs(g(j+1)) 
         iter_out = iter_out + 1
         
         ! Print progress every 5 inner iterations or at convergence
@@ -269,17 +282,22 @@ contains
         
         if (error < tol) then
           converged = .true.
+          inner_iter = j
           exit
         end if
         
-        if (iter_out >= max_iter) exit
+        if (iter_out >= max_iter) then
+          inner_iter = j
+          exit
+        end if
       end do
       
       ! Solve upper triangular system for y
-      call back_substitution(H(1:j,1:j), g(1:j), y(1:j), j)
+      call back_substitution(H(1:inner_iter,1:inner_iter), g(1:inner_iter), &
+                             y(1:inner_iter), inner_iter)
       
       ! Update solution: x = x + V*y
-      do i = 1, j
+      do i = 1, inner_iter
         x = x + y(i) * V(:,i)
       end do
       
@@ -288,7 +306,7 @@ contains
       if (converged .or. iter_out >= max_iter) exit
       
       ! Print restart information
-      if (.not. converged .and. j == m) then
+      if (.not. converged .and. inner_iter == m) then
         write(iw,'(" GMRES: Restarting (restart #", I3, ")")') restart_count
         call flush(iw)
       end if
@@ -308,7 +326,10 @@ contains
     write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
     call flush(iw)
     
+    ! Clean up local arrays
     deallocate(V, H, c, s, g, y, r, w, Ax)
+    
+    ! NOTE: Do NOT clean up GMRES work arrays here - they will be cleaned in main routine
     
   contains
     
@@ -376,9 +397,16 @@ contains
     ! Local variables
     real(kind=dp), pointer :: ab1(:,:,:)
     type(int2_tdgrd_data_t), allocatable, target :: int2_data
+    integer :: nvira, nvirb
     
-    ! Ensure work arrays are initialized
-    if (.not. gmres_work_allocated) then
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    
+    ! Ensure work arrays are initialized and have correct dimensions
+    if (.not. gmres_work_allocated .or. &
+        gmres_nbf /= nbf .or. &
+        gmres_nocca /= nocca .or. &
+        gmres_noccb /= noccb) then
       call init_gmres_work(nbf, nocca, noccb)
     end if
     
@@ -432,9 +460,9 @@ contains
           infos = infos)
     end if
     
-    ! Transform to MO basis
+    ! Transform to MO basis - Fixed to use correct mo_b for beta
     call mntoia(ab1(:,:,1), gmres_ab1_mo_a, mo_a, mo_a, nocca, nocca)
-    call mntoia(ab1(:,:,2), gmres_ab1_mo_b, mo_a, mo_a, noccb, noccb)
+    call mntoia(ab1(:,:,2), gmres_ab1_mo_b, mo_b, mo_b, noccb, noccb)
     
     ! Apply the operator
     call sfrolhs(x_out, x_in, mo_energy_a, fa, fb, gmres_ab1_mo_a, gmres_ab1_mo_b, &
@@ -930,9 +958,9 @@ contains
         where(abs(xminv) > 1.0d12) xminv = sign(1.0d12, xminv)
       end if
       
-      ! Initial guess
+      ! Initial guess with same strategy as CG
       xk = 0.0_dp
-      
+
       ! Call GMRES solver
       call gmres_solve( &
           apply_operator = apply_z_operator, &
@@ -940,7 +968,7 @@ contains
           b = rhs, &
           x = xk, &
           n = lzdim, &
-          restart = min(50, lzdim), &
+          restart = min(infos%tddft%gmres_dim, lzdim), &
           max_iter = infos%control%maxit_zv, &
           tol = cnvtol, &
           infos = infos, &
@@ -976,11 +1004,14 @@ contains
       ! ORIGINAL CONJUGATE GRADIENT SOLVER
       ! ============================================
       
+      ! Initial guess with same strategy as CG
+      xk = 0.0_dp
+
       call sfrogen(wrk1, wrk2, xk, nocca, noccb)
       ! Alpha
-      call orthogonal_transform('n', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+      call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
       ! Beta
-      call orthogonal_transform('n', nbf, mo_a, wrk2, pa(:,:,2), wrk3)
+      call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
 
       !****** INITIAL (A+B)*PK *************************************************
       ! Initialize ERI calculations
@@ -1020,7 +1051,7 @@ contains
       call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
 
       wrk1 = 2*ab1(:,:,2) + ab2(:,:,2)
-      call mntoia(wrk1, ab1_mo_b, mo_a, mo_a, noccb, noccb)
+      call mntoia(wrk1, ab1_mo_b, mo_b, mo_b, noccb, noccb)
 
       call sfrolhs(lhs, xk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                    nocca, noccb)
@@ -1077,7 +1108,7 @@ contains
         !     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
         call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
 
-        call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
+        call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
 
         call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                      nocca, noccb)
@@ -1180,10 +1211,10 @@ contains
 !   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
     call dgemm('n', 'n', nbf, noccb, nbf,  &
                1.0_dp, ab1(:,:,2), nbf,  &
-                       mo_a, nbf,  &
+                       mo_b, nbf,  &
                0.0_dp, wrk2, nbf)
     call dgemm('t', 'n', noccb, noccb, nbf,  &
-               1.0_dp, mo_a,  nbf,  &
+               1.0_dp, mo_b,  nbf,  &
                        wrk2,  nbf,  &
                0.0_dp, ppijb, noccb)
 
@@ -1230,5 +1261,3 @@ contains
   end subroutine tdhf_mrsf_z_vector
 
 end module tdhf_mrsf_z_vector_mod
-    
-    !
