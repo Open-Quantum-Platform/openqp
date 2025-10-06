@@ -21,7 +21,7 @@ save_mol=true
 
 [scf]
 type=uhf
-soscf_type=1
+converger_type=soscf
 multiplicity=3
 maxit=60
 conv=1.0e-6
