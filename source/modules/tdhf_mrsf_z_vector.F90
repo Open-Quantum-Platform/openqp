@@ -5,13 +5,13 @@ module tdhf_mrsf_z_vector_mod
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
 
   ! Module-level work arrays for GMRES to avoid repeated allocation
-  real(kind=8), allocatable, save :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
-  real(kind=8), allocatable, save, target :: gmres_pa(:,:,:)
-  real(kind=8), allocatable, save :: gmres_ab1_mo_a(:,:), gmres_ab1_mo_b(:,:)
-  logical, save :: gmres_work_allocated = .false.
-  integer, save :: gmres_nbf = 0
-  integer, save :: gmres_nocca = 0
-  integer, save :: gmres_noccb = 0
+  real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
+  real(kind=8), allocatable, target :: gmres_pa(:,:,:)
+  real(kind=8), allocatable :: gmres_ab1_mo_a(:,:), gmres_ab1_mo_b(:,:)
+  logical :: gmres_work_allocated = .false.
+  integer :: gmres_nbf = 0
+  integer :: gmres_nocca = 0
+  integer :: gmres_noccb = 0
 
 contains
 
@@ -1247,6 +1247,9 @@ contains
     if (dft) call dftclean(infos)
 
     call measure_time(print_total=1, log_unit=iw)
+    ! Clean up GMRES work arrays
+    call cleanup_gmres_work()
+
     close(iw)
 
   contains
