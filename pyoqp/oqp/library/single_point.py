@@ -542,6 +542,528 @@ class Gradient(Calculator):
         return grads
 
 
+"""
+Complete Dyson class
+"""
+class Dyson(Calculator):
+    """
+    OQP Dyson orbital calculation class
+    Computes Dyson orbitals using Extended Koopmans' Theorem (EKT)
+    Requires gradient calculation first to obtain relaxed density and Lagrangian
+    """
+
+    def __init__(self, mol):
+        super().__init__(mol)
+        self.mol = mol
+        self.method = mol.config["input"]["method"]
+        self.td = mol.config["tdhf"]["type"]
+        self.dyson_config = mol.config.get('dyson', {})
+        
+        # Dyson calculation parameters
+        self.compute_ip = self.dyson_config.get('ip', True)
+        self.compute_ea = self.dyson_config.get('ea', False)
+        self.target_state = self.dyson_config.get('target_state', 0)
+        self.threshold = self.dyson_config.get('threshold', 1.0e-4)
+        self.deflation_tol = self.dyson_config.get('deflation_tol', 1.0e-8)
+        self.max_orbitals = self.dyson_config.get('max_orbitals', 0)
+        self.print_level = self.dyson_config.get('print_level', 1)
+        self.max_print = self.dyson_config.get('max_print', 10)
+        self.export_dyson = self.dyson_config.get('export', False)
+        self.export_format = self.dyson_config.get('export_format', 'text')
+        self.export_name = self.dyson_config.get('export_name', 'dyson_results')
+        self.save_cube = self.dyson_config.get('save_cube', False)
+        self.spectrum = self.dyson_config.get('spectrum', False)
+        self.orbital_analysis = self.dyson_config.get('orbital_analysis', False)
+        
+        # If target_state is 0, use TDHF target
+        if self.target_state == 0:
+            self.target_state = mol.config.get('tdhf', {}).get('target', 1)
+        
+        # Function mappings for different TD methods
+        self.dyson_func = {
+            'rpa': oqp.dyson_orbital_calculation,
+            'tda': oqp.dyson_orbital_calculation,
+            'sf': oqp.dyson_mrsf,
+            'mrsf': oqp.dyson_mrsf,
+        }
+
+    def dyson(self):
+        """
+        Main entry point for Dyson orbital calculation.
+        Workflow:
+        1. Validate input
+        2. Set parameters for Fortran
+        3. Call appropriate Dyson calculation
+        4. Retrieve and process results
+        5. Export/save if requested
+        """
+        # Check method
+        if self.method != 'tdhf':
+            raise ValueError(f'Dyson calculation requires method=tdhf, but found {self.method}')
+        
+        # Check TD type
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf']:
+            raise ValueError(f'Unknown tdhf type {self.td} for Dyson calculation')
+        
+
+        # Check that Z-vector was computed
+        if not self.mol.mol_energy.Z_Vector_converged:
+           dump_log(self.mol, title='PyOQP: Error - Z-vector not computed', section='error')
+           raise ValueError('Z-vector must be computed before Dyson calculation')
+
+        dump_log(self.mol, title='PyOQP: Entering Dyson Orbital Calculation')
+        dump_log(self.mol, title='', section='dyson_setup', info={
+            'method': self.td,
+            'target_state': self.target_state,
+            'compute_ip': self.compute_ip,
+            'compute_ea': self.compute_ea,
+            'threshold': self.threshold,
+            'deflation_tol': self.deflation_tol,
+            'max_orbitals': self.max_orbitals,
+            'print_level': self.print_level
+        })
+        
+        # Set Dyson parameters in the data structure for Fortran to access
+        self.set_dyson_parameters()
+        
+        # Call appropriate Dyson calculation based on TD method
+        dump_log(self.mol, title=f'PyOQP: Calling Fortran Dyson calculation ({self.td})')
+        self.dyson_func[self.td](self.mol)
+        
+        # Process and retrieve results from tagarray including orbitals
+        results = self.retrieve_results_with_orbitals()
+        
+        # Store results in mol for access
+        self.mol.dyson_results = results
+        
+        # Export if requested
+        if self.export_dyson and results and results['n_orbitals'] > 0:
+            self.export_results(results)
+        
+        # Save cube files if requested
+        if self.save_cube and results and results['n_orbitals'] > 0:
+            self.save_cube_files(results)
+        
+        # Generate spectrum if requested
+        if self.spectrum and results and results['n_orbitals'] > 0:
+            self.generate_spectrum(results)
+        
+        # Save mol data if requested
+        if self.save_mol:
+            self.mol.save_data()
+        
+        return results
+    
+    def set_dyson_parameters(self):
+        """
+        Set Dyson parameters in the data structure for Fortran access.
+        Uses the tddft structure that's already bound in C.
+        """
+        # These parameters map to tddft_parameters type in types.F90
+        self.mol.data._data.tddft.dyson_compute_ip = self.compute_ip
+        self.mol.data._data.tddft.dyson_compute_ea = self.compute_ea
+        self.mol.data._data.tddft.dyson_target_state = self.target_state
+        self.mol.data._data.tddft.dyson_pole_threshold = self.threshold
+        self.mol.data._data.tddft.dyson_deflation_tol = self.deflation_tol
+        self.mol.data._data.tddft.dyson_max_orbitals = self.max_orbitals
+        self.mol.data._data.tddft.dyson_print_level = self.print_level
+        self.mol.data._data.tddft.dyson_max_print = self.max_print
+        self.mol.data._data.tddft.dyson_export = self.export_dyson
+        self.mol.data._data.tddft.dyson_orbital_analysis = self.orbital_analysis
+        
+        # Set export format as integer
+        format_map = {'text': 1, 'csv': 2, 'json': 3, 'numpy': 4}
+        self.mol.data._data.tddft.dyson_export_format = format_map.get(self.export_format, 1)
+        
+        # Enable Dyson calculation globally
+        self.mol.data._data.control.dyson_enabled = True
+    
+    def retrieve_results_with_orbitals(self):
+        """
+        Retrieve complete Dyson calculation results from tagarray including orbitals.
+        Results are stored in tagarray by Fortran code.
+        """
+        try:
+            # Get the number of significant orbitals stored
+            try:
+                n_orbitals = self.mol.data["OQP::DO_Count"]
+            except (KeyError, AttributeError):
+                n_orbitals = 0
+            
+            if n_orbitals == 0:
+                dump_log(self.mol, title='PyOQP: No significant Dyson orbitals found', section='warning')
+                return self.empty_results()
+            
+            # Access Dyson orbital coefficients (like MO coefficients)
+            vec_do = self.mol.data["OQP::VEC_DO"]  # Shape: (nbf, n_orbitals)
+            
+            # Access Dyson orbital energies (binding energies)
+            e_do = self.mol.data["OQP::E_DO"]  # Shape: (n_orbitals,)
+            
+            # Access pole strengths
+            do_strength = self.mol.data["OQP::DO_Strength"]  # Shape: (n_orbitals,)
+            
+            # Access orbital types (1=IP, -1=EA)
+            do_type = self.mol.data["OQP::DO_Type"]  # Shape: (n_orbitals,)
+            
+            # Convert to numpy arrays if needed
+            vec_do = np.array(vec_do) if not isinstance(vec_do, np.ndarray) else vec_do
+            e_do = np.array(e_do) if not isinstance(e_do, np.ndarray) else e_do
+            do_strength = np.array(do_strength) if not isinstance(do_strength, np.ndarray) else do_strength
+            do_type = np.array(do_type) if not isinstance(do_type, np.ndarray) else do_type
+            
+            # Reshape vec_do if necessary (Fortran column-major to Python)
+            if vec_do.ndim == 1 and n_orbitals > 0:
+                nbf = self.mol.data["nbf"]
+                vec_do = vec_do.reshape((nbf, n_orbitals), order='F')
+            
+            # Process results
+            results = self.process_results_with_orbitals(vec_do, e_do, do_strength, do_type)
+            
+            # Log summary
+            self.print_summary(results)
+            
+            return results
+            
+        except (KeyError, AttributeError) as e:
+            dump_log(self.mol, title=f'PyOQP: Error retrieving Dyson results: {e}', section='error')
+            return self.empty_results()
+    
+    def process_results_with_orbitals(self, vec_do, e_do, do_strength, do_type):
+        """
+        Process Dyson orbital data into structured results.
+        Separates IPs and EAs and converts to appropriate units.
+        """
+        hartree_to_ev = 27.211396
+        
+        # Ensure arrays are numpy arrays
+        do_type = np.array(do_type, dtype=int)
+        
+        # Separate IPs and EAs based on do_type
+        ip_mask = do_type == 1
+        ea_mask = do_type == -1
+        
+        results = {
+            # Full orbital data
+            'dyson_orbitals': vec_do,  # All Dyson orbital coefficients
+            'binding_energies': e_do,   # In Hartree
+            'pole_strengths': do_strength,
+            'orbital_types': do_type,
+            'n_orbitals': len(e_do),
+            'nbf': vec_do.shape[0] if vec_do.ndim > 1 else 0,
+            'target_state': self.target_state,
+            
+            # IP-specific data
+            'ips': None,
+            'ip_poles': None,
+            'ip_orbitals': None,
+            'n_ip': 0,
+            'homo': None,
+            
+            # EA-specific data
+            'eas': None,
+            'ea_poles': None,
+            'ea_orbitals': None,
+            'n_ea': 0,
+            'lumo': None,
+            
+            # Gap
+            'gap': None
+        }
+        
+        # Process IPs
+        if self.compute_ip and np.any(ip_mask):
+            results['ips'] = e_do[ip_mask] * hartree_to_ev  # Convert to eV
+            results['ip_poles'] = do_strength[ip_mask]
+            results['ip_orbitals'] = vec_do[:, ip_mask] if vec_do.ndim > 1 else None
+            results['n_ip'] = int(np.sum(ip_mask))
+            if len(results['ips']) > 0:
+                results['homo'] = np.min(results['ips'])
+        
+        # Process EAs
+        if self.compute_ea and np.any(ea_mask):
+            results['eas'] = -e_do[ea_mask] * hartree_to_ev  # Convert to eV (flip sign)
+            results['ea_poles'] = do_strength[ea_mask]
+            results['ea_orbitals'] = vec_do[:, ea_mask] if vec_do.ndim > 1 else None
+            results['n_ea'] = int(np.sum(ea_mask))
+            if len(results['eas']) > 0:
+                results['lumo'] = np.min(results['eas'])
+        
+        # Calculate HOMO-LUMO gap
+        if results['homo'] is not None and results['lumo'] is not None:
+            results['gap'] = results['homo'] + results['lumo']
+        
+        return results
+    
+    def empty_results(self):
+        """Return empty results structure"""
+        return {
+            'dyson_orbitals': np.array([]),
+            'binding_energies': np.array([]),
+            'pole_strengths': np.array([]),
+            'orbital_types': np.array([]),
+            'n_orbitals': 0,
+            'nbf': 0,
+            'target_state': self.target_state,
+            'ips': None,
+            'ip_poles': None,
+            'ip_orbitals': None,
+            'n_ip': 0,
+            'homo': None,
+            'eas': None,
+            'ea_poles': None,
+            'ea_orbitals': None,
+            'n_ea': 0,
+            'lumo': None,
+            'gap': None
+        }
+    
+    def print_summary(self, results):
+        """
+        Print summary of Dyson calculation results including orbital info.
+        """
+        if self.print_level == 0:
+            return
+        
+        dump_log(self.mol, title='PyOQP: Dyson Orbital Results', section='dyson_results')
+        
+        # Basic summary
+        dump_log(self.mol, title='', section='dyson_summary', info={
+            'n_orbitals': results['n_orbitals'],
+            'nbf': results['nbf'],
+            'n_ip': results['n_ip'],
+            'n_ea': results['n_ea'],
+            'target_state': results['target_state']
+        })
+        
+        # IP details
+        if results['n_ip'] > 0 and self.print_level >= 1:
+            ip_info = {
+                'n_ip': results['n_ip'],
+                'homo': f"{results['homo']:.4f} eV" if results['homo'] is not None else None,
+                'range': [f"{np.min(results['ips']):.4f}", f"{np.max(results['ips']):.4f}"] if results['n_ip'] > 0 else None
+            }
+            
+            # Add detailed list if verbose
+            if self.print_level >= 2:
+                n_show = min(self.max_print, results['n_ip'])
+                ip_details = []
+                for i in range(n_show):
+                    ip_details.append(f"  {i+1:3d}: {results['ips'][i]:8.4f} eV (pole: {results['ip_poles'][i]:.6f})")
+                ip_info['details'] = ip_details
+            
+            dump_log(self.mol, title='Ionization Potentials', section='dyson_ip', info=ip_info)
+        
+        # EA details
+        if results['n_ea'] > 0 and self.print_level >= 1:
+            ea_info = {
+                'n_ea': results['n_ea'],
+                'lumo': f"{results['lumo']:.4f} eV" if results['lumo'] is not None else None,
+                'range': [f"{np.min(results['eas']):.4f}", f"{np.max(results['eas']):.4f}"] if results['n_ea'] > 0 else None
+            }
+            
+            # Add detailed list if verbose
+            if self.print_level >= 2:
+                n_show = min(self.max_print, results['n_ea'])
+                ea_details = []
+                for i in range(n_show):
+                    ea_details.append(f"  {i+1:3d}: {results['eas'][i]:8.4f} eV (pole: {results['ea_poles'][i]:.6f})")
+                ea_info['details'] = ea_details
+            
+            dump_log(self.mol, title='Electron Affinities', section='dyson_ea', info=ea_info)
+        
+        # Gap
+        if results['gap'] is not None:
+            dump_log(self.mol, title='', section='dyson_gap', info={'gap': f"{results['gap']:.4f} eV"})
+    
+    def save_cube_files(self, results):
+        """
+        Save Dyson orbitals as cube files for visualization.
+        """
+        if results['n_orbitals'] == 0:
+            return
+        
+        # Get molecular geometry
+        atoms = self.mol.get_atoms()
+        coords = self.mol.get_system().reshape((-1, 3))
+        
+        # Check if we can write cube files
+        try:
+            from oqp.utils.cube_writer import write_cube
+            cube_available = True
+        except ImportError:
+            dump_log(self.mol, title='PyOQP: Cube writer not available, skipping cube file export', section='warning')
+            cube_available = False
+            return
+        
+        # Save IP orbitals
+        if results['ip_orbitals'] is not None and results['n_ip'] > 0:
+            n_save = min(results['n_ip'], 5)  # Save up to 5 IP orbitals
+            for i in range(n_save):
+                filename = f"{self.mol.log_path}/dyson_ip_{i+1}.cube"
+                comment = f"Dyson IP orbital {i+1}, BE={results['ips'][i]:.4f} eV, pole={results['ip_poles'][i]:.6f}"
+                write_cube(filename, atoms, coords, results['ip_orbitals'][:, i], comment=comment)
+                dump_log(self.mol, title=f'Saved IP Dyson orbital {i+1} to {filename}', section='export')
+        
+        # Save EA orbitals
+        if results['ea_orbitals'] is not None and results['n_ea'] > 0:
+            n_save = min(results['n_ea'], 5)  # Save up to 5 EA orbitals
+            for i in range(n_save):
+                filename = f"{self.mol.log_path}/dyson_ea_{i+1}.cube"
+                comment = f"Dyson EA orbital {i+1}, EA={results['eas'][i]:.4f} eV, pole={results['ea_poles'][i]:.6f}"
+                write_cube(filename, atoms, coords, results['ea_orbitals'][:, i], comment=comment)
+                dump_log(self.mol, title=f'Saved EA Dyson orbital {i+1} to {filename}', section='export')
+    
+    def generate_spectrum(self, results):
+        """
+        Generate a spectrum plot of IPs and EAs.
+        """
+        try:
+            import matplotlib.pyplot as plt
+            
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+            
+            # IP spectrum
+            if results['n_ip'] > 0:
+                ax1.stem(results['ips'], results['ip_poles'], linefmt='b-', markerfmt='bo', basefmt=' ')
+                ax1.set_xlabel('Ionization Potential (eV)')
+                ax1.set_ylabel('Pole Strength')
+                ax1.set_title(f'IP Spectrum (HOMO = {results["homo"]:.4f} eV)')
+                ax1.grid(True, alpha=0.3)
+            
+            # EA spectrum
+            if results['n_ea'] > 0:
+                ax2.stem(results['eas'], results['ea_poles'], linefmt='r-', markerfmt='ro', basefmt=' ')
+                ax2.set_xlabel('Electron Affinity (eV)')
+                ax2.set_ylabel('Pole Strength')
+                ax2.set_title(f'EA Spectrum (LUMO = {results["lumo"]:.4f} eV)')
+                ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            spectrum_file = self.dyson_config.get('spectrum_file', 'dyson_spectrum.png')
+            spectrum_path = f"{self.mol.log_path}/{spectrum_file}"
+            plt.savefig(spectrum_path, dpi=300, bbox_inches='tight')
+            
+            if self.dyson_config.get('show_spectrum', False):
+                plt.show()
+            else:
+                plt.close()
+            
+            dump_log(self.mol, title=f'Saved spectrum to {spectrum_path}', section='export')
+            
+        except ImportError:
+            dump_log(self.mol, title='PyOQP: Matplotlib not available, skipping spectrum generation', section='warning')
+    
+    def export_results(self, results):
+        """
+        Export Dyson results to file in various formats.
+        """
+        if self.export_format == 'text':
+            self.export_text(results)
+        elif self.export_format == 'numpy':
+            self.export_numpy(results)
+        elif self.export_format == 'json':
+            self.export_json(results)
+        elif self.export_format == 'csv':
+            self.export_csv(results)
+        
+        # Also export using dump_data for consistency with other OQP exports
+        if self.export:
+            dump_data(self.mol, (results, self.export_title), title='DYSON', fpath=self.mol.log_path)
+    
+    def export_text(self, results):
+        """Export results as text file"""
+        filename = f"{self.mol.log_path}/{self.export_name}.txt"
+        with open(filename, 'w') as f:
+            f.write("=" * 70 + "\n")
+            f.write(" " * 25 + "DYSON ORBITAL RESULTS\n")
+            f.write("=" * 70 + "\n\n")
+            f.write(f"Method: {self.td.upper()}\n")
+            f.write(f"Target State: {results['target_state']}\n")
+            f.write(f"Pole Strength Threshold: {self.threshold}\n")
+            f.write(f"Total Significant Orbitals: {results['n_orbitals']}\n")
+            f.write(f"Basis Functions: {results['nbf']}\n\n")
+            
+            if results['n_ip'] > 0:
+                f.write("-" * 70 + "\n")
+                f.write("IONIZATION POTENTIALS\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"Number of IPs: {results['n_ip']}\n")
+                f.write(f"HOMO: {results['homo']:.6f} eV\n")
+                f.write(f"Range: {np.min(results['ips']):.6f} - {np.max(results['ips']):.6f} eV\n\n")
+                f.write("  No.      IP (eV)    Pole Strength\n")
+                f.write("  ---    ----------   -------------\n")
+                for i in range(results['n_ip']):
+                    f.write(f"  {i+1:3d}    {results['ips'][i]:10.6f}   {results['ip_poles'][i]:12.8f}\n")
+                f.write("\n")
+            
+            if results['n_ea'] > 0:
+                f.write("-" * 70 + "\n")
+                f.write("ELECTRON AFFINITIES\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"Number of EAs: {results['n_ea']}\n")
+                f.write(f"LUMO: {results['lumo']:.6f} eV\n")
+                f.write(f"Range: {np.min(results['eas']):.6f} - {np.max(results['eas']):.6f} eV\n\n")
+                f.write("  No.      EA (eV)    Pole Strength\n")
+                f.write("  ---    ----------   -------------\n")
+                for i in range(results['n_ea']):
+                    f.write(f"  {i+1:3d}    {results['eas'][i]:10.6f}   {results['ea_poles'][i]:12.8f}\n")
+                f.write("\n")
+            
+            if results['gap'] is not None:
+                f.write("-" * 70 + "\n")
+                f.write(f"HOMO-LUMO Gap: {results['gap']:.6f} eV\n")
+                f.write("=" * 70 + "\n")
+        
+        dump_log(self.mol, title=f'PyOQP: Dyson results exported to {filename}', section='export')
+    
+    def export_numpy(self, results):
+        """Export results as NumPy npz file"""
+        filename = f"{self.mol.log_path}/{self.export_name}.npz"
+        np.savez(filename, **results)
+        dump_log(self.mol, title=f'PyOQP: Dyson results exported to {filename}', section='export')
+    
+    def export_json(self, results):
+        """Export results as JSON file"""
+        import json
+        filename = f"{self.mol.log_path}/{self.export_name}.json"
+        
+        # Convert numpy arrays to lists for JSON serialization
+        json_results = {}
+        for key, value in results.items():
+            if isinstance(value, np.ndarray):
+                json_results[key] = value.tolist()
+            elif value is None:
+                json_results[key] = None
+            else:
+                json_results[key] = value
+        
+        with open(filename, 'w') as f:
+            json.dump(json_results, f, indent=2)
+        
+        dump_log(self.mol, title=f'PyOQP: Dyson results exported to {filename}', section='export')
+    
+    def export_csv(self, results):
+        """Export results as CSV file"""
+        filename = f"{self.mol.log_path}/{self.export_name}.csv"
+        
+        with open(filename, 'w') as f:
+            # Header
+            f.write("Type,Index,Energy_eV,Pole_Strength\n")
+            
+            # IPs
+            if results['n_ip'] > 0:
+                for i in range(results['n_ip']):
+                    f.write(f"IP,{i+1},{results['ips'][i]:.6f},{results['ip_poles'][i]:.8f}\n")
+            
+            # EAs
+            if results['n_ea'] > 0:
+                for i in range(results['n_ea']):
+                    f.write(f"EA,{i+1},{results['eas'][i]:.6f},{results['ea_poles'][i]:.8f}\n")
+        
+        dump_log(self.mol, title=f'PyOQP: Dyson results exported to {filename}', section='export')
+
 class Hessian(Calculator):
     """
     OQP frequence calculation class

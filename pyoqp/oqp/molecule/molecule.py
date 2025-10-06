@@ -59,6 +59,16 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
+            # Dyson-specific tags
+            'OQP::VEC_DO',                # Dyson orbital coefficients (like VEC_MO)
+            'OQP::E_DO',                  # Dyson orbital energies (like E_MO)
+            'OQP::DO_Strength',           # Dyson pole strengths
+            'OQP::DO_Type',               # Orbital type (1=IP, -1=EA)
+            'OQP::DO_Count',              # Number of significant orbitals
+            'OQP::binding_energies',      # Simplified binding energies array
+            'OQP::pole_strengths',        # Simplified pole strengths array
+            'OQP::density_relaxed',       # Relaxed density for Dyson
+            'OQP::lagrangian_relaxed',    # Relaxed Lagrangian for Dyson 
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],
@@ -69,6 +79,7 @@ class Molecule:
         }
         self.start_time = None
         self.back_door = None
+        self.dyson_results = None
 
     def get_atoms(self):
         """

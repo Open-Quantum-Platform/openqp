@@ -15,7 +15,8 @@ from oqp.utils.input_checker import check_input_values
 from oqp.molecule import Molecule
 from oqp.library.runfunc import (
    compute_energy, compute_grad, compute_nac, compute_soc, compute_geom,
-   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo
+   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo,
+   compute_dyson
 )
 from oqp.utils.mpi_utils import MPIManager
 
@@ -66,6 +67,7 @@ class Runner:
             'thermo': compute_thermo,
             'prop': compute_properties,
             'data': compute_data,
+            'dyson': compute_dyson,
         }
 
         signal(SIGINT, SIG_DFL)

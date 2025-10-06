@@ -45,10 +45,13 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
-  
-  ! Minimal Dyson tags - Only for Python data exchange
-  character(len=*), parameter, public :: OQP_binding_energies = OQP_prefix // "binding_energies"
-  character(len=*), parameter, public :: OQP_pole_strengths = OQP_prefix // "pole_strengths"
+  ! Primary Dyson tags for full orbital data
+  character(len=*), parameter, public :: OQP_VEC_DO = OQP_prefix // "VEC_DO"           ! Dyson orbital coefficients
+  character(len=*), parameter, public :: OQP_E_DO = OQP_prefix // "E_DO"               ! Dyson orbital energies
+  character(len=*), parameter, public :: OQP_DO_Strength = OQP_prefix // "DO_Strength" ! Dyson pole strengths
+  character(len=*), parameter, public :: OQP_DO_Type = OQP_prefix // "DO_Type"         ! Type: IP or EA
+  character(len=*), parameter, public :: OQP_DO_Count = OQP_prefix // "DO_Count"       ! Number of significant DOs
+  ! MRSF preparation matrices
   character(len=*), parameter, public :: OQP_density_relaxed = OQP_prefix // "density_relaxed"
   character(len=*), parameter, public :: OQP_lagrangian_relaxed = OQP_prefix // "lagrangian_relaxed"
 
@@ -83,20 +86,25 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
   
   ! Minimal Dyson comments
-  character(len=*), parameter, public :: OQP_binding_energies_comment = "Significant binding energies (1D array)"
-  character(len=*), parameter, public :: OQP_pole_strengths_comment = "Significant pole strengths (1D array)"
-  character(len=*), parameter, public :: OQP_density_relaxed_comment = "Relaxed density matrices"
-  character(len=*), parameter, public :: OQP_lagrangian_relaxed_comment = "Relaxed Lagrangian matrices"
-  
+  character(len=*), parameter, public :: OQP_VEC_DO_comment = "Dyson orbital coefficients (nbf x n_orbitals)"
+  character(len=*), parameter, public :: OQP_E_DO_comment = "Dyson orbital binding energies (n_orbitals)"
+  character(len=*), parameter, public :: OQP_DO_Strength_comment = "Dyson orbital pole strengths (n_orbitals)"
+  character(len=*), parameter, public :: OQP_DO_Type_comment = "Orbital type: 1=IP, -1=EA (n_orbitals)"
+  character(len=*), parameter, public :: OQP_DO_Count_comment = "Number of significant Dyson orbitals"
+  character(len=*), parameter, public :: OQP_density_relaxed_comment = "Relaxed density matrix (nbf x nbf)"
+  character(len=*), parameter, public :: OQP_lagrangian_relaxed_comment = "Relaxed Lagrangian matrix (nbf x nbf)" 
   !
-  character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: all_tags(42) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
+    OQP_td_xpy, OQP_td_xmy, OQP_td_energies, &  ! Added missing td tags
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
-    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap /)
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
+    OQP_VEC_DO, OQP_E_DO, OQP_DO_Strength, OQP_DO_Type, OQP_DO_Count, &  ! Dyson tags
+    OQP_density_relaxed, OQP_lagrangian_relaxed /)  ! MRSF matrices
     
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d

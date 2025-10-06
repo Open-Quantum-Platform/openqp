@@ -327,6 +327,20 @@ class OQPData:
             "conf_threshold": "set_conf_threshold",
             "ixcore": "set_tdhf_ixcore",
         },
+        "dyson": {
+            "ip": "set_dyson_ip",
+            "ea": "set_dyson_ea",
+            "target_state": "set_dyson_target_state",
+            "threshold": "set_dyson_threshold",
+            "deflation_tol": "set_dyson_deflation_tol",
+            "max_orbitals": "set_dyson_max_orbitals",
+            "print_level": "set_dyson_print_level",
+            "max_print": "set_dyson_max_print",
+            "export": "set_dyson_export",
+            "export_format": "set_dyson_export_format",
+            "solver": "set_dyson_solver",
+            "orbital_analysis": "set_dyson_orbital_analysis",
+        },
     }
     _typemap = [np.void,
                 np.int8,
@@ -827,7 +841,7 @@ class OQPData:
             }
 
         return basis
-
+    # Dyson calculations
     def set_dyson_ip(self, compute_ip):
           """Enable/disable ionization potential calculation"""
           self._data.dyson_compute_ip = compute_ip
@@ -861,8 +875,25 @@ class OQPData:
     def set_dyson_export(self, export):
           """Enable/disable export"""
           self._data.dyson_export = export
-      
-def compute_alpha_beta_electrons(n_e, mult):
+
+    def set_dyson_max_orbitals(self, max_orbitals):
+          self._data.tddft.dyson_max_orbitals = max_orbitals
+       
+    def set_dyson_max_print(self, max_print):
+          self._data.tddft.dyson_max_print = max_print
+       
+    def set_dyson_solver(self, solver):
+          solver_map = {'dsygv': 1, 'dsyev': 2}
+          self._data.tddft.dyson_solver = solver_map.get(solver, 1)
+       
+    def set_dyson_orbital_analysis(self, analysis):
+          self._data.tddft.dyson_orbital_analysis = analysis
+
+    def set_dyson_export_format(self, format_str):
+         format_map = {'text': 1, 'csv': 2, 'json': 3, 'numpy': 4}
+         self._data.tddft.dyson_export_format = format_map.get(format_str, 1)
+    
+ def compute_alpha_beta_electrons(n_e, mult):
     """
     Compute number of alpha and beta electrons for a given total electron number and multiplicity
     ne - total number of electrons
