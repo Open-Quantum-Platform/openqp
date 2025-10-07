@@ -1283,7 +1283,8 @@ contains
   !> @param[inout] conv SCF convergence driver object.
   subroutine set_soscf_parametres(infos, conv)
     use types, only: information
-    use scf_converger, only: scf_conv, soscf_converger
+    use scf_converger, only : scf_conv, soscf_converger, &
+        SOSCF_VARIANT_ORIGINAL, SOSCF_VARIANT_STABLE_ONLY, SOSCF_VARIANT_QUAD_LS
 
     type(information), target, intent(inout) :: infos
     type(scf_conv) :: conv
@@ -1296,6 +1297,20 @@ contains
         type is (soscf_converger)
           sc%level_shift = infos%control%soscf_lvl_shift
           sc%soscf_reset_mod = infos%control%soscf_reset_mod
+      ! SOSCF_mode
+          select case (infos%control%soscf_mode)
+          case (0)
+            sc%variant = SOSCF_VARIANT_ORIGINAL          ! original behavior
+          case (1)
+            sc%variant = SOSCF_VARIANT_STABLE_ONLY       ! curvature-safe L-BFGS only
+          case (2)
+            sc%variant = SOSCF_VARIANT_QUAD_LS           ! + quadratic line search (no extra J/K)
+          case default
+            sc%variant = SOSCF_VARIANT_ORIGINAL
+          end select
+
+      class default
+      ! not an SOSCF converger; nothing to do
       end select
     end do
 

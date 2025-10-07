@@ -416,10 +416,16 @@ module scf_converger
   implicit none
 
   private
+  ! -- SOSCF variant selector (driven by infos%control%soscf_mode) --
+  integer, parameter, public :: SOSCF_VARIANT_ORIGINAL    = 0
+  integer, parameter, public :: SOSCF_VARIANT_STABLE_ONLY = 1
+  integer, parameter, public :: SOSCF_VARIANT_QUAD_LS     = 2
+  !
   public :: scf_conv
   public :: scf_conv_result
   public :: scf_conv_trah_result
   public :: soscf_converger ! Used to provide parametres for soscf
+  public :: soscf_set_variant ! SOSCF mode setter
   public :: trah_converger  ! Used to provide parametres dor trah
 
   !> Constants for converger types
@@ -701,8 +707,18 @@ module scf_converger
     integer :: nocc_b = 0             !< Number of occupied beta orbitals
     integer :: nvec = 0               !< Size of the gradient vector
 
+    ! === cheap step-control state (SOSCF only) ===
+    real(dp) :: alpha_cap   = 1.0_dp
+    real(dp) :: kappa_lim   = 0.8_dp
+    real(dp) :: alpha_last  = 0.0_dp
+    real(dp) :: gg_last     = 0.0_dp
+    real(dp) :: hh_last     = 1.0_dp
+    real(dp) :: g_rms_last  = 0.0_dp
+    integer  :: polish_cnt  = 0
+
     real(kind=dp), pointer :: overlap(:, :) => null()
     real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
+    class(information), pointer :: infos
 
 !    ! SOSCF parameters from scf_driver:
     real(kind=dp) :: hess_thresh = 1.0e-10_dp !< Orbital Hessian threshold
@@ -734,6 +750,8 @@ module scf_converger
     integer :: m_max = 0                          !< Maximum number of stored history steps
     integer :: m_history = 0                      !< Number of stored history steps
     logical :: first_macro = .true.               !< Flag for first macro-iteration
+    ! 0: original; 1: stability-only; 2: stability + quadratic LS + 1-D TR
+    integer :: variant = SOSCF_VARIANT_ORIGINAL
   contains
     procedure, pass :: init  => soscf_init
     procedure, pass :: clean => soscf_clean
@@ -799,6 +817,16 @@ module scf_converger
   end type trah_converger
 
 contains
+    subroutine soscf_set_variant(obj, variant)
+    class(subconverger), intent(inout) :: obj
+    integer,            intent(in)     :: variant
+    select type(me => obj)
+    type is (soscf_converger)
+      me%variant = variant
+    class default
+      ! ignore for non-SOSCF convergers
+  end select
+  end subroutine soscf_set_variant
 
 !==============================================================================
 ! scf_data_t Methods
@@ -1770,8 +1798,11 @@ contains
     use io_constants, only: iw
     class(cdiis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-      integer :: i, na, cur, info, ifock
-    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1)
+!      integer :: i, na, cur, info, ifock
+!    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1)
+    integer :: i, na, cur, info, ifock, trial, k
+    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1), a_sys(self%maxdiis+1, self%maxdiis+1)
+    real(kind=dp) :: delta
     real(kind=dp) :: x_loc(self%maxdiis+1)
     real(kind=dp), allocatable :: x(:)
     real(kind=dp), pointer :: err(:)
@@ -1791,19 +1822,37 @@ contains
 
     na = self%dat%num_saved
     ! Solve the set of DIIS linear equations
+    ! Add mild Tikhonov regularization before shrinking the subspace
     a_loc(:self%maxdiis, :self%maxdiis) = self%a
-    a_loc(:, na+1) = -1.0_dp
+    a_loc(1:na,   na+1) = -1.0_dp
+    a_loc(na+1, 1:na  ) = -1.0_dp
+    a_loc(na+1,  na+1) =  0.0_dp
     do i = na, 1, -1
       ! Helper index, needed for dimension reduction in case of instability
       cur = na - i + 1
       x_loc = 0.0_dp
       x_loc(na+1) = -1.0_dp
+ 
       info = 0
-      call solve_linear_equations(a_loc(cur:, cur:), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+      a_sys = a_loc
+      call solve_linear_equations(a_sys(cur:, cur:), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+ 
+      if (info > 0) then
+        do trial = 1, 3
+          delta = 1.0e-12_dp * (10.0_dp ** (trial-1))
+          a_sys = a_loc
+          do k = 0, i-1
+            a_sys(cur+k, cur+k) = a_sys(cur+k, cur+k) + delta
+          end do
+          call solve_linear_equations(a_sys(cur:, cur:), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+          if (info == 0) exit
+        end do
+      end if
+ 
       if (info <= 0) exit
       write(iw, *) 'Reducing DIIS Equation size by 1 for numerical stability'
     end do
-
+    !
     if (info < 0) then
       res%ierr = 2 ! Illegal value in DSYSV
     else if (info > 0) then
@@ -2908,7 +2957,7 @@ contains
     end associate
   end subroutine calc_orb_grad
 
-  subroutine bfgs(self, x)
+  subroutine bfgs_original_legacy(self, x)
     implicit none
     class(soscf_converger) :: self
     real(kind=dp), intent(out) :: x(:)
@@ -2973,7 +3022,315 @@ contains
     end if
     self%x_prev = x
     self%grad_prev = self%grad
+  end subroutine bfgs_original_legacy
+
+  subroutine bfgs_stable_only_impl(self, x)
+     implicit none
+     class(soscf_converger) :: self
+     real(kind=dp), intent(out) :: x(:)
+
+     ! --- locals ---
+     real(kind=dp) :: displn(self%nvec)      ! preconditioned (approx) H^{-1} g
+     real(kind=dp) :: dgrad(self%nvec)       ! y_k = g_k - g_{k-1}
+     real(kind=dp) :: updti(self%nvec)       ! H0^{-1} y_k  (H0 diagonal from gaps)
+     real(kind=dp) :: s1, s2, s3, s4, s5, s6 ! scalars used in the L-BFGS application
+     real(kind=dp) :: t, t1, t2, t3, t4
+     integer :: i
+
+     ! cheap step control scalars
+     real(kind=dp) :: gg, hh, alpha, cg, kappa_max, norm_rms
+     real(kind=dp), parameter :: eps       = 1.0e-16_dp
+     real(kind=dp), parameter :: alpha_min = 0.05_dp
+     !real(kind=dp), parameter :: alpha_max = 1.00_dp
+     !real(kind=dp), parameter :: kappa_lim = 0.30_dp   ! cap on max |rotation element|
+     real(dp) :: alpha_max, kappa_l
+
+     alpha_max = self%alpha_cap
+     kappa_l   = self%kappa_lim
+
+     ! -------- form search direction p (in x) via diagonal-precond L-BFGS --------
+     if (self%m_history < 1) then
+       ! first step: preconditioned steepest descent
+       x = - self%h_inv * self%grad
+       where (isnan(x)) x = 0.0_dp
+     else
+       displn = self%h_inv * self%grad
+       dgrad  = self%grad - self%grad_prev
+       updti  = self%h_inv * dgrad
+
+       ! apply stored pairs (i = 1 .. m_history-1) with curvature checks
+       if (self%m_history > 1) then
+         do i = 1, self%m_history-1
+           s1 = dot_product(self%s_history(:,i), self%y_history(:,i))          ! s·y
+           s2 = dot_product(self%y_history(:,i), self%upd_history(:,i))        ! y·(H0^{-1}y)
+
+           ! skip ill-conditioned pairs
+           if ( s1 <= 1.0e-12_dp * &
+                sqrt(max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps)) * &
+                sqrt(max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps)) ) cycle
+           if (abs(s2) <= eps) cycle
+
+           s3 = dot_product(self%s_history(:,i), self%grad)                    ! s·g
+           s4 = dot_product(self%upd_history(:,i), self%grad)                  ! (H0^{-1}y)·g
+           s5 = dot_product(self%s_history(:,i), dgrad)                        ! s·y_k
+           s6 = dot_product(self%upd_history(:,i), dgrad)                      ! (H0^{-1}y)·y_k
+
+           s1 = 1.0_dp / s1
+           s2 = 1.0_dp / s2
+           t  = 1.0_dp + s1 / s2
+
+           t2 = s1 * s3
+           t4 = s1 * s5
+           t1 = t * t2 - s1 * s4
+           t3 = t * t4 - s1 * s6
+
+           displn = displn + t1 * self%s_history(:,i) - t2 * self%upd_history(:,i)
+           updti  = updti  + t3 * self%s_history(:,i) - t4 * self%upd_history(:,i)
+         end do
+       end if
+
+       ! final correction using the current pair (x_prev, dgrad)
+       s1 = dot_product(self%x_prev, dgrad)                 ! s·y with current pair
+       s2 = dot_product(dgrad, updti)                       ! y·(H0^{-1}y)
+
+       if ( s1 > 1.0e-12_dp * sqrt(max(dot_product(self%x_prev, self%x_prev), eps)) * &
+                         sqrt(max(dot_product(dgrad, dgrad), eps)) .and. abs(s2) > eps ) then
+         s3 = dot_product(self%x_prev, self%grad)           ! s·g
+         s4 = dot_product(updti,       self%grad)           ! (H0^{-1}y)·g
+
+         s1 = 1.0_dp / s1
+         s2 = 1.0_dp / s2
+         t  = 1.0_dp + s1 / s2
+
+         t2 = s1 * s3
+         t1 = t * t2 - s1 * s4
+
+         displn = displn + t1 * self%x_prev - t2 * updti
+
+         ! store the current pair for the next iteration (safe to reuse)
+         self%s_history(:, self%m_history)   = self%x_prev
+         self%y_history(:, self%m_history)   = dgrad
+         self%upd_history(:, self%m_history) = updti
+       else
+         ! neutral store (keeps indexing consistent; pair will be skipped next time)
+         self%s_history(:, self%m_history)   = 0.0_dp
+         self%y_history(:, self%m_history)   = 0.0_dp
+         self%upd_history(:, self%m_history) = 0.0_dp
+       end if
+
+       x = -displn
+     end if
+
+     ! -------------------- CHEAP step length and safeguards ---------------------
+     ! Quadratic one-shot step along p = x using diagonal Hessian H0
+     gg = dot_product(self%grad, x)                            ! g·p
+     hh = sum( x * x / max(self%h_inv, eps) )                  ! p·H0·p  (H0 = diag(1/h_inv))
+
+     if (hh > eps) then
+       alpha = -gg / hh
+     else
+       alpha = 0.1_dp
+     end if
+     alpha = min(max(alpha, alpha_min), alpha_max)
+
+     ! angle safeguard: if p is poorly aligned with -g, be conservative
+     cg = -gg / ( sqrt(max(dot_product(self%grad, self%grad), eps)) * &
+                  sqrt(max(dot_product(x, x),               eps)) )
+     if (cg < 0.2_dp) alpha = 0.5_dp * alpha
+
+     ! elementwise amplitude cap (keeps exponential/orbital update in safe regime)
+     kappa_max = maxval(abs(x))
+     if (kappa_max > 0.0_dp) then
+       if (alpha * kappa_max > kappa_l) alpha = (kappa_l / kappa_max)
+     end if
+
+     ! scale the step
+     x = alpha * x
+
+     ! existing RMS clamp (RMS amplitude <= 0.1)
+     norm_rms = sqrt(dot_product(x, x) / self%nvec)
+     if (norm_rms > 0.1_dp) x = x * (0.1_dp / norm_rms)
+
+     where (isnan(x)) x = 0.0_dp
+
+     ! keep these for the next macro-iteration
+     self%x_prev   = x
+     self%grad_prev = self%grad
+     self%alpha_last = alpha
+     self%gg_last    = gg
+     self%hh_last    = hh
+     self%g_rms_last = sqrt( sum(self%grad*self%grad) / real(self%nvec,dp) )
+
+  end subroutine bfgs_stable_only_impl
+
+  subroutine bfgs_quad_ls_impl(self, x)
+    !! Mode 2: Curvature-safe L-BFGS + robust quadratic line search + 1-D trust region
+    !! - No extra J/K builds.
+    !! - Conservative early caps; bolder near the end.
+    !! - Guarantees descent direction; falls back to precond. SD if needed.
+    implicit none
+    class(soscf_converger)     :: self
+    real(kind=dp), intent(out) :: x(:)
+  
+    integer        :: n, i, m
+    real(kind=dp)  :: eps, sTy, rho_i, qdot, sN, yN, tol_curv
+    real(kind=dp)  :: gnorm, pnorm, g_rms, p_rms, p_inf, cg
+    real(kind=dp)  :: gg, hh, alpha, alpha_min, alpha_max
+    real(kind=dp)  :: delta_rms, kappa_lim, dEmodel
+  
+    ! Two-loop temporaries (automatic arrays)
+    real(kind=dp)  :: q(size(x)), r(size(x))
+    real(kind=dp), allocatable :: alpha_buf(:)
+  
+    n   = size(x)
+    eps = 1.0e-16_dp
+  
+    ! -------------------------------
+    ! 1) Curvature-safe L-BFGS two-loop
+    ! -------------------------------
+    m = self%m_history
+    q = self%grad
+  
+    if (m > 0) then
+      allocate(alpha_buf(m))
+      ! backward loop
+      do i = m, 1, -1
+        sTy = dot_product(self%s_history(:,i), self%y_history(:,i))
+        ! Nocedal curvature tolerance: skip weak/indef pairs
+        sN  = sqrt( max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps) )
+        yN  = sqrt( max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps) )
+        tol_curv = 1.0e-12_dp * sN * yN
+        if (sTy > tol_curv) then
+          rho_i = 1.0_dp / sTy
+          alpha_buf(i) = rho_i * dot_product(self%s_history(:,i), q)
+          q = q - alpha_buf(i) * self%y_history(:,i)
+        else
+          alpha_buf(i) = 0.0_dp
+        end if
+      end do
+    end if
+  
+    ! Initial inverse-Hessian action via diagonal preconditioner H0^{-1}
+    r = self%h_inv * q
+  
+    if (m > 0) then
+      ! forward loop
+      do i = 1, m
+        sTy = dot_product(self%s_history(:,i), self%y_history(:,i))
+        sN  = sqrt( max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps) )
+        yN  = sqrt( max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps) )
+        tol_curv = 1.0e-12_dp * sN * yN
+        if (sTy <= tol_curv) cycle
+        rho_i = 1.0_dp / sTy
+        qdot  = rho_i * dot_product(self%y_history(:,i), r)
+        r     = r + self%s_history(:,i) * (alpha_buf(i) - qdot)
+      end do
+      deallocate(alpha_buf)
+    end if
+  
+    ! Unscaled search direction
+    x = -r
+  
+    ! -------------------------------
+    ! 2) Robust step control (no extra J/K)
+    !    - quadratic step on diagonal model
+    !    - descent/angle checks
+    !    - 1-D trust region (RMS + ∞-norm)
+    ! -------------------------------
+    g_rms = sqrt( sum(self%grad*self%grad) / real(self%nvec, dp) )
+    gnorm = sqrt( max(dot_product(self%grad, self%grad), eps) )
+    pnorm = sqrt( max(dot_product(x, x), eps) )
+    p_rms = sqrt( dot_product(x, x) / real(self%nvec, dp) )
+    p_inf = maxval(abs(x))
+  
+    ! If L-BFGS gave a non-descent direction, fall back to preconditioned SD
+    gg = dot_product(self%grad, x)               ! g·p  (p == x at this point)
+    if (gg >= 0.0_dp) then
+      x  = - self%h_inv * self%grad              ! safe fallback
+      pnorm = sqrt( max(dot_product(x, x), eps) )
+      p_rms = sqrt( dot_product(x, x) / real(self%nvec, dp) )
+      p_inf = maxval(abs(x))
+      gg = dot_product(self%grad, x)
+    end if
+  
+    ! Diagonal quadratic curvature along p: H0 = diag(1/h_inv)
+    hh = sum( x * x / max(self%h_inv, eps) )     ! p·H0·p
+  
+    ! Stationary step on the quadratic model
+    if (hh > eps) then
+      alpha = -gg / hh
+    else
+      alpha = 0.10_dp
+    end if
+  
+    ! Conservative bounds far from minimum; relax as ||g||_rms shrinks
+    if (g_rms > 5.0e-3_dp) then
+      alpha_min = 0.02_dp;  alpha_max = 0.50_dp
+      delta_rms = 0.08_dp;  kappa_lim = 0.25_dp
+    elseif (g_rms > 1.0e-3_dp) then
+      alpha_min = 0.05_dp;  alpha_max = 0.75_dp
+      delta_rms = 0.12_dp;  kappa_lim = 0.40_dp
+    elseif (g_rms > 2.0e-4_dp) then
+      alpha_min = 0.10_dp;  alpha_max = 0.90_dp
+      delta_rms = 0.16_dp;  kappa_lim = 0.50_dp
+    else
+      alpha_min = 0.20_dp;  alpha_max = 1.00_dp
+      delta_rms = 0.20_dp;  kappa_lim = 0.60_dp
+    end if
+    if (alpha < alpha_min) alpha = alpha_min
+    if (alpha > alpha_max) alpha = alpha_max
+  
+    ! Descent-angle safeguard (only damp far from minimum)
+    if (pnorm > 0.0_dp) then
+      cg = -gg / ( gnorm * pnorm )               ! cos(angle(-g, p))
+    else
+      cg = 1.0_dp
+    end if
+    if (g_rms > 3.0e-3_dp) then
+      if (cg < 0.10_dp) alpha = 0.50_dp * alpha
+      if (cg < 0.00_dp) alpha = 0.25_dp * alpha
+    end if
+  
+    ! 1-D trust region caps
+    if (p_rms > 0.0_dp) alpha = min(alpha, delta_rms / p_rms)
+    if (p_inf > 0.0_dp) alpha = min(alpha, kappa_lim / p_inf)
+  
+    ! Model-based sufficient decrease (on the quadratic, not extra Fock):
+    ! Ensure m(alpha) = alpha*gg + 0.5*alpha^2*hh is negative and not tiny positive.
+    dEmodel = alpha*gg + 0.5_dp*alpha*alpha*hh
+    if (dEmodel >= 0.0_dp .and. hh > eps) then
+      ! move to half of stationary step on the model
+      alpha = min(alpha, -0.5_dp*gg/hh)
+      dEmodel = alpha*gg + 0.5_dp*alpha*alpha*hh
+      if (dEmodel >= 0.0_dp) alpha = 0.5_dp*alpha
+    end if
+  
+    ! Final scaled step
+    x = alpha * x
+  
+    ! Keep these for the next iteration (unchanged behavior)
+    self%x_prev    = x
+    self%grad_prev = self%grad
+  end subroutine bfgs_quad_ls_impl
+
+  subroutine bfgs(self, x)
+    !! Dispatcher so that soscf_mode = 0 is *bit-identical* to original.
+    implicit none
+    class(soscf_converger)     :: self
+    real(kind=dp), intent(out) :: x(:)
+  
+    select case (self%variant)
+    case (SOSCF_VARIANT_ORIGINAL)
+      call bfgs_original_legacy(self, x)     ! exact copy from original file
+    case (SOSCF_VARIANT_STABLE_ONLY)
+      call bfgs_stable_only_impl(self, x)    ! curvature-safe L-BFGS + legacy RMS clamp
+    case (SOSCF_VARIANT_QUAD_LS)
+      call bfgs_quad_ls_impl(self, x)        ! stable + quadratic line search (no extra J/K)
+    case default
+      call bfgs_original_legacy(self, x)
+    end select
   end subroutine bfgs
+
 
   subroutine rotate_orbs(self, x, nocc_a, nocc_b, mo)
     implicit none

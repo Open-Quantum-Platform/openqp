@@ -95,6 +95,7 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
+        'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
@@ -271,6 +272,7 @@ class OQPData:
             "rstctmo": "set_scf_rstctmo",
             "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
+            "soscf_mode": "set_scf_soscf_mode",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
             "trh_stab": "set_trah_stability",
@@ -571,6 +573,16 @@ class OQPData:
         """Reset the orbital Hessian. If it is zero, we don't reset by default.
         """
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
+
+    def set_scf_soscf_mode(self, soscf_mode):
+        """Set the SOSCF mode
+        Parameters:
+            soscf_mode (int):
+                0   : Plane 
+                1   : Stability Improved
+                2   : Stability + Performance
+        """
+        self._data.control.soscf_mode = soscf_mode
 
     def set_scf_soscf_reset_mod(self, soscf_reset_mod):
         """Set the SOSCF Hessian reset mode.
