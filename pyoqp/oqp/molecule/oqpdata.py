@@ -95,6 +95,7 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
+        'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': bool, 'default': 'False'},
         'verbose': {'type': int, 'default': '1'},
@@ -144,6 +145,8 @@ OQP_CONFIG_SCHEMA = {
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type': string, 'default': '-1'},
+        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -269,6 +272,7 @@ class OQPData:
             "rstctmo": "set_scf_rstctmo",
             "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
+            "soscf_mode": "set_scf_soscf_mode",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
             "trh_stab": "set_trah_stability",
@@ -315,6 +319,8 @@ class OQPData:
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
             "ixcore": "set_tdhf_ixcore",
+            "z_solver": "set_tdhf_z_solver",
+            "gmres_dim": "set_tdhf_gmres_dim",
         },
     }
     _typemap = [np.void,
@@ -568,6 +574,16 @@ class OQPData:
         """
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
 
+    def set_scf_soscf_mode(self, soscf_mode):
+        """Set the SOSCF mode
+        Parameters:
+            soscf_mode (int):
+                0   : Plane 
+                1   : Stability Improved
+                2   : Stability + Performance
+        """
+        self._data.control.soscf_mode = soscf_mode
+
     def set_scf_soscf_reset_mod(self, soscf_reset_mod):
         """Set the SOSCF Hessian reset mode.
         Parameters:
@@ -710,6 +726,19 @@ class OQPData:
             self.ixcore_array = arr  # keep reference!
             self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(arr))
             self._data.tddft.ixcore_len = arr.size
+
+    def set_tdhf_gmres_dim(self, gmres_dim):
+        """Set the restart dimension of GMRES during z-vector:
+           50 (default)
+        """
+        self._data.tddft.gmres_dim = gmres_dim
+
+    def set_tdhf_z_solver(self, z_solver):
+        """Set z-vector solver type:
+           0: CG (Conjugate Gradient) only
+           1: GMRES (Generalized Minimal Residual)
+        """
+        self._data.tddft.z_solver = z_solver
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""

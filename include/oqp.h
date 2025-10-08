@@ -98,6 +98,8 @@ struct dft_parameters {
     double spc_coov;
     int32_t* ixcore;
     int64_t ixcore_len;
+    int64_t z_solver;
+    int64_t gmres_dim;
 };
 
 struct control_parameters {
@@ -136,6 +138,7 @@ struct control_parameters {
     int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   soscf_reset_mod;
+    int64_t   soscf_mode;
     int64_t   verbose;
     bool      trh_stab;
     bool      trh_ls;

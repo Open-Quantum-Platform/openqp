@@ -131,6 +131,7 @@ module types
     integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
+    integer(c_int64_t) :: soscf_mode = 0       !0: plane, 1: Stability, 2: Stability+Performance
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
     logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
     ! Opentrustregion Parameter
@@ -167,6 +168,8 @@ module types
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
     integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
+    integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES)
+    integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator
