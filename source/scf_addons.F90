@@ -221,7 +221,7 @@ module scf_addons
   public :: apply_mom
   public :: level_shift_fock
   public :: fock_jk
-  public :: calc_fock2
+  public :: calc_fock
   public :: scf_energy_t
   public :: get_solver_name
   public :: compute_energy
@@ -1359,7 +1359,7 @@ contains
 
   end subroutine calc_jk_xc
 
-  subroutine calc_fock2(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
     use precision,       only : dp
     use oqp_tagarray_driver
     use types,           only : information
@@ -1453,7 +1453,7 @@ contains
 
     deallocate(pdmat)
 
-  end subroutine calc_fock2
+  end subroutine calc_fock
 
   function compute_energy(energy) result(etot)
     implicit none
