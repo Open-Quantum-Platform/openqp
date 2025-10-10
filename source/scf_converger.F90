@@ -3453,6 +3453,14 @@ contains
 !====================================================================
 ! Trust region agumnted hessian subroutines
 !====================================================================
+  !> @brief Initialize the TRAH (Trust-Region Augmented Hessian) converger.
+  !> @detail Copies basic problem dimensions and pointers from `params`, sets
+  !>         up spin/occ/vir sizes, counts the optimization variables, and
+  !>         allocates working arrays via `alloc_workspace`.
+  !> @param[inout] self    TRAH converger object.
+  !> @param[in]    params  SCF convergence context (dimensions, data handles).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine trah_init(self, params)
     implicit none
     class(trah_converger), intent(inout) :: self
@@ -3490,6 +3498,14 @@ contains
 
   end subroutine trah_init
 
+  !> @brief Initialize the TRAH (Trust-Region Augmented Hessian) converger.
+  !> @detail Copies basic problem dimensions and pointers from `params`, sets
+  !>         up spin/occ/vir sizes, counts the optimization variables, and
+  !>         allocates working arrays via `alloc_workspace`.
+  !> @param[inout] self    TRAH converger object.
+  !> @param[in]    params  SCF convergence context (dimensions, data handles).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine alloc_workspace(self)
     implicit none
     class(trah_converger), intent(inout) :: self
@@ -3528,6 +3544,12 @@ contains
     end if
   end subroutine alloc_workspace
 
+  !> @brief Free all allocated TRAH work arrays.
+  !> @detail Deallocates AO work buffers, spin-resolved slices, packed
+  !>         densities/Focks, and incremental-update buffers (d_old, f_old).
+  !> @param[inout] self  TRAH converger object to clean up.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine trah_clean(self)
     implicit none
     class(trah_converger), intent(inout) :: self
@@ -3552,6 +3574,12 @@ contains
 
   end subroutine trah_clean
 
+  !> @brief Lightweight (re)setup before a TRAH iteration.
+  !> @detail Resets internal flags that track whether data-dependent setup
+  !>         has been performed for the current iteration/step.
+  !> @param[inout] self  TRAH converger object.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine trah_setup(self)
 
     class(trah_converger), intent(inout) :: self
@@ -3560,6 +3588,14 @@ contains
 
   end subroutine trah_setup
 
+  !> @brief Entry point to run a TRAH step (skeleton).
+  !> @detail Pulls the latest Fock, density, and MO blocks from `self%dat`
+  !>         and creates a `scf_conv_trah_result`. Actual step logic is
+  !>         intended to be added where noted.
+  !> @param[inout] self  TRAH converger object.
+  !> @param[out]   res   Result object produced by TRAH iteration.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine trah_run(self, res)
 !    use otr_interface, only: init_trah_solver, run_trah_solver
     class(trah_converger), target, intent(inout) :: self
@@ -3580,6 +3616,16 @@ contains
 
   end subroutine trah_run
 
+  !> @brief Build orbital-rotation gradient and diagonal of the Hessian proxy.
+  !> @detail Transforms packed AO Fock to MO space (FOO/FVV blocks) and
+  !>         constructs the orbital-gradient (off-diagonal Fock) and a
+  !>         diagonal approximation to the Hessian using eigenvalue gaps.
+  !>         Covers RHF, UHF (α/β), and ROHF cases.
+  !> @param[inout] self    TRAH converger.
+  !> @param[out]   grad    Orbital-rotation gradient (vectorized).
+  !> @param[out]   h_diag  Diagonal of the Hessian approximation.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine calc_g_h(self, grad, h_diag)
     use precision,  only: dp
     use mathlib,    only: unpack_matrix
@@ -3715,6 +3761,17 @@ contains
     end associate
   end subroutine calc_g_h
 
+  !> @brief Apply the Hessian/operator to a trial vector (H·x) for TRAH.
+  !> @detail Maps trial rotations `x` (RHF/UHF/ROHF) to AO-space density
+  !>         perturbations, calls `get_response_packed` to obtain the
+  !>         packed Coulomb/exchange(+XC) response, transforms back to MO,
+  !>         and assembles the resulting vector `x2` in rotation space.
+  !> @param[inout] self   TRAH converger (uses work arrays, MO blocks).
+  !> @param[inout] infos  System/control information (basis, DFT flags, grid).
+  !> @param[in]    x      Trial vector (packed rotations; α then β for UHF).
+  !> @param[out]   x2     Result of operator application (same layout as x).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine calc_h_op(self, infos, x, x2)
     use precision,  only: dp
     use types, only: information
@@ -3742,6 +3799,8 @@ contains
                foo_b => self%foo_b,  fvv_b => self%fvv_b, xmat_b => self%xmat_b, x2mat_b => self%x2mat_b )
 
     select case (self%scf_type)
+
+    !============================== RHF ==============================
     case(SCF_RHF)
       k = 0
       do i = 1, nvir_a
@@ -3797,9 +3856,10 @@ contains
           x2(k) = 2*x2mat(i,a)
         end do
       end do
-      !#################### UHF
+
+    !============================== UHF ==============================
     case (scf_uhf)
-! alpha
+      ! ---- α channel ----
       k = 0
       do i = 1, nvir_a
         do a = 1, nocc_a
@@ -3834,7 +3894,7 @@ contains
       end do
       call pack_matrix(dm,dm_tri(:,1))
 
-! beta
+
       k = nvir_a*nocc_a
       do i = 1, nvir_b
         do a = 1, nocc_b
@@ -3869,9 +3929,9 @@ contains
       end do
 
       call pack_matrix(dm,dm_tri(:,2))
-! end of dm calculation
+      ! end of dm calculation
       call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
-! alpha x2mat
+      ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3885,7 +3945,7 @@ contains
                  0.0_dp, work3,  nbf)
       x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
 
-! beta x2mat
+      ! beta x2mat
       call unpack_matrix(pfock(:,2), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3914,9 +3974,9 @@ contains
         end do
       end do
 
-      !#################### ROHF
+!============================== ROHF ==============================
     case (scf_ROHF)
-! alpha
+     ! alpha
       call unpack_rohf_trial(x, xmat, xmat_b, nbf, nocc_a, nocc_b)
 
       call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
@@ -3945,8 +4005,7 @@ contains
       end do
       call pack_matrix(dm,dm_tri(:,1))
 
-! beta
-
+      ! beta
       call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
                  1.0_dp, fvv_b,  nvir_b, &
                          xmat_b, nvir_b, &
@@ -3973,9 +4032,9 @@ contains
       end do
 
       call pack_matrix(dm,dm_tri(:,2))
-! end of dm calculation
+      ! end of dm calculation
       call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
-! alpha x2mat
+      ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3989,7 +4048,7 @@ contains
                  0.0_dp, work3,  nbf)
       x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
 
-! beta x2mat
+      ! beta x2mat
       call unpack_matrix(pfock(:,2), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -4007,6 +4066,17 @@ contains
     end associate
   end subroutine calc_h_op
 
+  !> @brief Pack ROHF α/β trial matrices into a single rotation vector.
+  !> @detail Packs S↔D, V↔D, and V↔S blocks according to the ROHF layout
+  !>         (assuming nocc_a ≥ nocc_b), producing the linearized step.
+  !> @param[inout] x       Output vector of packed rotations.
+  !> @param[in]    xa      α-block trial matrix (V×Occ_α).
+  !> @param[in]    xb      β-block trial matrix (V×Occ_β with offset).
+  !> @param[in]    nbf     Number of basis functions.
+  !> @param[in]    nocc_a  Number of α occupied orbitals.
+  !> @param[in]    nocc_b  Number of β occupied orbitals.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine pack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
     use iso_fortran_env, only: dp => real64
     implicit none
@@ -4046,6 +4116,17 @@ contains
     end if
   end subroutine
 
+  !> @brief Unpack ROHF packed rotation vector into α/β trial matrices.
+  !> @detail Inverse of `pack_rohf_trial`. Reconstructs α and β trial blocks
+  !>         from the linearized ROHF step layout (nocc_a ≥ nocc_b).
+  !> @param[in]    x       Input packed rotation vector.
+  !> @param[out]   xa      α-block trial matrix (V×Occ_α).
+  !> @param[out]   xb      β-block trial matrix (V×Occ_β with offset).
+  !> @param[in]    nbf     Number of basis functions.
+  !> @param[in]    nocc_a  Number of α occupied orbitals.
+  !> @param[in]    nocc_b  Number of β occupied orbitals.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine unpack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
     use precision, only: dp
     implicit none
@@ -4087,6 +4168,16 @@ contains
     end if
   end subroutine
 
+  !> @brief Build a skew-symmetric orbital-rotation generator K from a step.
+  !> @detail Fills K with V↔Occ (and ROHF S↔D, V↔D, V↔S) elements from the
+  !>         linearized step vector. Handles RHF/UHF with explicit `nocc`,
+  !>         and ROHF using `self`’s spin occupations. Aborts on size mismatch.
+  !> @param[inout] self   TRAH converger (uses scf_type and occ/vir sizes).
+  !> @param[in]    step   Linearized rotation vector.
+  !> @param[inout] K      Output skew-symmetric generator (nbf×nbf).
+  !> @param[in,opt] nocc  Occupied count for non-ROHF (RHF/UHF) paths.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine skew_sym_k(self, step, K, nocc)
     use precision, only : dp
     implicit none
@@ -4170,6 +4261,17 @@ contains
     if (idx /= size(step)) error stop "skew_sym_k: not all elements consumed"
   end subroutine
 
+  !> @brief Rotate MOs by an exponential map of the generator (TRAH step).
+  !> @detail Builds the skew-symmetric generator K from `step`, evaluates a
+  !>         truncated matrix exponential (optionally higher-order), re-orthonormalizes
+  !>         the transform, and updates MO := MO · exp(K).
+  !> @param[inout] self  TRAH converger.
+  !> @param[in]    step  Linearized rotation vector (packed).
+  !> @param[in]    nbf   Basis dimension.
+  !> @param[in]    nocc  Occupied count (used for non-ROHF paths).
+  !> @param[inout] mo    MO coefficient matrix to be rotated (nbf×nbf).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine rotate_orbs_trah(self, step, nbf, nocc, mo)
     implicit none
 

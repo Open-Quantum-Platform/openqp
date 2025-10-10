@@ -63,7 +63,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
-    use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock2, &
+    use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
     implicit none
@@ -636,13 +636,13 @@ contains
       !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
-      call calc_fock2(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
       !----------------------------------------------------------------------------
       do_check = (scf_type == scf_rohf) .and. &
-           ( .not.(use_soscf .or. use_trah) .or. iter == 1 )
+           ( .not.(use_soscf .or. use_trah) .or. iter == 1  )
       if (do_check) then
         ! Store the original alpha Fock matrix before ROHF transformation
         rohf_bak = pfock
@@ -751,8 +751,9 @@ contains
       ! Run Convergence Accelerator (DIIS/SOSCF)
       !----------------------------------------------------------------------------
       call conv%run(conv_res)
-      if (use_trah .and. iter >1 ) then
+      if (use_trah .and. trim(conv_res%active_converger_name) == 'TRAH' ) then
         call run_otr(infos, molgrid, conv , conv_res, energy)
+        if (conv_res%ierr == 4) exit
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
         ! Retrieve updated Energies of Alpha Orbitals
@@ -1153,9 +1154,11 @@ contains
 
       if (delta_dens_a > 0.1_dp) then
         call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
+        mo_b=mo_a
       end if
       if (delta_dens_b > 0.1_dp) then
         call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
+        mo_a=mo_b
       end if
 
       ! Combine spin densities
