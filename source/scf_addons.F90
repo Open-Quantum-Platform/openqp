@@ -1131,16 +1131,25 @@ contains
     call int2_driver%clean()
 
   end subroutine fock_jk
-
-  !------------------------------------------------------------------------------
-  !  get_response_packed
-  !  Author : Mohsen Mazaherifar
-  !  Date   : 2025-09-30
-  !
-  !  Build AO-space linear response vector(s) in packed (triangular) form:
-  !    RHF : v1 = J/K(dm1) + f_xc(dm1)
-  !    U/R : v1a, v1b = J/K(dm1a,dm1b) + f_xc(dm1a,dm1b)
-  !------------------------------------------------------------------------------
+  !> @brief Builds AO-space linear response vector(s) in packed (triangular) form.
+  !> @detail Forms the Coulomb/exchange response and, when using DFT, the
+  !>         exchange–correlation kernel contribution in AO space.
+  !>         For RHF: v1 = J/K(dm1) + f_xc(dm1).
+  !>         For UHF/ROHF: spin-separated v1α, v1β using dm1α, dm1β.
+  !>         Uses `fock_jk` for J/K and `tddft_fxc` / `utddft_fxc` for the XC kernel.
+  !>         All AO matrices are in packed (upper-triangular) storage unless noted.
+  !> @param[in]  basis     Basis set information.
+  !> @param[inout] infos   System/control information (used to detect SCF type and DFT flags).
+  !> @param[in]  molGrid   DFT molecular grid (required if DFT/XC kernel is used).
+  !> @param[inout] mo_a    AO→MO coefficients for α (nbf×nbf). May be updated by XC routines.
+  !> @param[in]  dm1_tri   First-order AO density in packed form:
+  !>                       RHF: (nbf*(nbf+1)/2, 1)
+  !>                       U/R: (nbf*(nbf+1)/2, 2) for α,β.
+  !> @param[out] v1_tri    Packed AO response vector(s), same shape as dm1_tri.
+  !> @param[inout,opt] mo_b AO→MO coefficients for β (nbf×nbf). Required for UHF;
+  !>                        for ROHF it may be absent, in which case α is reused.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine get_response_packed(basis, infos, molGrid, mo_a, dm1_tri, v1_tri, mo_b)
       use precision,           only: dp
       use basis_tools,         only: basis_set
@@ -1226,7 +1235,25 @@ contains
 
   end subroutine get_response_packed
 
-
+  !> @brief Computes DFT exchange–correlation contributions (matrix and energies).
+  !> @detail Calls `dftexcor` to form the packed AO XC matrix pfxc and the
+  !>         XC/total electron/kinetic energies. Handles RHF, UHF, and ROHF:
+  !>         - RHF: single packed matrix used for both spins.
+  !>         - UHF: separate α/β packed matrices.
+  !>         - ROHF: β MOs are taken equal to α (mo_b := mo_a) for the call.
+  !> @param[inout] infos   System/control information (reads SCF type).
+  !> @param[in]    basis   Basis set information.
+  !> @param[in]    molgrid DFT molecular grid and quadrature weights.
+  !> @param[out]   pfxc    Packed AO XC matrix/matrices:
+  !>                       RHF: (nbf_tri,1)
+  !>                       U/R: (nbf_tri,2) for α,β.
+  !> @param[out]   eexc    Exchange–correlation energy.
+  !> @param[out]   totele  Total electron energy on the grid (xc driver report).
+  !> @param[out]   totkin  Kinetic energy on the grid (xc driver report).
+  !> @param[inout] mo_a    AO→MO coefficients for α (nbf×nbf).
+  !> @param[inout] mo_b    AO→MO coefficients for β (nbf×nbf). For ROHF, set to mo_a.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)
     use precision, only: dp
     use types, only: information
@@ -1276,6 +1303,31 @@ contains
 
   end subroutine calc_dft_xc
 
+  !> @brief Builds J/K (and optional DFT XC) Fock contribution(s) and energies.
+  !> @detail Forms two-electron Fock using `fock_jk`, adds the one-electron core
+  !>         Hamiltonian, and accumulates SCF energy components:
+  !>         E_hf1 = Tr[D·Hcore], E_hf = ½·Σ_i Tr[D_i·F_i] + ½·E_hf1, E_tot = E_hf + E_nuc.
+  !>         If DFT (infos%control%hamilton ≥ 20), adds packed XC matrix (via `calc_dft_xc`)
+  !>         and XC energy to F and E.
+  !>         Supports incremental updates when both d_old and f_old are provided:
+  !>         builds F for ΔD = D − D_old, accumulates into F (and updates D_old,F_old).
+  !> @param[in]     basis    Basis set information.
+  !> @param[inout]  infos    System/control information and runtime data.
+  !> @param[inout]  d        Packed AO density(ies), shape (nbf_tri,nfocks).
+  !> @param[in]     hcore    Packed one-electron core Hamiltonian (nbf_tri).
+  !> @param[in]     nfocks   Number of spin blocks: 1 (RHF) or 2 (UHF/ROHF).
+  !> @param[inout]  f        Packed Fock matrix(ces) to fill (nbf_tri,nfocks).
+  !> @param[inout]  E        SCF energy accumulator (ehf1, ehf, etot, … are updated).
+  !> @param[in,opt] molgrid  DFT grid (required if DFT is active).
+  !> @param[inout,opt] mo_a  AO→MO α (nbf×nbf); required if DFT is active.
+  !> @param[inout,opt] mo_b  AO→MO β (nbf×nbf); required for UHF. For ROHF α is reused.
+  !> @param[inout]  nschwz   (Output) number of Schwarz-screened quartets (from ERI driver).
+  !> @param[inout,opt] f_old Previously accumulated packed Fock(ces) for incremental build.
+  !> @param[inout,opt] d_old Previous packed density(ies) for incremental build.
+  !> @note For DFT hybrids, exchange scaling is taken from infos%dft%HFscale.
+  !> @throws error stop if DFT is requested but molgrid/mo_a are not provided.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
                                molgrid, mo_a, mo_b, nschwz, f_old, d_old)
     use precision,       only : dp
@@ -1359,6 +1411,26 @@ contains
 
   end subroutine calc_jk_xc
 
+  !> @brief High-level AO-Fock builder and energy evaluation.
+  !> @detail Retrieves required matrices/vectors from the internal tagarray
+  !>         (Hcore, T, S, D_α[,_β], MO_α[,_β]) and constructs the packed AO
+  !>         Fock matrix(ces) via `calc_jk_xc`. Computes one- and two-electron
+  !>         energy components, nuclear repulsion, virial ratio, and stores
+  !>         the packed Fock back to tagarray (FOCK_A[, FOCK_B]).
+  !>         Supports optional overrides for MO/Density and incremental updates.
+  !> @param[in]     basis     Basis set information.
+  !> @param[inout]  infos     System/control information and tagarray store.
+  !> @param[in]     molgrid   DFT molecular grid (used when DFT is active).
+  !> @param[inout]  fock_ao   Packed AO Fock output: (nbf_tri, nfocks).
+  !> @param[inout]  E         SCF energy structure (fields updated).
+  !> @param[inout,opt] mo_a_in Override AO→MO α (nbf×nbf).
+  !> @param[inout,opt] mo_b_in Override AO→MO β (nbf×nbf).
+  !> @param[inout,opt] dens_in Override packed AO density(ies) (nbf_tri, nfocks).
+  !> @param[inout,opt] dens_old Previous packed density(ies) for incremental build.
+  !> @param[inout,opt] f_old    Previous packed Fock(ces) for incremental build.
+  !> @param[inout,opt] nschwz   (Output) count of Schwarz-screened quartets.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
     use precision,       only : dp
     use oqp_tagarray_driver

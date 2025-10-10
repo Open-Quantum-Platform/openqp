@@ -1,8 +1,15 @@
-!==============================================================================
-! Module: trah_opentrustregion_interface
-! A simple interface to call OpenTrustRegion solver from OpenQP without needing
-! opentrustregion_solver_class
-!==============================================================================
+!> @brief Thin interface between OpenQP and OpenTrustRegion.
+!> @detail Provides callback glue so OpenTrustRegion’s generic trust-region
+!>         optimizer can drive OpenQP’s TRAH SCF updates without requiring
+!>         an external solver class. Exposes:
+!>           - init_trah_solver: bind OpenQP state to module pointers
+!>           - run_trah_solver : configure and invoke the OTR solver
+!>           - update_orbs     : objective/gradient/Hdiag callback
+!>           - hess_x_cb       : Hessian–vector product callback
+!>           - obj_func        : energy-only evaluation (trial move)
+!>           - logger          : forwards OTR log lines to OpenQP I/O
+!> @author Mohsen Mazaherifar
+!> @date August 2025
 module otr_interface
 
   use, intrinsic :: iso_c_binding, only: c_bool
@@ -32,7 +39,16 @@ module otr_interface
 
 
 contains
-
+  !> @brief Initialize the OTR–OpenQP bridge and working buffers.
+  !> @detail Stores references to OpenQP objects (infos, molgrid, TRAH converger,
+  !>         energy accumulator), allocates temporary work arrays, and zeros the
+  !>         incremental Fock/Density buffers used for ΔD updates.
+  !> @param[inout] infos_in   OpenQP information/control object (target).
+  !> @param[in]    molgrid_in DFT molecular grid (target).
+  !> @param[inout] conv_in    TRAH converger (provides MO/D/Fock buffers).
+  !> @param[inout] energy_in  SCF energy structure to be updated.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine init_trah_solver(infos_in, molgrid_in, conv_in, energy_in)
     class(information), intent(inout), target :: infos_in
     type(dft_grid_t), intent(in), target :: molgrid_in
@@ -54,6 +70,15 @@ contains
 
   end subroutine init_trah_solver
 
+  !> @brief Configure and run the OpenTrustRegion driver.
+  !> @detail Wires the required callbacks (`update_orbs`, `obj_func`, `logger`),
+  !>         maps OpenQP control flags to OTR options (stability, line-search,
+  !>         Davidson/Jacobi–Davidson, trust-radius settings), executes the solve,
+  !>         and returns iteration/error status in `res`.
+  !> @param[inout] res  Output SCF converger result (TRAH-specific fields filled).
+  !> @note Updates the active OpenQP buffers (MO/Fock) upon return.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine run_trah_solver(res)
     procedure(update_orbs_type), pointer :: p_update
     procedure(obj_func_type),   pointer :: p_obj
@@ -131,6 +156,18 @@ contains
 
   end subroutine run_trah_solver
 
+  !> @brief Objective/gradient/Hessian-diagonal callback used by OTR.
+  !> @detail Applies orbital rotations `kappa` to (α[,β]) MOs, rebuilds densities,
+  !>         constructs Fock via `calc_fock` (using incremental ΔD/ΔF when available),
+  !>         then forms orbital-rotation gradient and Hessian diagonal with
+  !>         `conv%calc_g_h`. Also binds the Hessian–vector product callback.
+  !> @param[in]   kappa    Packed rotation vector(s).
+  !> @param[out]  func     Objective value (total electronic energy).
+  !> @param[out]  grad     Objective gradient in rotation coordinates.
+  !> @param[out]  h_diag   Diagonal of approximate Hessian in rotation space.
+  !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr)
     real(dp), intent(in)                     :: kappa(:)
     real(dp), intent(out)                    :: func
@@ -169,7 +206,18 @@ contains
     grad = 2.0_dp * grad
   end subroutine update_orbs
 
-
+  !> @brief Objective/gradient/Hessian-diagonal callback used by OTR.
+  !> @detail Applies orbital rotations `kappa` to (α[,β]) MOs, rebuilds densities,
+  !>         constructs Fock via `calc_fock` (using incremental ΔD/ΔF when available),
+  !>         then forms orbital-rotation gradient and Hessian diagonal with
+  !>         `conv%calc_g_h`. Also binds the Hessian–vector product callback.
+  !> @param[in]   kappa    Packed rotation vector(s).
+  !> @param[out]  func     Objective value (total electronic energy).
+  !> @param[out]  grad     Objective gradient in rotation coordinates.
+  !> @param[out]  h_diag   Diagonal of approximate Hessian in rotation space.
+  !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   function hess_x_cb(x) result(hx)
     real(dp), intent(in) :: x(:)
     real(dp)             :: hx(size(x))
@@ -177,7 +225,14 @@ contains
     hx = 2.0_dp * hx
   end function hess_x_cb
 
-
+  !> @brief Energy-only objective for a trial move (no gradient).
+  !> @detail Rotates temporary copies of the MOs according to `kappa`, rebuilds
+  !>         densities, recomputes Fock and energies, and returns the total energy.
+  !>         Used by line-search/auxiliary steps in OTR.
+  !> @param[in]  kappa  Packed rotation vector(s).
+  !> @return     val    Total electronic energy at the trial point.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
   function obj_func(kappa) result(val)
     real(dp), intent(in) :: kappa(:)
     real(dp)             :: val
