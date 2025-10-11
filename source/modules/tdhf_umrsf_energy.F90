@@ -40,7 +40,7 @@ contains
       mrinivec, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density
-    use tdhf_umrsf_lib, only: umrsfcbc, umrsfmntoia
+    use tdhf_mrsf_lib, only: mrsfcbc, mrsfmntoia
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -373,7 +373,7 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
-          call umrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
 
         else if (mrst==5) then
 
@@ -438,7 +438,7 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           ! Product (A-B)*X
-          call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
 
