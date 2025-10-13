@@ -1,3 +1,9 @@
+!> @brief ECP (effective core potential) interface built on libecpint.
+!> @detail Provides ECP one-electron integrals and first derivatives, handling
+!>         AO-label remapping and shell-origin geometry. Wraps libecpint’s C API
+!>         and exposes simple Fortran-callable routines for OpenQP.
+!> @author Mohsen Mazaherifar
+!> @date January 2025
 module ecp_tool
     use iso_c_binding, only: c_double, c_ptr, c_int,&
             c_f_pointer, C_LOC, c_null_ptr
@@ -14,7 +20,16 @@ module ecp_tool
     public add_ecpder
 
 contains
-
+    !> @brief Add ECP one-electron contribution to the AO-core Hamiltonian (packed).
+    !> @detail Computes scalar ECP integrals with libecpint (deriv order 0),
+    !>         remaps them into OpenQP AO ordering via @ref transform_matrix,
+    !>         and accumulates into upper-triangular packed Hcore.
+    !> @param[in]  basis   Basis set (contains ECP params and AO metadata).
+    !> @param[in]  coord   Nuclear coordinates (3×natm).
+    !> @param[inout] hcore Upper-triangular packed AO core Hamiltonian (size nbf*(nbf+1)/2).
+    !> @note No-op if basis%ecp_params%is_ecp == .false.
+    !> @author Mohsen Mazaherifar
+    !> @date January 2025
     subroutine add_ecpint(basis, coord, hcore)
         real(real64), contiguous, intent(in) :: coord(:,:)
         type(basis_set), intent(in) :: basis
@@ -55,6 +70,18 @@ contains
 
     end subroutine add_ecpint
 
+    !> @brief Add ECP force contribution (first derivatives) to nuclear gradients.
+    !> @detail Computes dV_ECP/dR_A in AO full-square form for each atom using
+    !>         libecpint (deriv order 1), transforms to OpenQP AO ordering, and
+    !>         contracts with the symmetric density `denab` (packed) to accumulate
+    !>         into atomic gradient components `de(:,A)`.
+    !> @param[in]    basis  Basis set (with ECP params).
+    !> @param[in]    coord  Nuclear coordinates (3×natm).
+    !> @param[inout] denab  Packed AO density (size nbf*(nbf+1)/2).
+    !> @param[inout] de     Nuclear gradients (3×natm), incremented by ECP part.
+    !> @note No-op if basis%ecp_params%is_ecp == .false.
+    !> @author Mohsen Mazaherifar
+    !> @date January 2025
     subroutine add_ecpder(basis, coord, denab, de)
 
         real(real64), contiguous, intent(in) :: coord(:,:)
@@ -133,6 +160,18 @@ contains
 
     end subroutine add_ecpder
 
+    !> @brief Construct and initialize a libecpint integrator instance.
+    !> @detail Marshals Gaussian basis (centers, exponents, contractions, AMs) and
+    !>         ECP basis (centers, exponents, coefficients, AMs, powers) from
+    !>         OpenQP’s `basis_set` into libecpint arrays, assigns the ECP data,
+    !>         and finalizes the integrator for the requested derivative order.
+    !> @param[out] integrator    Opaque libecpint handle (C pointer).
+    !> @param[in]  basis         Basis + ECP data.
+    !> @param[in]  coord         Nuclear coordinates (3×natm).
+    !> @param[in]  deriv_order   0 = value, 1 = first derivatives.
+    !> @pre `basis%ecp_params` fields are allocated when is_ecp is true.
+    !> @author Mohsen Mazaherifar
+    !> @date January 2025
     subroutine set_integrator(integrator, basis, coord, deriv_order)
 
         real(c_double), intent(in), contiguous :: coord(:,:)
@@ -188,7 +227,14 @@ contains
         call init_integrator_instance(integrator, deriv_order)
 
     end subroutine set_integrator
-
+  !> @brief Build AO index remapping from libecpint canonical order to OpenQP AO order.
+  !> @detail Fills `label_map(i_old)=i_new` using shell origins and angular-momentum
+  !>         layout so that full-square AO matrices can be permuted consistently.
+  !> @param[in]    basis     Basis set (AO layout and shell metadata).
+  !> @param[inout] label_map Integer array of length nbf receiving the permutation.
+  !> @see transform_matrix
+  !> @author Mohsen Mazaherifar
+  !> @date January 2025
   subroutine libecpint_map(basis, label_map)
 
     use basis_tools, only: basis_set
@@ -204,7 +250,15 @@ contains
     end do
 
   end  subroutine libecpint_map
-
+  !> @brief Pack Gaussian-center coordinates per shell for libecpint.
+  !> @detail Writes (x,y,z) per shell index using `basis%origin(shell)` to select
+  !>         the parent atom for the shell center as expected by libecpint.
+  !> @param[in]  basis    Basis set.
+  !> @param[in]  coord    Nuclear coordinates (3×natm).
+  !> @param[out] g_coords Flat array of size 3*nshell: [x1,y1,z1, x2,y2,z2, ...].
+  !> @note Coordinates are cast to C double precision for the C API.
+  !> @author Mohsen Mazaherifar
+  !> @date January 2025
   subroutine libecp_g_coords(basis, coord, g_coords)
 
       type(basis_set), intent(in) :: basis
@@ -218,6 +272,15 @@ contains
       end do
   end subroutine libecp_g_coords
 
+  !> @brief Permute a full AO square matrix into OpenQP AO ordering.
+  !> @detail Applies the mapping from @ref libecpint_map to reorder rows/cols
+  !>         of `matrix` in-place (via a temporary copy). Expects size nbf×nbf.
+  !> @param[in]    basis   Basis set (provides AO label map).
+  !> @param[inout] matrix  Full AO square matrix flattened (size nbf*nbf).
+  !> @throws Stops if `size(matrix) != nbf*nbf`.
+  !> @see libecpint_map
+  !> @author Mohsen Mazaherifar
+  !> @date January 2025
   subroutine transform_matrix(basis, matrix)
 
     use basis_tools, only: basis_set
