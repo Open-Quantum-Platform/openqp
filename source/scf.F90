@@ -1155,10 +1155,12 @@ contains
       if (delta_dens_a > 0.1_dp) then
         call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
         mo_b=mo_a
+        mo_energy_b=mo_energy_a
       end if
       if (delta_dens_b > 0.1_dp) then
         call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
         mo_a=mo_b
+        mo_energy_a=mo_energy_b
       end if
 
       ! Combine spin densities
