@@ -37,10 +37,9 @@ contains
       get_transition_density, get_transitions, &
       get_transition_dipole, print_results
     use tdhf_mrsf_lib, only: &
-      mrinivec, mrsfesum, &
+      mrinivec, mrsfcbc, mrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density
-    use tdhf_mrsf_lib, only: mrsfcbc, mrsfmntoia
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -343,7 +342,7 @@ contains
 
     else if (mrst==5) then
 
-      call inivec(mo_energy_b,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
+      call inivec(mo_energy_a,mo_energy_b,bvec_mo,xm,noccb,nocca,nvec)
 
     end if
 
