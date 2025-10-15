@@ -972,7 +972,7 @@ class NACME(BasisOverlap):
         state_overlap = self.mol.data["OQP::td_states_overlap"]
 
         # compute time-derivative nac
-        dc_matrix = (state_overlap - state_overlap.T) / self.dt
+        dc_matrix = (state_overlap - state_overlap.T) / (2*self.dt)
         e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
         e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
         gap = e_j - e_i

@@ -151,10 +151,10 @@ contains
 
     do i = 1, ubound(Bvec, 2)
       td_states_phase(i) = dot_product(Bvec_old(:,i), Bvec(:,i))
-!     if (td_states_phase < 0.0d0) then
-!       Bvec(:,i) = -1.0d0*Bvec(:,i)
-!       td_states_phase = -1.0d0*td_states_phase
-!     endif
+     if (td_states_phase(i) < 0.0d0) then
+       Bvec(:,i) = -1.0d0*Bvec(:,i)
+       td_states_phase(i) = -1.0d0*td_states_phase(i)
+     endif
       write(iw, fmt='(6x,i4,x,f12.8)') i, td_states_phase(i)
     end do
 
@@ -1024,7 +1024,7 @@ contains
           "(<phi^{i}|d/dt|phi^{j}> = F - B)", &
           "---------------------------------"
     do j = 1, nstates
-       write(iw, fmt='(i5,10f11.6)') j, (nac(j,i), i = 1, nstates)
+       write(iw, fmt='(i5,10f11.6)') j, (nac(j,i)*0.02418884254, i = 1, nstates)
     end do
     write (iw,*) " "
 
