@@ -59,7 +59,7 @@ def guess_from_pyscf(mol):
     mole.spin = mol.config["scf"]["multiplicity"] - 1
     mole.output = '%s.pyscf' % mol.project_name
     mole.verbose = 4
-    mole.build(cart=False)
+    mole.build(cart=True)
     functional = mol.config["input"]["functional"]
 
     if mol.config["scf"]["type"] == 'rohf':
