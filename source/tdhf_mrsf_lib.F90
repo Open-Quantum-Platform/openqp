@@ -465,13 +465,13 @@ contains
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
                        bvec(lr1:lr1,nocca+1), nbf, &
-               0.0_dp, tmp(:,2), nbf)
+               0.0_dp, tmp(:,1), nbf)
 
     ! Step 2: Outer product to form AO-basis matrix
     !   P^bo1v_(mu,nu) += C^alpha_(mu,HOMO-1) * tmp_nu
     call dgemm('n', 't', nbf, nbf, 1, &
                1.0_dp, va(:,lr1:lr1), nbf, &
-                       tmp(:,2:2), nbf, &
+                       tmp(:,1:1), nbf, &
                1.0_dp, bo1v, nbf)
 
     !-----------------------------------------------------------------------
@@ -829,7 +829,7 @@ contains
     call dgemm('n','n',nbf,1,nbf, &
                one, ado1v, nbf, &
                     vb(:,lr2:lr2), nbf, &
-               zero, tmp, nbf)
+              zero, tmp, nbf)
     ! Step 2: Add contribution from aco12 with HOMO-1_beta MO coefficient
     !   tmp_mu += sum_nu P^aco12_(mu,nu) * C^beta_(nu,HOMO-1)
     call dgemm('n','n',nbf,1,nbf, &
@@ -863,7 +863,7 @@ contains
     call dgemm('n','n',nbf,1,nbf, &
                one, aco12, nbf, &
                     vb(:,lr2:lr2), nbf, &
-               zero, tmp, nbf)
+              zero, tmp, nbf)
     ! Step 2: Add ado2v contribution and subtract aco12 contribution
     !   tmp_mu = sum_nu P^ado2v_(mu,nu) * C^beta_(nu,HOMO-1) - tmp_mu
     call dgemm('n','n',nbf,1,nbf, &
@@ -896,7 +896,7 @@ contains
     call dgemm('t','n',nbf,1,nbf, &
                one, adco2, nbf, &
                     va(:,lr1:lr1), nbf, &
-               zero, tmp, nbf)
+              zero, tmp, nbf)
     ! Step 2: Add contribution from ao21v^T with HOMO_alpha MO coefficient
     !   tmp_mu += sum_nu P^ao21v_(nu,mu) * C^alpha_(nu,HOMO)
     call dgemm('t','n',nbf,1,nbf, &
@@ -930,7 +930,7 @@ contains
     call dgemm('t','n',nbf,1,nbf, &
                one, ao21v, nbf, &
                     va(:,lr1:lr1), nbf, &
-               zero, tmp, nbf)
+              zero, tmp, nbf)
     ! Step 2: Add adco1 contribution and subtract ao21v contribution
     !   tmp_mu = sum_nu P^adco1_(nu,mu) * C^alpha_(nu,HOMO) - tmp_mu
     call dgemm('t','n',nbf,1,nbf, &
