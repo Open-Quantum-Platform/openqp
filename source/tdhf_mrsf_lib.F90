@@ -421,7 +421,7 @@ contains
     lr1 = nocca-1
     lr2 = nocca
 
-    allocate(tmp(nbf,max(2,noccb)), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf,max(1,noccb)), source=0.0_dp, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory',with_abort)
 
     !-----------------------------------------------------------------------
@@ -602,12 +602,12 @@ contains
     call dgemm('n', 'n', nbf, 1, noccb, &
                1.0_dp, va, nbf, &
                        bvec(1:noccb,lr2:lr2), nbf, &
-               0.0_dp, tmp(:,2), nbf)
+               0.0_dp, tmp(:,1), nbf)
 
     !   P^co12_(mu,nu) -= C^beta_(mu,HOMO-1) * tmp_nu (negative contribution)
     call dgemm('n', 't', nbf, nbf, 1, &
               -1.0_dp, vb(:,lr1:lr1), nbf, &
-                       tmp(:,2:2), nbf, &
+                       tmp(:,1:1), nbf, &
                1.0_dp, co12, nbf)
 
     !-----------------------------------------------------------------------
@@ -636,12 +636,12 @@ contains
     call dgemm('n', 't', nbf, noccb, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
                        bvec(:,nocca+1), nbf, &
-               0.0_dp, tmp, nbf)
+               0.0_dp, tmp(:,1:noccb), nbf)
 
     ! Step 2: Outer product P^ball_(mu,nu) += sum_i C^alpha_(mu,i) * tmp_(nu,i)
     call dgemm('n', 't', nbf, nbf, noccb, &
                1.0_dp, va, nbf, &
-                       tmp, nbf, &
+                       tmp(:,1:noccb), nbf, &
                1.0_dp, ball, nbf)
 
     !-----------------------------------------------------------------------
