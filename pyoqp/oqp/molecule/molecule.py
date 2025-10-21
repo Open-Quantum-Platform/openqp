@@ -70,6 +70,13 @@ class Molecule:
         self.start_time = None
         self.back_door = None
 
+        for tag in self.tag:
+            name = tag.replace('OQP::', '').lower()
+            getter = lambda self, t=tag: np.array(self.data[t])
+            setter = lambda self, val, t=tag: self.data.__setitem__(t, val)
+            setattr(self.__class__, f'get_{name}', getter)
+            setattr(self.__class__, f'set_{name}', setter)
+
     def get_atoms(self):
         """
         Get read-only atoms
