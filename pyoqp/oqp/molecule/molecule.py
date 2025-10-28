@@ -111,6 +111,96 @@ class Molecule:
             dtype=np.double)
 
         return copy.deepcopy(coord)
+    def get_scf_energy(self, component=None):
+        """
+        Retrieve SCF (Self-Consistent Field) energy components.
+
+        This method provides convenient access to individual or all energy
+        terms computed during an SCF procedure. If no component is specified,
+        the total SCF energy is returned.
+
+        Parameters
+        ----------
+        component : str, optional
+            The energy component to retrieve. Supported options are:
+
+            - ``None`` (default): Returns only the total SCF energy.
+            - ``"all"``: Returns a dictionary containing all available
+              energy components.
+            - One of the following component names:
+                * "energy"  — total SCF energy
+                * "psinrm"  — wavefunction norm
+                * "ehf1"    — Hartree-Fock energy (one-electron)
+                * "vee"     — electron-electron repulsion energy
+                * "nenergy" — nuclear energy contribution
+                * "vne"     — electron-nucleus attraction energy
+                * "vnn"     — nucleus-nucleus repulsion energy
+                * "vtot"    — total potential energy
+                * "tkin"    — kinetic energy
+                * "virial"  — virial ratio
+
+        Returns
+        -------
+        float or dict
+            - If `component` is None, returns a single float (total SCF energy).
+            - If `component` is "all", returns a dictionary with all energy components.
+            - If `component` corresponds to a specific component, returns that component as a float.
+
+        Raises
+        ------
+        ValueError
+            If the provided `component` does not match any of the known energy components.
+
+        Examples
+        --------
+        >>> mol.get_scf_energy()
+        -75.98327432
+
+        >>> mol.get_scf_energy("tkin")
+        37.420192
+
+        >>> mol.get_scf_energy("all")
+        {
+            'energy': -75.98327432,
+            'psinrm': 0.999999,
+            'ehf1': -72.3123,
+            'vee': 18.2034,
+            'nenergy': -80.000,
+            'vne': -85.6214,
+            'vnn': 5.6214,
+            'vtot': -67.4180,
+            'tkin': 37.4202,
+            'virial': 2.1519
+        }
+        """
+        energy_data = self.data._data.mol_energy
+
+        if component is None:
+            return energy_data.energy
+
+        elif component == "all":
+            return {
+                "energy": energy_data.energy,
+                "psinrm": energy_data.psinrm,
+                "ehf1": energy_data.ehf1,
+                "vee": energy_data.vee,
+                "nenergy": energy_data.nenergy,
+                "vne": energy_data.vne,
+                "vnn": energy_data.vnn,
+                "vtot": energy_data.vtot,
+                "tkin": energy_data.tkin,
+                "virial": energy_data.virial
+            }
+
+        else:
+            if hasattr(energy_data, component):
+                return getattr(energy_data, component)
+            else:
+                raise ValueError(
+                    f"Invalid component '{component}'. Use one of: "
+                    f"energy, psinrm, ehf1, vee, nenergy, vne, vnn, "
+                    f"vtot, tkin, virial, or 'all'."
+                )
 
     def get_grad(self):
         """
@@ -152,7 +242,7 @@ class Molecule:
         data = {}
         for key in self.tag:
             if key in self.skip_tag[scf_type]:
-                continue 
+                continue
             try:
                 data[key] = np.array(self.data[key]).tolist()
 
