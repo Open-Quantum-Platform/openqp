@@ -171,7 +171,28 @@ if(USE_LIBINT)
 endif()
 
 if(ENABLE_PYTHON)
-    add_subdirectory(pyoqp)
+# --- Python selection (optional but recommended) ---
+# Let users request a specific Python version, e.g. -DOQP_PYTHON_VERSION=3.11
+   set(OQP_PYTHON_VERSION "" CACHE STRING "Request a specific Python version (e.g. 3.11)")
+  
+   if(OQP_PYTHON_VERSION)
+     # EXACT locks to the requested minor, e.g. 3.11.x only
+     find_package(Python ${OQP_PYTHON_VERSION} EXACT
+                  REQUIRED COMPONENTS Interpreter Development)
+   else()
+     # Fall back to the default active Python
+     find_package(Python REQUIRED COMPONENTS Interpreter Development)
+   endif()
+ 
+   # Expose the resolved interpreter/lib to subdirectories (like pyoqp)
+   # so that a second find_package(Python ...) in subdirs reuses this one.
+   set(Python_EXECUTABLE "${Python_EXECUTABLE}" CACHE FILEPATH "Chosen Python interpreter" FORCE)
+   set(Python_INCLUDE_DIRS "${Python_INCLUDE_DIRS}" CACHE PATH "Chosen Python include dirs" FORCE)
+   set(Python_LIBRARIES   "${Python_LIBRARIES}"   CACHE FILEPATH "Chosen Python libraries"   FORCE)
+ 
+   # You can also export convenient imported targets in subdirs:
+   #   Python::Interpreter, Python::Python, Python::Module, Python::NumPy (if found)
+add_subdirectory(pyoqp)
 endif()
 
 install(
