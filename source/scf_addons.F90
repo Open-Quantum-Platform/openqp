@@ -1582,7 +1582,7 @@ contains
 
      u_mrsf = infos%tddft%u_mrsf
 
-     u_mrsf = .true.
+!     u_mrsf = .true.
 
      thresh = infos%tddft%jacobi_conv
 
