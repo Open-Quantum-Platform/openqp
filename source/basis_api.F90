@@ -1,3 +1,9 @@
+!> @brief Basis ingestion API bridging external handles to OpenQP basis_set.
+!> @detail Collects electron shells and ECP data from C/handles, builds the
+!>         internal basis_set (cartesian AO layout), normalizes primitives,
+!>         and prints a compact basis/ECP summary to the log.
+!> @author Mohsen Mazaherifar
+!> @date November 2025
 module basis_api
     use iso_c_binding, only: c_f_pointer, c_ptr, c_double
     use iso_fortran_env, only: real64
@@ -55,7 +61,13 @@ module basis_api
     public print_basis 
 
 contains
-
+   !> @brief Append the current electron shell from an external handle.
+   !> @detail Pulls one shell from `oqp_handle_get_info(c_handle)%elshell` and
+   !>         pushes it to the internal linked list (`head`).
+   !> @param[in] c_handle  Foreign handle carrying an `information` pointer.
+   !> @note C binding: name="append_shell".
+   !> @author Mohsen
+   !> @date November 2025
     subroutine append_shell(c_handle) bind(C, name="append_shell")
         use c_interop, only: oqp_handle_t, oqp_handle_get_info
         use types, only: information
@@ -64,7 +76,13 @@ contains
         inf => oqp_handle_get_info(c_handle)
         call oqp_append_shell(inf)
     end subroutine append_shell
-
+    !> @brief Append ECP metadata from an external handle.
+    !> @detail Copies global ECP arrays (per-element exponents/coeffs, AM, radii,
+    !>         coords, and removed core Z) into `ecp_head` buffers.
+    !> @param[in] c_handle  Foreign handle carrying an `information` pointer.
+    !> @note C binding: name="append_ecp". No-op if element_id==0 (no ECP). 
+    !> @author Mohsen
+    !> @date November 2025
     subroutine append_ecp(c_handle) bind(C, name="append_ecp")
         use c_interop, only: oqp_handle_t, oqp_handle_get_info
         use types, only: information
@@ -73,7 +91,10 @@ contains
         inf => oqp_handle_get_info(c_handle)
         call oqp_append_ecp(inf)
     end subroutine append_ecp
-
+    !> @brief Internal: stage ECP data from `information%elshell` into `ecp_head`.
+    !> @param[in] info  Read-only `information` snapshot with ECP fields populated.
+    !> @author Mohsen
+    !> @date November 2025
     subroutine oqp_append_ecp(info)
         use types, only: information
         type(information), intent(in) :: info
@@ -121,7 +142,10 @@ contains
         ecp_head%ecp_am = am_ptr
         ecp_head%ecp_coord = coord_ptr !* UNITS_ANGSTROM
     end subroutine oqp_append_ecp
-
+    !> @brief Internal: stage one electron shell from `information%elshell` to list.
+    !> @param[in] info  Read-only `information` snapshot with shell fields populated.
+    !> @note Maintains insertion order; computes n_exponents per shell. 
+    !> @date November 2025
     subroutine oqp_append_shell(info)
         use types, only: information
         type(information), intent(in) :: info
@@ -177,7 +201,14 @@ contains
         end do
         print *, "----------------------"
     end subroutine print_all_shells
-
+    !> @brief Build `basis_set` from staged shells/ECP and finalize normalization.
+    !> @detail Computes sizes (nbf, nshell, nprim), allocates arrays, copies
+    !>         exponents/coeffs, AO offsets, origins, AM; normalizes primitives,
+    !>         sets ECP params (if present), and clears staging lists.
+    !> @param[inout] infos  Provides target `basis_set` (primary or alt by flag).
+    !> @note Sets `basis%ecp_params%is_ecp` and `basis%ecp_zn_num` when ECP present.
+    !> @throws Sets `infos%control%basis_set_issue=.false.` on entry (reserved).
+    !> @date November 2025
     subroutine map_shell2basis_set(infos)
         use basis_tools, only: basis_set
         use types, only: information
@@ -306,7 +337,11 @@ contains
         call ecp_head%clear()
 
     end subroutine map_shell2basis_set
-
+    !> @brief Pretty-print the active basis (and ECP, if any) to the log file.
+    !> @detail Lists element, shell AM, primitives with normalized coefficients;
+    !>         for ECP atoms, prints removed core Z and per-term parameters.
+    !> @param[inout] infos  Supplies basis, atom labels, and output filename.
+    !> @date November 2025
     subroutine print_basis(infos)
         use types, only: information
         use elements, only: ELEMENTS_SHORT_NAME
@@ -359,7 +394,11 @@ contains
         close(iw)
 
     end subroutine print_basis
-
+    !> @brief Print ECP terms for atom j to the open unit `iw`.
+    !> @param[in] basis  Basis with `ecp_params` populated.
+    !> @param[in] iw     Fortran unit already opened for append.
+    !> @param[in] j      Atom index (1-based).
+    !> @date November 2025
     subroutine ecp_printing(basis,iw,j)
 
         use basis_tools, only: basis_set
@@ -382,7 +421,8 @@ contains
         end do
 
     end subroutine ecp_printing
-
+    !> @brief Clear an electron_shell node and recursively clear its `next` chain.
+    !> @date November 2025
     subroutine electron_shell_clear(this)
         class(electron_shell), intent(inout) :: this
 
@@ -400,7 +440,8 @@ contains
         end if
 
     end subroutine electron_shell_clear
-
+    !> @brief Clear staged ECP buffers in `ecpdata`.
+    !> @date November 2025
     subroutine ecpdata_clear(this)
         class(ecpdata), intent(inout) :: this
 

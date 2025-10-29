@@ -71,9 +71,6 @@ def check_tdhf_input(config, info):
     if td_type in ['mrsf', 'sf'] and scf_type != 'rohf':
         exit(f'{info}\nPyOQP: tdhf type {td_type} cannot use {scf_type} orbitals, choose rohf in scf type\n')
 
-    if td_type in ['umrsf'] and scf_type != 'uhf':
-        exit(f'{info}\nPyOQP: tdhf type {td_type} cannot use {scf_type} orbitals, choose uhf in scf type\n')
-
 def check_energy_input(config, info):
     method = config['input']['method']
 

@@ -18,7 +18,8 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
-
+- [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
+  
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
@@ -26,9 +27,9 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 ### Quickstart
 
-- **Ready to Use Docker Image** of [openqp/openqp](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image)
+- **pip install openqp** or
+- **Ready to Use Docker Image** of [openqp/openqp](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) or
 - **Building from Source Files Using the Instructions Below.**
-
 
 #### Requirements
 
