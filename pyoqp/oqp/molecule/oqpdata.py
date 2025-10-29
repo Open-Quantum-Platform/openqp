@@ -147,6 +147,8 @@ OQP_CONFIG_SCHEMA = {
         'ixcore': {'type': string, 'default': '-1'},
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+        'u_mrsf': {'type': bool,  'default': 'false'},
+        'jacobi_conv' :{'type': float, 'default': '-1.0'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -321,6 +323,8 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+            "u_mrsf": "set_tdhf_u_mrsf",
+            "jacobi_conv": "set_tdhf_jacobi_conv",
         },
     }
     _typemap = [np.void,
@@ -732,6 +736,12 @@ class OQPData:
            50 (default)
         """
         self._data.tddft.gmres_dim = gmres_dim
+    
+    def set_tdhf_u_mrsf(self, u_mrsf):
+        self._data.tddft.u_mrsf = u_mrsf
+    
+    def set_tdhf_jacobi_conv(self, jacobi_conv):
+        self._data.tddft.jacobi_conv = jacobi_conv
 
     def set_tdhf_z_solver(self, z_solver):
         """Set z-vector solver type:

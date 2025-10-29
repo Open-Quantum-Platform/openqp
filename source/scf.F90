@@ -65,7 +65,7 @@ contains
                              conv_trah
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
-                          scf_diis, scf_bfgs, scf_trah, get_solver_name
+                          scf_diis, scf_bfgs, scf_trah, get_solver_name, get_jacobi
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -216,6 +216,7 @@ contains
     type(int2_compute_t) :: int2_driver                ! Two-electron integral driver
     class(int2_fock_data_t), allocatable :: int2_data  ! Two-electron integral data
 
+    INTEGER :: c_scf_0, c_scf_1, c_scf_rate
     !==============================================================================
     ! Extract Calculation Parameters from Input
     !==============================================================================
@@ -620,6 +621,8 @@ contains
     !==============================================================================
     ! Begin Main SCF Iteration Loop
     !==============================================================================
+    CALL SYSTEM_CLOCK(c_scf_0, c_scf_rate)
+
     do iter = 1, maxit
       if (do_rstctmo) then
         mo_energy_a_for_rstctmo = mo_energy_a
@@ -959,6 +962,9 @@ contains
     ! End of Main SCF Iteration Loop
     end do
 
+    CALL SYSTEM_CLOCK(c_scf_1)
+    WRITE(iw,'("SCF wall = ",F12.6," s" )') REAL(c_scf_1-c_scf_0)/REAL(c_scf_rate)
+
     !----------------------------------------------------------------------------
     ! Clean Convergence Accelerator (DIIS/SOSCF)
     !----------------------------------------------------------------------------
@@ -982,6 +988,15 @@ contains
 
     write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), energy%etot, iter
 
+
+    !----------------------------------------------------------------------------
+    ! Jacobi rotations procedure
+    !----------------------------------------------------------------------------
+
+    call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nelec_a,work1, work2, 0)
+    call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nelec_a,work1, work2, 1)
+
+
     !----------------------------------------------------------------------------
     ! Print DFT-Specific Information (if DFT)
     !----------------------------------------------------------------------------
@@ -1002,6 +1017,10 @@ contains
         call int2_driver%pe%bcast(mo_b, size(mo_b))
         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
     end if
+
+
+
+
 
     !----------------------------------------------------------------------------
     ! Save Final Fock and Density Matrices
