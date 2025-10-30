@@ -65,7 +65,7 @@ contains
                              conv_trah
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
-                          scf_diis, scf_bfgs, scf_trah, get_solver_name
+                          scf_diis, scf_bfgs, scf_trah, get_solver_name, get_jacobi
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -981,6 +981,14 @@ contains
     end if
 
     write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), energy%etot, iter
+
+
+    !----------------------------------------------------------------------------
+    ! Jacobi rotations procedure
+    !----------------------------------------------------------------------------
+!    call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nelec_a,work1, work2, 0)
+!    call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nelec_a,work1, work2, 1)
+
 
     !----------------------------------------------------------------------------
     ! Print DFT-Specific Information (if DFT)

@@ -100,6 +100,8 @@ struct dft_parameters {
     int64_t ixcore_len;
     int64_t z_solver;
     int64_t gmres_dim;
+    bool u_mrsf;
+    double jacobi_conv;
 };
 
 struct control_parameters {
@@ -214,6 +216,8 @@ void tdhf_sf_gradient(struct oqp_handle_t *inf);
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
+
+void tdhf_umrsf_energy(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
