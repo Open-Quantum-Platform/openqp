@@ -19,6 +19,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
+- [MOKIT](https://github.com/1234zou/MOKIT) for adopting better initial guess from pyscf/ORCA
   
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
