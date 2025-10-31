@@ -41,7 +41,7 @@ contains
 
     call print_module_info('Dyson Orbitals (MRSF-TDDFT) module', 'Dyson Orbitals (MRSF-TDDFT) module')
 
-    nbf          = infos%mol_basis%nbf
+    nbf          = infos%basis%nbf
     nstates      = max(1, infos%tddft%nstate)
     target_state = max(1, infos%tddft%target_state)
 
@@ -82,10 +82,10 @@ contains
     call symmetrize_matrix(density_relaxed,   nbf)
     call symmetrize_matrix(lagrangian_relaxed, nbf)
 
-    status = infos%dat%set_data(OQP_density_relaxed,   density_relaxed,   comment=OQP_density_relaxed_comment)
-    if (status /= TA_OK) call show_message('Failed to store relaxed density',   without_abort)
-    status = infos%dat%set_data(OQP_lagrangian_relaxed, lagrangian_relaxed, comment=OQP_lagrangian_relaxed_comment)
-    if (status /= TA_OK) call show_message('Failed to store relaxed Lagrangian', without_abort)
+!    status = infos%dat%set_data(OQP_density_relaxed,   density_relaxed,   comment=OQP_density_relaxed_comment)
+!    if (status /= TA_OK) call show_message('Failed to store relaxed density',   without_abort)
+!    status = infos%dat%set_data(OQP_lagrangian_relaxed, lagrangian_relaxed, comment=OQP_lagrangian_relaxed_comment)
+!    if (status /= TA_OK) call show_message('Failed to store relaxed Lagrangian', without_abort)
 
     deallocate(density_relaxed, lagrangian_relaxed)
     write(iw,'(5x,"Relaxed matrices prepared and stored.")')

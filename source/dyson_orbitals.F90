@@ -40,9 +40,9 @@ contains
   !--------------------------------------------------------------------
   ! Driver: given relaxed density D and Lagrangian W, run EKT and export
   !--------------------------------------------------------------------
-  subroutine dyson_orbital_driver(infos, D, W)
+  subroutine dyson_orbital_driver(infos)
     type(information), intent(inout) :: infos
-    real(dp), intent(in) :: D(:,:), W(:,:)
+    real(dp), allocatable :: D(:,:), W(:,:)
 
     integer :: nbf, nroots, j
     real(dp), allocatable :: dyson_AO(:,:), energies(:), strengths(:)
@@ -195,11 +195,11 @@ contains
 
     ! Remove any previous records for our tags (equal-length constructor avoids warnings)
     tags_to_remove = [ character(len=80) :: OQP_DO_Count, OQP_VEC_DO, OQP_E_DO, OQP_DO_Strength, OQP_DO_Type ]
-    call infos%dat%remove_records(tags_to_remove)
+!    call infos%dat%remove_records(tags_to_remove)
 
     ! DO_Count: 1-element INT64
-    call infos%dat%reserve_data(OQP_DO_Count, TA_TYPE_INT64, 1, (/1/), comment=OQP_DO_Count_comment)
-    call tagarray_get_data(infos%dat, OQP_DO_Count, p_count)
+!    call infos%dat%reserve_data(OQP_DO_Count, TA_TYPE_INT64, 1, (/1/), comment=OQP_DO_Count_comment)
+!    call tagarray_get_data(infos%dat, OQP_DO_Count, p_count)
     p_count(1) = int(n_sig, 8)
 
     if (n_sig <= 0) then
@@ -221,21 +221,21 @@ contains
     end do
 
     ! Reserve TagArray buffers and map pointers
-    call infos%dat%reserve_data(OQP_VEC_DO,      TA_TYPE_REAL64, nbf*n_sig, (/ nbf, n_sig /), comment=OQP_VEC_DO_comment)
-    call infos%dat%reserve_data(OQP_E_DO,        TA_TYPE_REAL64, n_sig,     (/ n_sig /),      comment=OQP_E_DO_comment)
-    call infos%dat%reserve_data(OQP_DO_Strength, TA_TYPE_REAL64, n_sig,     (/ n_sig /),      comment=OQP_DO_Strength_comment)
-    call infos%dat%reserve_data(OQP_DO_Type,     TA_TYPE_INT64,  n_sig,     (/ n_sig /),      comment=OQP_DO_Type_comment)
-
-    call tagarray_get_data(infos%dat, OQP_VEC_DO,      p_vec_do)
-    call tagarray_get_data(infos%dat, OQP_E_DO,        p_e_do)
-    call tagarray_get_data(infos%dat, OQP_DO_Strength, p_do_strength)
-    call tagarray_get_data(infos%dat, OQP_DO_Type,     p_do_type)
+!    call infos%dat%reserve_data(OQP_VEC_DO,      TA_TYPE_REAL64, nbf*n_sig, (/ nbf, n_sig /), comment=OQP_VEC_DO_comment)
+!    call infos%dat%reserve_data(OQP_E_DO,        TA_TYPE_REAL64, n_sig,     (/ n_sig /),      comment=OQP_E_DO_comment)
+!    call infos%dat%reserve_data(OQP_DO_Strength, TA_TYPE_REAL64, n_sig,     (/ n_sig /),      comment=OQP_DO_Strength_comment)
+!    call infos%dat%reserve_data(OQP_DO_Type,     TA_TYPE_INT64,  n_sig,     (/ n_sig /),      comment=OQP_DO_Type_comment)
+!
+!    call tagarray_get_data(infos%dat, OQP_VEC_DO,      p_vec_do)
+!    call tagarray_get_data(infos%dat, OQP_E_DO,        p_e_do)
+!    call tagarray_get_data(infos%dat, OQP_DO_Strength, p_do_strength)
+!    call tagarray_get_data(infos%dat, OQP_DO_Type,     p_do_type)
 
     ! Copy data
-    p_vec_do(:,:)    = vec_do
-    p_e_do(:)        = e_do
-    p_do_strength(:) = do_strength
-    p_do_type(:)     = do_type
+!    p_vec_do(:,:)    = vec_do
+!    p_e_do(:)        = e_do
+!    p_do_strength(:) = do_strength
+!    p_do_type(:)     = do_type
 
     deallocate(vec_do, e_do, do_strength, do_type)
   end subroutine store_dyson_results_tagarray
@@ -258,28 +258,28 @@ contains
 
     ! Ensure tags exist (will print a message if any is missing)
     tags = [ character(len=80) :: OQP_DO_Count, OQP_VEC_DO, OQP_E_DO, OQP_DO_Strength, OQP_DO_Type ]
-    call data_has_tags(infos%dat, tags, 'dyson_orbitals_mod', 'print_dyson_results', WITH_ABORT)
+!    call data_has_tags(infos%dat, tags, 'dyson_orbitals_mod', 'print_dyson_results', WITH_ABORT)
 
-    call tagarray_get_data(infos%dat, OQP_DO_Count, p_count)
-    n = int(p_count(1))
-
-    call tagarray_get_data(infos%dat, OQP_VEC_DO,      vec_do)
-    call tagarray_get_data(infos%dat, OQP_E_DO,        e_do)
-    call tagarray_get_data(infos%dat, OQP_DO_Strength, do_strength)
-    call tagarray_get_data(infos%dat, OQP_DO_Type,     do_type)
-
-    n_print = min(n, 20)
-    write(iw,'(/,5x,"Dyson results (top ",i0,"):",/)') n_print
-    do i = 1, n_print
-      if (do_type(i) == 1_8) then
-        write(iw,'(5x,"#",i3,":  IP  = ",f12.6," Ha  (",f10.4," eV)   |  Strength = ",f8.5)') &
-             i, e_do(i),  e_do(i)*HARTREE_TO_EV, do_strength(i)
-      else
-        write(iw,'(5x,"#",i3,":  EA  = ",f12.6," Ha  (",f10.4," eV)   |  Strength = ",f8.5)') &
-             i, e_do(i), -e_do(i)*HARTREE_TO_EV, do_strength(i)
-      end if
-    end do
-    write(iw,'( )')
+!    call tagarray_get_data(infos%dat, OQP_DO_Count, p_count)
+!    n = int(p_count(1))
+!
+!    call tagarray_get_data(infos%dat, OQP_VEC_DO,      vec_do)
+!    call tagarray_get_data(infos%dat, OQP_E_DO,        e_do)
+!    call tagarray_get_data(infos%dat, OQP_DO_Strength, do_strength)
+!    call tagarray_get_data(infos%dat, OQP_DO_Type,     do_type)
+!
+!    n_print = min(n, 20)
+!    write(iw,'(/,5x,"Dyson results (top ",i0,"):",/)') n_print
+!    do i = 1, n_print
+!      if (do_type(i) == 1_8) then
+!        write(iw,'(5x,"#",i3,":  IP  = ",f12.6," Ha  (",f10.4," eV)   |  Strength = ",f8.5)') &
+!             i, e_do(i),  e_do(i)*HARTREE_TO_EV, do_strength(i)
+!      else
+!        write(iw,'(5x,"#",i3,":  EA  = ",f12.6," Ha  (",f10.4," eV)   |  Strength = ",f8.5)') &
+!             i, e_do(i), -e_do(i)*HARTREE_TO_EV, do_strength(i)
+!      end if
+!    end do
+!    write(iw,'( )')
   end subroutine print_dyson_results
 
 
