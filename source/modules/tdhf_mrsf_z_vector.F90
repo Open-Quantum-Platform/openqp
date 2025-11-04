@@ -494,6 +494,7 @@ contains
   end subroutine tdhf_mrsf_z_vector_C
 
   subroutine tdhf_mrsf_z_vector(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use precision, only: dp
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -580,6 +581,7 @@ contains
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       fock_a(:), mo_a(:,:), mo_energy_a(:), &
       fock_b(:), mo_b(:,:), &
@@ -683,12 +685,12 @@ contains
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    call infos%dat%remove_records(tags_alloc)
+    call infos%dat%erase(tags_alloc)
 
-    call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf_tri, comment=OQP_WAO_comment)
-    call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*7, (/7, nbf, nbf /), comment=OQP_td_mrsf_density)
-    call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf_tri*2, (/ nbf_tri, 2 /), comment=OQP_td_p)
-    call infos%dat%reserve_data(OQP_td_abxc, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_td_abxc)
+    stat = infos%dat%create(OQP_WAO, TA_TYPE_REAL64, (/ nbf_tri /), description=OQP_WAO_comment)
+    stat = infos%dat%create(OQP_td_mrsf_density, TA_TYPE_REAL64, (/7, nbf, nbf /), description=OQP_td_mrsf_density)
+    stat = infos%dat%create(OQP_td_p, TA_TYPE_REAL64, (/ nbf_tri, 2 /), description=OQP_td_p)
+    stat = infos%dat%create(OQP_td_abxc, TA_TYPE_REAL64, (/ nbf, nbf /), description=OQP_td_abxc)
 
     call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
