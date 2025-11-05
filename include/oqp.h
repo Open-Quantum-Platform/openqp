@@ -100,6 +100,7 @@ struct dft_parameters {
     int64_t ixcore_len;
     int64_t z_solver;
     int64_t gmres_dim;
+    bool umrsf;
 };
 
 struct control_parameters {

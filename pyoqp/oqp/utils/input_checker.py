@@ -57,6 +57,8 @@ def check_tdhf_input(config, info):
     td_type = config['tdhf']['type']
     td_mult = config['tdhf']['multiplicity']
 
+    td_umrsf = config['tdhf']['umrsf']
+
     info += f'\n[scf] type={scf_type}'
     info += f'\n[scf] multiplicity={scf_mult}'
     info += f'\n[tdhf] type={td_type}'
@@ -68,7 +70,7 @@ def check_tdhf_input(config, info):
     if td_type in ['sf', 'mrsf'] and scf_mult == td_mult:
         print(f'{info}\nPyOQP: Caution! tdhf type {td_type} multiplicity {td_mult} is equal to scf multiplicity {scf_mult}\n')
 
-    if td_type in ['mrsf', 'sf'] and scf_type != 'rohf':
+    if td_type in ['mrsf', 'sf'] and scf_type != 'rohf' and not td_umrsf:
         exit(f'{info}\nPyOQP: tdhf type {td_type} cannot use {scf_type} orbitals, choose rohf in scf type\n')
 
 def check_energy_input(config, info):

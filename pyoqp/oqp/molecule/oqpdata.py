@@ -147,6 +147,7 @@ OQP_CONFIG_SCHEMA = {
         'ixcore': {'type': string, 'default': '-1'},
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+        'umrsf': {'type': bool, 'default': 'False'}, # UMRSF branch calculations
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -321,6 +322,7 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+            "umrsf": "set_tdhf_umrsf",
         },
     }
     _typemap = [np.void,
@@ -739,6 +741,12 @@ class OQPData:
            1: GMRES (Generalized Minimal Residual)
         """
         self._data.tddft.z_solver = z_solver
+
+    def set_tdhf_umrsf(self, umrsf):
+        """Set the UMRSF calculation branch
+           False (default)
+        """
+        self._data.tddft.umrsf = umrsf
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""

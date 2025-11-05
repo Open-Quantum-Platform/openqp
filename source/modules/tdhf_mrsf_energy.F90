@@ -87,6 +87,7 @@ contains
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     integer :: maxvec, mrst, nstates, target_state
     logical :: roref = .false.
+    logical :: uhfref= .false.
     logical :: debug_mode
 
     type(int2_compute_t) :: int2_driver
@@ -95,6 +96,8 @@ contains
 
     logical :: dft = .false.
     integer :: scf_type, mol_mult
+
+    logical :: umrsf 
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -111,8 +114,14 @@ contains
   ! Files open
   ! 3. LOG: Write: Main output file
     open (unit=iw, file=infos%log_filename, position="append")
+
+    umrsf = infos%tddft%umrsf
   !
-    call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
+    if (umrsf .eqv. .false.) then
+      call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
+    else if (umrsf .eqv. .true.) then
+      call print_module_info('UMRSF_TDHF_Energy','Computing Energy of UMRSF-TDDFT')
+    endif
 
   ! Load basis set
     basis => infos%basis
@@ -137,7 +146,10 @@ contains
         &with ONLY triplet multiplicity(mult=3)',with_abort)
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    if (.not. umrsf .and. scf_type==3) roref = .true.
+    
+    if (umrsf .and. scf_type/=2) call show_message('U-MRSF requires UHF reference (SCFTYPE=2).',with_abort)
+    if (umrsf .and. scf_type==2) uhfref = .true.
 
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
@@ -170,7 +182,7 @@ contains
     end if
 
     infos%tddft%nstate = nstates
-    nvec = min(max(nstates,6), mxvec)
+    nvec = min(max(nstates,12), mxvec)
 
     call infos%dat%remove_records(tags_alloc)
 
@@ -313,8 +325,8 @@ contains
     call flush(iw)
 
   ! Prepare for ROHF
-    if (roref) then
-  !   Alapha
+    if ((roref .and. .not. umrsf) .or. (uhfref .and. umrsf)) then
+  !   Alpha
       call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
 
       ! shift Fock in MO basis here except MOs listed in ixcores
@@ -336,15 +348,21 @@ contains
 
   ! Construct TD trial vector
     if (mrst==1 .or. mrst==3) then
-
+     if (.not. umrsf) then
       call mrinivec(infos, mo_energy_a, mo_energy_a, bvec_mo, xm, nvec)
+     else if (umrsf) then
+      call mrinivec(infos, mo_energy_a, mo_energy_b, bvec_mo, xm, nvec)
+     endif
 
     else if (mrst==5) then
-
+     if (.not. umrsf) then
       call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
-
+     else if (umrsf) then
+      call show_message('This case of U-MRSF-Q has not been developed yet...',with_abort)
+     endif
     end if
 
+!    if (umrsf.eqv..true.) call show_message('UMRSF-TDDFT is not ready (but glad you have asked)',with_abort)
     ist = 1
     iend = nvec
     iter = 0
