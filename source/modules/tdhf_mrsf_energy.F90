@@ -117,10 +117,10 @@ contains
 
     umrsf = infos%tddft%umrsf
   !
-    if (umrsf .eqv. .false.) then
-      call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
-    else if (umrsf .eqv. .true.) then
+    if (umrsf) then
       call print_module_info('UMRSF_TDHF_Energy','Computing Energy of UMRSF-TDDFT')
+    else 
+      call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
     endif
 
   ! Load basis set
@@ -148,8 +148,11 @@ contains
     scf_type = infos%control%scftype
     if (.not. umrsf .and. scf_type==3) roref = .true.
     
-    if (umrsf .and. scf_type/=2) call show_message('U-MRSF requires UHF reference (SCFTYPE=2).',with_abort)
-    if (umrsf .and. scf_type==2) uhfref = .true.
+    if (umrsf .and. scf_type/=2) then
+      call show_message('U-MRSF requires UHF reference (SCFTYPE=2).',with_abort)
+    else if (umrsf) then
+      uhfref = .true.
+    endif
 
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
@@ -182,7 +185,12 @@ contains
     end if
 
     infos%tddft%nstate = nstates
-    nvec = min(max(nstates,12), mxvec)
+
+    if (umrsf) then
+      nvec = min(max(nstates,12), mxvec)
+    else 
+      nvec = min(max(nstates,6), mxvec)
+    endif
 
     call infos%dat%remove_records(tags_alloc)
 
