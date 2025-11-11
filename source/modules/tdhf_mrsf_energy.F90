@@ -27,7 +27,7 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_mrsf_lib, only: int2_mrsf_data_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
     use tdhf_lib, only: int2_td_data_t
     use tdhf_lib, only: &
       iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
@@ -37,7 +37,7 @@ contains
       get_transition_density, get_transitions, &
       get_transition_dipole, print_results
     use tdhf_mrsf_lib, only: &
-      mrinivec, mrsfcbc, mrsfmntoia, mrsfesum, &
+      mrinivec, mrsfcbc,umrsfcbc, mrsfmntoia,umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
@@ -92,12 +92,17 @@ contains
 
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
+    type(int2_umrsf_data_t), target :: int2_udata_st
+
     type(int2_td_data_t), target :: int2_data_q
 
     logical :: dft = .false.
     integer :: scf_type, mol_mult
 
     logical :: umrsf 
+
+
+
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -187,7 +192,7 @@ contains
     infos%tddft%nstate = nstates
 
     if (umrsf) then
-      nvec = min(max(nstates,12), mxvec)
+      nvec = min(max(nstates,6), mxvec)
     else 
       nvec = min(max(nstates,6), mxvec)
     endif
@@ -251,11 +256,15 @@ contains
     tb => td_t(:,2)
 
     if (mrst==1 .or. mrst==3 ) then
-
-      allocate(mrsf_density(nvec,7,nbf,nbf), &
+        if (umrsf) then
+          allocate(mrsf_density(nvec,11,nbf,nbf), &
+             source=0.0_dp, &
+             stat=ok)
+        else
+        allocate(mrsf_density(nvec,7,nbf,nbf), &
                source=0.0_dp, &
                stat=ok)
-
+        endif
     else if( mrst==5  )then
 
       allocate(fmrq1(nbf,nbf,nvec), &
@@ -397,7 +406,11 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
-          call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          if (umrsf) then 
+              call umrsfcbc(infos, mo_a, mo_b, wrk1,mrsf_density(iv,:,:,:))
+          else
+              call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          endif
 
         else if (mrst==5) then
 
@@ -410,11 +423,28 @@ contains
 
       if (mrst==1 .or. mrst==3) then
 
-        int2_data_st = int2_mrsf_data_t( &
-          d3 = mrsf_density(:iv,:,:,:), &
-          tamm_dancoff = tamm_dancoff, &
-          scale_exchange = scale_exch, &
-          scale_coulomb = scale_exch)
+        if (umrsf ) then
+          int2_udata_st = int2_umrsf_data_t( &
+            d3 = mrsf_density(:iv,:,:,:), &
+            tamm_dancoff = tamm_dancoff, &
+            scale_exchange = scale_exch, &
+            scale_coulomb = scale_exch)
+          call int2_driver%run( &
+           int2_udata_st, &
+           cam = dft.and.infos%dft%cam_flag, &
+           alpha = infos%tddft%cam_alpha, &
+           alpha_coulomb = infos%tddft%cam_alpha, &
+           beta = infos%tddft%cam_beta, &
+           beta_coulomb = infos%tddft%cam_beta, &
+           mu = infos%tddft%cam_mu)
+
+         fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+        else
+          int2_data_st = int2_mrsf_data_t( &
+            d3 = mrsf_density(:iv,:,:,:), &
+            tamm_dancoff = tamm_dancoff, &
+            scale_exchange = scale_exch, &
+            scale_coulomb = scale_exch)
 
         call int2_driver%run( &
           int2_data_st, &
@@ -426,6 +456,8 @@ contains
           mu = infos%tddft%cam_mu)
 
         fmrst2 => int2_data_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
+        endif
 
         ! Scaling factor if triplet
         if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
@@ -462,7 +494,11 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           ! Product (A-B)*X
-          call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          if (umrsf) then
+              call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          else
+              call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          endif
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
 
