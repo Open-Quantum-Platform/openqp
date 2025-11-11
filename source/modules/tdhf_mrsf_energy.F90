@@ -39,7 +39,7 @@ contains
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc,umrsfcbc, mrsfmntoia,umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
-      get_mrsf_transition_density
+      get_mrsf_transition_density, get_jacobi
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -59,7 +59,7 @@ contains
     real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
     real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
     real(kind=dp), allocatable :: squared_S(:)
-    real(kind=dp), allocatable :: amb(:,:), apb(:,:)
+    real(kind=dp), allocatable :: amb(:,:), apb(:,:), smat_full(:,:)
     real(kind=dp), allocatable, target :: vl(:), vr(:)
     real(kind=dp), pointer :: vl_p(:,:), vr_p(:,:)
     real(kind=dp), allocatable :: xm(:), scr(:)
@@ -197,6 +197,7 @@ contains
       nvec = min(max(nstates,6), mxvec)
     endif
 
+
     call infos%dat%remove_records(tags_alloc)
 
     call infos%dat%reserve_data(OQP_td_bvec_mo, TA_TYPE_REAL64, &
@@ -220,6 +221,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    
 
   ! Allocate temporary matrices for diagonalization
     allocate (fa(nbf,nbf), &
@@ -233,6 +235,7 @@ contains
              trden(nbf,nbf,nstates,nstates), &
              wrk1(nbf,nbf), &
              wrk2(nbf,nbf), &
+             smat_full(nbf,nbf), &
              amo(xvec_dim,mxvec), &
              EEX(mxvec), &
              squared_S(nstates), &
@@ -251,6 +254,14 @@ contains
     allocate(trans(xvec_dim,2), &
              source=0, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
+
+    if (umrsf ) then
+       write(iw,*) 'Jacobi part'
+      call unpack_matrix(smat, smat_full, nbf, 'U')
+      call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
+      call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 1)
+    
+    endif
 
     ta => td_t(:,1)
     tb => td_t(:,2)
@@ -367,7 +378,7 @@ contains
     if (mrst==1 .or. mrst==3) then
      if (.not. umrsf) then
       call mrinivec(infos, mo_energy_a, mo_energy_a, bvec_mo, xm, nvec)
-     else if (umrsf) then
+     else
       call mrinivec(infos, mo_energy_a, mo_energy_b, bvec_mo, xm, nvec)
      endif
 

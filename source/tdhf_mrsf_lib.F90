@@ -218,8 +218,11 @@ contains
 
 
 subroutine int2_umrsf_data_t_update(this, buf)
-  implicit none
 
+  use io_constants, only: iw
+    
+  implicit none
+  logical :: debug_mode
   class(int2_umrsf_data_t), intent(inout) :: this
   type(int2_storage_t), intent(inout) :: buf
   integer :: i, j, k, l, n
@@ -227,6 +230,8 @@ subroutine int2_umrsf_data_t_update(this, buf)
   integer :: mythread
 
   mythread = buf%thread_id
+
+  debug_mode = .True.
 
   if (.not.this%tamm_dancoff) return
 
@@ -288,6 +293,14 @@ subroutine int2_umrsf_data_t_update(this, buf)
       end if
 
     end do
+
+  if (debug_mode) then
+    write(iw,*) 'UPDATE'
+    write(iw,*) f3(0,11,0,0)
+
+  endif
+
+
   end associate
 
   buf%ncur = 0
@@ -383,7 +396,7 @@ end subroutine int2_umrsf_data_t_update
       end do
     end do
 
-    if (debug_mode) then
+    if (debug_mode .and. .false.) then
       write(iw,'("print xm(xvec_dim) ordering")')
       do i = 1, xvec_dim
         write(iw,'(a,i5,f20.10,i5)') 'i,xm(ij)=', i, xm(i)
@@ -419,7 +432,7 @@ end subroutine int2_umrsf_data_t_update
       end do
     end do
 
-    if (debug_mode) then
+    if (debug_mode .and. .false.) then
       write(iw,'("print xm(xvec_dim) ordering")')
       do i = 1, xvec_dim
         write(iw,'(a,i5,f20.10,i5)') 'i,xm(ij)=', i, xm(i)
@@ -658,6 +671,23 @@ end subroutine int2_umrsf_data_t_update
             *bvec(lr1,lr1)*isqrt2
      end do
    endif
+    if (debug_mode) then
+      write(iw,*) 'UMRSFCBC'
+      write(iw,*) 'Check sum = va', sum(abs(va))
+      write(iw,*) 'Check sum = vb', sum(abs(vb))
+      write(iw,*) 'Check sum = bvec', sum(abs(bvec))
+      write(iw,*) 'Check sum = ball', sum(abs(ball))
+      write(iw,*) 'Check sum = o21v', sum(abs(o21v))
+      write(iw,*) 'Check sum = co12', sum(abs(co12))
+      write(iw,*) 'Check sum = bo2va', sum(abs(bo2va))
+      write(iw,*) 'Check sum = bo2vb', sum(abs(bo2vb))
+      write(iw,*) 'Check sum = bo1va', sum(abs(bo1va))
+      write(iw,*) 'Check sum = bo1vb', sum(abs(bo1vb))
+      write(iw,*) 'Check sum = bco1a', sum(abs(bco1a))
+      write(iw,*) 'Check sum = bco1b', sum(abs(bco1b))
+      write(iw,*) 'Check sum = bco2a', sum(abs(bco2a))
+      write(iw,*) 'Check sum = bco2b', sum(abs(bco2b))
+    end if
 
  return
  end subroutine umrsfcbc
@@ -943,6 +973,7 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
     end do
 
     if (debug_mode) then
+      write(iw,*) 'UMRSFMNTOIA'
       write(iw,*) 'Check sum = ivec', ivec
       write(iw,*) 'Check sum = agdlr', sum(abs(agdlr))
       write(iw,*) 'Check sum = ao21v', sum(abs(ao21v))
@@ -2027,4 +2058,333 @@ end subroutine umrsfmntoia
 
   end subroutine
 
+
+
+
+
+
+  !> @brief Jacobi pair-rotations of MO based on off-diagonal elements of S_mo (overlap matrix)
+  !> @author Vladimir Yu. Makhnev
+  !> @date October 2025
+  subroutine get_jacobi(infos, v_a, e_a, v_b, e_b, s_ao,n_occ,work,  s_mo, isegm)
+
+     use precision, only: dp
+     use io_constants, only: iw
+     use types, only: information
+
+     implicit none
+
+     ! Input/output parameters
+     type(information), intent(in) :: infos
+     real(kind=dp), intent(in),    dimension(:,:) :: v_a, v_b
+     real(kind=dp), intent(in),    dimension(:)   :: e_a, e_b
+     real(kind=dp), intent(in),    dimension(:,:) :: s_ao
+     integer,       intent(in)                    :: n_occ, isegm
+     real(kind=dp), intent(inout), dimension(:,:) :: s_mo
+     real(kind=dp), intent(inout), dimension(:,:) :: work
+
+
+
+     ! Local variables
+     integer :: i, j, k, ip1, nbf, nmo
+     integer :: p_start, p_end, q_start
+     integer :: p, q, iterj
+
+     integer :: max_idx, max_iter, i_max, j_max
+     real(kind=dp) :: max_overlap, overlap, diag_temp, thresh
+     real(kind=dp) :: max_off
+     logical, allocatable :: reordered(:)
+     real(kind=dp), parameter :: go2ev = 27.211386245988d+00
+     logical :: u_mrsf
+     logical :: dgprint
+     logical :: if_conv
+
+
+     INTEGER :: c0,c1,rate
+     CALL SYSTEM_CLOCK(c0, rate)
+
+
+!      u_mrsf = infos%tddft%u_mrsf
+
+      u_mrsf = .true.
+
+!      thresh = infos%tddft%jacobi_conv
+      thresh = 1e-4
+
+      if (u_mrsf .eqv. .false.) return
+
+      dgprint = .true.
+
+
+      if_conv=.false.
+
+      THRESH = 1d-3
+
+      nbf = size(v_a, 1)
+      nmo = size(v_a, 2)
+
+
+      write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
+      write(iw,'(A)') '                       MODULE: HF_DFT_Energy'
+      write(iw,'(A)') '                       Rotation MO orbitls (Jacobi)'
+      write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
+
+      ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * s_ao * v_curr
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, v_a, nbf, s_ao, nbf, 0.0_dp, work, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, work, nbf, v_b, nbf, 0.0_dp, s_mo, nbf)
+
+      ! Normalize columns to ensure proper comparison
+      do i = 1, nbf
+        s_mo(:,i) = s_mo(:,i) / max(norm2(s_mo(:,i)), 1.0e-10_dp)
+      end do
+
+
+      if (dgprint) then
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') 'Diagonal elements of overlap matrix (BEFORE ROTATIONS)'
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+        write(iw,'(A)') '-----------------------------------------'
+
+
+        do i = 1, nmo
+           write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+        enddo
+        write(iw,'(A)') '-----------------------------------------'
+
+      endif
+
+
+      if (isegm .eq. 0) then
+          P_START = N_occ-1
+          P_END   = 2
+          Q_START = 1
+          MAX_ITER = 10000
+ !         THRESH = 1.0D-4
+      ELSE IF (ISEGM .EQ. 1) THEN
+          P_START = nmo
+          P_END   = N_occ+1
+          Q_START = N_occ
+          MAX_ITER = 10000
+ !         THRESH = 1.0D-4
+      else
+          write(iw, *) "WRONG ISEGM"
+      endif
+
+
+
+      DO ITERJ = 1, MAX_ITER
+
+          MAX_OFF = 0.0D0
+          I_MAX = -1
+          J_MAX = -1
+
+          DO P = P_START, P_END, -1
+             DO Q = Q_START, P-1
+                IF (DABS(S_MO(P,Q)) .GT. MAX_OFF) THEN
+                   MAX_OFF = DABS(S_MO(P,Q))
+                   I_MAX = P
+                   J_MAX = Q
+                ENDIF
+                IF (DABS(S_MO(Q,P)) .GT. MAX_OFF) THEN
+                   MAX_OFF = DABS(S_MO(Q,P))
+                   I_MAX = Q
+                   J_MAX = P
+                ENDIF
+             END DO
+          END DO
+
+          write(iw, *) "max_off", max_off, i_max, j_max
+
+          IF (MAX_OFF .LE. THRESH) then
+             WRITE(iw,'("segment ",I1," converged at iter ",I0)') ISEGM,  ITERJ
+             CALL FLUSH(iw)
+             EXIT
+         else if  (if_conv .eqv. .true.) THEN
+              WRITE(iw,'("segment ",I1," reached the min thera at iter ",I0)') ISEGM,  ITERJ
+              CALL FLUSH(iw)
+              EXIT
+          END IF
+
+          CALL ROTATE_PAIR(V_A, V_B, S_ao, S_MO, nmo, nbf, ISEGM, I_MAX, J_MAX, if_conv)
+
+
+      enddo
+
+
+      if (dgprint) then
+
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') 'Diagonal elements of overlap matrix (AFTER ROTATIONS)'
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+        write(iw,'(A)') '-----------------------------------------'
+
+        do i = 1, nmo
+           write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+        enddo
+        write(iw,'(A)') '-----------------------------------------'
+
+      endif
+
+
+      call check_sign(V_a, V_b,S_ao, S_mo, nmo, nbf)
+
+       write(iw,'(A)') '-----------------------------------------'
+       write(iw,'(A)') 'Diagonal elements of overlap matrix (FINAL/SIGN FIXED)'
+       write(iw,'(A)') '-----------------------------------------'
+       write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+       write(iw,'(A)') '-----------------------------------------'
+
+       do i = 1, nmo
+          write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+       enddo
+       write(iw,'(A)') '-----------------------------------------'
+
+
+
+ !    write(iw,*) "this is holiday"
+
+
+        CALL SYSTEM_CLOCK(c1)
+        WRITE(iw,'("Jacobi wall = ",F12.6," s, segm #", I2)') REAL(c1-c0)/REAL(rate), isegm
+
+      return
+
+   end subroutine get_jacobi
+
+
+   subroutine rotate_pair(va,vb,s,smo,l1,lx,isegm,i_idx, j_idx, if_conv)
+
+       use io_constants, only: iw
+
+
+       IMPLICIT NONE
+       logical, intent(inout) :: if_conv
+       INTEGER L1, LX, ISEGM, I_IDX, J_IDX
+       DOUBLE PRECISION VA(L1,*), VB(L1,*), S(*), SMO(LX,*)
+       DOUBLE PRECISION THT
+       INTEGER I
+       DOUBLE PRECISION AA,BB,CC,DD, ATT, BTT, CTH, STH
+       DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
+
+
+       AA = SMO(I_IDX, I_IDX)
+       BB = SMO(J_IDX, J_IDX)
+       CC = SMO(I_IDX, J_IDX)
+       DD = SMO(J_IDX, I_IDX)
+
+       ATT = 0.5D0*(AA*AA + BB*BB - CC*CC - DD*DD)
+       IF (ISEGM .EQ. 0) THEN
+          BTT = AA*DD - BB*CC
+       ELSE IF (ISEGM .EQ. 1) THEN
+          BTT = AA*CC - BB*DD
+       ENDIF
+
+ !      IF ( DABS(BTT) .LT. 1.0D-14) THEN
+ !         THT = 0.0D0
+ !         write(iw,*) att, btt, i_idx, j_idx
+ !         if_conv=.true.
+ !         RETURN
+ !      ENDIF
+
+       THT = 0.5D0*DATAN2(BTT, ATT)
+
+
+       if (abs(tht).lt.1e-4) then
+           if_conv = .true.
+           return
+ !      write(iw,*) 'btt', btt, 'att', att
+ !      write(iw, *) tht, i_idx, j_idx
+       endif
+       CTH = DCOS(THT)
+       STH = DSIN(THT)
+       IF (ISEGM .EQ. 0) THEN
+          CALL DROT(L1, VA(1,I_IDX), 1, VA(1,J_IDX), 1, CTH, STH)
+
+          CALL DROT(LX, SMO(I_IDX,1), LX, SMO(J_IDX,1), LX, CTH, STH)
+
+       ELSE
+          CALL DROT(L1, VB(1,I_IDX), 1, VB(1,J_IDX), 1, CTH, STH)
+
+          CALL DROT(LX, SMO(1,I_IDX), 1, SMO(1,J_IDX), 1, CTH, STH)
+       ENDIF
+
+   end subroutine rotate_pair
+
+
+
+       subroutine swap_sign_a(Va, Vb, l1, lx, swA, isegm)
+
+         implicit none
+
+         real(kind=dp), intent(inout), dimension(l1,*) :: Va, Vb ! (l1, lx)
+         integer, intent(in) :: l1, lx, swA
+         integer :: i, isegm
+
+         if (isegm .eq. 0) then
+             do i=1, l1
+                 va(i, swA) = -va(i, swA)
+             enddo
+         else
+             do i=1, l1
+                 vb(i, swA) = -vb(i, swA)
+             enddo
+         end if
+       END SUBROUTINE swap_sign_a
+
+
+       subroutine check_sign(Va, Vb,S, Smo, l1, lx)
+       IMPLICIT NONE
+       DOUBLE PRECISION VA(L1,*), VB(L1,*)
+       DOUBLE PRECISION S(*)
+       DOUBLE PRECISION SMO(LX,*)
+       INTEGER L1, LX, ISEGM
+
+       INTEGER I, J, P, Q, P_START, P_END, Q_START
+       DOUBLE PRECISION MAX_OFF, THRESH, THT
+       INTEGER I_MAX, J_MAX
+       INTEGER MAX_ITER, ITERJ
+       DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
+
+
+       do i = 1, lx
+           if (Smo(i,i)<-0.8) then
+               call swap_sign_a(Va, Vb, l1, lx, i, 1 )
+           end if
+       enddo
+
+       ALLOCATE(SQ(L1,L1))
+
+       call dgemm('t', 'n', l1, l1, l1, 1.0_dp, va, l1, s, l1, 0.0_dp, SQ, l1)
+       call dgemm('n', 'n', l1,l1,l1, 1.0_dp, SQ, l1, vb, l1, 0.0_dp, smo, l1)
+
+       DEALLOCATE(SQ)
+
+
+
+       end subroutine check_sign
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 end module tdhf_mrsf_lib
+
+
+
+
