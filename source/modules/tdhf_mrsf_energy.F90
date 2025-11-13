@@ -251,6 +251,7 @@ contains
              qvec(xvec_dim,nstates), &
              RNORM(nstates), &
              source=0.0_dp,stat=ok)
+    if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
     allocate(trans(xvec_dim,2), &
              source=0, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
@@ -260,7 +261,6 @@ contains
       call unpack_matrix(smat, smat_full, nbf, 'U')
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 1)
-    
     endif
 
     ta => td_t(:,1)
@@ -374,6 +374,7 @@ contains
       call unpack_matrix(scr,fb)
     end if
 
+
   ! Construct TD trial vector
     if (mrst==1 .or. mrst==3) then
      if (.not. umrsf) then
@@ -419,6 +420,7 @@ contains
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
           if (umrsf) then 
               call umrsfcbc(infos, mo_a, mo_b, wrk1,mrsf_density(iv,:,:,:))
+              write(*,*) ivec, iv
           else
               call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
           endif
@@ -474,12 +476,29 @@ contains
         if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
 
         ! Spin pair coupling
-        if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
-           fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
-        if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
-           fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
-        if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-           fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+        if (umrsf) then
+        
+          if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
+             fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
+          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
+             fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
+          if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
+             fmrst2(:,1,:,:) = fmrst2(:,1,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,2,:,:) = fmrst2(:,2,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,3,:,:) = fmrst2(:,3,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,4,:,:) = fmrst2(:,4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,7,:,:) = fmrst2(:,7,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,8,:,:) = fmrst2(:,8,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+        else
+          if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
+             fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
+          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
+             fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
+          if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
+             fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+        endif
 
       else if (mrst==5) then
 

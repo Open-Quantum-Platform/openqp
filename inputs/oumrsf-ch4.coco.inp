@@ -1,0 +1,28 @@
+# MRSF-TDDFT/BHHLYP/6-31G* Geom. Opt. of Thymine S1 State 
+[input]
+system=ch4.xyz
+runtype=energy
+method=tdhf
+functional=
+basis=6-31g*
+
+[guess]
+save_mol=true
+
+[scf]
+type=uhf
+multiplicity=3
+converger_type=diis
+maxit=200
+
+[dftgrid]
+rad_npts=90
+ang_npts=302
+
+[tdhf]
+type=mrsf
+nstate=10
+umrsf=true
+spc_coco = 0.0
+spc_ovov = 1.0
+spc_coov = 0.0

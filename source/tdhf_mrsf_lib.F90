@@ -260,14 +260,14 @@ subroutine int2_umrsf_data_t_update(this, buf)
 
       if (this%cur_pass==1) then
         ! --- Coulomb-like updates (was :4 -> now :8 (alpha/beta pairs)) ---
-        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,k,l)  ! (ij|lk)
-        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,i,j)  ! (kl|ji)
-        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,l,k)  ! (ij|kl)
-        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,i,j)  ! (lk|ji)
-        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,k,l)  ! (ji|lk)
-        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)  ! (kl|ij)
-        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)  ! (ji|kl)
-        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)  ! (lk|ij)
+        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,k,l)   ! (ij|lk)
+        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,i,j)   ! (kl|ji)
+        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,l,k)   ! (ij|kl)
+        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,i,j)   ! (lk|ji)
+        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,k,l)   ! (ji|lk)
+        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)   ! (kl|ij)
+        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)   ! (ji|kl)
+        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
 
         ! --- Exchange-like updates (was :7 -> now :11 (all types incl alpha/beta)) ---
         f3(:nf,1:11,i,k) = f3(:nf,1:11,i,k) - xval*d3(:nf,1:11,j,l) ! (ij|lk)
@@ -296,7 +296,8 @@ subroutine int2_umrsf_data_t_update(this, buf)
 
   if (debug_mode) then
     write(iw,*) 'UPDATE'
-    write(iw,*) f3(0,11,0,0)
+    write(iw,*) f3(0,11,0,0) 
+    write(iw,*) xval, cval
 
   endif
 
@@ -688,7 +689,7 @@ end subroutine int2_umrsf_data_t_update
       write(iw,*) 'Check sum = bco2a', sum(abs(bco2a))
       write(iw,*) 'Check sum = bco2b', sum(abs(bco2b))
     end if
-
+ deallocate(tmp,tmp1, tmp2)
  return
  end subroutine umrsfcbc
 
@@ -798,6 +799,7 @@ end subroutine int2_umrsf_data_t_update
     end do
 
     if (debug_mode) then
+      write(iw,*) 'MNTOIA'
       write(iw,*) 'Check sum = ivec', ivec
       write(iw,*) 'Check sum = agdlr', sum(abs(agdlr))
       write(iw,*) 'Check sum = ao21v', sum(abs(ao21v))
@@ -964,6 +966,12 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
 
     pmo(:,ivec) = 0.0_dp
 
+    if (debug_mode) then
+        write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
+        write(iw,*) wrk(1:5,1:5)
+    endif
+
+
     ij = 0
     do j = nocb+1, nbf
       do i = 1, noca
@@ -1045,6 +1053,13 @@ end subroutine umrsfmntoia
     scr = wrk
     scr(lr1,lr1) = 0.0_dp
     scr(lr2,lr2) = 0.0_dp
+
+
+
+
+
+
+
 
     ! Contraction 1
     call dgemm('n', 't', nocca, nbf-noccb, nbf-noccb, &
@@ -2349,7 +2364,7 @@ end subroutine umrsfmntoia
 
 
        do i = 1, lx
-           if (Smo(i,i)<-0.8) then
+           if (Smo(i,i)<-0.0) then
                call swap_sign_a(Va, Vb, l1, lx, i, 1 )
            end if
        enddo
