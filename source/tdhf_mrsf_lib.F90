@@ -240,12 +240,22 @@ subroutine int2_umrsf_data_t_update(this, buf)
               nf => this%nfocks &
     )
 
+
+!      write(iw,*) 'int2_umrsf_data_t_update', this%cur_pass
+!      write(iw,*) f3(1,1:8,1,1)
+!      write(iw,*) f3(1,1,1:8,1)
+
+
     do n = 1, buf%ncur
       i = buf%ids(1,n)
       j = buf%ids(2,n)
       k = buf%ids(3,n)
       l = buf%ids(4,n)
       val = buf%ints(n)
+
+
+!      write(iw,*) 'val', val, n
+!      write(iw,*) i,j,k,l
 
       xval = val * this%scale_exchange
       cval = val * this%scale_coulomb
@@ -270,18 +280,26 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
 
         ! --- Exchange-like updates (was :7 -> now :11 (all types incl alpha/beta)) ---
-        f3(:nf,1:11,i,k) = f3(:nf,1:11,i,k) - xval*d3(:nf,1:11,j,l) ! (ij|lk)
-        f3(:nf,1:11,k,i) = f3(:nf,1:11,k,i) - xval*d3(:nf,1:11,l,j) ! (kl|ji)
-        f3(:nf,1:11,i,l) = f3(:nf,1:11,i,l) - xval*d3(:nf,1:11,j,k) ! (ij|kl)
-        f3(:nf,1:11,l,i) = f3(:nf,1:11,l,i) - xval*d3(:nf,1:11,k,j) ! (lk|ji)
-        f3(:nf,1:11,j,k) = f3(:nf,1:11,j,k) - xval*d3(:nf,1:11,i,l) ! (ji|lk)
-        f3(:nf,1:11,k,j) = f3(:nf,1:11,k,j) - xval*d3(:nf,1:11,l,i) ! (kl|ij)
-        f3(:nf,1:11,j,l) = f3(:nf,1:11,j,l) - xval*d3(:nf,1:11,i,k) ! (ji|kl)
-        f3(:nf,1:11,l,j) = f3(:nf,1:11,l,j) - xval*d3(:nf,1:11,k,i) ! (lk|ij)
+        f3(:nf,1:8,i,k) = f3(:nf,1:8,i,k) - xval*d3(:nf,1:8,j,l) ! (ij|lk)
+        f3(:nf,1:8,k,i) = f3(:nf,1:8,k,i) - xval*d3(:nf,1:8,l,j) ! (kl|ji)
+        f3(:nf,1:8,i,l) = f3(:nf,1:8,i,l) - xval*d3(:nf,1:8,j,k) ! (ij|kl)
+        f3(:nf,1:8,l,i) = f3(:nf,1:8,l,i) - xval*d3(:nf,1:8,k,j) ! (lk|ji)
+        f3(:nf,1:8,j,k) = f3(:nf,1:8,j,k) - xval*d3(:nf,1:8,i,l) ! (ji|lk)
+        f3(:nf,1:8,k,j) = f3(:nf,1:8,k,j) - xval*d3(:nf,1:8,l,i) ! (kl|ij)
+        f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
+        f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
 
-      else if (this%cur_pass==2) then
-        ! In pass 2 only agdlr was updated in scalar version (col 7).
-        ! Here agdlr is column 11 (spin-independent), update only that.
+
+        f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j) ! 
+        f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k) ! 
+        f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l) ! 
+        f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i) ! 
+        f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j) ! 
+        f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l) ! 
+        f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k) ! 
+        f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i) ! 
+
+
         f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
         f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
         f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
@@ -290,16 +308,46 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
         f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
         f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      else if (this%cur_pass==2) then
+        ! In pass 2 only agdlr was updated in scalar version (col 7).
+        write(iw,*) 'THIS PART OF PROGRAMM IS FORBIDDEN'
+        ! Here agdlr is column 11 (spin-independent), update only that.
       end if
 
     end do
 
-  if (debug_mode) then
-    write(iw,*) 'UPDATE'
-    write(iw,*) f3(0,11,0,0) 
-    write(iw,*) xval, cval
+!  if (debug_mode ) then
+!    write(iw,*) 'UPDATE'
+!    write(iw,*) 'adco2a 1 1-5 1', f3(1,7,1:5,1)
+!    write(iw,*) 'agdlr 1 1 1-5', f3(1,11,1,1:5) 
+!    write(iw,*) this%scale_exchange, this%scale_coulomb !xval, cval
 
-  endif
+!  endif
 
 
   end associate
@@ -586,7 +634,7 @@ end subroutine int2_umrsf_data_t_update
    logical :: debug_mode
    real(kind=dp), parameter :: isqrt2 = 1.0_dp/sqrt(2.0_dp)
 
-   ball => mrsf_density(11,:,:)
+   ball  => mrsf_density(11,:,:)
    bo2va => mrsf_density(1,:,:)
    bo2vb => mrsf_density(2,:,:)
    bo1va => mrsf_density(3,:,:)
@@ -595,8 +643,10 @@ end subroutine int2_umrsf_data_t_update
    bco1b => mrsf_density(6,:,:)
    bco2a => mrsf_density(7,:,:)
    bco2b => mrsf_density(8,:,:)
-   o21v => mrsf_density(9,:,:)
-   co12 => mrsf_density(10,:,:)
+   o21v  => mrsf_density(9,:,:)
+   co12  => mrsf_density(10,:,:)
+
+!   write(*,*) 'seek'
 
    nbf = infos%basis%nbf
    nocca = infos%mol_prop%nelec_A
@@ -626,6 +676,8 @@ end subroutine int2_umrsf_data_t_update
      tmp2(:,4) = tmp2(:,4)+vb(:,i)*bvec(i,nocca)
    end do
 
+!   write(*,*) 'locate'
+
    do m = 1, nbf
      ball(:,m) = ball(:,m)+tmp1(m,2)*va(:,nocca) &
                           +tmp1(m,4)*va(:,nocca-1) &
@@ -647,6 +699,7 @@ end subroutine int2_umrsf_data_t_update
                           -tmp2(:,3)*vb(m,nocca-1)
    end do
 
+!   write(*,*) 'destroy'
    call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
               1.0_dp, vb(:,nocca+1), nbf, &
                       bvec(:,nocca+1), nbf, &

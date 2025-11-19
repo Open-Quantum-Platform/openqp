@@ -191,12 +191,7 @@ contains
 
     infos%tddft%nstate = nstates
 
-    if (umrsf) then
-      nvec = min(max(nstates,6), mxvec)
-    else 
-      nvec = min(max(nstates,6), mxvec)
-    endif
-
+    nvec = min(max(nstates,6), mxvec)
 
     call infos%dat%remove_records(tags_alloc)
 
@@ -420,7 +415,6 @@ contains
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
           if (umrsf) then 
               call umrsfcbc(infos, mo_a, mo_b, wrk1,mrsf_density(iv,:,:,:))
-              write(*,*) ivec, iv
           else
               call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
           endif
@@ -452,6 +446,7 @@ contains
            mu = infos%tddft%cam_mu)
 
          fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
         else
           int2_data_st = int2_mrsf_data_t( &
             d3 = mrsf_density(:iv,:,:,:), &
@@ -473,7 +468,11 @@ contains
         endif
 
         ! Scaling factor if triplet
-        if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+        if (umrsf .and. mrst==3) then
+          fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
+        else if (mrst==3) then
+          fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+        endif
 
         ! Spin pair coupling
         if (umrsf) then
