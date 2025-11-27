@@ -15,6 +15,16 @@ contains
     call tdhf_mrsf_energy(inf)
   end subroutine tdhf_mrsf_energy_C
 
+  subroutine tdhf_umrsf_energy_C(c_handle) bind(C, name="tdhf_umrsf_energy")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    inf%tddft%umrsf= .true.
+    call tdhf_mrsf_energy(inf)
+  end subroutine tdhf_umrsf_energy_C
+
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -35,7 +45,7 @@ contains
       rpaprint, inivec
     use tdhf_sf_lib, only: sfresvec, sfqvec, sfdmat, trfrmb, &
       get_transition_density, get_transitions, &
-      get_transition_dipole, print_results
+      get_transition_dipole, print_results, get_spin_square
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc,umrsfcbc, mrsfmntoia,umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
@@ -99,7 +109,7 @@ contains
     logical :: dft = .false.
     integer :: scf_type, mol_mult
 
-    logical :: umrsf 
+    logical :: umrsf, umrsf_jac 
 
 
 
@@ -251,8 +261,7 @@ contains
              source=0, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    if (umrsf ) then
-       write(iw,*) 'Jacobi part'
+    if (umrsf) then
       call unpack_matrix(smat, smat_full, nbf, 'U')
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 1)
@@ -621,7 +630,9 @@ contains
             call get_mrsf_transition_density(infos,trden(:,:,ist,jst), bvec_mo, ist, jst)
           end do
         end do
-        squared_S(:) = 0.0_dp
+        wrk1 = 0.0_dp
+        call sfdmat(bvec_mo(:,ist),wrk1,mo_a,ta,tb,nocca,noccb)
+        squared_S(:) = get_spin_square(dmat_a,dmat_b,ta,tb,wrk1,Smat,noccb,nocca)
         call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')

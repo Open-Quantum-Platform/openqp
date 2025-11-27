@@ -29,8 +29,6 @@ module tdhf_mrsf_lib
 
     end type
 
-
-
 contains
 
 !###############################################################################
@@ -169,6 +167,8 @@ contains
                 nf => this%nfocks &
       )
 
+!v      write(*,*) 'MRSF UPDATE 2d pass =', this%cur_pass
+
       do n = 1, buf%ncur
         i = buf%ids(1,n)
         j = buf%ids(2,n)
@@ -209,13 +209,13 @@ contains
           f3(1:nf,7,j,l) = f3(1:nf,7,j,l) - xval*d3(1:nf,7,i,k)
           f3(1:nf,7,l,j) = f3(1:nf,7,l,j) - xval*d3(1:nf,7,k,i)
         end if
+
       end do
     end associate
 
     buf%ncur = 0
 
   end subroutine
-
 
 subroutine int2_umrsf_data_t_update(this, buf)
 
@@ -241,11 +241,6 @@ subroutine int2_umrsf_data_t_update(this, buf)
     )
 
 
-!      write(iw,*) 'int2_umrsf_data_t_update', this%cur_pass
-!      write(iw,*) f3(1,1:8,1,1)
-!      write(iw,*) f3(1,1,1:8,1)
-
-
     do n = 1, buf%ncur
       i = buf%ids(1,n)
       j = buf%ids(2,n)
@@ -254,19 +249,8 @@ subroutine int2_umrsf_data_t_update(this, buf)
       val = buf%ints(n)
 
 
-!      write(iw,*) 'val', val, n
-!      write(iw,*) i,j,k,l
-
       xval = val * this%scale_exchange
       cval = val * this%scale_coulomb
-
-      ! new mapping:
-      ! f3(nF,1:11,:,:) !> 1=ado2va, 2=ado2vb, 3=ado1va, 4=ado1vb,
-      !                  5=adco1a, 6=adco1b, 7=adco2a, 8=adco2b,
-      !                  9=ao21v, 10=aco12, 11=agdlr
-      ! d3(nF,1:11,:,:) !> 1=bo2va, 2=bo2vb, 3=bo1va, 4=bo1vb,
-      !                  5=bco1a, 6=bco1b, 7=bco2a, 8=bco2b,
-      !                  9=o21v, 10=co12, 11=ball
 
       if (this%cur_pass==1) then
         ! --- Coulomb-like updates (was :4 -> now :8 (alpha/beta pairs)) ---
@@ -278,7 +262,6 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)   ! (kl|ij)
         f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)   ! (ji|kl)
         f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
-
         ! --- Exchange-like updates (was :7 -> now :11 (all types incl alpha/beta)) ---
         f3(:nf,1:8,i,k) = f3(:nf,1:8,i,k) - xval*d3(:nf,1:8,j,l) ! (ij|lk)
         f3(:nf,1:8,k,i) = f3(:nf,1:8,k,i) - xval*d3(:nf,1:8,l,j) ! (kl|ji)
@@ -289,7 +272,6 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
         f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
 
-
         f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j) ! 
         f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k) ! 
         f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l) ! 
@@ -298,7 +280,6 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l) ! 
         f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k) ! 
         f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i) ! 
-
 
         f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
         f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
@@ -309,33 +290,16 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
         f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       else if (this%cur_pass==2) then
         ! In pass 2 only agdlr was updated in scalar version (col 7).
-        write(iw,*) 'THIS PART OF PROGRAMM IS FORBIDDEN'
+        f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
+        f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
+        f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
+        f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
+        f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
+        f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
+        f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
+        f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
         ! Here agdlr is column 11 (spin-independent), update only that.
       end if
 
@@ -346,19 +310,13 @@ subroutine int2_umrsf_data_t_update(this, buf)
 !    write(iw,*) 'adco2a 1 1-5 1', f3(1,7,1:5,1)
 !    write(iw,*) 'agdlr 1 1 1-5', f3(1,11,1,1:5) 
 !    write(iw,*) this%scale_exchange, this%scale_coulomb !xval, cval
-
 !  endif
-
 
   end associate
 
   buf%ncur = 0
 
 end subroutine int2_umrsf_data_t_update
-
-
-
-
 
 !###############################################################################
 !###############################################################################
@@ -646,8 +604,6 @@ end subroutine int2_umrsf_data_t_update
    o21v  => mrsf_density(9,:,:)
    co12  => mrsf_density(10,:,:)
 
-!   write(*,*) 'seek'
-
    nbf = infos%basis%nbf
    nocca = infos%mol_prop%nelec_A
    noccb = infos%mol_prop%nelec_B
@@ -676,8 +632,6 @@ end subroutine int2_umrsf_data_t_update
      tmp2(:,4) = tmp2(:,4)+vb(:,i)*bvec(i,nocca)
    end do
 
-!   write(*,*) 'locate'
-
    do m = 1, nbf
      ball(:,m) = ball(:,m)+tmp1(m,2)*va(:,nocca) &
                           +tmp1(m,4)*va(:,nocca-1) &
@@ -699,7 +653,6 @@ end subroutine int2_umrsf_data_t_update
                           -tmp2(:,3)*vb(m,nocca-1)
    end do
 
-!   write(*,*) 'destroy'
    call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
               1.0_dp, vb(:,nocca+1), nbf, &
                       bvec(:,nocca+1), nbf, &
@@ -868,10 +821,7 @@ end subroutine int2_umrsf_data_t_update
 
   end subroutine mrsfmntoia
 
-
-
 subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
-
 
      use precision, only: dp
      use types, only: information
@@ -940,14 +890,10 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
                 one, wrk, nbf, &
                      vb, nbf, &
                 zero, scr, nbf)
-
  ! 1
  !   ----- (m,n) to (i+,n) -----
      wrk = scr
      pmo(:,ivec) = 0.0_dp
-
-
-
 ! 3
     j = lr2
     do i=1, lr1-1
@@ -961,7 +907,6 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
         enddo 
         wrk(i,j) = wrk(i,j) + dumn
     enddo
-
 ! 4
     j = lr1
     do i=1,lr1-1
@@ -975,7 +920,6 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
         enddo
         wrk(i,j) = wrk(i,j) + dumn
     enddo
-
 ! 5
     i = lr1
     do j=lr2+1, nbf
@@ -989,7 +933,6 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
         enddo
         wrk(i,j) = wrk(i,j) + dumn
     enddo
-
 ! 6
     i = lr2
     do j=lr2+1, nbf
@@ -1003,9 +946,6 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
         enddo
         wrk(i,j) = wrk(i,j) + dumn
     enddo
-
-
-
 
     if (mrst==1) then
       wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
@@ -1023,7 +963,6 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
         write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
         write(iw,*) wrk(1:5,1:5)
     endif
-
 
     ij = 0
     do j = nocb+1, nbf
@@ -1051,24 +990,7 @@ subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
     end if
 
     return
-
-
-
-
-
-
-
 end subroutine umrsfmntoia
-
-
-
-
-
-
-
-
-
-
 
   subroutine mrsfesum(infos, wrk, fij, fab, pmo, iv)
 
@@ -1106,13 +1028,6 @@ end subroutine umrsfmntoia
     scr = wrk
     scr(lr1,lr1) = 0.0_dp
     scr(lr2,lr2) = 0.0_dp
-
-
-
-
-
-
-
 
     ! Contraction 1
     call dgemm('n', 't', nocca, nbf-noccb, nbf-noccb, &
@@ -2126,11 +2041,6 @@ end subroutine umrsfmntoia
 
   end subroutine
 
-
-
-
-
-
   !> @brief Jacobi pair-rotations of MO based on off-diagonal elements of S_mo (overlap matrix)
   !> @author Vladimir Yu. Makhnev
   !> @date October 2025
@@ -2151,8 +2061,6 @@ end subroutine umrsfmntoia
      real(kind=dp), intent(inout), dimension(:,:) :: s_mo
      real(kind=dp), intent(inout), dimension(:,:) :: work
 
-
-
      ! Local variables
      integer :: i, j, k, ip1, nbf, nmo
      integer :: p_start, p_end, q_start
@@ -2167,22 +2075,17 @@ end subroutine umrsfmntoia
      logical :: dgprint
      logical :: if_conv
 
-
      INTEGER :: c0,c1,rate
      CALL SYSTEM_CLOCK(c0, rate)
 
-
 !      u_mrsf = infos%tddft%u_mrsf
-
       u_mrsf = .true.
-
 !      thresh = infos%tddft%jacobi_conv
-      thresh = 1e-4
+!      thresh = 1e-4
 
       if (u_mrsf .eqv. .false.) return
 
-      dgprint = .true.
-
+      dgprint = .false.
 
       if_conv=.false.
 
@@ -2190,7 +2093,6 @@ end subroutine umrsfmntoia
 
       nbf = size(v_a, 1)
       nmo = size(v_a, 2)
-
 
       write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
       write(iw,'(A)') '                       MODULE: HF_DFT_Energy'
@@ -2206,40 +2108,31 @@ end subroutine umrsfmntoia
         s_mo(:,i) = s_mo(:,i) / max(norm2(s_mo(:,i)), 1.0e-10_dp)
       end do
 
-
       if (dgprint) then
         write(iw,'(A)') '-----------------------------------------'
         write(iw,'(A)') 'Diagonal elements of overlap matrix (BEFORE ROTATIONS)'
         write(iw,'(A)') '-----------------------------------------'
         write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
         write(iw,'(A)') '-----------------------------------------'
-
-
         do i = 1, nmo
            write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
         enddo
         write(iw,'(A)') '-----------------------------------------'
-
       endif
-
 
       if (isegm .eq. 0) then
           P_START = N_occ-1
           P_END   = 2
           Q_START = 1
           MAX_ITER = 10000
- !         THRESH = 1.0D-4
       ELSE IF (ISEGM .EQ. 1) THEN
           P_START = nmo
           P_END   = N_occ+1
           Q_START = N_occ
           MAX_ITER = 10000
- !         THRESH = 1.0D-4
       else
           write(iw, *) "WRONG ISEGM"
       endif
-
-
 
       DO ITERJ = 1, MAX_ITER
 
@@ -2262,7 +2155,7 @@ end subroutine umrsfmntoia
              END DO
           END DO
 
-          write(iw, *) "max_off", max_off, i_max, j_max
+          if (dgprint) write(iw, *) "max_off", max_off, i_max, j_max
 
           IF (MAX_OFF .LE. THRESH) then
              WRITE(iw,'("segment ",I1," converged at iter ",I0)') ISEGM,  ITERJ
@@ -2275,10 +2168,7 @@ end subroutine umrsfmntoia
           END IF
 
           CALL ROTATE_PAIR(V_A, V_B, S_ao, S_MO, nmo, nbf, ISEGM, I_MAX, J_MAX, if_conv)
-
-
       enddo
-
 
       if (dgprint) then
 
@@ -2287,32 +2177,26 @@ end subroutine umrsfmntoia
         write(iw,'(A)') '-----------------------------------------'
         write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
         write(iw,'(A)') '-----------------------------------------'
-
         do i = 1, nmo
            write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
         enddo
         write(iw,'(A)') '-----------------------------------------'
-
       endif
 
 
       call check_sign(V_a, V_b,S_ao, S_mo, nmo, nbf)
 
+      if (dgprint) then
        write(iw,'(A)') '-----------------------------------------'
        write(iw,'(A)') 'Diagonal elements of overlap matrix (FINAL/SIGN FIXED)'
        write(iw,'(A)') '-----------------------------------------'
        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
        write(iw,'(A)') '-----------------------------------------'
-
        do i = 1, nmo
           write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
        enddo
        write(iw,'(A)') '-----------------------------------------'
-
-
-
- !    write(iw,*) "this is holiday"
-
+      endif
 
         CALL SYSTEM_CLOCK(c1)
         WRITE(iw,'("Jacobi wall = ",F12.6," s, segm #", I2)') REAL(c1-c0)/REAL(rate), isegm
@@ -2321,11 +2205,9 @@ end subroutine umrsfmntoia
 
    end subroutine get_jacobi
 
-
    subroutine rotate_pair(va,vb,s,smo,l1,lx,isegm,i_idx, j_idx, if_conv)
 
        use io_constants, only: iw
-
 
        IMPLICIT NONE
        logical, intent(inout) :: if_conv
@@ -2335,7 +2217,6 @@ end subroutine umrsfmntoia
        INTEGER I
        DOUBLE PRECISION AA,BB,CC,DD, ATT, BTT, CTH, STH
        DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
-
 
        AA = SMO(I_IDX, I_IDX)
        BB = SMO(J_IDX, J_IDX)
@@ -2362,8 +2243,6 @@ end subroutine umrsfmntoia
        if (abs(tht).lt.1e-4) then
            if_conv = .true.
            return
- !      write(iw,*) 'btt', btt, 'att', att
- !      write(iw, *) tht, i_idx, j_idx
        endif
        CTH = DCOS(THT)
        STH = DSIN(THT)
@@ -2401,7 +2280,6 @@ end subroutine umrsfmntoia
          end if
        END SUBROUTINE swap_sign_a
 
-
        subroutine check_sign(Va, Vb,S, Smo, l1, lx)
        IMPLICIT NONE
        DOUBLE PRECISION VA(L1,*), VB(L1,*)
@@ -2414,7 +2292,6 @@ end subroutine umrsfmntoia
        INTEGER I_MAX, J_MAX
        INTEGER MAX_ITER, ITERJ
        DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
-
 
        do i = 1, lx
            if (Smo(i,i)<-0.0) then
@@ -2429,30 +2306,7 @@ end subroutine umrsfmntoia
 
        DEALLOCATE(SQ)
 
-
-
        end subroutine check_sign
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 end module tdhf_mrsf_lib
-
-
-
 
