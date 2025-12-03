@@ -49,7 +49,7 @@ contains
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc,umrsfcbc, mrsfmntoia,umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
-      get_mrsf_transition_density, get_jacobi
+      get_mrsf_transition_density, get_jacobi, umrsfssqu
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -65,7 +65,7 @@ contains
 
     integer :: s_size, ok
 
-    real(kind=dp), allocatable :: scr2(:)
+    real(kind=dp), allocatable :: scr2(:),scr3(:)
     real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
     real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
     real(kind=dp), allocatable :: squared_S(:)
@@ -110,9 +110,6 @@ contains
     integer :: scf_type, mol_mult
 
     logical :: umrsf, umrsf_jac 
-
-
-
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -253,6 +250,7 @@ contains
              scr(nbf2), &
              bvec_mo_tmp(xvec_dim), &
              scr2(mxvec*mxvec), &
+             scr3(nocca), &
              qvec(xvec_dim,nstates), &
              RNORM(nstates), &
              source=0.0_dp,stat=ok)
@@ -260,7 +258,7 @@ contains
     allocate(trans(xvec_dim,2), &
              source=0, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
-
+  ! MO rotations (Jacobi) 
     if (umrsf) then
       call unpack_matrix(smat, smat_full, nbf, 'U')
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
@@ -630,10 +628,19 @@ contains
             call get_mrsf_transition_density(infos,trden(:,:,ist,jst), bvec_mo, ist, jst)
           end do
         end do
-        wrk1 = 0.0_dp
-        call sfdmat(bvec_mo(:,ist),wrk1,mo_a,ta,tb,nocca,noccb)
-        squared_S(:) = get_spin_square(dmat_a,dmat_b,ta,tb,wrk1,Smat,noccb,nocca)
-        call get_mrsf_transitions(trans, nocca, noccb, nbf)
+
+! U-version (working)
+        if (umrsf) then
+          do ist = 1, nstates
+            call umrsfssqu(squared_S(ist),mo_a,mo_b, smat, wrk1,scr3,nbf,nbf2, &
+                xvec_dim,ist,nbf,bvec_mo,nocca,noccb, &
+                .true., .false.)
+          enddo 
+        else 
+          squared_S(:) = 0.0_dp
+        endif
+!
+      call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
       case(3)
@@ -642,7 +649,15 @@ contains
             call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
           end do
         end do
-        squared_S(:) = 2.0_dp
+        if (umrsf) then
+          do ist = 1, nstates
+            call umrsfssqu(squared_S(ist),mo_a,mo_b, smat, wrk1,scr3,nbf,nbf2, &
+                xvec_dim,ist,nbf,bvec_mo,nocca,noccb, &
+                .false., .true.)
+          enddo 
+        else 
+          squared_S(:) = 2.0_dp
+        endif
         call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')

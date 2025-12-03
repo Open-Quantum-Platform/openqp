@@ -2085,7 +2085,7 @@ end subroutine umrsfmntoia
 
       if (u_mrsf .eqv. .false.) return
 
-      dgprint = .false.
+      dgprint = .true.
 
       if_conv=.false.
 
@@ -2183,7 +2183,6 @@ end subroutine umrsfmntoia
         write(iw,'(A)') '-----------------------------------------'
       endif
 
-
       call check_sign(V_a, V_b,S_ao, S_mo, nmo, nbf)
 
       if (dgprint) then
@@ -2259,8 +2258,6 @@ end subroutine umrsfmntoia
 
    end subroutine rotate_pair
 
-
-
        subroutine swap_sign_a(Va, Vb, l1, lx, swA, isegm)
 
          implicit none
@@ -2307,6 +2304,116 @@ end subroutine umrsfmntoia
        DEALLOCATE(SQ)
 
        end subroutine check_sign
+
+      SUBROUTINE UMRSFSSQU(SS,VA,VB,S,WRK1,WRK2,L1,L2,L7,js,LX,BVEC,NA,NB,MRSFS,MRSFT)
+
+      use mathlib, only: UNPACK_F90
+
+      IMPLICIT NONE
+      LOGICAL :: MRSFS, MRSFT
+      INTEGER :: IR, IW, IP, IS, IPK, IDAF, NAV
+      INTEGER :: I,J,JS,K,NA,NB,L1,L2,L7,LX
+      INTEGER, DIMENSION(950) :: IODA(950)
+      REAL(KIND=dp), DIMENSION(L1,LX) :: VA, VB
+      REAL(KIND=dp), DIMENSION(L2) :: S
+      REAL(KIND=dp), DIMENSION(L1,L1) :: WRK1!, S
+      REAL(KIND=dp), DIMENSION(NA) :: WRK2
+      REAL(KIND=dp), DIMENSION(NA,LX-NB,*) :: BVEC
+
+      COMMON /IOFILE/ IR,IW,IP,IS,IPK,IDAF,NAV,IODA
+
+      REAL(KIND=dp), PARAMETER :: HALF=0.5D+00
+
+      REAL(KIND=dp) :: A,B,C,DUM,F,SS, TERM
+      REAL(dp), PARAMETER :: TOL = 1.0D-12
+
+      call UNPACK_F90(s, wrk1,'U')
+
+!     ----- PRECALCULATION -----
+      A=0
+      B=1
+      C=0
+      DO I=1,NA
+         DUM=0
+         DO J=1,L1
+            DO K=1,L1
+               DUM=DUM+VA(J,I)*WRK1(J,K)*VB(K,I)
+            ENDDO
+         ENDDO
+         WRK2(I)=DUM
+         if (I .GT. NB) THEN
+            cycle
+         else
+            A=A+DUM*DUM
+            B=B*DUM*DUM
+            C=C+(1.0_dp/MAX((DUM*DUM),TOL))
+         endif
+      ENDDO
+
+      F=1
+      if(mrsfs) then
+!     ----- CALCULATE SINGLET SPIN QUANTUM NUMBER -----
+      SS=0
+      DO i=1,NA
+         DO j=1,LX-NB
+!     ----- CV -----
+            if ((j .GT. 2).and.(i .LE. NB)) then
+               SS = SS + (NA-1-A + (WRK2(i))**2 - B /  &
+               (MAX(ABS(WRK2(i)), TOL))**2) * (BVEC(i,j,js))**2
+!     ----- CO -----
+            else if (i .LE. NB) then
+               SS = SS + (NA-1-A + (WRK2(i))**1 - (WRK2(j+NB))**2 &
+                 - B * ((WRK2(j+NB)) / MAX(ABS(WRK2(i)), TOL))**2) &
+                 * (BVEC(i,j,js))**2
+
+!    ----- OV , OS -----
+            else if ((j .GT. 2) .or. (i .EQ. NB+j)) then
+               SS=SS+(NA-1-A-B)*(BVEC(i,j,js))**2
+!    ----- G, D -----
+            else
+               SS = SS + HALF * (NA-1-A - (WRK2(NB+j))**2 &
+                + (WRK2(NB+j))**2 * B * (NA-1-C - 1.0D0 / &
+                (MAX(ABS(WRK2(NB+j)), TOL))**2)) &
+                * (BVEC(i,j,js))**2
+
+               F=F+HALF*(-1+A*(WRK2(NB+j))**2)*(BVEC(i,j,js))**2
+            endif
+         ENDDO
+      ENDDO
+
+      else if(mrsft) then
+!     ----- CALCULATE TRIPLET SPIN QUANTUM NUMBER -----
+      SS=0
+      DO i=1,NA
+         DO j=1,LX-NB
+!     ----- CV -----
+            if ((j .GT. 2).and.(i .LE. NB)) then
+               SS = SS + (NA-1 - A + (WRK2(i))**2 &
+                + B * (1.0d0 / MAX(ABS(WRK2(i)), 1.0D-12))**2) &
+                * (BVEC(i,j,js))**2
+
+!               SS = SS + (NA-1 - A + (WRK2(i))**2 - (WRK2(j+NB))**2 &
+!                + B * ((WRK2(j+NB) / MAX(ABS(WRK2(i)), 1.0D-12))**2)) &
+!                * (BVEC(i,j,js))**2
+!     ----- CO -----
+            else if (i .LE. NB) then
+               SS = SS + (NA-1 - A + (WRK2(i))**2 - (WRK2(j+NB))**2 &
+                     + B * ( (WRK2(j+NB) / &
+                     MAX(ABS(WRK2(i)),1.0D-12))**2 )) * (BVEC(i,j,js))**2
+
+!    ----- OV , OT -----
+            else if ((j .GT. 2) .or. (i .EQ. NB+j)) then
+               SS=SS+(NA-1-A+B)*(BVEC(i,j,js))**2
+            endif
+         ENDDO
+      ENDDO
+      endif
+!    ----- NORMALIZATION -----
+      SS=SS/F
+!
+      RETURN
+      END
+
 
 end module tdhf_mrsf_lib
 
