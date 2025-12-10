@@ -407,7 +407,7 @@ class SinglePoint(Calculator):
             if self.exception is True:
                 raise SCFnotConverged()
             else:
-                exit()
+                raise RuntimeError("SCF did not converge — stopping current run.")
 
         if self.save_molden:
             guess_file = self.pack_molden_name('scf', self.scf_type, self.functional)
