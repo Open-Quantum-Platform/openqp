@@ -1480,6 +1480,244 @@ end subroutine umrsfmntoia
 
   end subroutine mrsfsp
 
+
+!>    @brief    Spin-pairing parts
+!>              of singlet and triplet UMRSF Lagrangian
+!>
+  subroutine umrsfsp(xhxa, xhxb, ca, cb, xv, fmrsf, noca, nocb)
+
+    use precision, only: dp
+    use messages, only: show_message, with_abort
+    implicit none
+
+    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
+    real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
+    integer, intent(in) :: noca, nocb
+
+    integer :: nbf, i, j, lr1, lr2, ok
+
+    real(kind=dp), allocatable :: scr(:,:), scr2(:,:)
+    real(kind=dp), pointer, dimension(:,:) :: &
+      adco1a, adco1b, adco2a, adco2b, ado1va, &
+      ado1vb, ado2va, ado2vb, aco12, ao21v
+
+    ado2va => fmrsf(1,:,:)
+    ado2vb => fmrsf(2,:,:)
+    ado1va => fmrsf(3,:,:)
+    ado1vb => fmrsf(4,:,:)
+    adco1a => fmrsf(5,:,:)
+    adco1b => fmrsf(6,:,:)
+    adco2a  => fmrsf(7,:,:)
+    adco2b  => fmrsf(8,:,:)
+    ao21v  => fmrsf(9,:,:)
+    aco12  => fmrsf(10,:,:)
+
+    nbf = ubound(ca, 1)
+    lr1 = nocb+1
+    lr2 = noca
+
+    allocate(scr(nbf,nbf), &
+             scr2(nbf,nbf), &
+             source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+  ! Spin-pairing coupling contributions of xhxa
+
+  ! o1v
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf,  &
+                       ao21v, nbf,  &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr2) = xhxa(:,lr2)+scr(:,j)*xv(lr1,j)
+      xhxa(:,lr1) = xhxa(:,lr1)-scr(:,j)*xv(lr2,j)
+    end do
+
+    ! co1
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       aco12, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,lr2)*xv(i,lr1)
+      xhxa(:,i) = xhxa(:,i)-scr(:,lr1)*xv(i,lr2)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       adco2a, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr1) = xhxa(:,lr1)+scr(:,j)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       adco1a, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr2) = xhxa(:,lr2)+scr(:,j)*xv(lr2,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado2va, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, 1, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb(:,lr1), nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,1)*xv(i,lr1)
+    end do
+
+  ! co2
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado1va, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, 1, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb(:,lr2), nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,1)*xv(i,lr2)
+    end do
+
+   ! Spin-pairing coupling contributions of xhxb
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ao21v, nbf,&
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(lr2,:)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       ao21v, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(lr1,:)*xv(lr2,j)
+    end do
+
+  ! co1
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       aco12, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr2) = xhxb(:,lr2)+scr(i,:)*xv(i,lr1)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+                         1.0_dp, ca, nbf, &
+                                 aco12, nbf, &
+                         0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+                         2.0_dp, scr2, nbf, &
+                                 cb, nbf, &
+                         0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr1) = xhxb(:,lr1)+scr(i,:)*xv(i,lr2)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado2vb, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n' ,'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr1) = xhxb(:,lr1)+scr(i,:)*xv(i,lr1)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado1vb, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr2) = xhxb(:,lr2)+scr(i,:)*xv(i,lr2)
+    end do
+
+  ! O1V
+    call dgemm('t', 'n', 1, nbf, nbf, &
+               1.0_dp, ca(:, lr1), nbf, &
+                       adco2b, nbf,  &
+               0.0_dp, scr2, 1)
+    call dgemm('n', 'n', 1, nbf, nbf, &
+               2.0_dp, scr2, 1, &
+                       cb, nbf, &
+               0.0_dp, scr, 1)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(:,1)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', 1, nbf, nbf, &
+               1.0_dp, ca(:, lr2), nbf, &
+                       adco1b, nbf,  &
+               0.0_dp, scr2, 1)
+    call dgemm('n',  'n', 1, nbf, nbf, &
+               2.0_dp, scr2, 1, &
+                       cb, nbf, &
+               0.0_dp, scr, 1)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(:,1)*xv(lr2,j)
+    end do
+
+    return
+
+  end subroutine umrsfsp
+
   subroutine mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
                         xhxa, xhxb, hppija, hppijb, noca, nocb)
 
@@ -2305,114 +2543,179 @@ end subroutine umrsfmntoia
 
        end subroutine check_sign
 
-      SUBROUTINE UMRSFSSQU(SS,VA,VB,S,WRK1,WRK2,L1,L2,L7,js,LX,BVEC,NA,NB,MRSFS,MRSFT)
+      subroutine umrsfssqu(ss,mo_a,mo_b,smat,wrk1,wrk2,nbf,nbf2,xvec_dim,js, &
+     &                    norb,bvec_mo,nocca,noccb,mrsfs,mrsft)
 
-      use mathlib, only: UNPACK_F90
+      use mathlib, only: unpack_f90
+      use precision, only: dp
 
-      IMPLICIT NONE
-      LOGICAL :: MRSFS, MRSFT
-      INTEGER :: IR, IW, IP, IS, IPK, IDAF, NAV
-      INTEGER :: I,J,JS,K,NA,NB,L1,L2,L7,LX
-      INTEGER, DIMENSION(950) :: IODA(950)
-      REAL(KIND=dp), DIMENSION(L1,LX) :: VA, VB
-      REAL(KIND=dp), DIMENSION(L2) :: S
-      REAL(KIND=dp), DIMENSION(L1,L1) :: WRK1!, S
-      REAL(KIND=dp), DIMENSION(NA) :: WRK2
-      REAL(KIND=dp), DIMENSION(NA,LX-NB,*) :: BVEC
+      implicit none
+      logical, intent(in) :: mrsfs, mrsft
+      integer :: i,j,js,k,nocca,noccb,nbf,nbf2,xvec_dim,norb, ok
+      real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
+      real(kind=dp), intent(in),    dimension(:)   :: smat
+      real(kind=dp), intent(inout), dimension(:,:) :: wrk1
+      real(kind=dp), intent(inout), dimension(:)   :: wrk2
+      real(kind=dp), intent(in),    dimension(nocca, norb-noccb, *) :: bvec_mo
+      real(kind=dp), intent(out) :: ss
+      real(kind=dp), parameter :: half=0.5d+00
 
-      COMMON /IOFILE/ IR,IW,IP,IS,IPK,IDAF,NAV,IODA
+      real(kind=dp) :: a,b,c,dum,f, term
+      real(dp), parameter :: tol = 1.0d-12
 
-      REAL(KIND=dp), PARAMETER :: HALF=0.5D+00
-
-      REAL(KIND=dp) :: A,B,C,DUM,F,SS, TERM
-      REAL(dp), PARAMETER :: TOL = 1.0D-12
-
-      call UNPACK_F90(s, wrk1,'U')
+      call unpack_f90(smat, wrk1,'u')
 
 !     ----- PRECALCULATION -----
-      A=0
-      B=1
-      C=0
-      DO I=1,NA
-         DUM=0
-         DO J=1,L1
-            DO K=1,L1
-               DUM=DUM+VA(J,I)*WRK1(J,K)*VB(K,I)
-            ENDDO
-         ENDDO
-         WRK2(I)=DUM
-         if (I .GT. NB) THEN
+      a=0
+      b=1
+      c=0
+      do i=1,nocca
+         dum=0
+         dum = dot_product( mo_a(:,i), matmul(wrk1, mo_b(:,i)) )
+         wrk2(i)=dum
+         if (i .gt. noccb) then
             cycle
          else
-            A=A+DUM*DUM
-            B=B*DUM*DUM
-            C=C+(1.0_dp/MAX((DUM*DUM),TOL))
+            a=a+dum*dum
+            b=b*dum*dum
+            c=c+(1.0_dp/max((dum*dum),tol))
          endif
-      ENDDO
+      enddo
 
-      F=1
+      f=1
       if(mrsfs) then
-!     ----- CALCULATE SINGLET SPIN QUANTUM NUMBER -----
-      SS=0
-      DO i=1,NA
-         DO j=1,LX-NB
-!     ----- CV -----
-            if ((j .GT. 2).and.(i .LE. NB)) then
-               SS = SS + (NA-1-A + (WRK2(i))**2 - B /  &
-               (MAX(ABS(WRK2(i)), TOL))**2) * (BVEC(i,j,js))**2
-!     ----- CO -----
-            else if (i .LE. NB) then
-               SS = SS + (NA-1-A + (WRK2(i))**1 - (WRK2(j+NB))**2 &
-                 - B * ((WRK2(j+NB)) / MAX(ABS(WRK2(i)), TOL))**2) &
-                 * (BVEC(i,j,js))**2
+!     ----- calculate singlet spin quantum number -----
+      ss=0
+      do i=1,nocca
+         do j=1,norb-noccb
+!     ----- cv -----
+            if ((j .gt. 2).and.(i .le. noccb)) then
+               ss = ss + (nocca-1-a + (wrk2(i))**2 - b /  &
+               (max(abs(wrk2(i)), tol))**2) * (bvec_mo(i,j,js))**2
+!     ----- co -----
+            else if (i .le. noccb) then
+               ss = ss + (nocca-1-a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
+                 - b * ((wrk2(j+noccb)) / max(abs(wrk2(i)), tol))**2) &
+                 * (bvec_mo(i,j,js))**2
 
-!    ----- OV , OS -----
-            else if ((j .GT. 2) .or. (i .EQ. NB+j)) then
-               SS=SS+(NA-1-A-B)*(BVEC(i,j,js))**2
-!    ----- G, D -----
+!    ----- ov , os -----
+            else if ((j .gt. 2) .or. (i .eq. noccb+j)) then
+               ss=ss+(nocca-1-a-b)*(bvec_mo(i,j,js))**2
+!    ----- g, d -----
             else
-               SS = SS + HALF * (NA-1-A - (WRK2(NB+j))**2 &
-                + (WRK2(NB+j))**2 * B * (NA-1-C - 1.0D0 / &
-                (MAX(ABS(WRK2(NB+j)), TOL))**2)) &
-                * (BVEC(i,j,js))**2
+               ss = ss + half * (nocca-1-a - (wrk2(noccb+j))**2 &
+                + (wrk2(noccb+j))**2 * b * (nocca-1-c - 1.0d0 / &
+                (max(abs(wrk2(noccb+j)), tol))**2)) &
+                * (bvec_mo(i,j,js))**2
 
-               F=F+HALF*(-1+A*(WRK2(NB+j))**2)*(BVEC(i,j,js))**2
+               f=f+half*(-1+a*(wrk2(noccb+j))**2)*(bvec_mo(i,j,js))**2
             endif
-         ENDDO
-      ENDDO
+         enddo
+      enddo
 
       else if(mrsft) then
-!     ----- CALCULATE TRIPLET SPIN QUANTUM NUMBER -----
-      SS=0
-      DO i=1,NA
-         DO j=1,LX-NB
-!     ----- CV -----
-            if ((j .GT. 2).and.(i .LE. NB)) then
-               SS = SS + (NA-1 - A + (WRK2(i))**2 &
-                + B * (1.0d0 / MAX(ABS(WRK2(i)), 1.0D-12))**2) &
-                * (BVEC(i,j,js))**2
+!     ----- calculate triplet spin quantum number -----
+      ss=0
+      do i=1,nocca
+         do j=1,norb-noccb
+!     ----- cv -----
+            if ((j .gt. 2).and.(i .le. noccb)) then
+               ss = ss + (nocca-1 - a + (wrk2(i))**2 &
+                + b * (1.0d0 / max(abs(wrk2(i)), 1.0d-12))**2) &
+                * (bvec_mo(i,j,js))**2
 
-!               SS = SS + (NA-1 - A + (WRK2(i))**2 - (WRK2(j+NB))**2 &
-!                + B * ((WRK2(j+NB) / MAX(ABS(WRK2(i)), 1.0D-12))**2)) &
-!                * (BVEC(i,j,js))**2
-!     ----- CO -----
-            else if (i .LE. NB) then
-               SS = SS + (NA-1 - A + (WRK2(i))**2 - (WRK2(j+NB))**2 &
-                     + B * ( (WRK2(j+NB) / &
-                     MAX(ABS(WRK2(i)),1.0D-12))**2 )) * (BVEC(i,j,js))**2
+!     ----- co -----
+            else if (i .le. noccb) then
+               ss = ss + (nocca-1 - a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
+                     + b * ( (wrk2(j+noccb) / &
+                     max(abs(wrk2(i)),1.0d-12))**2 )) * (bvec_mo(i,j,js))**2
 
-!    ----- OV , OT -----
-            else if ((j .GT. 2) .or. (i .EQ. NB+j)) then
-               SS=SS+(NA-1-A+B)*(BVEC(i,j,js))**2
+!    ----- ov , ot -----
+            else if ((j .gt. 2) .or. (i .eq. noccb+j)) then
+               ss=ss+(nocca-1-a+b)*(bvec_mo(i,j,js))**2
             endif
-         ENDDO
-      ENDDO
+         enddo
+      enddo
       endif
-!    ----- NORMALIZATION -----
-      SS=SS/F
+!    ----- normalization -----
+      ss=ss/f
 !
-      RETURN
-      END
+      return
+      end subroutine umrsfssqu
+       
+  subroutine umrsfdmat(bvec,abxc,mo_a,mo_b,ta,tb, &
+                       noca,nocb)
+    use precision, only: dp
+    use tdhf_lib, only: iatogen
+    use mathlib, only: pack_matrix
+
+    implicit none
+
+    real(kind=dp), intent(in), dimension(:) :: bvec
+    real(kind=dp), intent(in), dimension(:,:) :: mo_a, mo_b
+    real(kind=dp), intent(inout), dimension(:,:) :: abxc
+    real(kind=dp), intent(out), dimension(:) :: ta, tb
+    integer, intent(in) :: noca, nocb
+
+    integer :: nvirb, nbf
+    real(kind=dp), allocatable, dimension(:,:) :: scr1, scr2
+
+    nbf = ubound(mo_a,1)
+    allocate(scr1(nbf,nbf), &
+             scr2(nbf,nbf), &
+             source=0.0_dp)
+
+  ! MO(I+,A-) -> AO(M,N) using different alpha/beta MOs
+    nvirb = nbf-nocb
+
+    call iatogen(bvec,scr1,noca,nocb)
+    call dgemm('n','n',nbf,nbf,nbf, &
+               1.0_dp,mo_a,nbf, &
+                      scr1,nbf, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,nbf, &
+               1.0_dp,scr2,nbf, &
+                      mo_b,nbf, &
+               0.0_dp,abxc,nbf)
+
+  ! Unrelaxed difference density matrix -----
+
+  ! OCC(Alpha)-OCC(Alpha)
+    call dgemm('n','t',noca,noca,nvirb, &
+              -1.0_dp,bvec,noca, &
+                      bvec,noca, &
+               0.0_dp,scr1,noca)
+
+  ! MO(I+,J+) -> AO(M,N)
+    call dgemm('n','n',nbf,noca,noca, &
+               1.0_dp,mo_a,nbf, &
+                      scr1,noca, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,noca, &
+               1.0_dp,scr2,nbf, &
+                      mo_a,nbf, &
+               0.0_dp,scr1,nbf)
+    call pack_matrix(scr1,ta)
+
+    call dgemm('t','n',nvirb,nvirb,noca, &
+               1.0_dp,bvec,noca, &
+                      bvec,noca, &
+               0.0_dp,scr1,nvirb)
+
+  ! MO(A-,B-) -> AO(M,N)
+    call dgemm('n','n',nbf,nvirb,nvirb, &
+               1.0_dp,mo_b(:,nocb+1:),nbf, &
+                      scr1,nvirb, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,nvirb, &
+               1.0_dp,scr2,nbf, &
+                      mo_b(:,nocb+1:),nbf, &
+               0.0_dp,scr1,nbf)
+    call pack_matrix(scr1,tb)
+
+    deallocate(scr1,scr2)
+  end subroutine umrsfdmat
+
 
 
 end module tdhf_mrsf_lib
