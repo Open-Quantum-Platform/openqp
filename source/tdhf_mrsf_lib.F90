@@ -167,8 +167,6 @@ contains
                 nf => this%nfocks &
       )
 
-!v      write(*,*) 'MRSF UPDATE 2d pass =', this%cur_pass
-
       do n = 1, buf%ncur
         i = buf%ids(1,n)
         j = buf%ids(2,n)
