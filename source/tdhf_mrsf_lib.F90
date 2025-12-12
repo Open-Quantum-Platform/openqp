@@ -2704,10 +2704,10 @@ end subroutine umrsfmntoia
 
   end subroutine
 
-  !> @brief Jacobi pair-rotations of MO based on off-diagonal elements of S_mo (overlap matrix)
+     !> @brief Jacobi pair-rotations of MO based on off-diagonal elements of S_mo (overlap matrix)
   !> @author Vladimir Yu. Makhnev
   !> @date October 2025
-  subroutine get_jacobi(infos, v_a, e_a, v_b, e_b, s_ao,n_occ,work,  s_mo, isegm)
+  subroutine get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full,nocca,work,  s_mo, isegm)
 
      use precision, only: dp
      use io_constants, only: iw
@@ -2717,10 +2717,10 @@ end subroutine umrsfmntoia
 
      ! Input/output parameters
      type(information), intent(in) :: infos
-     real(kind=dp), intent(in),    dimension(:,:) :: v_a, v_b
-     real(kind=dp), intent(in),    dimension(:)   :: e_a, e_b
-     real(kind=dp), intent(in),    dimension(:,:) :: s_ao
-     integer,       intent(in)                    :: n_occ, isegm
+     real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
+     real(kind=dp), intent(in),    dimension(:)   :: mo_energy_a, mo_energy_b
+     real(kind=dp), intent(in),    dimension(:,:) :: smat_full
+     integer,       intent(in)                    :: nocca, isegm
      real(kind=dp), intent(inout), dimension(:,:) :: s_mo
      real(kind=dp), intent(inout), dimension(:,:) :: work
 
@@ -2754,17 +2754,17 @@ end subroutine umrsfmntoia
 
       THRESH = 1d-3
 
-      nbf = size(v_a, 1)
-      nmo = size(v_a, 2)
+      nbf = size(mo_a, 1)
+      nmo = size(mo_a, 2)
 
       write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
       write(iw,'(A)') '                       MODULE: HF_DFT_Energy'
       write(iw,'(A)') '                       Rotation MO orbitls (Jacobi)'
       write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
 
-      ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * s_ao * v_curr
-      call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, v_a, nbf, s_ao, nbf, 0.0_dp, work, nbf)
-      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, work, nbf, v_b, nbf, 0.0_dp, s_mo, nbf)
+      ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * smat_full * v_curr
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, smat_full, nbf, 0.0_dp, work, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, work, nbf, mo_b, nbf, 0.0_dp, s_mo, nbf)
 
       ! Normalize columns to ensure proper comparison
       do i = 1, nbf
@@ -2778,20 +2778,20 @@ end subroutine umrsfmntoia
         write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
         write(iw,'(A)') '-----------------------------------------'
         do i = 1, nmo
-           write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+           write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
         enddo
         write(iw,'(A)') '-----------------------------------------'
       endif
 
       if (isegm .eq. 0) then
-          P_START = N_occ-1
+          P_START = nocca-1
           P_END   = 2
           Q_START = 1
           MAX_ITER = 10000
       ELSE IF (ISEGM .EQ. 1) THEN
           P_START = nmo
-          P_END   = N_occ+1
-          Q_START = N_occ
+          P_END   = nocca+1
+          Q_START = nocca
           MAX_ITER = 10000
       else
           write(iw, *) "WRONG ISEGM"
@@ -2830,7 +2830,7 @@ end subroutine umrsfmntoia
               EXIT
           END IF
 
-          CALL ROTATE_PAIR(V_A, V_B, S_ao, S_MO, nmo, nbf, ISEGM, I_MAX, J_MAX, if_conv)
+          CALL ROTATE_PAIR(mo_a, mo_b, smat_full, S_MO, nmo, nbf, ISEGM, I_MAX, J_MAX, if_conv)
       enddo
 
       if (dgprint) then
@@ -2841,12 +2841,12 @@ end subroutine umrsfmntoia
         write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
         write(iw,'(A)') '-----------------------------------------'
         do i = 1, nmo
-           write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+           write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
         enddo
         write(iw,'(A)') '-----------------------------------------'
       endif
 
-      call check_sign(V_a, V_b,S_ao, S_mo, nmo, nbf)
+      call check_sign(mo_a, mo_b,smat_full, S_mo, nmo, nbf)
 
       if (dgprint) then
        write(iw,'(A)') '-----------------------------------------'
@@ -2855,7 +2855,7 @@ end subroutine umrsfmntoia
        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
        write(iw,'(A)') '-----------------------------------------'
        do i = 1, nmo
-          write(iw,'(I5,3F12.6)') i, e_a(i)*go2ev, e_b(i)*go2ev, s_mo(i,i)
+          write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
        enddo
        write(iw,'(A)') '-----------------------------------------'
       endif
@@ -2867,106 +2867,97 @@ end subroutine umrsfmntoia
 
    end subroutine get_jacobi
 
-   subroutine rotate_pair(va,vb,s,smo,l1,lx,isegm,i_idx, j_idx, if_conv)
+   subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, if_conv)
 
-       use io_constants, only: iw
+     implicit none
+     logical, intent(inout) :: if_conv
+     integer :: nbf, norb, isegm, i_idx, j_idx
+     double precision :: mo_a(nbf,*), mo_b(nbf,*), smat(*), s_mo(norb,*)
+     double precision :: tht
+     integer :: i
+     double precision :: aa, bb, cc, dd, att, btt, cth, sth
+     double precision, allocatable :: sq(:,:), scr(:,:)
 
-       IMPLICIT NONE
-       logical, intent(inout) :: if_conv
-       INTEGER L1, LX, ISEGM, I_IDX, J_IDX
-       DOUBLE PRECISION VA(L1,*), VB(L1,*), S(*), SMO(LX,*)
-       DOUBLE PRECISION THT
-       INTEGER I
-       DOUBLE PRECISION AA,BB,CC,DD, ATT, BTT, CTH, STH
-       DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
+     aa = s_mo(i_idx, i_idx)
+     bb = s_mo(j_idx, j_idx)
+     cc = s_mo(i_idx, j_idx)
+     dd = s_mo(j_idx, i_idx)
 
-       AA = SMO(I_IDX, I_IDX)
-       BB = SMO(J_IDX, J_IDX)
-       CC = SMO(I_IDX, J_IDX)
-       DD = SMO(J_IDX, I_IDX)
+     att = 0.5d0 * (aa*aa + bb*bb - cc*cc - dd*dd)
 
-       ATT = 0.5D0*(AA*AA + BB*BB - CC*CC - DD*DD)
-       IF (ISEGM .EQ. 0) THEN
-          BTT = AA*DD - BB*CC
-       ELSE IF (ISEGM .EQ. 1) THEN
-          BTT = AA*CC - BB*DD
-       ENDIF
+     if (isegm .eq. 0) then
+         btt = aa*dd - bb*cc
+     else if (isegm .eq. 1) then
+         btt = aa*cc - bb*dd
+     end if
 
- !      IF ( DABS(BTT) .LT. 1.0D-14) THEN
- !         THT = 0.0D0
- !         write(iw,*) att, btt, i_idx, j_idx
- !         if_conv=.true.
- !         RETURN
- !      ENDIF
+     tht = 0.5d0 * datan2(btt, att)
 
-       THT = 0.5D0*DATAN2(BTT, ATT)
+     if (abs(tht) .lt. 1.0d-4) then
+         if_conv = .true.
+         return
+     end if
 
+     cth = dcos(tht)
+     sth = dsin(tht)
 
-       if (abs(tht).lt.1e-4) then
-           if_conv = .true.
-           return
-       endif
-       CTH = DCOS(THT)
-       STH = DSIN(THT)
-       IF (ISEGM .EQ. 0) THEN
-          CALL DROT(L1, VA(1,I_IDX), 1, VA(1,J_IDX), 1, CTH, STH)
-
-          CALL DROT(LX, SMO(I_IDX,1), LX, SMO(J_IDX,1), LX, CTH, STH)
-
-       ELSE
-          CALL DROT(L1, VB(1,I_IDX), 1, VB(1,J_IDX), 1, CTH, STH)
-
-          CALL DROT(LX, SMO(1,I_IDX), 1, SMO(1,J_IDX), 1, CTH, STH)
-       ENDIF
+     if (isegm .eq. 0) then
+         call drot(nbf, mo_a(1, i_idx), 1, mo_a(1, j_idx), 1, cth, sth)
+         call drot(norb, s_mo(i_idx, 1), norb, s_mo(j_idx, 1), norb, cth, sth)
+     else
+         call drot(nbf, mo_b(1, i_idx), 1, mo_b(1, j_idx), 1, cth, sth)
+         call drot(norb, s_mo(1, i_idx), 1, s_mo(1, j_idx), 1, cth, sth)
+     end if
 
    end subroutine rotate_pair
 
-       subroutine swap_sign_a(Va, Vb, l1, lx, swA, isegm)
+   subroutine swap_sign_a(mo_a, mo_b, nbf, norb, swa, isegm)
 
-         implicit none
+    implicit none
 
-         real(kind=dp), intent(inout), dimension(l1,*) :: Va, Vb ! (l1, lx)
-         integer, intent(in) :: l1, lx, swA
-         integer :: i, isegm
+    real(kind=dp), intent(inout), dimension(nbf,*) :: mo_a, mo_b
+    integer, intent(in) :: nbf, norb, swa
+    integer :: i, isegm
 
-         if (isegm .eq. 0) then
-             do i=1, l1
-                 va(i, swA) = -va(i, swA)
-             enddo
-         else
-             do i=1, l1
-                 vb(i, swA) = -vb(i, swA)
-             enddo
-         end if
-       END SUBROUTINE swap_sign_a
+    if (isegm .eq. 0) then
+        do i = 1, nbf
+            mo_a(i, swa) = -mo_a(i, swa)
+        end do
+    else
+        do i = 1, nbf
+            mo_b(i, swa) = -mo_b(i, swa)
+        end do
+    end if
 
-       subroutine check_sign(Va, Vb,S, Smo, l1, lx)
-       IMPLICIT NONE
-       DOUBLE PRECISION VA(L1,*), VB(L1,*)
-       DOUBLE PRECISION S(*)
-       DOUBLE PRECISION SMO(LX,*)
-       INTEGER L1, LX, ISEGM
+    end subroutine swap_sign_a
 
-       INTEGER I, J, P, Q, P_START, P_END, Q_START
-       DOUBLE PRECISION MAX_OFF, THRESH, THT
-       INTEGER I_MAX, J_MAX
-       INTEGER MAX_ITER, ITERJ
-       DOUBLE PRECISION, ALLOCATABLE :: SQ(:,:), SCR(:,:)
+    subroutine check_sign(mo_a, mo_b, smat, s_mo, nbf, norb)
+      implicit none
+      double precision mo_a(nbf,*), mo_b(nbf,*)
+      double precision smat(*)
+      double precision s_mo(norb,*)
+      integer nbf, norb, isegm
 
-       do i = 1, lx
-           if (Smo(i,i)<-0.0) then
-               call swap_sign_a(Va, Vb, l1, lx, i, 1 )
-           end if
-       enddo
+      integer i, j, p, q, p_start, p_end, q_start
+      double precision max_off, thresh, tht
+      integer i_max, j_max
+      integer max_iter, iterj
+      double precision, allocatable :: sq(:,:), scr(:,:)
 
-       ALLOCATE(SQ(L1,L1))
+      do i = 1, norb
+          if (s_mo(i,i) < -0.0d0) then
+              call swap_sign_a(mo_a, mo_b, nbf, norb, i, 1)
+          end if
+      end do
 
-       call dgemm('t', 'n', l1, l1, l1, 1.0_dp, va, l1, s, l1, 0.0_dp, SQ, l1)
-       call dgemm('n', 'n', l1,l1,l1, 1.0_dp, SQ, l1, vb, l1, 0.0_dp, smo, l1)
+      allocate(sq(nbf,nbf))
 
-       DEALLOCATE(SQ)
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0d0, mo_a, nbf, smat, nbf, 0.0d0, sq, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0d0, sq, nbf, mo_b, nbf, 0.0d0, s_mo, nbf)
 
-       end subroutine check_sign
+      deallocate(sq)
+
+    end subroutine check_sign
 
       subroutine umrsfssqu(ss,mo_a,mo_b,smat,wrk1,wrk2,nbf,nbf2,xvec_dim,js, &
      &                    norb,bvec_mo,nocca,noccb,mrsfs,mrsft)
