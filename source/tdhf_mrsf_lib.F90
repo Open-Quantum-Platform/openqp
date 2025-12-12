@@ -403,7 +403,7 @@ end subroutine int2_umrsf_data_t_update
       end do
     end do
 
-    if (debug_mode .and. .false.) then
+    if (debug_mode) then
       write(iw,'("print xm(xvec_dim) ordering")')
       do i = 1, xvec_dim
         write(iw,'(a,i5,f20.10,i5)') 'i,xm(ij)=', i, xm(i)
@@ -439,7 +439,7 @@ end subroutine int2_umrsf_data_t_update
       end do
     end do
 
-    if (debug_mode .and. .false.) then
+    if (debug_mode) then
       write(iw,'("print xm(xvec_dim) ordering")')
       do i = 1, xvec_dim
         write(iw,'(a,i5,f20.10,i5)') 'i,xm(ij)=', i, xm(i)
