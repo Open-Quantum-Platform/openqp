@@ -170,6 +170,7 @@ module types
     integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
     integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES)
     integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
+    logical(c_bool) :: umrsf= .False.      !< UMRSF branch calculations switch in td_mrsf_energy module
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator

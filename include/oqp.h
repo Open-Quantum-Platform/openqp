@@ -100,6 +100,7 @@ struct dft_parameters {
     int64_t ixcore_len;
     int64_t z_solver;
     int64_t gmres_dim;
+    bool umrsf;
 };
 
 struct control_parameters {
@@ -212,6 +213,7 @@ void tdhf_sf_z_vector(struct oqp_handle_t *inf);
 void tdhf_sf_gradient(struct oqp_handle_t *inf);
 
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
+void tdhf_umrsf_energy(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
