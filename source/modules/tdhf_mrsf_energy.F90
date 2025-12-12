@@ -154,9 +154,13 @@ contains
     debug_mode = infos%tddft%debug_mode
 
     mol_mult = infos%mol_prop%mult
-    if (mol_mult/=3) call show_message('MRSF-TDDFT are available for ROHF ref.&
-        &with ONLY triplet multiplicity(mult=3)',with_abort)
-
+    if (umrsf) then
+      if (mol_mult/=3) call show_message('UMRSF-TDDFT are available for UHF ref.&
+          &with ONLY triplet multiplicity(mult=3)',with_abort)
+    else
+      if (mol_mult/=3) call show_message('MRSF-TDDFT are available for ROHF ref.&
+          &with ONLY triplet multiplicity(mult=3)',with_abort)
+    endif
     scf_type = infos%control%scftype
     if (.not. umrsf .and. scf_type==3) roref = .true.
     
@@ -386,14 +390,9 @@ contains
      endif
 
     else if (mrst==5) then
-     if (.not. umrsf) then
       call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
-     else if (umrsf) then
-      call show_message('This case of U-MRSF-Q has not been developed yet...',with_abort)
-     endif
     end if
 
-!    if (umrsf.eqv..true.) call show_message('UMRSF-TDDFT is not ready (but glad you have asked)',with_abort)
     ist = 1
     iend = nvec
     iter = 0

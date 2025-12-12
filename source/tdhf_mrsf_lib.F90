@@ -2746,7 +2746,7 @@ end subroutine umrsfmntoia
 
       if (u_mrsf .eqv. .false.) return
 
-      dgprint = .true.
+      dgprint = infos%tddft%debug_mode 
 
       if_conv=.false.
 
@@ -2759,6 +2759,7 @@ end subroutine umrsfmntoia
       write(iw,'(A)') '                       MODULE: HF_DFT_Energy'
       write(iw,'(A)') '                       Rotation MO orbitls (Jacobi)'
       write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
+      write(iw,'(A)') ''
 
       ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * smat_full * v_curr
       call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, smat_full, nbf, 0.0_dp, work, nbf)
@@ -2779,6 +2780,7 @@ end subroutine umrsfmntoia
            write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
         enddo
         write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') ''
       endif
 
       if (isegm .eq. 0) then
