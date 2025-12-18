@@ -21,6 +21,14 @@ module tdhf_mrsf_lib
 
     end type
 
+    type, extends(int2_mrsf_data_t) :: int2_umrsf_data_t
+
+    contains 
+
+        procedure :: update => int2_umrsf_data_t_update
+
+    end type
+
 contains
 
 !###############################################################################
@@ -39,7 +47,7 @@ contains
     this%nfocks = ubound(this%d3,1)
     this%nthreads = nthreads
     nsh = basis%nshell
-    nmatrix = 7 ! spin pair copuling A': bo2v, bo1v, bco1, bco2, o21v, co12; A: ball
+    nmatrix = ubound(this%d3, 2) ! 7 ! spin pair copuling A': bo2v, bo1v, bco1, bco2, o21v, co12; A: ball
 
     if (this%cur_pass == 1) then
       if (allocated(this%f3)) deallocate(this%f3)
@@ -99,9 +107,12 @@ contains
 
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
+    integer :: sized 
+
+    sized = ubound(this%d3,2)
 
 !   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,7,:,:), basis)
+    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -196,12 +207,114 @@ contains
           f3(1:nf,7,j,l) = f3(1:nf,7,j,l) - xval*d3(1:nf,7,i,k)
           f3(1:nf,7,l,j) = f3(1:nf,7,l,j) - xval*d3(1:nf,7,k,i)
         end if
+
       end do
     end associate
 
     buf%ncur = 0
 
   end subroutine
+
+subroutine int2_umrsf_data_t_update(this, buf)
+
+  use io_constants, only: iw
+    
+  implicit none
+  logical :: debug_mode
+  class(int2_umrsf_data_t), intent(inout) :: this
+  type(int2_storage_t), intent(inout) :: buf
+  integer :: i, j, k, l, n
+  real(kind=dp) :: val, xval, cval
+  integer :: mythread
+
+  mythread = buf%thread_id
+
+  debug_mode = .True.
+
+  if (.not.this%tamm_dancoff) return
+
+  associate ( f3 => this%f3(:,:,:,:,mythread), &
+              d3 => this%d3, &
+              nf => this%nfocks &
+    )
+
+
+    do n = 1, buf%ncur
+      i = buf%ids(1,n)
+      j = buf%ids(2,n)
+      k = buf%ids(3,n)
+      l = buf%ids(4,n)
+      val = buf%ints(n)
+
+
+      xval = val * this%scale_exchange
+      cval = val * this%scale_coulomb
+
+      if (this%cur_pass==1) then
+        ! --- Coulomb-like updates (was :4 -> now :8 (alpha/beta pairs)) ---
+        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,k,l)   ! (ij|lk)
+        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,i,j)   ! (kl|ji)
+        f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,l,k)   ! (ij|kl)
+        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,i,j)   ! (lk|ji)
+        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,k,l)   ! (ji|lk)
+        f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)   ! (kl|ij)
+        f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)   ! (ji|kl)
+        f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
+        ! --- Exchange-like updates (was :7 -> now :11 (all types incl alpha/beta)) ---
+        f3(:nf,1:8,i,k) = f3(:nf,1:8,i,k) - xval*d3(:nf,1:8,j,l) ! (ij|lk)
+        f3(:nf,1:8,k,i) = f3(:nf,1:8,k,i) - xval*d3(:nf,1:8,l,j) ! (kl|ji)
+        f3(:nf,1:8,i,l) = f3(:nf,1:8,i,l) - xval*d3(:nf,1:8,j,k) ! (ij|kl)
+        f3(:nf,1:8,l,i) = f3(:nf,1:8,l,i) - xval*d3(:nf,1:8,k,j) ! (lk|ji)
+        f3(:nf,1:8,j,k) = f3(:nf,1:8,j,k) - xval*d3(:nf,1:8,i,l) ! (ji|lk)
+        f3(:nf,1:8,k,j) = f3(:nf,1:8,k,j) - xval*d3(:nf,1:8,l,i) ! (kl|ij)
+        f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
+        f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
+
+        f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j) ! 
+        f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k) ! 
+        f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l) ! 
+        f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i) ! 
+        f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j) ! 
+        f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l) ! 
+        f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k) ! 
+        f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i) ! 
+
+        f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
+        f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
+        f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
+        f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
+        f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
+        f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
+        f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
+        f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
+
+      else if (this%cur_pass==2) then
+        ! In pass 2 only agdlr was updated in scalar version (col 7).
+        f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
+        f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
+        f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
+        f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
+        f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
+        f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
+        f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
+        f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
+        ! Here agdlr is column 11 (spin-independent), update only that.
+      end if
+
+    end do
+
+!  if (debug_mode ) then
+!    write(iw,*) 'UPDATE'
+!    write(iw,*) 'adco2a 1 1-5 1', f3(1,7,1:5,1)
+!    write(iw,*) 'agdlr 1 1 1-5', f3(1,11,1,1:5) 
+!    write(iw,*) this%scale_exchange, this%scale_coulomb !xval, cval
+!  endif
+
+  end associate
+
+  buf%ncur = 0
+
+end subroutine int2_umrsf_data_t_update
 
 !###############################################################################
 !###############################################################################
@@ -703,6 +816,136 @@ contains
     return
 
   end subroutine mrsfcbc
+ subroutine umrsfcbc(infos, va, vb, bvec, mrsf_density)
+
+   use messages, only: show_message, with_abort
+   use types, only: information
+   use io_constants, only: iw
+   use precision, only: dp
+
+   implicit none
+
+   type(information), intent(in) :: infos
+   real(kind=dp), intent(in), dimension(:,:) :: &
+     va, vb, bvec
+   real(kind=dp), intent(inout), target, dimension(:,:,:) :: &
+     mrsf_density
+
+   real(kind=dp), allocatable, dimension(:,:) :: &
+     tmp, tmp1, tmp2
+   real(kind=dp), pointer, dimension(:,:) :: &
+     bo2va, bo2vb, bo1va, bo1vb, bco1a, bco1b, &
+     bco2a, bco2b, ball, co12, o21v
+   integer :: nocca, noccb, mrst, i, j, m, nbf, lr1, lr2, ok
+   logical :: debug_mode
+   real(kind=dp), parameter :: isqrt2 = 1.0_dp/sqrt(2.0_dp)
+
+   ball  => mrsf_density(11,:,:)
+   bo2va => mrsf_density(1,:,:)
+   bo2vb => mrsf_density(2,:,:)
+   bo1va => mrsf_density(3,:,:)
+   bo1vb => mrsf_density(4,:,:)
+   bco1a => mrsf_density(5,:,:)
+   bco1b => mrsf_density(6,:,:)
+   bco2a => mrsf_density(7,:,:)
+   bco2b => mrsf_density(8,:,:)
+   o21v  => mrsf_density(9,:,:)
+   co12  => mrsf_density(10,:,:)
+
+   nbf = infos%basis%nbf
+   nocca = infos%mol_prop%nelec_A
+   noccb = infos%mol_prop%nelec_B
+   mrst = infos%tddft%mult
+   debug_mode = infos%tddft%debug_mode
+
+   lr1 = nocca-1
+   lr2 = nocca
+   allocate(tmp(nbf,nbf), &
+            tmp1(nbf,4), &
+            tmp2(nbf,4), &
+            source=0.0_dp, stat=ok)
+   if( ok/=0 ) call show_message('Cannot allocate memory',with_abort)
+
+   do j = nocca+1, nbf
+     tmp1(:,1) = tmp1(:,1)+va(:,j)*bvec(nocca,j)
+     tmp1(:,2) = tmp1(:,2)+vb(:,j)*bvec(nocca,j)
+     tmp1(:,3) = tmp1(:,3)+va(:,j)*bvec(nocca-1,j)
+     tmp1(:,4) = tmp1(:,4)+vb(:,j)*bvec(nocca-1,j)
+   end do
+
+   do i = 1, nocca-2
+     tmp2(:,1) = tmp2(:,1)+va(:,i)*bvec(i,nocca-1)
+     tmp2(:,2) = tmp2(:,2)+vb(:,i)*bvec(i,nocca-1)
+     tmp2(:,3) = tmp2(:,3)+va(:,i)*bvec(i,nocca)
+     tmp2(:,4) = tmp2(:,4)+vb(:,i)*bvec(i,nocca)
+   end do
+
+   do m = 1, nbf
+     ball(:,m) = ball(:,m)+tmp1(m,2)*va(:,nocca) &
+                          +tmp1(m,4)*va(:,nocca-1) &
+                          +tmp2(:,1)*vb(m,nocca-1) &
+                          +tmp2(:,3)*vb(m,nocca)
+
+     bo2va(:,m) = bo2va(:,m)+tmp1(m,1)*va(:,nocca)
+     bo2vb(:,m) = bo2vb(:,m)+tmp1(m,2)*vb(:,nocca)
+     bo1va(:,m) = bo1va(:,m)+tmp1(m,3)*va(:,nocca-1)
+     bo1vb(:,m) = bo1vb(:,m)+tmp1(m,4)*vb(:,nocca-1)
+     o21v(:,m) = o21v(:,m)+tmp1(m,2)*va(:,nocca-1) &
+                          -tmp1(m,4)*va(:,nocca)
+
+     bco1a(:,m) = bco1a(:,m)+tmp2(:,1)*va(m,nocca-1)
+     bco1b(:,m) = bco1b(:,m)+tmp2(:,2)*vb(m,nocca-1)
+     bco2a(:,m) = bco2a(:,m)+tmp2(:,3)*va(m,nocca)
+     bco2b(:,m) = bco2b(:,m)+tmp2(:,4)*vb(m,nocca)
+     co12(:,m) = co12(:,m)+tmp2(:,1)*vb(m,nocca) &
+                          -tmp2(:,3)*vb(m,nocca-1)
+   end do
+
+   call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
+              1.0_dp, vb(:,nocca+1), nbf, &
+                      bvec(:,nocca+1), nbf, &
+              0.0_dp, tmp, nbf)
+
+   call dgemm('n','t', nbf, nbf, nocca-2, &
+              1.0_dp, va, nbf, &
+                      tmp, nbf, &
+              1.0_dp, ball, nbf)
+
+   if (mrst==1) then
+     do m = 1, nbf
+       ball(:,m) = ball(:,m) &
+       +va(:,lr2)*bvec(lr2,lr1)*vb(m,lr1) &
+       +va(:,lr1)*bvec(lr1,lr2)*vb(m,lr2) &
+       +(va(:,lr1)*vb(m,lr1)-va(:,lr2)*vb(m,lr2)) &
+          *bvec(lr1,lr1)*isqrt2
+     end do
+   elseif (mrst==3) then
+     do m = 1, nbf
+       ball(:,m) = ball(:,m) &
+         +(va(:,lr1)*vb(m,lr1)+va(:,lr2)*vb(m,lr2)) &
+            *bvec(lr1,lr1)*isqrt2
+     end do
+   endif
+    if (debug_mode) then
+      write(iw,*) 'UMRSFCBC'
+      write(iw,*) 'Check sum = va', sum(abs(va))
+      write(iw,*) 'Check sum = vb', sum(abs(vb))
+      write(iw,*) 'Check sum = bvec', sum(abs(bvec))
+      write(iw,*) 'Check sum = ball', sum(abs(ball))
+      write(iw,*) 'Check sum = o21v', sum(abs(o21v))
+      write(iw,*) 'Check sum = co12', sum(abs(co12))
+      write(iw,*) 'Check sum = bo2va', sum(abs(bo2va))
+      write(iw,*) 'Check sum = bo2vb', sum(abs(bo2vb))
+      write(iw,*) 'Check sum = bo1va', sum(abs(bo1va))
+      write(iw,*) 'Check sum = bo1vb', sum(abs(bo1vb))
+      write(iw,*) 'Check sum = bco1a', sum(abs(bco1a))
+      write(iw,*) 'Check sum = bco1b', sum(abs(bco1b))
+      write(iw,*) 'Check sum = bco2a', sum(abs(bco2a))
+      write(iw,*) 'Check sum = bco2b', sum(abs(bco2b))
+    end if
+ deallocate(tmp,tmp1, tmp2)
+ return
+ end subroutine umrsfcbc
 
 !> Transform MRSF Fock-like matrices from AO to MO basis
 !>
@@ -985,6 +1228,7 @@ contains
     end do
 
     if (debug_mode) then
+      write(iw,*) 'MNTOIA'
       write(iw,*) 'Check sum = ivec', ivec
       write(iw,*) 'Check sum = agdlr', sum(abs(agdlr))
       write(iw,*) 'Check sum = ao21v', sum(abs(ao21v))
@@ -993,12 +1237,183 @@ contains
       write(iw,*) 'Check sum = ado1v', sum(abs(ado1v))
       write(iw,*) 'Check sum = adco1', sum(abs(adco1))
       write(iw,*) 'Check sum = adco2', sum(abs(adco2))
-      write(iw,*) 'Check sum = pmo', sum(abs(pmo(:,ivec)))
+      write(iw,*) 'Check sum = pmo', sum(abs(pmo(:,ivec)))    
     end if
 
     return
 
   end subroutine mrsfmntoia
+
+subroutine umrsfmntoia(infos, fmrsf, pmo, va, vb, ivec)
+
+     use precision, only: dp
+     use types, only: information
+     use messages, only: show_message, with_abort
+     use io_constants, only: iw
+
+     implicit none
+
+     type(information), intent(in) :: infos
+     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
+       fmrsf
+     real(kind=dp), intent(out), dimension(:,:) :: pmo
+     real(kind=dp), intent(in), dimension(:,:) :: va, vb
+     integer, intent(in) :: ivec
+
+     real(kind=dp), allocatable :: &
+       scr(:,:), tmp(:), wrk(:,:), tmp2(:)
+     real(kind=dp), pointer, dimension(:,:) :: &
+       adco1a, adco1b, adco2a, adco2b, &
+       ado1va, ado1vb, ado2va,ado2vb, agdlr, aco12, ao21v
+     integer :: noca, nocb, mrst, i, ij, &
+       j, lr1, lr2, nbf, ok, ni, nj
+     real(kind=dp), parameter :: zero = 0.0_dp
+     real(kind=dp), parameter :: one = 1.0_dp
+     real(kind=dp), parameter :: half = 0.5_dp
+     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
+     real(kind=dp)  :: dumn
+     logical :: debug_mode
+
+     nbf = infos%basis%nbf
+     mrst = infos%tddft%mult
+     noca = infos%mol_prop%nelec_a
+     nocb = infos%mol_prop%nelec_b
+     debug_mode = infos%tddft%debug_mode
+
+     allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), tmp2(nbf), source=0.0_dp, stat=ok)
+     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+     dumn = 0.0_dp
+
+     agdlr => fmrsf(11,:,:)
+
+     ado2va => fmrsf(1,:,:)
+     ado2vb => fmrsf(2,:,:)
+
+     ado1va => fmrsf(3,:,:)
+     ado1vb => fmrsf(4,:,:)
+
+     adco1a => fmrsf(5,:,:)
+     adco1b => fmrsf(6,:,:)
+
+     adco2a => fmrsf(7,:,:)
+     adco2b => fmrsf(8,:,:)
+
+     ao21v => fmrsf(9,:,:)
+     aco12 => fmrsf(10,:,:)
+
+     lr1 = noca-1
+     lr2 = noca
+
+     call dgemm('t','n',nbf,nbf,nbf, &
+                one, va, nbf, &
+                     agdlr,nbf, &
+                zero, wrk, nbf)
+     call dgemm('n','n',nbf,nbf,nbf, &
+                one, wrk, nbf, &
+                     vb, nbf, &
+                zero, scr, nbf)
+ ! 1
+ !   ----- (m,n) to (i+,n) -----
+     wrk = scr
+     pmo(:,ivec) = 0.0_dp
+! 3
+    j = lr2
+    do i=1, lr1-1
+        dumn = 0.0_dp
+        do ni = 1, nbf
+        do nj = 1, nbf
+            dumn = dumn + va(ni, i) * va(nj, j) * ado1va(ni, nj) * half & 
+   &                    + vb(ni, i) * vb(nj, j) * ado1vb(ni, nj) * half &
+   &                    + va(ni, i) * vb(nj, j-1) * aco12(ni, nj)
+        enddo 
+        enddo 
+        wrk(i,j) = wrk(i,j) + dumn
+    enddo
+! 4
+    j = lr1
+    do i=1,lr1-1
+        dumn = 0.0_dp
+        do ni=1,nbf
+        do nj=1,nbf
+            dumn = dumn + va(ni, i) * va(nj, j) * ado2va(ni, nj) * half &
+   &                    + vb(ni, i) * vb(nj, j) * ado2vb(ni, nj) * half &
+   &                    - va(ni, i) * vb(nj, j+1) * aco12(ni, nj) 
+        enddo
+        enddo
+        wrk(i,j) = wrk(i,j) + dumn
+    enddo
+! 5
+    i = lr1
+    do j=lr2+1, nbf
+        dumn = 0.0_dp
+        do ni=1,nbf
+        do nj=1,nbf
+            dumn = dumn + va(nj, j) * va(ni, i) * adco2a(ni, nj) * half &
+   &                    + vb(nj, j) * vb(ni, i) * adco2b(ni, nj) * half &
+   &                    + vb(nj, j) * va(ni, i+1) * ao21v(ni, nj)
+        enddo
+        enddo
+        wrk(i,j) = wrk(i,j) + dumn
+    enddo
+! 6
+    i = lr2
+    do j=lr2+1, nbf
+        dumn = 0.0_dp
+        do ni=1,nbf
+        do nj=1,nbf
+            dumn = dumn + va(nj, j) * va(ni, i) * adco1a(ni, nj) * half &
+   &                    + vb(nj, j) * vb(ni, i) * adco1b(ni, nj) * half &
+   &                    - vb(nj, j) * va(ni, i-1) * ao21v(ni, nj)
+        enddo
+        enddo
+        wrk(i,j) = wrk(i,j) + dumn
+    enddo
+
+    if (mrst==1) then
+      wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
+      wrk(lr2,lr2) = 0.0_dp
+    else if (mrst==3) then
+      wrk(lr1,lr1) = (scr(lr1,lr1)+scr(lr2,lr2))*sqrt2
+      wrk(lr2,lr1) = 0.0_dp
+      wrk(lr1,lr2) = 0.0_dp
+      wrk(lr2,lr2) = 0.0_dp
+    end if
+
+    pmo(:,ivec) = 0.0_dp
+
+    if (debug_mode) then
+        write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
+        write(iw,*) wrk(1:5,1:5)
+    endif
+
+    ij = 0
+    do j = nocb+1, nbf
+      do i = 1, noca
+        ij = ij+1
+        pmo(ij,ivec) = pmo(ij,ivec) + wrk(i,j)
+      end do
+    end do
+
+    if (debug_mode) then
+      write(iw,*) 'UMRSFMNTOIA'
+      write(iw,*) 'Check sum = ivec', ivec
+      write(iw,*) 'Check sum = agdlr', sum(abs(agdlr))
+      write(iw,*) 'Check sum = ao21v', sum(abs(ao21v))
+      write(iw,*) 'Check sum = ado2vb', sum(abs(ado2vb))
+      write(iw,*) 'Check sum = ado2va', sum(abs(ado2va))
+      write(iw,*) 'Check sum = aco12', sum(abs(aco12))
+      write(iw,*) 'Check sum = ado1va', sum(abs(ado1va))
+      write(iw,*) 'Check sum = ado1vb', sum(abs(ado1vb))
+      write(iw,*) 'Check sum = adco1a', sum(abs(adco1a))
+      write(iw,*) 'Check sum = adco1b', sum(abs(adco1b))
+      write(iw,*) 'Check sum = adco2a', sum(abs(adco2a))
+      write(iw,*) 'Check sum = adco2b', sum(abs(adco2b))
+      write(iw,*) 'Check sum = pmo', sum(abs(pmo(:,ivec)))
+    end if
+
+    return
+end subroutine umrsfmntoia
 
   subroutine mrsfesum(infos, wrk, fij, fab, pmo, iv)
 
@@ -1487,6 +1902,244 @@ contains
     return
 
   end subroutine mrsfsp
+
+
+!>    @brief    Spin-pairing parts
+!>              of singlet and triplet UMRSF Lagrangian
+!>
+  subroutine umrsfsp(xhxa, xhxb, ca, cb, xv, fmrsf, noca, nocb)
+
+    use precision, only: dp
+    use messages, only: show_message, with_abort
+    implicit none
+
+    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
+    real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
+    integer, intent(in) :: noca, nocb
+
+    integer :: nbf, i, j, lr1, lr2, ok
+
+    real(kind=dp), allocatable :: scr(:,:), scr2(:,:)
+    real(kind=dp), pointer, dimension(:,:) :: &
+      adco1a, adco1b, adco2a, adco2b, ado1va, &
+      ado1vb, ado2va, ado2vb, aco12, ao21v
+
+    ado2va => fmrsf(1,:,:)
+    ado2vb => fmrsf(2,:,:)
+    ado1va => fmrsf(3,:,:)
+    ado1vb => fmrsf(4,:,:)
+    adco1a => fmrsf(5,:,:)
+    adco1b => fmrsf(6,:,:)
+    adco2a  => fmrsf(7,:,:)
+    adco2b  => fmrsf(8,:,:)
+    ao21v  => fmrsf(9,:,:)
+    aco12  => fmrsf(10,:,:)
+
+    nbf = ubound(ca, 1)
+    lr1 = nocb+1
+    lr2 = noca
+
+    allocate(scr(nbf,nbf), &
+             scr2(nbf,nbf), &
+             source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+  ! Spin-pairing coupling contributions of xhxa
+
+  ! o1v
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf,  &
+                       ao21v, nbf,  &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr2) = xhxa(:,lr2)+scr(:,j)*xv(lr1,j)
+      xhxa(:,lr1) = xhxa(:,lr1)-scr(:,j)*xv(lr2,j)
+    end do
+
+    ! co1
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       aco12, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,lr2)*xv(i,lr1)
+      xhxa(:,i) = xhxa(:,i)-scr(:,lr1)*xv(i,lr2)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       adco2a, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr1) = xhxa(:,lr1)+scr(:,j)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       adco1a, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxa(:,lr2) = xhxa(:,lr2)+scr(:,j)*xv(lr2,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado2va, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, 1, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb(:,lr1), nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,1)*xv(i,lr1)
+    end do
+
+  ! co2
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado1va, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, 1, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb(:,lr2), nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxa(:,i) = xhxa(:,i)+scr(:,1)*xv(i,lr2)
+    end do
+
+   ! Spin-pairing coupling contributions of xhxb
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ao21v, nbf,&
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(lr2,:)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       ao21v, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(lr1,:)*xv(lr2,j)
+    end do
+
+  ! co1
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+              -1.0_dp, ca, nbf, &
+                       aco12, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr2) = xhxb(:,lr2)+scr(i,:)*xv(i,lr1)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+                         1.0_dp, ca, nbf, &
+                                 aco12, nbf, &
+                         0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+                         2.0_dp, scr2, nbf, &
+                                 cb, nbf, &
+                         0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr1) = xhxb(:,lr1)+scr(i,:)*xv(i,lr2)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado2vb, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n' ,'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr1) = xhxb(:,lr1)+scr(i,:)*xv(i,lr1)
+    end do
+
+    call dgemm('t', 'n', nbf, nbf, nbf, &
+               1.0_dp, ca, nbf, &
+                       ado1vb, nbf, &
+               0.0_dp, scr2, nbf)
+    call dgemm('n', 'n', nbf, nbf, nbf, &
+               2.0_dp, scr2, nbf, &
+                       cb, nbf, &
+               0.0_dp, scr, nbf)
+
+    do i = 1, nocb
+      xhxb(:,lr2) = xhxb(:,lr2)+scr(i,:)*xv(i,lr2)
+    end do
+
+  ! O1V
+    call dgemm('t', 'n', 1, nbf, nbf, &
+               1.0_dp, ca(:, lr1), nbf, &
+                       adco2b, nbf,  &
+               0.0_dp, scr2, 1)
+    call dgemm('n', 'n', 1, nbf, nbf, &
+               2.0_dp, scr2, 1, &
+                       cb, nbf, &
+               0.0_dp, scr, 1)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(:,1)*xv(lr1,j)
+    end do
+
+    call dgemm('t', 'n', 1, nbf, nbf, &
+               1.0_dp, ca(:, lr2), nbf, &
+                       adco1b, nbf,  &
+               0.0_dp, scr2, 1)
+    call dgemm('n',  'n', 1, nbf, nbf, &
+               2.0_dp, scr2, 1, &
+                       cb, nbf, &
+               0.0_dp, scr, 1)
+
+    do j = noca+1, nbf
+      xhxb(:,j) = xhxb(:,j)+scr(:,1)*xv(lr2,j)
+    end do
+
+    return
+
+  end subroutine umrsfsp
 
   subroutine mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
                         xhxa, xhxb, hppija, hppijb, noca, nocb)
@@ -2049,4 +2702,430 @@ contains
 
   end subroutine
 
+     !> @brief Jacobi pair-rotations of MO based on off-diagonal elements of S_mo (overlap matrix)
+  !> @author Vladimir Yu. Makhnev
+  !> @date October 2025
+  subroutine get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full,nocca,work,  s_mo, isegm)
+
+     use precision, only: dp
+     use io_constants, only: iw
+     use types, only: information
+
+     implicit none
+
+     ! Input/output parameters
+     type(information), intent(in) :: infos
+     real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
+     real(kind=dp), intent(in),    dimension(:)   :: mo_energy_a, mo_energy_b
+     real(kind=dp), intent(in),    dimension(:,:) :: smat_full
+     integer,       intent(in)                    :: nocca, isegm
+     real(kind=dp), intent(inout), dimension(:,:) :: s_mo
+     real(kind=dp), intent(inout), dimension(:,:) :: work
+
+     ! Local variables
+     integer :: i, j, k, ip1, nbf, nmo
+     integer :: p_start, p_end, q_start
+     integer :: p, q, iterj
+
+     integer :: max_idx, max_iter, i_max, j_max
+     real(kind=dp) :: max_overlap, overlap, diag_temp, thresh
+     real(kind=dp) :: max_off
+     logical, allocatable :: reordered(:)
+     real(kind=dp), parameter :: go2ev = 27.211386245988d+00
+     logical :: u_mrsf
+     logical :: dgprint
+     logical :: if_conv
+
+     INTEGER :: c0,c1,rate
+
+      u_mrsf = .true.
+
+      if (u_mrsf .eqv. .false.) return
+
+      dgprint = infos%tddft%debug_mode 
+
+      if_conv=.false.
+
+      THRESH = 1d-3
+
+      nbf = size(mo_a, 1)
+      nmo = size(mo_a, 2)
+
+      write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
+      write(iw,'(A)') '                       MODULE: HF_DFT_Energy'
+      write(iw,'(A)') '                       Rotation MO orbitls (Jacobi)'
+      write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
+      write(iw,'(A)') ''
+
+      ! Calculate overlap between previous and current MOs: s_mo = v_prev^T * smat_full * v_curr
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, smat_full, nbf, 0.0_dp, work, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, work, nbf, mo_b, nbf, 0.0_dp, s_mo, nbf)
+
+      ! Normalize columns to ensure proper comparison
+      do i = 1, nbf
+        s_mo(:,i) = s_mo(:,i) / max(norm2(s_mo(:,i)), 1.0e-10_dp)
+      end do
+
+      if (dgprint) then
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') 'Diagonal elements of overlap matrix (BEFORE ROTATIONS)'
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+        write(iw,'(A)') '-----------------------------------------'
+        do i = 1, nmo
+           write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
+        enddo
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') ''
+      endif
+
+      if (isegm .eq. 0) then
+          p_start = nocca-1
+          p_end   = 2
+          q_start = 1
+          max_iter = 10000
+      else if (isegm .eq. 1) then
+          p_start = nmo
+          p_end   = nocca+1
+          q_start = nocca
+          max_iter = 10000
+      else
+          write(iw, *) "WRONG ISEGM"
+      endif
+
+      do iterj = 1, max_iter
+
+          max_off = 0.0D0
+          i_max = -1
+          j_max = -1
+
+          do p = p_start, p_end, -1
+              do q = q_start, p-1
+                  if (dabs(s_mo(p,q)) .gt. max_off) then
+                      max_off = dabs(s_mo(p,q))
+                      i_max = p
+                      j_max = q
+                  endif
+                  if (dabs(s_mo(q,p)) .gt. max_off) then
+                      max_off = dabs(s_mo(q,p))
+                      i_max = q
+                      j_max = p
+                  endif
+              end do
+          end do
+
+          if (dgprint) write(iw, *) "max_off", max_off, i_max, j_max
+
+          if (max_off .le. thresh) then
+             write(iw,'("segment ",I1," converged at iter ",I0)') isegm,  iterj
+             call flush(iw)
+             exit
+          else if  (if_conv .eqv. .true.) THEN
+              write(iw,'("segment ",I1," reached the min thera at iter ",I0)') isegm,  iterj
+              call flush(iw)
+              exit
+          end if
+
+          call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, i_max, j_max, if_conv)
+      enddo
+
+      if (dgprint) then
+
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') 'Diagonal elements of overlap matrix (AFTER ROTATIONS)'
+        write(iw,'(A)') '-----------------------------------------'
+        write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+        write(iw,'(A)') '-----------------------------------------'
+        do i = 1, nmo
+           write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
+        enddo
+        write(iw,'(A)') '-----------------------------------------'
+      endif
+
+      call check_sign(mo_a, mo_b,smat_full, S_mo, nmo, nbf)
+
+      if (dgprint) then
+       write(iw,'(A)') '-----------------------------------------'
+       write(iw,'(A)') 'Diagonal elements of overlap matrix (FINAL/SIGN FIXED)'
+       write(iw,'(A)') '-----------------------------------------'
+       write(iw,'(A)') '# orb.      A_i, eV  B_i, eV   A_i × B_i Overlap'
+       write(iw,'(A)') '-----------------------------------------'
+       do i = 1, nmo
+          write(iw,'(I5,3F12.6)') i, mo_energy_a(i)*go2ev, mo_energy_b(i)*go2ev, s_mo(i,i)
+       enddo
+       write(iw,'(A)') '-----------------------------------------'
+      endif
+
+      return
+
+   end subroutine get_jacobi
+
+   subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, if_conv)
+
+     implicit none
+     logical, intent(inout) :: if_conv
+     integer :: nbf, norb, isegm, i_idx, j_idx
+     double precision :: mo_a(nbf,*), mo_b(nbf,*), smat(*), s_mo(norb,*)
+     double precision :: tht
+     integer :: i
+     double precision :: aa, bb, cc, dd, att, btt, cth, sth
+     double precision, allocatable :: sq(:,:), scr(:,:)
+
+     aa = s_mo(i_idx, i_idx)
+     bb = s_mo(j_idx, j_idx)
+     cc = s_mo(i_idx, j_idx)
+     dd = s_mo(j_idx, i_idx)
+
+     att = 0.5d0 * (aa*aa + bb*bb - cc*cc - dd*dd)
+
+     if (isegm .eq. 0) then
+         btt = aa*dd - bb*cc
+     else if (isegm .eq. 1) then
+         btt = aa*cc - bb*dd
+     end if
+
+     tht = 0.5d0 * datan2(btt, att)
+
+     if (abs(tht) .lt. 1.0d-4) then
+         if_conv = .true.
+         return
+     end if
+
+     cth = dcos(tht)
+     sth = dsin(tht)
+
+     if (isegm .eq. 0) then
+         call drot(nbf, mo_a(1, i_idx), 1, mo_a(1, j_idx), 1, cth, sth)
+         call drot(norb, s_mo(i_idx, 1), norb, s_mo(j_idx, 1), norb, cth, sth)
+     else
+         call drot(nbf, mo_b(1, i_idx), 1, mo_b(1, j_idx), 1, cth, sth)
+         call drot(norb, s_mo(1, i_idx), 1, s_mo(1, j_idx), 1, cth, sth)
+     end if
+
+   end subroutine rotate_pair
+
+   subroutine swap_sign_a(mo_a, mo_b, nbf, norb, swa, isegm)
+
+    implicit none
+
+    real(kind=dp), intent(inout), dimension(nbf,*) :: mo_a, mo_b
+    integer, intent(in) :: nbf, norb, swa
+    integer :: i, isegm
+
+    if (isegm .eq. 0) then
+        do i = 1, nbf
+            mo_a(i, swa) = -mo_a(i, swa)
+        end do
+    else
+        do i = 1, nbf
+            mo_b(i, swa) = -mo_b(i, swa)
+        end do
+    end if
+
+    end subroutine swap_sign_a
+
+    subroutine check_sign(mo_a, mo_b, smat, s_mo, nbf, norb)
+      implicit none
+      double precision mo_a(nbf,*), mo_b(nbf,*)
+      double precision smat(*)
+      double precision s_mo(norb,*)
+      integer nbf, norb, isegm
+
+      integer i, j, p, q, p_start, p_end, q_start
+      double precision max_off, thresh, tht
+      integer i_max, j_max
+      integer max_iter, iterj
+      double precision, allocatable :: sq(:,:), scr(:,:)
+
+      do i = 1, norb
+          if (s_mo(i,i) < -0.0d0) then
+              call swap_sign_a(mo_a, mo_b, nbf, norb, i, 1)
+          end if
+      end do
+
+      allocate(sq(nbf,nbf))
+
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0d0, mo_a, nbf, smat, nbf, 0.0d0, sq, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0d0, sq, nbf, mo_b, nbf, 0.0d0, s_mo, nbf)
+
+      deallocate(sq)
+
+    end subroutine check_sign
+
+      subroutine umrsfssqu(ss,mo_a,mo_b,smat,wrk1,wrk2,nbf,nbf2,xvec_dim,js, &
+     &                    norb,bvec_mo,nocca,noccb,mrsfs,mrsft)
+
+      use mathlib, only: unpack_f90
+      use precision, only: dp
+
+      implicit none
+      logical, intent(in) :: mrsfs, mrsft
+      integer :: i,j,js,k,nocca,noccb,nbf,nbf2,xvec_dim,norb, ok
+      real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
+      real(kind=dp), intent(in),    dimension(:)   :: smat
+      real(kind=dp), intent(inout), dimension(:,:) :: wrk1
+      real(kind=dp), intent(inout), dimension(:)   :: wrk2
+      real(kind=dp), intent(in),    dimension(nocca, norb-noccb, *) :: bvec_mo
+      real(kind=dp), intent(out) :: ss
+      real(kind=dp), parameter :: half=0.5d+00
+
+      real(kind=dp) :: a,b,c,dum,f, term
+      real(dp), parameter :: tol = 1.0d-12
+
+      call unpack_f90(smat, wrk1,'u')
+
+!     ----- PRECALCULATION -----
+      a=0
+      b=1
+      c=0
+      do i=1,nocca
+         dum=0
+         dum = dot_product( mo_a(:,i), matmul(wrk1, mo_b(:,i)) )
+         wrk2(i)=dum
+         if (i .gt. noccb) then
+            cycle
+         else
+            a=a+dum*dum
+            b=b*dum*dum
+            c=c+(1.0_dp/max((dum*dum),tol))
+         endif
+      enddo
+
+      f=1
+      if(mrsfs) then
+!     ----- calculate singlet spin quantum number -----
+      ss=0
+      do i=1,nocca
+         do j=1,norb-noccb
+!     ----- cv -----
+            if ((j .gt. 2).and.(i .le. noccb)) then
+               ss = ss + (nocca-1-a + (wrk2(i))**2 - b /  &
+               (max(abs(wrk2(i)), tol))**2) * (bvec_mo(i,j,js))**2
+!     ----- co -----
+            else if (i .le. noccb) then
+               ss = ss + (nocca-1-a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
+                 - b * ((wrk2(j+noccb)) / max(abs(wrk2(i)), tol))**2) &
+                 * (bvec_mo(i,j,js))**2
+
+!    ----- ov , os -----
+            else if ((j .gt. 2) .or. (i .eq. noccb+j)) then
+               ss=ss+(nocca-1-a-b)*(bvec_mo(i,j,js))**2
+!    ----- g, d -----
+            else
+               ss = ss + half * (nocca-1-a - (wrk2(noccb+j))**2 &
+                + (wrk2(noccb+j))**2 * b * (nocca-1-c - 1.0d0 / &
+                (max(abs(wrk2(noccb+j)), tol))**2)) &
+                * (bvec_mo(i,j,js))**2
+
+               f=f+half*(-1+a*(wrk2(noccb+j))**2)*(bvec_mo(i,j,js))**2
+            endif
+         enddo
+      enddo
+
+      else if(mrsft) then
+!     ----- calculate triplet spin quantum number -----
+      ss=0
+      do i=1,nocca
+         do j=1,norb-noccb
+!     ----- cv -----
+            if ((j .gt. 2).and.(i .le. noccb)) then
+               ss = ss + (nocca-1 - a + (wrk2(i))**2 &
+                + b * (1.0d0 / max(abs(wrk2(i)), 1.0d-12))**2) &
+                * (bvec_mo(i,j,js))**2
+
+!     ----- co -----
+            else if (i .le. noccb) then
+               ss = ss + (nocca-1 - a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
+                     + b * ( (wrk2(j+noccb) / &
+                     max(abs(wrk2(i)),1.0d-12))**2 )) * (bvec_mo(i,j,js))**2
+
+!    ----- ov , ot -----
+            else if ((j .gt. 2) .or. (i .eq. noccb+j)) then
+               ss=ss+(nocca-1-a+b)*(bvec_mo(i,j,js))**2
+            endif
+         enddo
+      enddo
+      endif
+!    ----- normalization -----
+      ss=ss/f
+!
+      return
+      end subroutine umrsfssqu
+       
+  subroutine umrsfdmat(bvec,abxc,mo_a,mo_b,ta,tb, &
+                       noca,nocb)
+    use precision, only: dp
+    use tdhf_lib, only: iatogen
+    use mathlib, only: pack_matrix
+
+    implicit none
+
+    real(kind=dp), intent(in), dimension(:) :: bvec
+    real(kind=dp), intent(in), dimension(:,:) :: mo_a, mo_b
+    real(kind=dp), intent(inout), dimension(:,:) :: abxc
+    real(kind=dp), intent(out), dimension(:) :: ta, tb
+    integer, intent(in) :: noca, nocb
+
+    integer :: nvirb, nbf
+    real(kind=dp), allocatable, dimension(:,:) :: scr1, scr2
+
+    nbf = ubound(mo_a,1)
+    allocate(scr1(nbf,nbf), &
+             scr2(nbf,nbf), &
+             source=0.0_dp)
+
+  ! MO(I+,A-) -> AO(M,N) using different alpha/beta MOs
+    nvirb = nbf-nocb
+
+    call iatogen(bvec,scr1,noca,nocb)
+    call dgemm('n','n',nbf,nbf,nbf, &
+               1.0_dp,mo_a,nbf, &
+                      scr1,nbf, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,nbf, &
+               1.0_dp,scr2,nbf, &
+                      mo_b,nbf, &
+               0.0_dp,abxc,nbf)
+
+  ! Unrelaxed difference density matrix -----
+
+  ! OCC(Alpha)-OCC(Alpha)
+    call dgemm('n','t',noca,noca,nvirb, &
+              -1.0_dp,bvec,noca, &
+                      bvec,noca, &
+               0.0_dp,scr1,noca)
+
+  ! MO(I+,J+) -> AO(M,N)
+    call dgemm('n','n',nbf,noca,noca, &
+               1.0_dp,mo_a,nbf, &
+                      scr1,noca, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,noca, &
+               1.0_dp,scr2,nbf, &
+                      mo_a,nbf, &
+               0.0_dp,scr1,nbf)
+    call pack_matrix(scr1,ta)
+
+    call dgemm('t','n',nvirb,nvirb,noca, &
+               1.0_dp,bvec,noca, &
+                      bvec,noca, &
+               0.0_dp,scr1,nvirb)
+
+  ! MO(A-,B-) -> AO(M,N)
+    call dgemm('n','n',nbf,nvirb,nvirb, &
+               1.0_dp,mo_b(:,nocb+1:),nbf, &
+                      scr1,nvirb, &
+               0.0_dp,scr2,nbf)
+    call dgemm('n','t',nbf,nbf,nvirb, &
+               1.0_dp,scr2,nbf, &
+                      mo_b(:,nocb+1:),nbf, &
+               0.0_dp,scr1,nbf)
+    call pack_matrix(scr1,tb)
+
+    deallocate(scr1,scr2)
+  end subroutine umrsfdmat
+
+
+
 end module tdhf_mrsf_lib
+
