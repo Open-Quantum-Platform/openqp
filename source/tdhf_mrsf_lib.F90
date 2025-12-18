@@ -2737,12 +2737,8 @@ end subroutine umrsfmntoia
      logical :: if_conv
 
      INTEGER :: c0,c1,rate
-     CALL SYSTEM_CLOCK(c0, rate)
 
-!      u_mrsf = infos%tddft%u_mrsf
       u_mrsf = .true.
-!      thresh = infos%tddft%jacobi_conv
-!      thresh = 1e-4
 
       if (u_mrsf .eqv. .false.) return
 
@@ -2784,53 +2780,53 @@ end subroutine umrsfmntoia
       endif
 
       if (isegm .eq. 0) then
-          P_START = nocca-1
-          P_END   = 2
-          Q_START = 1
-          MAX_ITER = 10000
-      ELSE IF (ISEGM .EQ. 1) THEN
-          P_START = nmo
-          P_END   = nocca+1
-          Q_START = nocca
-          MAX_ITER = 10000
+          p_start = nocca-1
+          p_end   = 2
+          q_start = 1
+          max_iter = 10000
+      else if (isegm .eq. 1) then
+          p_start = nmo
+          p_end   = nocca+1
+          q_start = nocca
+          max_iter = 10000
       else
           write(iw, *) "WRONG ISEGM"
       endif
 
-      DO ITERJ = 1, MAX_ITER
+      do iterj = 1, max_iter
 
-          MAX_OFF = 0.0D0
-          I_MAX = -1
-          J_MAX = -1
+          max_off = 0.0D0
+          i_max = -1
+          j_max = -1
 
-          DO P = P_START, P_END, -1
-             DO Q = Q_START, P-1
-                IF (DABS(S_MO(P,Q)) .GT. MAX_OFF) THEN
-                   MAX_OFF = DABS(S_MO(P,Q))
-                   I_MAX = P
-                   J_MAX = Q
-                ENDIF
-                IF (DABS(S_MO(Q,P)) .GT. MAX_OFF) THEN
-                   MAX_OFF = DABS(S_MO(Q,P))
-                   I_MAX = Q
-                   J_MAX = P
-                ENDIF
-             END DO
-          END DO
+          do p = p_start, p_end, -1
+              do q = q_start, p-1
+                  if (dabs(s_mo(p,q)) .gt. max_off) then
+                      max_off = dabs(s_mo(p,q))
+                      i_max = p
+                      j_max = q
+                  endif
+                  if (dabs(s_mo(q,p)) .gt. max_off) then
+                      max_off = dabs(s_mo(q,p))
+                      i_max = q
+                      j_max = p
+                  endif
+              end do
+          end do
 
           if (dgprint) write(iw, *) "max_off", max_off, i_max, j_max
 
-          IF (MAX_OFF .LE. THRESH) then
-             WRITE(iw,'("segment ",I1," converged at iter ",I0)') ISEGM,  ITERJ
-             CALL FLUSH(iw)
-             EXIT
-         else if  (if_conv .eqv. .true.) THEN
-              WRITE(iw,'("segment ",I1," reached the min thera at iter ",I0)') ISEGM,  ITERJ
-              CALL FLUSH(iw)
-              EXIT
-          END IF
+          if (max_off .le. thresh) then
+             write(iw,'("segment ",I1," converged at iter ",I0)') isegm,  iterj
+             call flush(iw)
+             exit
+          else if  (if_conv .eqv. .true.) THEN
+              write(iw,'("segment ",I1," reached the min thera at iter ",I0)') isegm,  iterj
+              call flush(iw)
+              exit
+          end if
 
-          CALL ROTATE_PAIR(mo_a, mo_b, smat_full, S_MO, nmo, nbf, ISEGM, I_MAX, J_MAX, if_conv)
+          call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, i_max, j_max, if_conv)
       enddo
 
       if (dgprint) then
@@ -2859,9 +2855,6 @@ end subroutine umrsfmntoia
        enddo
        write(iw,'(A)') '-----------------------------------------'
       endif
-
-        CALL SYSTEM_CLOCK(c1)
-        WRITE(iw,'("Jacobi wall = ",F12.6," s, segm #", I2)') REAL(c1-c0)/REAL(rate), isegm
 
       return
 
