@@ -1002,6 +1002,10 @@ contains
         call int2_driver%pe%bcast(mo_b, size(mo_b))
         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
     end if
+    if (scf_type == scf_uhf) then
+        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+        call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+    endif
 
     !----------------------------------------------------------------------------
     ! Save Final Fock and Density Matrices
