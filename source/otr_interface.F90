@@ -100,27 +100,30 @@ contains
     verbose  = int(3, kind=ip)
     settings = default_solver_settings
     settings%conv_tol = conv_tol
-    settings%n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
-    settings%jacobi_davidson_start = 30
-    settings%seed = 42 
     settings%verbose = verbose
     settings%stability = (infos%control%trh_stab .eqv. .true._c_bool)
     settings%line_search = (infos%control%trh_ls   .eqv. .true._c_bool)
+    select case (infos%control%trh_sub_solver)
+    case (0)
+        settings%subsystem_solver = "davidson"
+    case (1)
+        settings%subsystem_solver = "jacobi_davidson"
+    case (2)
+        settings%subsystem_solver = "tcg"
+    case default
+        error stop "Invalid trh_sub_solver value"
+    end select
+    settings%n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
     settings%start_trust_radius = real(infos%control%trh_r0, kind=ip)
-    settings%global_red_factor = real(infos%control%trh_gred, kind=ip)
-    settings%local_red_factor = real(infos%control%trh_lred, kind=ip)
+    settings%jacobi_davidson_start = int(infos%control%trh_jd_start, kind=ip)
+    settings%global_red_factor = real(infos%control%trh_gred, kind=rp)
+    settings%local_red_factor = real(infos%control%trh_lred, kind=rp)
     settings%n_macro = max_iter
     settings%n_micro = int(infos%control%trh_nmic, kind=ip)
-!    settings = solver_settings_type(precond = null(), conv_check = null(), logger = null(), &
-!                             stability = .false., line_search = .false., &
-!                             initialized = .true., conv_tol = 1e-5_rp, &
-!                             start_trust_radius = 0.4_rp, global_red_factor = 1e-3_rp, &
-!                             local_red_factor = 1e-4_rp, n_random_trial_vectors = 1, &
-!                             n_macro = 150, n_micro = 50, jacobi_davidson_start = 30, &
-!                             seed = 42, verbose = 3, subsystem_solver = "davidson")
 
-    settings%logger => logger 
+    settings%logger => logger
 
+    call print_trah_settings(settings)
     ! Bind callbacks
     p_update => update_orbs
     p_obj    => obj_func
@@ -258,8 +261,8 @@ contains
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
       work2 = work1
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
-      call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old) 
-    end select 
+      call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old)
+    end select
     val = compute_energy(energy)
   end function obj_func
 
@@ -269,5 +272,34 @@ contains
     character(*), intent(in) :: message
     write(IW, "(A)") trim(message)
   end subroutine
+  subroutine print_trah_settings(settings)
+      use io_constants, only : IW
+      implicit none
 
+      type(solver_settings_type), intent(in) :: settings
+
+      write(IW, '(5X, a)') "----------------------------------------"
+      write(IW, '(6X, a)') "TRAH / Trust-Region Augmented Hessian Settings"
+      write(IW, '(5X, a)') "----------------------------------------"
+      write(IW, '(7X, a, es12.5)') "conv_tol                : ", settings%conv_tol
+      write(IW, '(7X, a, i0)')     "verbose                 : ", settings%verbose
+      write(IW, '(7X, a, l1)')     "stability               : ", settings%stability
+      write(IW, '(7X, a, l1)')     "line_search             : ", settings%line_search
+      write(IW, '(7X, a, a)')      "subsystem_solver        : ", &
+                                    trim(settings%subsystem_solver)
+      write(IW, '(7X, a, i0)')     "n_random_trial_vectors  : ", &
+                                    settings%n_random_trial_vectors
+      write(IW, '(7X, a, es12.5)') "start_trust_radius      : ", &
+                                    settings%start_trust_radius
+      write(IW, '(7X, a, i0)')     "jacobi_davidson_start   : ", &
+                                    settings%jacobi_davidson_start
+      write(IW, '(7X, a, es12.5)') "global_red_factor       : ", &
+                                    settings%global_red_factor
+      write(IW, '(7X, a, es12.5)') "local_red_factor        : ", &
+                                    settings%local_red_factor
+      write(IW, '(7X, a, i0)')     "n_macro                 : ", settings%n_macro
+      write(IW, '(7X, a, i0)')     "n_micro                 : ", settings%n_micro
+      write(IW, '(5X, a)') "----------------------------------------"
+      flush(IW)
+  end subroutine print_trah_settings
 end module otr_interface
