@@ -14,7 +14,9 @@ module otr_interface
 
   use, intrinsic :: iso_c_binding, only: c_bool
   use opentrustregion, only: solver, update_orbs_type,&
-          obj_func_type, hess_x_type, logger_type, rp, ip
+          obj_func_type, hess_x_type, logger_type, rp, ip, &
+          solver_settings_type, stability_settings_type, &
+          default_solver_settings
   use mathlib, only: unpack_matrix
   use scf_converger, only: trah_converger, scf_conv_trah_result, scf_conv_result
   use scf_addons,only: compute_energy,calc_fock
@@ -84,9 +86,10 @@ contains
     procedure(obj_func_type),   pointer :: p_obj
     procedure(logger_type),     pointer :: p_log
     class(scf_conv_result), intent(inout) :: res
-    logical(kind=4) :: error, stability, line_search, davidson,&
+    type(solver_settings_type) :: settings
+    logical(kind=4) :: stability, line_search, davidson,&
                          jacobi_davidson, prefer_jacobi_davidson
-    integer(ip) :: n_random_trial_vectors, n_micro,&
+    integer(ip) :: error, n_random_trial_vectors, n_micro,&
                         n_param, max_iter, verbose
     real(dp) :: start_trust_radius, global_red_factor,&
                           local_red_factor, conv_tol
@@ -95,31 +98,34 @@ contains
     max_iter = int(infos%control%maxit, kind=ip)
     conv_tol = real(infos%control%conv, kind=rp)
     verbose  = int(3, kind=ip)
-    stability              = (infos%control%trh_stab .eqv. .true._c_bool)
-    line_search            = (infos%control%trh_ls   .eqv. .true._c_bool)
-    davidson               = (infos%control%trh_dav  .eqv. .true._c_bool)
-    jacobi_davidson        = (infos%control%trh_jd   .eqv. .true._c_bool)
-    prefer_jacobi_davidson = (infos%control%trh_pjd  .eqv. .true._c_bool)
+    settings = default_solver_settings
+    settings%conv_tol = conv_tol
+    settings%n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
+    settings%jacobi_davidson_start = 30
+    settings%seed = 42 
+    settings%verbose = verbose
+    settings%stability = (infos%control%trh_stab .eqv. .true._c_bool)
+    settings%line_search = (infos%control%trh_ls   .eqv. .true._c_bool)
+    settings%start_trust_radius = real(infos%control%trh_r0, kind=ip)
+    settings%global_red_factor = real(infos%control%trh_gred, kind=ip)
+    settings%local_red_factor = real(infos%control%trh_lred, kind=ip)
+    settings%n_macro = max_iter
+    settings%n_micro = int(infos%control%trh_nmic, kind=ip)
+!    settings = solver_settings_type(precond = null(), conv_check = null(), logger = null(), &
+!                             stability = .false., line_search = .false., &
+!                             initialized = .true., conv_tol = 1e-5_rp, &
+!                             start_trust_radius = 0.4_rp, global_red_factor = 1e-3_rp, &
+!                             local_red_factor = 1e-4_rp, n_random_trial_vectors = 1, &
+!                             n_macro = 150, n_micro = 50, jacobi_davidson_start = 30, &
+!                             seed = 42, verbose = 3, subsystem_solver = "davidson")
 
-    n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
-    start_trust_radius     = real(infos%control%trh_r0, kind=ip)
-    n_micro                = int(infos%control%trh_nmic, kind=ip)
-    global_red_factor      = real(infos%control%trh_gred, kind=ip)
-    local_red_factor       = real(infos%control%trh_lred, kind=ip)
+    settings%logger => logger 
 
     ! Bind callbacks
     p_update => update_orbs
     p_obj    => obj_func
-    p_log    => logger
 
-    call solver(p_update, p_obj, n_param, error=error, &
-                stability=stability, line_search=line_search, davidson=davidson, &
-                jacobi_davidson=jacobi_davidson, &
-                prefer_jacobi_davidson=prefer_jacobi_davidson, &
-                conv_tol=conv_tol, n_random_trial_vectors=n_random_trial_vectors, &
-                start_trust_radius=start_trust_radius, n_macro=max_iter, &
-                n_micro=n_micro, global_red_factor=global_red_factor, &
-                local_red_factor=local_red_factor, verbose=verbose)
+    call solver(p_update, p_obj, n_param, error, settings)
 
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
@@ -132,7 +138,7 @@ contains
       res%iter = iter_otr
     end select
 
-    if (error) then
+    if (error /= 0) then
       write(*,*) 'OpenTrustRegion solver failed.'
       res%ierr = 4
       select type (res)
@@ -168,11 +174,12 @@ contains
   !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr)
-    real(dp), intent(in)                     :: kappa(:)
-    real(dp), intent(out)                    :: func
-    real(dp), intent(out)                    :: grad(:), h_diag(:)
-    procedure(hess_x_type), pointer, intent(out) :: hess_x_funptr
+  subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr, error)
+    real(dp), intent(in), target :: kappa(:)
+    real(dp), intent(out) :: func
+    real(dp), intent(out), target :: grad(:), h_diag(:)
+    procedure(hess_x_type), intent(out), pointer :: hess_x_funptr
+    integer(ip), intent(out) :: error
     type(basis_set), pointer :: basis
     integer :: nschwz
 
@@ -206,24 +213,16 @@ contains
     grad = 2.0_dp * grad
   end subroutine update_orbs
 
-  !> @brief Objective/gradient/Hessian-diagonal callback used by OTR.
-  !> @detail Applies orbital rotations `kappa` to (α[,β]) MOs, rebuilds densities,
-  !>         constructs Fock via `calc_fock` (using incremental ΔD/ΔF when available),
-  !>         then forms orbital-rotation gradient and Hessian diagonal with
-  !>         `conv%calc_g_h`. Also binds the Hessian–vector product callback.
-  !> @param[in]   kappa    Packed rotation vector(s).
-  !> @param[out]  func     Objective value (total electronic energy).
-  !> @param[out]  grad     Objective gradient in rotation coordinates.
-  !> @param[out]  h_diag   Diagonal of approximate Hessian in rotation space.
-  !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
+  !> @brief hess_x_cb.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  function hess_x_cb(x) result(hx)
-    real(dp), intent(in) :: x(:)
-    real(dp)             :: hx(size(x))
+  subroutine hess_x_cb(x, hx, error)
+    real(dp), intent(in), target :: x(:)
+    real(dp), intent(out), target :: hx(:)
+    integer(ip), intent(out) :: error
     call conv%calc_h_op(infos, x, hx)
     hx = 2.0_dp * hx
-  end function hess_x_cb
+  end subroutine hess_x_cb
 
   !> @brief Energy-only objective for a trial move (no gradient).
   !> @detail Rotates temporary copies of the MOs according to `kappa`, rebuilds
@@ -233,8 +232,9 @@ contains
   !> @return     val    Total electronic energy at the trial point.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  function obj_func(kappa) result(val)
-    real(dp), intent(in) :: kappa(:)
+  function obj_func(kappa, error) result(val)
+    real(dp), intent(in), target :: kappa(:)
+    integer(ip), intent(out) :: error
     real(dp)             :: val
     type(basis_set), pointer :: basis
     integer :: nschwz
