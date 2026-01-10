@@ -350,7 +350,7 @@ contains
         type(information), target, intent(inout) :: infos
         type(basis_set), pointer :: basis
 
-        integer :: iw, i, j, atom, elem, end_i
+        integer :: iw, i, j, atom, elem, end_i, ecp_counter
         character(len=1) :: orbit
         character(len=1), dimension(5) :: orbital_types = ['S', 'P', 'D', 'F', 'G']
         if (infos%control%active_basis == 0) then
@@ -362,6 +362,7 @@ contains
 
         write(iw, '(/,5X,"====================== Basis Set Details ======================")')
         atom = 0
+        ecp_counter = 0
 
         write(iw, '(/,17X, A,13X,A)') 'Exponent', 'Normalized Coefficient'
         do j = 1, basis%nshell
@@ -384,10 +385,11 @@ contains
         if (basis%ecp_params%is_ecp) then
             do i=1, infos%mol_prop%natom
                 if (basis%ecp_zn_num(i) .EQ. 0) cycle
+                ecp_counter = ecp_counter + 1
                 elem = nint(infos%atoms%zn(i))
                 write(iw, '(5X, A2, A4)') ELEMENTS_SHORT_NAME(elem), '-ECP'
                 write(iw, '(5X, A, I5)') 'Core Electrons Removed:', basis%ecp_zn_num(i)
-                call ecp_printing(basis, iw, i)
+                call ecp_printing(basis, iw, ecp_counter)
             end do
         end if
         write(iw, '(/,5X,"==================== End of Basis Set Data ====================")')
@@ -408,7 +410,7 @@ contains
         integer :: i, start_i, end_i
 
         if (j > 1) then
-            start_i = sum(basis%ecp_params%n_expo(1:j-1)) + 1
+            start_i = sum(basis%ecp_params%n_expo(1:j)) + 1
             end_i   = sum(basis%ecp_params%n_expo(1:j))
         else
             start_i = 1
