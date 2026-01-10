@@ -143,11 +143,10 @@ struct control_parameters {
     int64_t   verbose;
     bool      trh_stab;
     bool      trh_ls;
-    bool      trh_dav;
-    bool      trh_jd;
-    bool      trh_pjd;
+    int64_t   trh_sub_solver;
     int64_t   trh_nrtv;
     double    trh_r0;
+    int64_t   trh_jd_start;
     int64_t   trh_nmic;
     double    trh_gred;
     double    trh_lred;
