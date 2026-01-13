@@ -859,7 +859,10 @@ class OQPData:
         if molecule.control.scftype == 3 and molecule.mol_prop.mult == 1:
             print("WARNING! ROHF + multiplicity = 1 has bugs!")
             print("Do not trust to these results!")
-
+        elif molecule.control.scftype == 2 and molecule.mol_prop.mult == 1:
+            print("WARNING! UHF + multiplicity = 1 has bugs!")
+            print("Do not trust to these results!")
+ 
     def get_basis(self):
         """Get basis set from a molecule"""
         pex = ffi.new('double **')
