@@ -66,7 +66,7 @@ OQP_CONFIG_SCHEMA = {
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
-        'forced_attempt': {'type': int, 'default': '1'},
+        'forced_attempt': {'type': int, 'default': '2'},
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},
@@ -97,7 +97,7 @@ OQP_CONFIG_SCHEMA = {
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
-        'alternative_scf': {'type': bool, 'default': 'False'},
+        'alternative_scf': {'type': string, 'default': 'trah'},
         'verbose': {'type': int, 'default': '1'},
         'trh_stab': {'type': bool,  'default': 'False'},
         'trh_ls': {'type': bool,  'default': 'False'},
