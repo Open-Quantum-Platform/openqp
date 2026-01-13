@@ -276,7 +276,7 @@ contains
     type(c_ptr), intent(out) :: v
     integer(c_int32_t) :: type_id
     integer(c_int32_t) :: ndims
-    integer(c_int64_t) :: dims(TA_DIMENSIONS_LENGTH)
+    integer(c_int64_t) :: dims(TA_MAX_DIMENSIONS_LENGTH)
 
     type(information), pointer :: inf
     character(:), allocatable :: code_str
@@ -313,11 +313,12 @@ contains
     type(c_ptr), intent(out) :: v
     integer(c_int32_t) :: type_id
     integer(c_int32_t) :: ndims
-    integer(c_int64_t) :: dims(TA_DIMENSIONS_LENGTH)
+    integer(c_int64_t) :: dims(TA_MAX_DIMENSIONS_LENGTH)
 
     type(information), pointer :: inf
     character(:), allocatable :: tag_str
     integer(c_int64_t) :: data_size
+    integer(c_int32_t) :: status_
 
     n = -1
     if (.not.c_associated(c_handle%inf)) return
@@ -325,11 +326,9 @@ contains
 
     tag_str = trim(adjustl(c_f_char(tag)))
 
-    ! 1. check, if the data already exist, and clean it if yes
-    call inf%dat%remove_records([tag_str])
-    ! 2. allocate the memory in container
-    call inf%dat%reserve_data(tag_str, type_id, product(dims(:ndims)), dims(:ndims))
-    ! 3. Get the pointer to the freshly allocated data
+    ! 1. allocate the memory in container (override, if exists)
+    status_ = inf%dat%create(tag_str, type_id, dims(:ndims), override=.true._4)
+    ! 2. Get the pointer to the freshly allocated data
     n = tagarray_get_cptr(inf%dat, tag_str, v, type_id, ndims, dims, data_size)
     if (.not.c_associated(v))  n = -2
 
@@ -368,7 +367,7 @@ contains
     if (stat /= TA_OK) return
 
     n = -3
-    call inf%dat%remove_records([tag_str])
+    call inf%dat%erase([tag_str])
 
     n = 0
 

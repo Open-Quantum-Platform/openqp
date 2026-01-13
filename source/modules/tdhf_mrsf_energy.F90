@@ -26,6 +26,7 @@ contains
   end subroutine tdhf_umrsf_energy_C
 
   subroutine tdhf_mrsf_energy(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use io_constants, only: iw
     use oqp_tagarray_driver
 
@@ -112,6 +113,7 @@ contains
     logical :: umrsf, umrsf_jac 
 
     ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       fock_a(:), dmat_a(:), mo_A(:,:), mo_energy_a(:), &
       fock_b(:), dmat_b(:), mo_b(:,:), mo_energy_b(:), &
@@ -204,12 +206,14 @@ contains
 
     nvec = min(max(nstates,6), mxvec)
 
-    call infos%dat%remove_records(tags_alloc)
+    call infos%dat%erase(tags_alloc)
 
-    call infos%dat%reserve_data(OQP_td_bvec_mo, TA_TYPE_REAL64, &
-        xvec_dim*nstates, (/xvec_dim, nstates/), comment=OQP_td_bvec_mo_comment)
-    call infos%dat%reserve_data(OQP_td_t, TA_TYPE_REAL64, nbf2*2, (/ nbf2, 2 /), comment=OQP_td_t_comment)
-    call infos%dat%reserve_data(OQP_td_energies, TA_TYPE_REAL64, nstates, comment=OQP_td_energies_comment)
+    stat = infos%dat%create(OQP_td_bvec_mo, TA_TYPE_REAL64, &
+        (/xvec_dim, nstates/), description=OQP_td_bvec_mo_comment)
+    stat = infos%dat%create(OQP_td_t, TA_TYPE_REAL64, &
+        (/ nbf2, 2 /), description=OQP_td_t_comment)
+    stat = infos%dat%create(OQP_td_energies, TA_TYPE_REAL64, &
+        (/ nstates /), description=OQP_td_energies_comment)
 
     call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo_out)

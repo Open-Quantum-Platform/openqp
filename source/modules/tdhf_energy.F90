@@ -15,6 +15,7 @@ contains
   end subroutine tdhf_energy_C
 
   subroutine tdhf_energy(infos)
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use io_constants, only: iw
     use oqp_tagarray_driver
     use types, only: information
@@ -81,6 +82,7 @@ contains
     logical :: dft
 
     ! tagarray
+    integer(c_int32_t) :: stat
     real(kind=dp), contiguous, pointer :: &
       mo_energy_a(:), mo_a(:,:), td_t(:,:), &
       xpy(:,:), xmy(:,:), td_energies(:)
@@ -313,27 +315,27 @@ contains
         vro(:,ist) = vro(:,ist) * norm
     end do
 
-    call infos%dat%remove_records(tags_alloc)
+    call infos%dat%erase(tags_alloc)
 
-    call infos%dat%reserve_data(OQP_td_t, &
+    stat = infos%dat%create(OQP_td_t, &
             TA_TYPE_REAL64, &
-            nbf2, [nbf2, 1], &
-            comment=OQP_td_t_comment)
+            [nbf2, 1], &
+            description=OQP_td_t_comment)
 
-    call infos%dat%reserve_data(OQP_td_xpy, &
+    stat = infos%dat%create(OQP_td_xpy, &
             TA_TYPE_REAL64, &
-            lexc*nstates, [lexc, nstates], &
-            comment="(X+Y) vector for target state in TD-DFT calculations")
+            [lexc, nstates], &
+            description="(X+Y) vector for target state in TD-DFT calculations")
 
-    call infos%dat%reserve_data(OQP_td_xmy, &
+    stat = infos%dat%create(OQP_td_xmy, &
             TA_TYPE_REAL64, &
-            lexc*nstates, [lexc, nstates], &
-            comment="(X-Y) vector for target state in TD-DFT calculations")
+            [lexc, nstates], &
+            description="(X-Y) vector for target state in TD-DFT calculations")
 
-    call infos%dat%reserve_data(OQP_td_energies, &
+    stat = infos%dat%create(OQP_td_energies, &
             TA_TYPE_REAL64, &
-            nstates, [nstates], &
-            comment=OQP_td_energies_comment)
+            [nstates], &
+            description=OQP_td_energies_comment)
 
     call tagarray_get_data(infos%dat, OQP_td_t, td_t)
     call tagarray_get_data(infos%dat, OQP_td_xpy, xpy)
