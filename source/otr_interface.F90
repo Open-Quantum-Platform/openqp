@@ -14,7 +14,9 @@ module otr_interface
 
   use, intrinsic :: iso_c_binding, only: c_bool
   use opentrustregion, only: solver, update_orbs_type,&
-          obj_func_type, hess_x_type, logger_type, rp, ip
+          obj_func_type, hess_x_type, logger_type, rp, ip, &
+          solver_settings_type, stability_settings_type, &
+          default_solver_settings
   use mathlib, only: unpack_matrix
   use scf_converger, only: trah_converger, scf_conv_trah_result, scf_conv_result
   use scf_addons,only: compute_energy,calc_fock
@@ -84,9 +86,10 @@ contains
     procedure(obj_func_type),   pointer :: p_obj
     procedure(logger_type),     pointer :: p_log
     class(scf_conv_result), intent(inout) :: res
-    logical(kind=4) :: error, stability, line_search, davidson,&
+    type(solver_settings_type) :: settings
+    logical(kind=4) :: stability, line_search, davidson,&
                          jacobi_davidson, prefer_jacobi_davidson
-    integer(ip) :: n_random_trial_vectors, n_micro,&
+    integer(ip) :: error, n_random_trial_vectors, n_micro,&
                         n_param, max_iter, verbose
     real(dp) :: start_trust_radius, global_red_factor,&
                           local_red_factor, conv_tol
@@ -95,31 +98,37 @@ contains
     max_iter = int(infos%control%maxit, kind=ip)
     conv_tol = real(infos%control%conv, kind=rp)
     verbose  = int(3, kind=ip)
-    stability              = (infos%control%trh_stab .eqv. .true._c_bool)
-    line_search            = (infos%control%trh_ls   .eqv. .true._c_bool)
-    davidson               = (infos%control%trh_dav  .eqv. .true._c_bool)
-    jacobi_davidson        = (infos%control%trh_jd   .eqv. .true._c_bool)
-    prefer_jacobi_davidson = (infos%control%trh_pjd  .eqv. .true._c_bool)
+    settings = default_solver_settings
+    settings%conv_tol = conv_tol
+    settings%verbose = verbose
+    settings%stability = (infos%control%trh_stab .eqv. .true._c_bool)
+    settings%line_search = (infos%control%trh_ls   .eqv. .true._c_bool)
+    select case (infos%control%trh_sub_solver)
+    case (0)
+        settings%subsystem_solver = "davidson"
+    case (1)
+        settings%subsystem_solver = "jacobi_davidson"
+    case (2)
+        settings%subsystem_solver = "tcg"
+    case default
+        error stop "Invalid trh_sub_solver value"
+    end select
+    settings%n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
+    settings%start_trust_radius = real(infos%control%trh_r0, kind=ip)
+    settings%jacobi_davidson_start = int(infos%control%trh_jd_start, kind=ip)
+    settings%global_red_factor = real(infos%control%trh_gred, kind=rp)
+    settings%local_red_factor = real(infos%control%trh_lred, kind=rp)
+    settings%n_macro = max_iter
+    settings%n_micro = int(infos%control%trh_nmic, kind=ip)
 
-    n_random_trial_vectors = int(infos%control%trh_nrtv, kind=ip)
-    start_trust_radius     = real(infos%control%trh_r0, kind=ip)
-    n_micro                = int(infos%control%trh_nmic, kind=ip)
-    global_red_factor      = real(infos%control%trh_gred, kind=ip)
-    local_red_factor       = real(infos%control%trh_lred, kind=ip)
+    settings%logger => logger
 
+    call print_trah_settings(settings)
     ! Bind callbacks
     p_update => update_orbs
     p_obj    => obj_func
-    p_log    => logger
 
-    call solver(p_update, p_obj, n_param, error=error, &
-                stability=stability, line_search=line_search, davidson=davidson, &
-                jacobi_davidson=jacobi_davidson, &
-                prefer_jacobi_davidson=prefer_jacobi_davidson, &
-                conv_tol=conv_tol, n_random_trial_vectors=n_random_trial_vectors, &
-                start_trust_radius=start_trust_radius, n_macro=max_iter, &
-                n_micro=n_micro, global_red_factor=global_red_factor, &
-                local_red_factor=local_red_factor, verbose=verbose)
+    call solver(p_update, p_obj, n_param, error, settings)
 
     conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
     conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
@@ -132,7 +141,7 @@ contains
       res%iter = iter_otr
     end select
 
-    if (error) then
+    if (error /= 0) then
       write(*,*) 'OpenTrustRegion solver failed.'
       res%ierr = 4
       select type (res)
@@ -168,11 +177,12 @@ contains
   !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr)
-    real(dp), intent(in)                     :: kappa(:)
-    real(dp), intent(out)                    :: func
-    real(dp), intent(out)                    :: grad(:), h_diag(:)
-    procedure(hess_x_type), pointer, intent(out) :: hess_x_funptr
+  subroutine update_orbs(kappa, func, grad, h_diag, hess_x_funptr, error)
+    real(dp), intent(in), target :: kappa(:)
+    real(dp), intent(out) :: func
+    real(dp), intent(out), target :: grad(:), h_diag(:)
+    procedure(hess_x_type), intent(out), pointer :: hess_x_funptr
+    integer(ip), intent(out) :: error
     type(basis_set), pointer :: basis
     integer :: nschwz
 
@@ -206,24 +216,16 @@ contains
     grad = 2.0_dp * grad
   end subroutine update_orbs
 
-  !> @brief Objective/gradient/Hessian-diagonal callback used by OTR.
-  !> @detail Applies orbital rotations `kappa` to (α[,β]) MOs, rebuilds densities,
-  !>         constructs Fock via `calc_fock` (using incremental ΔD/ΔF when available),
-  !>         then forms orbital-rotation gradient and Hessian diagonal with
-  !>         `conv%calc_g_h`. Also binds the Hessian–vector product callback.
-  !> @param[in]   kappa    Packed rotation vector(s).
-  !> @param[out]  func     Objective value (total electronic energy).
-  !> @param[out]  grad     Objective gradient in rotation coordinates.
-  !> @param[out]  h_diag   Diagonal of approximate Hessian in rotation space.
-  !> @param[out]  hess_x_funptr Pointer to Hessian–vector product routine.
+  !> @brief hess_x_cb.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  function hess_x_cb(x) result(hx)
-    real(dp), intent(in) :: x(:)
-    real(dp)             :: hx(size(x))
+  subroutine hess_x_cb(x, hx, error)
+    real(dp), intent(in), target :: x(:)
+    real(dp), intent(out), target :: hx(:)
+    integer(ip), intent(out) :: error
     call conv%calc_h_op(infos, x, hx)
     hx = 2.0_dp * hx
-  end function hess_x_cb
+  end subroutine hess_x_cb
 
   !> @brief Energy-only objective for a trial move (no gradient).
   !> @detail Rotates temporary copies of the MOs according to `kappa`, rebuilds
@@ -233,8 +235,9 @@ contains
   !> @return     val    Total electronic energy at the trial point.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  function obj_func(kappa) result(val)
-    real(dp), intent(in) :: kappa(:)
+  function obj_func(kappa, error) result(val)
+    real(dp), intent(in), target :: kappa(:)
+    integer(ip), intent(out) :: error
     real(dp)             :: val
     type(basis_set), pointer :: basis
     integer :: nschwz
@@ -258,8 +261,8 @@ contains
       call conv%rotate_orbs(kappa, conv%nbf, conv%nocc_a, work1)
       work2 = work1
       call get_ab_initio_density(conv%dens(:,1), work1, conv%dens(:,2), work2,infos,basis)
-      call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old) 
-    end select 
+      call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, work1, conv%dens, work2, nschwz, conv%f_old, conv%d_old)
+    end select
     val = compute_energy(energy)
   end function obj_func
 
@@ -269,5 +272,34 @@ contains
     character(*), intent(in) :: message
     write(IW, "(A)") trim(message)
   end subroutine
+  subroutine print_trah_settings(settings)
+      use io_constants, only : IW
+      implicit none
 
+      type(solver_settings_type), intent(in) :: settings
+
+      write(IW, '(5X, a)') "----------------------------------------"
+      write(IW, '(6X, a)') "TRAH / Trust-Region Augmented Hessian Settings"
+      write(IW, '(5X, a)') "----------------------------------------"
+      write(IW, '(7X, a, es12.5)') "conv_tol                : ", settings%conv_tol
+      write(IW, '(7X, a, i0)')     "verbose                 : ", settings%verbose
+      write(IW, '(7X, a, l1)')     "stability               : ", settings%stability
+      write(IW, '(7X, a, l1)')     "line_search             : ", settings%line_search
+      write(IW, '(7X, a, a)')      "subsystem_solver        : ", &
+                                    trim(settings%subsystem_solver)
+      write(IW, '(7X, a, i0)')     "n_random_trial_vectors  : ", &
+                                    settings%n_random_trial_vectors
+      write(IW, '(7X, a, es12.5)') "start_trust_radius      : ", &
+                                    settings%start_trust_radius
+      write(IW, '(7X, a, i0)')     "jacobi_davidson_start   : ", &
+                                    settings%jacobi_davidson_start
+      write(IW, '(7X, a, es12.5)') "global_red_factor       : ", &
+                                    settings%global_red_factor
+      write(IW, '(7X, a, es12.5)') "local_red_factor        : ", &
+                                    settings%local_red_factor
+      write(IW, '(7X, a, i0)')     "n_macro                 : ", settings%n_macro
+      write(IW, '(7X, a, i0)')     "n_micro                 : ", settings%n_micro
+      write(IW, '(5X, a)') "----------------------------------------"
+      flush(IW)
+  end subroutine print_trah_settings
 end module otr_interface

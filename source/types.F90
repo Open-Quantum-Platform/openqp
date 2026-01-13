@@ -133,14 +133,13 @@ module types
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
     integer(c_int64_t) :: soscf_mode = 0       !0: plane, 1: Stability, 2: Stability+Performance
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
-    logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
     ! Opentrustregion Parameter
+    logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
     logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
-    logical(c_bool)        :: trh_dav  = .true.     !< Use level-shifted Davidson as inner solver
-    logical(c_bool)        :: trh_jd   = .false.    !< Allow Jacobi–Davidson switching for inner solve
-    logical(c_bool)        :: trh_pjd  = .false.    !< Prefer JD over Davidson when switching is allowed 
+    integer(c_int64_t)     :: trh_sub_solver=0      !< subsystem solver. 0: "davidson", 1 :"jacobi-davidson",2: "tcg" 
     integer(c_int64_t)     :: trh_nrtv = 1          !< # of random trial vectors for initial subspace
     real(c_double)         :: trh_r0   = 0.4d0      !< Initial trust-region radius
+    integer(c_int64_t)     :: trh_jd_start = 30     !< Number of micro iterations -> switches to the Jacobi-Davidson method.
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)

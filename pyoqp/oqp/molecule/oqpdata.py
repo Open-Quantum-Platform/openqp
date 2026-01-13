@@ -101,11 +101,10 @@ OQP_CONFIG_SCHEMA = {
         'verbose': {'type': int, 'default': '1'},
         'trh_stab': {'type': bool,  'default': 'False'},
         'trh_ls': {'type': bool,  'default': 'False'},
-        'trh_dav': {'type': bool,  'default': 'True'},
-        'trh_jd': {'type': bool,  'default': 'False'},
-        'trh_pjd': {'type': bool,  'default': 'False'},
+        'trh_sub_solver': {'type': string,   'default': 'davidson'},
         'trh_nrtv': {'type': int,   'default': '1'},
         'trh_r0': {'type': float, 'default': '0.4'},
+        'trh_jd_start': {'type': int,   'default': '30'},
         'trh_nmic': {'type': int,   'default': '50'},
         'trh_gred': {'type': float, 'default': '0.001'},
         'trh_lred': {'type': float, 'default': '0.0001'},
@@ -277,11 +276,10 @@ class OQPData:
             "verbose": "set_scf_verbose",
             "trh_stab": "set_trah_stability",
             "trh_ls": "set_trah_line_search",
-            "trh_dav": "set_trah_davidson",
-            "trh_jd": "set_trah_jacobi_davidson",
-            "trh_pjd": "set_trah_prefer_jacobi_davidson",
+            "trh_sub_solver": "set_subsystem_solver",
             "trh_nrtv": "set_trah_n_random_trial_vectors",
             "trh_r0": "set_trah_start_trust_radius",
+            "trh_jd_start": "set_trah_jacobi_davidson_start",
             "trh_nmic": "set_trah_n_micro",
             "trh_gred": "set_trah_global_red_factor",
             "trh_lred": "set_trah_local_red_factor",
@@ -605,17 +603,23 @@ class OQPData:
         """Enable line search within TRAH micro-iterations."""
         self._data.control.trh_ls = bool(flag)
 
-    def set_trah_davidson(self, flag: bool):
-        """Prefer (plain) Davidson eigensolver for inner linear solves."""
-        self._data.control.trh_dav = bool(flag)
-
-    def set_trah_jacobi_davidson(self, flag: bool):
-        """Enable Jacobi–Davidson eigensolver for inner linear solves."""
-        self._data.control.trh_jd = bool(flag)
-
-    def set_trah_prefer_jacobi_davidson(self, flag: bool):
-        """Prefer Jacobi–Davidson over Davidson when both available."""
-        self._data.control.trh_pjd = bool(flag)
+    def set_subsystem_solver(self, trh_sub_solver) -> None:
+        """
+        Select the TRAH subsystem solver.
+        Valid values:
+          0 : Davidson
+          1 : Jacobi–Davidson
+          2 : TCG
+        """
+        solver_map = {
+            "davidson": 0,
+            "jacobi_davidson": 1,
+            "tcg": 2,
+        }
+        if not isinstance(trh_sub_solver, str):
+            raise TypeError("trh_sub_solver must be a string")
+        key = trh_sub_solver.strip().lower()
+        self._data.control.trh_sub_solver = solver_map[key]
 
     def set_trah_n_random_trial_vectors(self, n: int):
         """Number of random trial vectors for initial subspace."""
@@ -628,6 +632,12 @@ class OQPData:
         if r0 <= 0.0:
             raise ValueError("start_trust_radius must be > 0")
         self._data.control.trh_r0 = float(r0)
+
+    def set_trah_jacobi_davidson_start(self, trh_jd_start: int):
+        """
+        Jacobi-Davidson start mode / option.
+        """
+        self._data.control.trh_jd_start = int(trh_jd_start)
 
     def set_trah_n_micro(self, k: int):
         """Max micro-iterations per macro step."""
