@@ -548,7 +548,8 @@ contains
                        overlap_sqrt=qmat, &
                        num_focks=soscf_nfocks, &
                        scf_type=infos%control%scftype, &
-                       verbose=infos%control%verbose)
+                       verbose=infos%control%verbose, &
+                       sd_scf=infos%control%sd_scf)
 
       ! Configure the TRAH converger with input parameters
       call set_trah_parametres(infos, molgrid, conv)
@@ -973,7 +974,7 @@ contains
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
     if (iter > maxit) then
-      write(IW,"(3x,64('-')/10x,'SCF is not converged ....')")
+      write(IW,"(3x,64('-')/10x,'SCF did not converge. Restarting SCF with the TRAH method.')")
       infos%mol_energy%SCF_converged = .false.
     else
       write(IW,"(3x,64('-')/10x,'SCF convergence achieved ....')")

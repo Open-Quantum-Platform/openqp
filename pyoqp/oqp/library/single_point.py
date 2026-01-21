@@ -393,6 +393,7 @@ class SinglePoint(Calculator):
             else:
                 dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
                 self.mol.data.set_scf_converger_type(self.alternative_scf)
+                self.mol.data.set_sd_scf(False)
                 dump_log(self.mol, title=f'PyOQP: Enable the {self.alternative_scf} in SCF to improve convergence.', section='input')
 
         if not scf_flag:

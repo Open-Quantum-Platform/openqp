@@ -286,6 +286,7 @@ class OQPData:
             "trh_nmic": "set_trah_n_micro",
             "trh_gred": "set_trah_global_red_factor",
             "trh_lred": "set_trah_local_red_factor",
+            "sd_scf": "set_sd_scf"
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -663,6 +664,9 @@ class OQPData:
         if not (0.0 < f < 1.0):
             raise ValueError("local_red_factor must be in (0,1)")
         self._data.control.trh_lred = float(f)
+    def set_sd_scf(self, sd_scf):
+        """prevent running the first SD-SCF calculation"""
+        self._data.control.sd_scf = sd_scf
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""

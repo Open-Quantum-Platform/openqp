@@ -410,6 +410,7 @@ module scf_converger
   use mathlib, only: antisymmetrize_matrix, unpack_matrix, pack_matrix
   use scf_addons, only: pfon_t
   use, intrinsic :: iso_fortran_env, only: int32
+  use, intrinsic :: iso_c_binding, only: c_bool
   use types, only: information
   use mod_dft_molgrid, only: dft_grid_t
 
@@ -1451,7 +1452,7 @@ contains
   !> @param[in] num_focks 1 if R/ROHF, 2 if UHF
   !> @param[in] verbose Verbosity level
   subroutine scf_conv_init(self, ldim, nelec_a, nelec_b, maxvec, subconvergers, thresholds, &
-                          overlap, overlap_sqrt, num_focks, scf_type ,verbose)
+                          overlap, overlap_sqrt, num_focks, scf_type ,verbose, sd_scf)
     class(scf_conv), intent(inout) :: self
     integer, intent(in) :: ldim
     integer, optional, intent(in) :: nelec_a
@@ -1464,6 +1465,7 @@ contains
     integer, optional, intent(in) :: verbose
     integer :: nfocks, istat, i
     integer, optional, intent(in) :: scf_type
+    logical(c_bool), optional, intent(in) :: sd_scf
 
     if (self%state /= conv_state_not_initialized) call self%clean()
 
@@ -1502,6 +1504,9 @@ contains
     if (istat /= 0) then
       self%state = conv_state_not_initialized
       return
+    end if
+    if (present(sd_scf)) then
+        if(.not. sd_scf) self%step = self%step + 1
     end if
 
     if (present(subconvergers)) then

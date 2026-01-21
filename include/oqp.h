@@ -152,6 +152,7 @@ struct control_parameters {
     int64_t   trh_nmic;
     double    trh_gred;
     double    trh_lred;
+    bool      sd_scf;
 };
 
 struct mpi_communicator {

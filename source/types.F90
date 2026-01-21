@@ -149,6 +149,8 @@ module types
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
+    ! SD parameters
+    logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
