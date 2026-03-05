@@ -37,6 +37,8 @@ MODULE mod_1e_primitives
  PUBLIC comp_coulomb_int1_prim
  PUBLIC comp_kin_ovl_int1_prim
  PUBLIC comp_lz_int1_prim
+ PUBLIC comp_lx_int1_prim
+ PUBLIC comp_ly_int1_prim
  public comp_mult_int1_prim
  public comp_allmult_int1_prim
  PUBLIC comp_coulomb_dampch_int1_prim
@@ -460,6 +462,156 @@ END SUBROUTINE
     END ASSOCIATE
 
 END SUBROUTINE
+
+! -----------------------------------------------------------------------------
+!> @brief Compute primitive block of Lx = y*pz - z*py angular momentum integrals
+!>
+!> @details  Uses the same Gauss-Hermite overlap engine as comp_lz_int1_prim.
+!>  The 2*alpha cross-terms cancel exactly (see header above), leaving only
+!>  the j*S(j-1) downward-recurrence part of the momentum operator.
+!>  overlap_xyz is called with jang+1 so that both the (mz+1) and (my+1)
+!>  shifted integrals are available.
+!>
+!> @note  Argument and loop structure are identical to comp_lz_int1_prim;
+!>  only the contraction indices and the free-axis factor change.
+!>
+!> @param[in]   cp      shell pair data (coordinates, exponents, ang. momenta)
+!> @param[in]   id      index of the current primitive pair within cp
+!> @param[inout] xblk   accumulated block of Lx integrals (triangular ordering)
+!>
+!> @author  (add your name)
+!> @date    2024
+! -----------------------------------------------------------------------------
+ SUBROUTINE comp_lx_int1_prim(cp, id, xblk)
+!dir$ attributes inline :: comp_lx_int1_prim
+
+    TYPE(shpair_t), INTENT(IN)               :: cp
+    INTEGER,        INTENT(IN)               :: id
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT)  :: xblk(:)
+
+    INTEGER :: i, j, ij, nx, ny, nz, mx, my, mz, jmax
+
+    REAL(REAL64) :: dum2
+    ! xyzovl(0:jang+1, 0:iang, XYZ) — same layout as in comp_lz_int1_prim
+    REAL(REAL64) :: xyzovl(0:max_ang+2, 0:max_ang, 3)
+    ! xyzlz needs all 3 components now (Lz only needed 1:2)
+    REAL(REAL64) :: xyzlz(0:max_ang_pad, 0:max_ang, 3)
+!dir$ assume_aligned xblk   : 64
+!dir$ assume_aligned xyzovl : 64
+!dir$ assume_aligned xyzlz  : 64
+
+    ASSOCIATE (pp   => cp%p(id),               &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+
+    ! Compute 1-D overlaps up to jang+1 in all three directions
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang, jang+1, xyzovl)
+
+    ! Pre-compute  lz(j,i,c) = j * S(j-1,i,c)  for Y and Z directions
+    ! (the cancellation proof shows only this part survives)
+    xyzlz(0, 0:iang, 2:3) = 0.0_REAL64
+    DO j = 1, jang
+        xyzlz(j, 0:iang, 2:3) = j * xyzovl(j-1, 0:iang, 2:3)
+    END DO
+
+    ! Contract over basis function pairs
+    ij   = 0
+    jmax = jnao
+    DO i = 1, inao
+        nx = CART_X(i, iang)
+        ny = CART_Y(i, iang)
+        nz = CART_Z(i, iang)
+        IF (cp%iandj) jmax = i
+        DO j = 1, jmax
+            mx = CART_X(j, jang)
+            my = CART_Y(j, jang)
+            mz = CART_Z(j, jang)
+
+            ij = ij + 1
+
+            ! <i|Lx|j> = [S_y(ny,my+1)*lz(mz,nz,Z) - lz(my,ny,Y)*S_z(nz,mz+1)] * S_x(nx,mx)
+            dum2 = xyzovl(my+1, ny, 2) * xyzlz(mz, nz, 3) &
+                 - xyzlz(my, ny, 2)    * xyzovl(mz+1, nz, 3)
+            xblk(ij) = xblk(ij) + pp%expfac * dum2 * xyzovl(mx, nx, 1)
+
+        END DO
+    END DO
+    END ASSOCIATE
+
+ END SUBROUTINE comp_lx_int1_prim
+
+
+! -----------------------------------------------------------------------------
+!> @brief Compute primitive block of Ly = z*px - x*pz angular momentum integrals
+!>
+!> @details  Mirror of comp_lx_int1_prim with cyclic index permutation y->z->x->y.
+!>  See module header for the derivation of the cancellation of 2*alpha terms.
+!>
+!> @param[in]   cp      shell pair data
+!> @param[in]   id      index of the current primitive pair
+!> @param[inout] yblk   accumulated block of Ly integrals (triangular ordering)
+!>
+!> @author  (add your name)
+!> @date    2024
+! -----------------------------------------------------------------------------
+ SUBROUTINE comp_ly_int1_prim(cp, id, yblk)
+!dir$ attributes inline :: comp_ly_int1_prim
+
+    TYPE(shpair_t), INTENT(IN)               :: cp
+    INTEGER,        INTENT(IN)               :: id
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT)  :: yblk(:)
+
+    INTEGER :: i, j, ij, nx, ny, nz, mx, my, mz, jmax
+
+    REAL(REAL64) :: dum2
+    REAL(REAL64) :: xyzovl(0:max_ang+2, 0:max_ang, 3)
+    REAL(REAL64) :: xyzlz(0:max_ang_pad, 0:max_ang, 3)
+!dir$ assume_aligned yblk   : 64
+!dir$ assume_aligned xyzovl : 64
+!dir$ assume_aligned xyzlz  : 64
+
+    ASSOCIATE (pp   => cp%p(id),               &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang, jang+1, xyzovl)
+
+    ! Pre-compute lz(j,i,c) = j * S(j-1,i,c)  for X and Z directions
+    xyzlz(0, 0:iang, 1) = 0.0_REAL64
+    xyzlz(0, 0:iang, 3) = 0.0_REAL64
+    DO j = 1, jang
+        xyzlz(j, 0:iang, 1) = j * xyzovl(j-1, 0:iang, 1)
+        xyzlz(j, 0:iang, 3) = j * xyzovl(j-1, 0:iang, 3)
+    END DO
+
+    ij   = 0
+    jmax = jnao
+    DO i = 1, inao
+        nx = CART_X(i, iang)
+        ny = CART_Y(i, iang)
+        nz = CART_Z(i, iang)
+        IF (cp%iandj) jmax = i
+        DO j = 1, jmax
+            mx = CART_X(j, jang)
+            my = CART_Y(j, jang)
+            mz = CART_Z(j, jang)
+
+            ij = ij + 1
+
+            ! <i|Ly|j> = [S_z(nz,mz+1)*lz(mx,nx,X) - lz(mz,nz,Z)*S_x(nx,mx+1)] * S_y(ny,my)
+            dum2 = xyzovl(mz+1, nz, 3) * xyzlz(mx, nx, 1) &
+                 - xyzlz(mz, nz, 3)    * xyzovl(mx+1, nx, 1)
+            yblk(ij) = yblk(ij) + pp%expfac * dum2 * xyzovl(my, ny, 2)
+
+        END DO
+    END DO
+    END ASSOCIATE
+
+ END SUBROUTINE comp_ly_int1_prim
+
+
+
+
 
 !> @brief Compute primitive block of multipole integrals of order `MOM`
 !> @param[in]       cp          shell pair data
