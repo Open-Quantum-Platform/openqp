@@ -21,8 +21,6 @@ module int1
         comp_ewaldlr_int1_prim, &
         comp_kin_ovl_int1_prim, &
         comp_lz_int1_prim, &
-        comp_lx_int1_prim, &   
-        comp_ly_int1_prim, &   
         MAX_EL_MOM, &
         comp_mult_int1_prim, &
         comp_allmult_int1_prim, &
@@ -73,7 +71,7 @@ contains
 !> @param[in,out]   t       packed matrix of kinetic energy integrals
 !> @param[in,out]   z       packed matrix of z-angular momentum (Lz) integrals
 !> @param[in]       dbug    flag for debug output
- subroutine omp_hst(basis, coord, zq, h, s, t, x, y, z, debug, logtol, comm, usempi)
+ subroutine omp_hst(basis, coord, zq, h, s, t, z, debug, logtol, comm, usempi)
 
     use io_constants, only: iw
     use precision, only: dp
@@ -87,13 +85,13 @@ contains
     type(basis_set), intent(in) :: basis
     real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
     real(real64), contiguous, intent(inout) :: h(:), s(:), t(:)
-    real(real64), contiguous, optional, intent(inout) :: z(:), x(:), y(:)
+    real(real64), contiguous, optional, intent(inout) :: z(:)
     real(real64), optional, intent(in) :: logtol
     logical, optional, intent(in) :: debug
     integer :: ii
 
     real(real64) :: tol
-    logical :: lzint,lxint, lyint, dbug
+    logical :: lzint, dbug
 
     integer :: nbf, nbf_tri
     type(par_env_t) :: pe
@@ -105,8 +103,6 @@ contains
 
 
     lzint = present(z)
-    lxint = present(x)
-    lyint = present(y)
     dbug = .false.
     if (present(debug)) dbug = debug
 
@@ -171,16 +167,12 @@ contains
 !    END IF
 
     if (lzint) call lzints(z, basis, tol)
-    if (lxint) call lxints(x, basis, tol)
-    if (lyint) call lyints(y, basis, tol)
 
 !   Normalize 1-e integrals all at once
     call bas_norm_matrix(h, basis%bfnrm, nbf)
     call bas_norm_matrix(s, basis%bfnrm, nbf)
     call bas_norm_matrix(t, basis%bfnrm, nbf)
     if (lzint)  call bas_norm_matrix(z, basis%bfnrm, nbf)
-    if (lxint)  call bas_norm_matrix(x, basis%bfnrm, nbf)
-    if (lyint)  call bas_norm_matrix(y, basis%bfnrm, nbf)
 
 !   Form one electron Hamiltonian
 !   Hcore = Vne + Te
@@ -713,74 +705,6 @@ contains
     END DO
 !   End of shell loops
  END SUBROUTINE
-
- SUBROUTINE lxints(x, basis, tol)
-     TYPE(basis_set), INTENT(IN)  :: basis
-     REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: x(:)
-     REAL(REAL64), INTENT(IN)  :: tol
-     INTEGER :: ii, jj
-     REAL(REAL64), DIMENSION(BLOCKSIZE) :: xblk
-     TYPE(shell_t) :: shi, shj
-     TYPE(shpair_t)  :: cntp
-     CALL cntp%alloc(basis)
-     DO ii = 1, basis%nshell
-         CALL shi%fetch_by_id(basis, ii)
-         DO jj = 1, ii
-             CALL shj%fetch_by_id(basis, jj)
-             CALL cntp%shell_pair(basis, shi, shj, tol)
-             IF (cntp%numpairs==0) CYCLE
-             xblk = 0.0
-             CALL int1_lx(cntp, xblk)
-             CALL update_triang_matrix(shi, shj, xblk, x)
-         END DO
-     END DO
- END SUBROUTINE
-
- SUBROUTINE int1_lx(cntp, blk)
- !dir$ attributes inline :: int1_lx
-     TYPE(shpair_t), INTENT(IN) :: cntp
-     REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:)
-     INTEGER :: ig
- !dir$ assume_aligned blk : 64
-     DO ig = 1, cntp%numpairs
-         CALL comp_lx_int1_prim(cntp, ig, blk)
-     END DO
- END SUBROUTINE
-
-
- SUBROUTINE lyints(y, basis, tol)
-     TYPE(basis_set), INTENT(IN)  :: basis
-     REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: y(:)
-     REAL(REAL64), INTENT(IN)  :: tol
-     INTEGER :: ii, jj
-     REAL(REAL64), DIMENSION(BLOCKSIZE) :: yblk
-     TYPE(shell_t) :: shi, shj
-     TYPE(shpair_t)  :: cntp
-     CALL cntp%alloc(basis)
-     DO ii = 1, basis%nshell
-         CALL shi%fetch_by_id(basis, ii)
-         DO jj = 1, ii
-             CALL shj%fetch_by_id(basis, jj)
-             CALL cntp%shell_pair(basis, shi, shj, tol)
-             IF (cntp%numpairs==0) CYCLE
-             yblk = 0.0
-             CALL int1_ly(cntp, yblk)
-             CALL update_triang_matrix(shi, shj, yblk, y)
-         END DO
-     END DO
- END SUBROUTINE
-
- SUBROUTINE int1_ly(cntp, blk)
- !dir$ attributes inline :: int1_lx
-     TYPE(shpair_t), INTENT(IN) :: cntp
-     REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:)
-     INTEGER :: ig
- !dir$ assume_aligned blk : 64
-     DO ig = 1, cntp%numpairs
-         CALL comp_ly_int1_prim(cntp, ig, blk)
-     END DO
- END SUBROUTINE
-
 
 !-------------------------------------------------------------------------------
 
