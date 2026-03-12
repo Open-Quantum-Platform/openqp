@@ -127,6 +127,11 @@ module types
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
+    ! Scalar relativistic correction Parameters
+    integer(c_int64_t) :: scal_rel = 0               !< Douglas–Kroll–Hess correction (DKH) to the hcore
+                                                     !< 0   - no DKH correction
+                                                     !< 1   - first-order  DKH
+                                                     !< 2   - second-order DKH
     ! SOSCF Parameters
     integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF

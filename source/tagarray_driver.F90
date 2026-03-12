@@ -29,6 +29,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_t = OQP_prefix // "td_bvec_mo_t"                  !new
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"

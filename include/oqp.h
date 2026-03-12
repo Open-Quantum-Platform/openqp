@@ -135,6 +135,7 @@ struct control_parameters {
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
+    int64_t   scal_rel;
     int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   soscf_reset_mod;
@@ -221,4 +222,5 @@ void get_states_overlap(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
-
+void soc_mrsf(struct oqp_handle_t *inf);
+void dk_scalar(struct oqp_handle_t *inf);

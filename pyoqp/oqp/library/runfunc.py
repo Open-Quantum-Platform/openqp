@@ -80,7 +80,24 @@ def compute_nac(mol):
     NAC(mol).nac()
 
 def compute_soc(mol):
-    pass
+    sp = SinglePoint(mol)
+    ref_energy = sp.reference()          # SCF один раз
+
+    mol.data.set_tdhf_multiplicity(1)
+    mol.singlet_energies = sp.excitation(ref_energy)
+
+    mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies']
+    mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo']
+
+    mol.data.set_tdhf_multiplicity(3)
+    mol.triplet_energies = sp.excitation(ref_energy)
+
+    mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies']
+    mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo']
+
+    oqp.soc_mrsf(mol)
+
+
 
 
 def compute_hess(mol):

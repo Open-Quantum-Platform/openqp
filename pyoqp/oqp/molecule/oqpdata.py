@@ -94,6 +94,7 @@ OQP_CONFIG_SCHEMA = {
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
+        'scal_rel': {'type': int, 'default': '0'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
@@ -270,6 +271,7 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
+            "scal_rel": "set_scf_scal_rel",
             "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_mode": "set_scf_soscf_mode",
@@ -550,6 +552,10 @@ class OQPData:
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""
         self._data.control.conv = conv
+
+    def set_scf_scal_rel(self, scal_rel):
+        """Set SCF convergence threshold"""
+        self._data.control.scal_rel = scal_rel
 
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
