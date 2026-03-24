@@ -1,0 +1,29 @@
+[input]
+functional = bhhlyp
+basis      = sto-3g
+method     = tdhf
+qmmm_flag  = true
+
+[scf]
+type  = rohf
+maxit = 100
+multiplicity=3
+[tdhf]
+type   = mrsf
+nstate = 6
+
+[properties]
+export    = true
+nac       = nacme
+back_door = true
+grad      = 5
+
+[qmmm]
+pdb_file         = water_dimer.pdb
+forcefield_files = tip3p.xml
+qm_atoms         = 0-2
+cutoff           = PME
+embedding        = electrostatic
+n_steps          = 1000
+timestep         = 1.0
+temperature      = 300.0
