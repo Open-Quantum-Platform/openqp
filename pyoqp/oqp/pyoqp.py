@@ -220,6 +220,14 @@ def main():
 
     silent = 1 if args.silent else 0
 
+    from oqp.library.qmmm_md import parse_ini_to_config
+    config = parse_ini_to_config(input_file)
+    if config.get("input.qmmm_flag") == "true":
+        from oqp.library.qmmm_md import QMMM_MD
+        md = QMMM_MD(oqp_cfg=input_file)
+        md.run()
+        return
+
     # Initialize OQP class
     oqp_runner = Runner(project=project_name,
                         input_file=input_file,

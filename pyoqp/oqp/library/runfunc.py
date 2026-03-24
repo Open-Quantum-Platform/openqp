@@ -9,7 +9,7 @@ from oqp.library.single_point import (
 
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MEP, QMMMOpt
 from oqp.library.libdlfind import DLFindMin, DLFindTS, DLFindMECI, DLFindQMMM
-from oqp.library.libopenmm import QMMM_MD 
+#from oqp.library.libopenmm import QMMM_MD 
 
 
 def compute_energy(mol):
@@ -38,8 +38,8 @@ def compute_scf_prop(mol):
         else:
             raise ValueError(f'Unknown property: {prop}')
 
-    if 'resp' not in properties and mol.config['input']['qmmm_flag']:
-        oqp.resp_charges(mol)
+#    if 'resp' not in properties and mol.config['input']['qmmm_flag']:
+#        oqp.resp_charges(mol)
 
 
 
@@ -52,8 +52,8 @@ def compute_grad(mol):
 
     # compute properties
     compute_scf_prop(mol)
-    if mol.config['input']['qmmm_flag']:
-       oqp.resp_charges(mol)
+#    if mol.config['input']['qmmm_flag']:
+#       oqp.resp_charges(mol)
 
     # compute dftd4
     LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
@@ -64,7 +64,7 @@ def compute_md(mol):
     prep_guess(mol)
     
     #Run MD
-    qmmm_md = QMMM_MD(mol)
+#    qmmm_md = QMMM_MD(mol)
     qmmm_md.run_md()
 
 def compute_nacme(mol):
@@ -206,9 +206,9 @@ def get_optimizer(mol):
         },
     }
 
-    if runtype == 'optimize' and mol.config['input']['qmmm_flag']:
-       if lib == 'dlfind': opt_lib[lib][runtype] = DLFindQMMM
-       elif lib == 'scipy': opt_lib[lib][runtype] = QMMMOpt
+#    if runtype == 'optimize' and mol.config['input']['qmmm_flag']:
+#       if lib == 'dlfind': opt_lib[lib][runtype] = DLFindQMMM
+#       elif lib == 'scipy': opt_lib[lib][runtype] = QMMMOpt
 
     if opt_lib[lib][runtype]:
         return opt_lib[lib][runtype](mol)

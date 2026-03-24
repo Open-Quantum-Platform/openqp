@@ -178,6 +178,8 @@ module qmmm_mod
     character(len=*), parameter :: tags(3) = &
          (/ character(len=80) :: OQP_SM, OQP_ESPF_CORR, OQP_POTQM /)
 
+    if(.not.infos%control%qmmm_flag) return
+
     basis      => infos%basis
     basis%atoms => infos%atoms
 

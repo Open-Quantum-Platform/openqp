@@ -40,6 +40,8 @@ class Molecule:
         self.input_file = input_file
         self.log = log
         self.log_path = os.path.dirname(log)
+        if self.log_path == '':
+            self.log_path = os.path.dirname(os.path.abspath(__file__))
         self.energies = None
         self.grads = None
         self.dcm = []  # Nstate, Nstate
@@ -202,7 +204,7 @@ class Molecule:
                     f"energy, psinrm, ehf1, vee, nenergy, vne, vnn, "
                     f"vtot, tkin, virial, or 'all'."
                 )
-    def get_atoms(self, prop=None):
+    def get_atoms2(self, prop=None):
         """
         Get atomic data.
         Parameters

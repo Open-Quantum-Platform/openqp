@@ -488,10 +488,10 @@ class Gradient(Calculator):
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
 
-        if self.mol.config['input']['qmmm_flag']:
-           current_xyz = self.mol.get_system().reshape((-1, 3))
-           gradient_qm,gradient_mm=qmmm.openmm_gradient(current_xyz,self.mol.data["OQP::partial_charges"])
-           self.mol.data["OQP::mm_gradient"]=gradient_qm
+#        if self.mol.config['input']['qmmm_flag']:
+#           current_xyz = self.mol.get_system().reshape((-1, 3))
+#           gradient_qm,gradient_mm=qmmm.openmm_gradient(current_xyz,self.mol.data["OQP::partial_charges"])
+#           self.mol.data["OQP::mm_gradient"]=gradient_qm
 
         # compute gradients
         grads = []
@@ -502,8 +502,8 @@ class Gradient(Calculator):
 
         self.mol.grads = grads
 
-        if self.mol.config['input']['qmmm_flag']:
-           qmmm.gradient_qmmm=qmmm.form_gradient_qmmm(grads,gradient_mm)
+#        if self.mol.config['input']['qmmm_flag']:
+#           qmmm.gradient_qmmm=qmmm.form_gradient_qmmm(grads,gradient_mm)
 
         return grads
 

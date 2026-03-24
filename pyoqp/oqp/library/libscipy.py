@@ -938,8 +938,8 @@ class QMMMOpt(Optimizer):
         self.opt_status = 0
         self.message = 'not converged'
 
-        if not self.mol.config['input']['qmmm_flag']:
-           exit(f"QM/MM optimizations require an active qmmm_flag")
+#        if not self.mol.config['input']['qmmm_flag']:
+#           exit(f"QM/MM optimizations require an active qmmm_flag")
 
     def one_step(self, coordinates):
         # add iteration

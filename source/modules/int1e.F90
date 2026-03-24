@@ -103,23 +103,23 @@ contains
             logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
 
 !   Compute QM/MM interaction
-    if(infos%control%qmmm_flag) then
-       call infos%dat%reserve_data(OQP_Hqmmm, TA_TYPE_REAL64, nbf2, comment=OQP_Hqmmm_comment)
-       call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
-       call tagarray_get_data(infos%dat, OQP_Hqmmm, Hqmmm)
-       call tagarray_get_data(infos%dat, OQP_mm_potential, mm_potential)
-
-       write(iw,"(/1X,'  Computing ESP One Electron Integrals (QM/MM) '/)")
-       write(iw,"('External MM potential:'/)")
-       do i=1,nat
-          write(iw,"(i4,1X,f12.8)") i, mm_potential(i)
-       end do
-!   Compute QM/MM contribution to core Hamiltonian
-       call oqp_esp_qmmm(infos, Hqmmm, mm_potential, smat, logtol=tol)
-!   Add QM/MM contribution to core Hamiltonian
-       hcore = hcore + hqmmm
-       write(iw,"(/1X,'  ... End of ESP One Electron Integrals ... '/)")
-    endif
+!    if(infos%control%qmmm_flag) then
+!       call infos%dat%reserve_data(OQP_Hqmmm, TA_TYPE_REAL64, nbf2, comment=OQP_Hqmmm_comment)
+!       call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
+!       call tagarray_get_data(infos%dat, OQP_Hqmmm, Hqmmm)
+!       call tagarray_get_data(infos%dat, OQP_mm_potential, mm_potential)
+!
+!       write(iw,"(/1X,'  Computing ESP One Electron Integrals (QM/MM) '/)")
+!       write(iw,"('External MM potential:'/)")
+!       do i=1,nat
+!          write(iw,"(i4,1X,f12.8)") i, mm_potential(i)
+!       end do
+!!   Compute QM/MM contribution to core Hamiltonian
+!!       call oqp_esp_qmmm(infos, Hqmmm, mm_potential, smat, logtol=tol)
+!!   Add QM/MM contribution to core Hamiltonian
+!       hcore = hcore + hqmmm
+!       write(iw,"(/1X,'  ... End of ESP One Electron Integrals ... '/)")
+!    endif
 
     if (dbg) then
         if(infos%control%qmmm_flag) then
