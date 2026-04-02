@@ -1,22 +1,12 @@
 [input]
 functional = bhhlyp
-basis      = sto-3g
-method     = tdhf
+basis      = 6-31g
 qmmm_flag  = true
 
 [scf]
-type  = rohf
+type  = rhf
 maxit = 100
-multiplicity=3
-[tdhf]
-type   = mrsf
-nstate = 6
 
-[properties]
-export    = true
-nac       = nacme
-back_door = true
-grad      = 5
 
 [qmmm]
 pdb_file         = water_dimer.pdb
@@ -25,5 +15,5 @@ qm_atoms         = 0-2
 cutoff           = PME
 embedding        = electrostatic
 n_steps          = 1000
-timestep         = 1.0
+timestep         = 0.1
 temperature      = 300.0
