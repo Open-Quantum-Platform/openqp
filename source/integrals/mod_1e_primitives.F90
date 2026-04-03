@@ -54,6 +54,7 @@ MODULE mod_1e_primitives
  PUBLIC density_ordered
  PUBLIC density_unordered
  PUBLIC comp_pvp_int1_prim
+ PUBLIC comp_soc_int1_prim
 
 CONTAINS
 
@@ -1894,7 +1895,7 @@ END SUBROUTINE
 !> @param[in]  nroots  number of Rys roots
 !> @param[out] dxyz    derivative table, same indexing as xyzin
 !>
-!> @author   [your name]
+!> @author   Vladimir Makhnev
 !>
  subroutine pvp_xyz_ij(xyzin, li, lj, ai, aj, nroots, dxyz)
 !dir$ attributes forceinline :: pvp_xyz_ij
@@ -1958,7 +1959,7 @@ END SUBROUTINE
 !> @param[in]     znuc   nuclear charge (passed as -Z, same as coulomb)
 !> @param[inout]  pvpblk block of PVP integrals (accumulated)
 !>
-!> @author   [your name]
+!> @author  
 !>
  subroutine comp_pvp_int1_prim(cp, id, c, znuc, pvpblk)
 !dir$ attributes inline :: comp_pvp_int1_prim
@@ -2045,6 +2046,155 @@ END SUBROUTINE
     end associate
 
  end subroutine comp_pvp_int1_prim
+
+!> @brief Build one-sided Gaussian derivative tables for SOC integrals
+!> @details
+!>   di(m,n) = 2*ai*xyzin(m,n+1) - n*xyzin(m,n-1)  [d/d bra, second index]
+!>   dj(m,n) = 2*aj*xyzin(m+1,n) - m*xyzin(m-1,n)  [d/d ket, first index]
+!> @param[in]  xyzin   1D Rys integral table (dims: (Lj,Li,XYZ,NRoots))
+!> @param[in]  iang    angular momentum of bra shell
+!> @param[in]  jang    angular momentum of ket shell
+!> @param[in]  ai      exponent of bra primitive
+!> @param[in]  aj      exponent of ket primitive
+!> @param[in]  nroots  number of Rys roots
+!> @param[out] di      bra-side derivative table (dims: (Lj,Li,XYZ,NRoots))
+!> @param[out] dj      ket-side derivative table (dims: (Lj,Li,XYZ,NRoots))
+!>
+!> @author  Vladimir Makhnev
+!> @date    March 2026
+
+ subroutine soc_xyz_ij(xyzin, iang, jang, ai, aj, nroots, di, dj)
+!dir$ attributes forceinline :: soc_xyz_ij
+    implicit none
+    real(real64), contiguous, intent(in)  :: xyzin(0:, 0:, :, :)
+    real(real64), contiguous, intent(out) :: di(0:, 0:, :, :)
+    real(real64), contiguous, intent(out) :: dj(0:, 0:, :, :)
+    integer,      intent(in) :: iang, jang, nroots
+    real(real64), intent(in) :: ai, aj
+
+    integer :: n
+!dir$ assume_aligned xyzin : 64
+!dir$ assume_aligned di    : 64
+!dir$ assume_aligned dj    : 64
+
+    ! bra derivative (second index): di(m,n) = 2*ai*xyzin(m,n+1) - n*xyzin(m,n-1)
+    di(0:jang, 0:iang, 1:3, 1:nroots) = 2*ai * xyzin(0:jang, 1:iang+1, 1:3, 1:nroots)
+    do n = 1, iang
+        di(0:jang, n, 1:3, 1:nroots) = di(0:jang, n, 1:3, 1:nroots) &
+                                      - n * xyzin(0:jang, n-1, 1:3, 1:nroots)
+    end do
+
+    ! ket derivative (first index): dj(m,n) = 2*aj*xyzin(m+1,n) - m*xyzin(m-1,n)
+    dj(0:jang, 0:iang, 1:3, 1:nroots) = 2*aj * xyzin(1:jang+1, 0:iang, 1:3, 1:nroots)
+    do n = 1, jang
+        dj(n, 0:iang, 1:3, 1:nroots) = dj(n, 0:iang, 1:3, 1:nroots) &
+                                      - n * xyzin(n-1, 0:iang, 1:3, 1:nroots)
+    end do
+
+ end subroutine soc_xyz_ij
+
+
+!> @brief Compute primitive block of 1e SOC integrals for one nucleus
+!> @details Evaluates <mu|Z_eff*L/r_A^3|nu> via IBP reduction to Coulomb
+!>  integrals with one-sided Gaussian derivatives:
+!>   Lx: <d/dy mu|1/r|d/dz nu> - <d/dz mu|1/r|d/dy nu>
+!>   Ly: <d/dz mu|1/r|d/dx nu> - <d/dx mu|1/r|d/dz nu>
+!>   Lz: <d/dx mu|1/r|d/dy nu> - <d/dy mu|1/r|d/dx nu>
+!>
+!> @param[in]     cp      shell pair data
+!> @param[in]     id      current pair of primitives
+!> @param[in]     c       nuclear coordinates
+!> @param[in]     znuc    effective nuclear charge Z_eff
+!> @param[inout]  socblk  accumulated SOC block (nfunc,3): Lx, Ly, Lz
+!>
+!> @author  Vladimir Makhnev
+!> @date    March 2026
+
+ subroutine comp_soc_int1_prim(cp, id, c, znuc, socblk)
+!dir$ attributes inline :: comp_soc_int1_prim
+    implicit none
+
+    type(shpair_t), intent(in)              :: cp
+    integer,        intent(in)              :: id
+    real(real64),   intent(in)              :: c(3), znuc
+    real(real64), contiguous, intent(inout) :: socblk(:, :)
+
+    type(rys_root_t) :: ryscomp
+    integer      :: i, j, ij, jmax, nroots_soc
+    integer      :: nx, ny, nz, mx, my, mz
+    real(real64) :: dij, lx, ly, lz
+
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1, 3, max_nroots+1)
+    real(real64) :: di(0:max_ang_pad, 0:max_ang, 3, max_nroots+1)
+    real(real64) :: dj(0:max_ang_pad, 0:max_ang, 3, max_nroots+1)
+!dir$ assume_aligned xyzin  : 64
+!dir$ assume_aligned socblk : 64
+
+    associate (pp   => cp%p(id), &
+               iang => cp%iang,  jang => cp%jang, &
+               inao => cp%inao,  jnao => cp%jnao)
+    ! 
+    nroots_soc     = cp%nroots + 2   
+    ryscomp%nroots = nroots_soc
+    ryscomp%x      = pp%aa * sum((pp%r - c)**2)
+    call QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 2)  
+
+
+    call soc_xyz_ij(xyzin, iang, jang, pp%ai, pp%aj, nroots_soc, di, dj)
+
+    dij  = pp%expfac * TWOPI * pp%aa1
+    ij   = 0
+    jmax = jnao
+
+    do i = 1, inao
+        nx = CART_X(i, iang);  ny = CART_Y(i, iang);  nz = CART_Z(i, iang)
+        if (cp%iandj) jmax = i
+        do j = 1, jmax
+            mx = CART_X(j, jang);  my = CART_Y(j, jang);  mz = CART_Z(j, jang)
+            ij = ij + 1
+
+            ! Lx = <d/dy mu|1/r|d/dz nu> - <d/dz mu|1/r|d/dy nu>
+            lx = sum( xyzin(mx,nx,1,1:nroots_soc) &
+                    *    di(my,ny,2,1:nroots_soc)  &
+                    *    dj(mz,nz,3,1:nroots_soc) )&
+               - sum( xyzin(mx,nx,1,1:nroots_soc) &
+                    *    di(mz,nz,3,1:nroots_soc)  &
+                    *    dj(my,ny,2,1:nroots_soc) )
+
+            ! Ly = <d/dz mu|1/r|d/dx nu> - <d/dx mu|1/r|d/dz nu>
+            ly = sum( xyzin(my,ny,2,1:nroots_soc) &
+                    *    di(mz,nz,3,1:nroots_soc)  &
+                    *    dj(mx,nx,1,1:nroots_soc) )&
+               - sum( xyzin(my,ny,2,1:nroots_soc) &
+                    *    di(mx,nx,1,1:nroots_soc)  &
+                    *    dj(mz,nz,3,1:nroots_soc) )
+
+            ! Lz = <d/dx mu|1/r|d/dy nu> - <d/dy mu|1/r|d/dx nu>
+            lz = sum( xyzin(mz,nz,3,1:nroots_soc) &
+                    *    di(mx,nx,1,1:nroots_soc)  &
+                    *    dj(my,ny,2,1:nroots_soc) )&
+               - sum( xyzin(mz,nz,3,1:nroots_soc) &
+                    *    di(my,ny,2,1:nroots_soc)  &
+                    *    dj(mx,nx,1,1:nroots_soc) )
+
+            socblk(ij, 1) = socblk(ij, 1) + dij * lx
+            socblk(ij, 2) = socblk(ij, 2) + dij * ly
+            socblk(ij, 3) = socblk(ij, 3) + dij * lz
+
+        end do
+    end do
+    if (iang==2 .and. jang==2 .and. ij==1) then
+     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,1,1):', di(0,0,1,1), di(1,0,1,1), di(2,0,1,1)
+     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,2,1):', di(0,0,2,1), di(1,0,2,1), di(2,0,2,1)
+     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,3,1):', di(0,0,3,1), di(1,0,3,1), di(2,0,3,1)
+     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,1,1):', dj(0,0,1,1), dj(1,0,1,1), dj(2,0,1,1)
+     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,2,1):', dj(0,0,2,1), dj(1,0,2,1), dj(2,0,2,1)
+     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,3,1):', dj(0,0,3,1), dj(1,0,3,1), dj(2,0,3,1)
+    end if
+
+    end associate
+
+ end subroutine comp_soc_int1_prim
 
 
 END MODULE

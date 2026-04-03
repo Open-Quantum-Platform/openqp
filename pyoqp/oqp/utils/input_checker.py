@@ -221,7 +221,23 @@ def check_nac_input(config, info):
 
 
 def check_soc_input(config, info):
-    not_available('soc', info)
+    method = config['input']['method']
+    td_type = config['tdhf']['type']
+    scf_type = config['scf']['type']
+    scf_mult = config['scf']['multiplicity']
+
+    info += f'\n[input] method={method}'
+    info += f'\n[tdhf] type={td_type}'
+    info += f'\n[scf] type={scf_type}, multiplicity={scf_mult}'
+
+    if method != 'tdhf':
+        exit(f'{info}\nPyOQP: soc requires method=tdhf\n')
+    if td_type != 'mrsf':
+        exit(f'{info}\nPyOQP: soc requires tdhf type=mrsf\n')
+    if scf_type != 'rohf':
+        exit(f'{info}\nPyOQP: soc requires scf type=rohf\n')
+    if scf_mult != 3:
+        exit(f'{info}\nPyOQP: soc requires scf multiplicity=3 (ROHF triplet reference)\n')
 
 
 def check_neb_input(config, info):
