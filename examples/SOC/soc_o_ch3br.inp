@@ -1,0 +1,31 @@
+[input]
+system =
+    C    0.0000    0.0000    0.0000
+    H    0.0000    1.0700    0.1500
+    H    0.9270   -0.5350    0.1500
+    H   -0.9270   -0.5350    0.1500
+    Br   0.0000    0.0000   -1.9390
+charge = 0
+basis = 6-31g*
+functional = bhhlyp
+method = tdhf
+runtype = soc
+
+[guess]
+save_mol = True
+
+[scf]
+type = rohf
+multiplicity = 3
+maxit = 200
+conv = 1e-7
+scal_rel=0
+
+[tdhf]
+type = mrsf
+nstate = 6
+multiplicity = 1
+conv = 1e-7
+
+[properties]
+soc = mrsf
