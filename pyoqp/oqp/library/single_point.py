@@ -528,6 +528,7 @@ class Gradient(Calculator):
                     raise ZVnotConverged()
                 else:
                     exit()
+            oqp.electric_moments_excited(self.mol)
 
             self.grad_func[self.td](self.mol)
             grad = self.mol.get_grad().reshape((self.natom, 3))
