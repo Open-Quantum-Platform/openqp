@@ -60,15 +60,22 @@ _CUTOFF_MAP = {
     "ewald":              app.Ewald,
 }
 
+_TRAJ_REPORTERS = {
+    "pdb": app.PDBReporter,
+    "dcd": app.DCDReporter,
+}
+
+_VALID_ENSEMBLES = ("nve", "nvt", "npt")
+
 
 def _parse_int_list(value):
     """
     Convert *value* to a list of ints.
 
     Accepts:
-      - a list / ndarray  → returned as-is (cast to int)
-      - an int             → [value]
-      - a string           → comma-separated ints, or ``start-end`` range
+      - a list / ndarray  -> returned as-is (cast to int)
+      - an int            -> [value]
+      - a string          -> comma-separated ints, or ``start-end`` range
         e.g. ``"0,1,2"``  or  ``"0-2"``  or  ``"0, 1, 2"``
     """
     if isinstance(value, (list, np.ndarray)):
@@ -77,14 +84,13 @@ def _parse_int_list(value):
         return [int(value)]
     value = str(value).strip()
     if "-" in value and "," not in value:
-        # range notation  "0-5"  →  [0, 1, 2, 3, 4, 5]
         parts = value.split("-")
         return list(range(int(parts[0]), int(parts[1]) + 1))
     return [int(v) for v in value.split(",")]
 
 
 def _parse_str_list(value):
-    """Comma-separated string or list → list of stripped strings."""
+    """Comma-separated string or list -> list of stripped strings."""
     if isinstance(value, list):
         return value
     return [s.strip() for s in str(value).split(",") if s.strip()]
@@ -102,7 +108,7 @@ def _resolve_cutoff(value):
                 f"Choices: {', '.join(_CUTOFF_MAP)}"
             )
         return _CUTOFF_MAP[key]
-    return value  # already an OpenMM object
+    return value
 
 
 def _extract_qmmm_config(oqp_cfg=None, mol=None):
@@ -118,12 +124,11 @@ def _extract_qmmm_config(oqp_cfg=None, mol=None):
         qmmm = dict(mol.config.get("qmmm", {}))
         return qmmm, None
 
-    # oqp_cfg dict mode — split qmmm.* from the rest
     qmmm = {}
     qm_cfg = {}
     for k, v in oqp_cfg.items():
         if k.startswith("qmmm."):
-            qmmm[k[5:]] = v          # strip the "qmmm." prefix
+            qmmm[k[5:]] = v
         else:
             qm_cfg[k] = v
     return qmmm, qm_cfg
@@ -135,16 +140,15 @@ def _extract_qmmm_config(oqp_cfg=None, mol=None):
 
 class QMMM_MD:
     """
-    QM/MM Molecular Dynamics — simplified single-argument interface.
+    QM/MM Molecular Dynamics with NVE / NVT / NPT support.
 
-    All parameters (PDB path, force-field, QM atoms, MD settings …)
-    are read from the configuration.  Provide **exactly one** of:
+    All parameters are read from the configuration. Provide **exactly one** of:
 
-    *   ``oqp_cfg``  – a ``dict`` with flat ``"section.key"`` entries
-        **or** a path to an INI file.  QM/MM settings live under the
+    *   ``oqp_cfg``  - a ``dict`` with flat ``"section.key"`` entries
+        **or** a path to an INI file. QM/MM settings live under the
         ``[qmmm]`` section / ``"qmmm.*"`` keys.
 
-    *   ``mol`` – a pre-built OpenQP mol object whose
+    *   ``mol`` - a pre-built OpenQP mol object whose
         ``mol.config["qmmm"]`` contains the same keys.
 
     Recognised ``[qmmm]`` keys
@@ -152,61 +156,32 @@ class QMMM_MD:
     pdb_file           : str            (required)
     forcefield_files   : str            comma-separated list
     qm_atoms           : str or list    ``"0,1,2"`` or ``"0-2"``
-    cutoff             : str            PME | NoCutoff | Ewald | …
+    cutoff             : str            PME | NoCutoff | Ewald | ...
     embedding          : str            mechanical | electrostatic
     n_steps            : int            default 1000
     timestep           : float (fs)     default 1.0
     temperature        : float (K)      default 300.0
-    trajectory_file    : str            default qmmm_trajectory.pdb
+    ensemble           : str            nve | nvt | npt   (default nve)
+    friction           : float (ps^-1)  default 1.0      (NVT/NPT only)
+    pressure           : float (bar)    default 1.0      (NPT only)
+    barostat_interval  : int            default 25       (NPT only)
+    trajectory_format  : str            pdb | dcd        (default pdb)
+    trajectory_file    : str            default qmmm_trajectory.<format>
     log_file           : str            default qmmm_trajectory.dat
     report_interval    : int            default 1
-    energy_file        : str            default total_energy.npy
+    energy_file        : str            default total_energy.npz
     qm_atoms_xyz       : str            optional XYZ file
     qm_list            : str or list    optional index mapping
 
-    Example INI file
-    ----------------
-    ::
-
-        [input]
-        functional = bhhlyp
-        basis      = sto-3g
-        method     = tdhf
-
-        [scf]
-        type       = rohf
-        maxit      = 100
-
-        [tdhf]
-        type       = mrsf
-        nstate     = 6
-
-        [properties]
-        export     = true
-        nac        = nacme
-        grad       = 5
-
-        [qmmm]
-        pdb_file         = water_dimer.pdb
-        forcefield_files = tip3p.xml
-        qm_atoms         = 0-2
-        cutoff           = PME
-        embedding        = electrostatic
-        n_steps          = 100
-        timestep         = 1.0
-        temperature      = 300.0
-        qm_atoms_xyz     = optimised_qm.xyz
-        qm_list          = 0,1,2
-
-    Example usage
-    -------------
-    >>> md = QMMM_MD(oqp_cfg="run.inp")
-    >>> md.run()
-
-    >>> md = QMMM_MD(mol=my_mol)
-    >>> md.setup()
-    >>> for i in range(md.n_steps):
-    ...     E = md.step()
+    Saved observables (in ``energy_file`` as ``.npz``)
+    --------------------------------------------------
+    step          : MD step index
+    time_ps       : simulation time (ps)
+    E_pot         : potential energy (kJ/mol)
+    E_kin         : kinetic energy (kJ/mol)
+    E_tot         : total energy (kJ/mol)
+    temperature   : instantaneous T from kinetic energy (K)
+    volume_nm3    : box volume (nm^3), only populated for NPT
     """
 
     def __init__(self, oqp_cfg=None, mol=None):
@@ -216,7 +191,7 @@ class QMMM_MD:
             raise ValueError("Either 'oqp_cfg' or 'mol' must be provided.")
         if oqp_cfg is not None and mol is not None:
             raise ValueError(
-                "'oqp_cfg' and 'mol' are mutually exclusive – provide only one."
+                "'oqp_cfg' and 'mol' are mutually exclusive - provide only one."
             )
 
         # ------ resolve oqp_cfg from file if needed -----------------------
@@ -252,13 +227,40 @@ class QMMM_MD:
         self.n_steps   = int(qmmm_cfg.get("n_steps", 1000))
         self.timestep  = float(qmmm_cfg.get("timestep", 1.0)) * unit.femtoseconds
         self.temperature = float(qmmm_cfg.get("temperature", 300.0)) * unit.kelvin
-        self.trajectory_file = str(qmmm_cfg.get("trajectory_file",
-                                                  "qmmm_trajectory.pdb"))
+
+        # ------ ensemble settings -----------------------------------------
+        self.ensemble = str(qmmm_cfg.get("ensemble", "nve")).lower()
+        if self.ensemble not in _VALID_ENSEMBLES:
+            raise ValueError(
+                f"Unknown ensemble '{self.ensemble}'. "
+                f"Choices: {', '.join(_VALID_ENSEMBLES)}"
+            )
+        self.friction = float(qmmm_cfg.get("friction", 1.0)) / unit.picosecond
+        self.pressure = float(qmmm_cfg.get("pressure", 1.0)) * unit.bar
+        self.barostat_interval = int(qmmm_cfg.get("barostat_interval", 25))
+
+        if self.ensemble == "npt" and self.cutoff is app.NoCutoff:
+            raise ValueError(
+                "NPT requires a periodic cutoff method "
+                "(PME / Ewald / CutoffPeriodic)."
+            )
+
+        # ------ trajectory format -----------------------------------------
+        fmt = str(qmmm_cfg.get("trajectory_format", "pdb")).lower()
+        if fmt not in _TRAJ_REPORTERS:
+            raise ValueError(
+                f"Unknown trajectory_format '{fmt}'. "
+                f"Choices: {', '.join(_TRAJ_REPORTERS)}"
+            )
+        self.trajectory_format = fmt
+
+        default_traj = f"qmmm_trajectory.{self.trajectory_format}"
+        self.trajectory_file = str(qmmm_cfg.get("trajectory_file", default_traj))
         self.log_file        = str(qmmm_cfg.get("log_file",
-                                                  "qmmm_trajectory.dat"))
+                                                "qmmm_trajectory.dat"))
         self.report_interval = int(qmmm_cfg.get("report_interval", 1))
         self.energy_file     = str(qmmm_cfg.get("energy_file",
-                                                  "total_energy.npy"))
+                                                "total_energy.npz"))
 
         # ------ optional XYZ override for QM positions --------------------
         qm_atoms_xyz = qmmm_cfg.get("qm_atoms_xyz")
@@ -269,7 +271,7 @@ class QMMM_MD:
             self._apply_xyz_positions(str(qm_atoms_xyz), qm_list)
 
         # ------ store QM config / mol for the driver ----------------------
-        self.oqp_cfg = qm_cfg   # None when in mol-mode
+        self.oqp_cfg = qm_cfg
         self.mol     = mol
 
         # ------ internal state --------------------------------------------
@@ -277,8 +279,28 @@ class QMMM_MD:
         self.mm_systems = None
         self.simulation_md = None
         self.system_md = None
-        self.qmmm_force = None
-        self.total_energies = []
+        self.qmmm_ext = None
+
+        self._traj_data = {
+            "step":        [],
+            "time_ps":     [],
+            "E_pot":       [],
+            "E_kin":       [],
+            "E_tot":       [],
+            "temperature": [],
+            "volume_nm3":  [],
+        }
+
+    # ------------------------------------------------------------------
+    #  Ensemble label
+    # ------------------------------------------------------------------
+
+    def _ensemble_label(self):
+        return {
+            "nve": "NVE (Verlet, lagged QM/MM forces - expect energy drift)",
+            "nvt": "NVT (Langevin)",
+            "npt": "NPT (Langevin + MonteCarloBarostat)",
+        }[self.ensemble]
 
     # ------------------------------------------------------------------
     #  XYZ override
@@ -360,29 +382,52 @@ class QMMM_MD:
         ecorr /= n_particles
         self.qmmm_ext.addGlobalParameter("ecorr", ecorr)
 
+        # Add barostat for NPT
+        if self.ensemble == "npt":
+            barostat = mm.MonteCarloBarostat(
+                self.pressure, self.temperature, self.barostat_interval
+            )
+            self.system_md.addForce(barostat)
+
+    def _build_integrator(self):
+        if self.ensemble == "nve":
+            return mm.VerletIntegrator(self.timestep)
+        # NVT and NPT both use Langevin for temperature control
+        return mm.LangevinMiddleIntegrator(
+            self.temperature, self.friction, self.timestep
+        )
+
     def _build_simulation(self):
-        integrator = mm.VerletIntegrator(self.timestep)
+        integrator = self._build_integrator()
         self.simulation_md = app.Simulation(
             self.pdb.topology, self.system_md, integrator
         )
         self.simulation_md.context.setPositions(self.pdb.positions)
         self.simulation_md.context.setVelocitiesToTemperature(self.temperature)
 
+        TrajReporter = _TRAJ_REPORTERS[self.trajectory_format]
         self.simulation_md.reporters.append(
-            app.PDBReporter(self.trajectory_file, self.report_interval)
+            TrajReporter(self.trajectory_file, self.report_interval)
         )
+
+        report_kwargs = dict(
+            time=True, potentialEnergy=True,
+            kineticEnergy=True, totalEnergy=True,
+            temperature=True, speed=True,
+        )
+        if self.ensemble == "npt":
+            report_kwargs["volume"] = True
+            report_kwargs["density"] = True
+
         self.simulation_md.reporters.append(
             app.StateDataReporter(
-                self.log_file, self.report_interval,
-                time=True, potentialEnergy=True,
-                kineticEnergy=True, totalEnergy=True, speed=True,
+                self.log_file, self.report_interval, **report_kwargs
             )
         )
         self.simulation_md.reporters.append(
             app.StateDataReporter(
                 stdout, self.report_interval,
-                step=True, time=True, potentialEnergy=True,
-                kineticEnergy=True, totalEnergy=True, speed=True,
+                step=True, **report_kwargs,
             )
         )
 
@@ -418,6 +463,16 @@ class QMMM_MD:
         self.simulation_md.context.setParameter("ecorr", ecorr)
         self.qmmm_ext.updateParametersInContext(self.simulation_md.context)
 
+    def _instantaneous_temperature(self, E_kin_kJmol):
+        """Compute T from kinetic energy: T = 2 * E_kin / (dof * k_B)."""
+        dof = 3 * self.system_md.getNumParticles()
+        if dof <= 0:
+            return 0.0
+        kB_kJ = unit.MOLAR_GAS_CONSTANT_R.value_in_unit(
+            unit.kilojoules_per_mole / unit.kelvin
+        )
+        return (2.0 * E_kin_kJmol) / (dof * kB_kJ)
+
     # ------------------------------------------------------------------
     #  Single-step interface
     # ------------------------------------------------------------------
@@ -447,30 +502,79 @@ class QMMM_MD:
         self._update_qmmm_force(pos0)
 
         state_energy = self.simulation_md.context.getState(getEnergy=True)
-        E_pot = state_energy.getPotentialEnergy()
-        E_kin = state_energy.getKineticEnergy()
-        E_tot = (E_pot + E_kin).value_in_unit(unit.kilojoules_per_mole)
-        self.total_energies.append(E_tot)
+        E_pot = state_energy.getPotentialEnergy().value_in_unit(
+            unit.kilojoules_per_mole
+        )
+        E_kin = state_energy.getKineticEnergy().value_in_unit(
+            unit.kilojoules_per_mole
+        )
+        E_tot = E_pot + E_kin
+        T_inst = self._instantaneous_temperature(E_kin)
+
+        # Box volume (only meaningful for periodic systems / NPT)
+        if self.ensemble == "npt":
+            box = self.simulation_md.context.getState().getPeriodicBoxVectors()
+            vol = (box[0][0] * box[1][1] * box[2][2]).value_in_unit(
+                unit.nanometer ** 3
+            )
+        else:
+            vol = np.nan
+
+        step_idx = self.simulation_md.currentStep
+        t_ps = (step_idx * self.timestep).value_in_unit(unit.picoseconds)
+
+        self._traj_data["step"].append(step_idx)
+        self._traj_data["time_ps"].append(t_ps)
+        self._traj_data["E_pot"].append(E_pot)
+        self._traj_data["E_kin"].append(E_kin)
+        self._traj_data["E_tot"].append(E_tot)
+        self._traj_data["temperature"].append(T_inst)
+        self._traj_data["volume_nm3"].append(vol)
+
         return E_tot
+
+    # ------------------------------------------------------------------
+    #  Persistence
+    # ------------------------------------------------------------------
+
+    def _save_traj_data(self):
+        """Persist all collected per-step observables to a single .npz file."""
+        base, ext = os.path.splitext(self.energy_file)
+        out = base + ".npz" if ext == ".npy" else self.energy_file
+        np.savez(
+            out,
+            **{k: np.asarray(v) for k, v in self._traj_data.items()},
+        )
 
     # ------------------------------------------------------------------
     #  Run all steps
     # ------------------------------------------------------------------
 
     def run(self):
-        """Run the full NVE simulation.  Returns np.ndarray of energies."""
+        """
+        Run the full simulation in the configured ensemble.
+
+        Returns
+        -------
+        dict of np.ndarray
+            Keys: step, time_ps, E_pot, E_kin, E_tot, temperature, volume_nm3.
+        """
         if self.simulation_md is None:
             self.setup()
 
-        print(f"\n\nStarting NVE dynamics using Verlet algorithm:\n")
-        self.total_energies = []
+        print(f"\n\nStarting {self._ensemble_label()} dynamics:\n")
 
-        for _ in range(self.n_steps):
+        for step_i in range(self.n_steps):
             self.step()
 
-        total_energies = np.array(self.total_energies)
-        np.save(self.energy_file, total_energies)
-        return total_energies
+            # Persist on the same cadence as the trajectory reporters
+            if (step_i + 1) % self.report_interval == 0:
+                self._save_traj_data()
+
+        # Final save (covers n_steps not a multiple of report_interval)
+        self._save_traj_data()
+
+        return {k: np.asarray(v) for k, v in self._traj_data.items()}
 
 
 # ======================================================================
@@ -500,47 +604,25 @@ if __name__ == "__main__":
     #   grad      = 5
     #
     #   [qmmm]
-    #   pdb_file         = water_dimer.pdb
-    #   forcefield_files = tip3p.xml
-    #   qm_atoms         = 0-2
-    #   cutoff           = PME
-    #   embedding        = electrostatic
-    #   n_steps          = 100
-    #   timestep         = 1.0
-    #   temperature      = 300.0
+    #   pdb_file          = water_dimer.pdb
+    #   forcefield_files  = tip3p.xml
+    #   qm_atoms          = 0-2
+    #   cutoff            = PME
+    #   embedding         = electrostatic
+    #   ensemble          = nvt          ; nve | nvt | npt
+    #   friction          = 1.0          ; ps^-1
+    #   pressure          = 1.0          ; bar (NPT only)
+    #   barostat_interval = 25           ; steps (NPT only)
+    #   trajectory_format = dcd
+    #   n_steps           = 100
+    #   timestep          = 1.0
+    #   temperature       = 300.0
     #
     md = QMMM_MD(oqp_cfg="run.inp")
-    md.run()
+    data = md.run()
 
-    # ---- Option B: dict --------------------------------------------------
-    # md = QMMM_MD(oqp_cfg={
-    #     "input.functional": "bhhlyp",
-    #     "input.basis":      "sto-3g",
-    #     "input.method":     "tdhf",
-    #     "scf.type":         "rohf",
-    #     "scf.maxit":        100,
-    #     "tdhf.type":        "mrsf",
-    #     "tdhf.nstate":      6,
-    #     "properties.export":    "true",
-    #     "properties.nac":       "nacme",
-    #     "properties.back_door": "true",
-    #     "properties.grad":      5,
-    #     "qmmm.pdb_file":         "water_dimer.pdb",
-    #     "qmmm.forcefield_files": "tip3p.xml",
-    #     "qmmm.qm_atoms":        "0-2",
-    #     "qmmm.cutoff":           "PME",
-    #     "qmmm.embedding":        "electrostatic",
-    #     "qmmm.n_steps":          100,
-    # })
-    # md.run()
-
-    # ---- Option C: pre-built mol object ----------------------------------
-    #   mol.config["qmmm"] = {
-    #       "pdb_file": "water_dimer.pdb",
-    #       "forcefield_files": "tip3p.xml",
-    #       "qm_atoms": [0, 1, 2],
-    #       ...
-    #   }
-    #
-    # md = QMMM_MD(mol=my_mol)
-    # md.run()
+    # Post-run analysis:
+    #   data = np.load("total_energy.npz")
+    #   print(data["temperature"].mean(), data["E_tot"].std())
+    #   if data["volume_nm3"][0] == data["volume_nm3"][0]:  # not NaN
+    #       print("density-related volume:", data["volume_nm3"].mean())

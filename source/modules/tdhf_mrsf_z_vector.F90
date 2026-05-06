@@ -524,7 +524,8 @@ contains
       mrsfqrorhs, mrsfqropcal, mrsfqrowcal
     use oqp_linalg
     use printing, only: print_module_info
-
+    use population_analysis, only: mulliken_excited
+    use qmmm_mod, only: form_esp_charges_excited 
 
     implicit none
 
@@ -1241,7 +1242,10 @@ contains
     wao = wao*0.5_dp
 !   ROHF, half one more time:
     wao = wao*0.5_dp
-
+    
+    call mulliken_excited(infos)
+    PRINT *, "epsf charge"
+    call form_esp_charges_excited(infos)
     call int2_driver%clean()
 
     if (dft) call dftclean(infos)

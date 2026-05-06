@@ -225,3 +225,4 @@ void lowdin(struct oqp_handle_t *inf);
 void espf_op_corr(struct oqp_handle_t *inf);
 void form_esp_charges(struct oqp_handle_t *inf);
 void grad_esp_qmmm(struct oqp_handle_t *inf);
+void grad_esp_qmmm_excited(struct oqp_handle_t *inf);

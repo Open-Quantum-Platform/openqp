@@ -14,6 +14,7 @@ module qmmm_mod
   public grad_esp_qmmm
   public espf_op_corr
   public add_potqm_contributions
+  public form_esp_charges_excited
 
   contains
 
@@ -44,6 +45,122 @@ module qmmm_mod
     inf => oqp_handle_get_info(c_handle)
     call grad_esp_qmmm(inf)
   end subroutine grad_esp_qmmm_C
+
+  subroutine grad_esp_qmmm_excited_C(c_handle) bind(C, name="grad_esp_qmmm_excited")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call grad_esp_qmmm_excited(inf)
+  end subroutine grad_esp_qmmm_excited_C
+
+  subroutine form_esp_charges_excited(infos)
+    use precision, only: dp
+    use io_constants, only: iw
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use types, only: information
+    use oqp_tagarray_driver
+    use int1, only: omp_qmmm
+    use constants, only: tol_int
+    use mathlib, only: traceprod_sym_packed
+    implicit none
+
+    character(len=*), parameter :: module_name = "form_esp_charges_excited"
+    character(len=*), parameter :: subroutine_name = "form_esp_charges_excited"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    integer :: nat, nbf, nbf2, ok, istate
+    integer :: npt, nptcur, i
+    logical :: urohf, use_relaxed
+
+    real(dp), allocatable :: tmp(:), chg_op(:)
+    real(dp), allocatable, target :: xyz(:,:), ttt(:,:)
+    real(dp), pointer :: wn(:,:)
+    real(dp) :: tol, chg, corr
+
+    real(dp), contiguous, pointer :: dmat_a(:), dmat_b(:), partial_charges(:)
+    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+         OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
+
+    character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
+         OQP_partial_charges /)
+
+    open (unit=IW, file=infos%log_filename, position="append")
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+
+    nat  = ubound(infos%atoms%zn, 1)
+    nbf  = basis%nbf
+    nbf2 = nbf * (nbf + 1) / 2
+    istate = infos%tddft%target_state
+
+    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
+    use_relaxed = .true.
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+
+    allocate(tmp(nbf2), stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate tmp', WITH_ABORT)
+    tmp = 0.0_dp
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    tmp = dmat_a
+    if (urohf) then
+      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+      tmp = tmp + dmat_b
+    end if
+
+    if (use_relaxed) then
+      call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
+      tmp = tmp + td_p(:,1) + td_p(:,2)
+      write(iw,'(4x,a,i4)') 'Using RELAXED excited-state density for ESPF charges, state ', istate
+    else
+      call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
+      tmp = tmp + td_abxc
+      write(iw,'(4x,a,i4)') 'Using UNRELAXED excited-state density for ESPF charges, state ', istate
+    end if
+
+    npt = nat * (132 + 152 + 192 + 350)
+    allocate(xyz(npt,3), ttt(nat,npt), chg_op(nbf2), stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate ESPF arrays', WITH_ABORT)
+
+    call form_espf_grid(nat, npt, 4, [1.4_dp,1.6_dp,1.8_dp,2.0_dp], &
+                        [132,152,192,350], [3,3,3,0], &
+                        infos%atoms%zn, infos%atoms%xyz, xyz, ttt, nptcur)
+
+    wn  => ttt(:,:nptcur)
+    tol = log(10.0d0) * tol_int
+
+    call infos%dat%reserve_data(OQP_partial_charges, TA_TYPE_REAL64, nat, &
+         comment=OQP_partial_charges_comment)
+    partial_charges = 0.0_dp
+    call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
+
+    corr=0.0_dp
+    do i = 1, nat
+      call omp_qmmm(basis, i, transpose(xyz(1:nptcur,:)), wn, chg_op, nat, logtol=tol)
+      chg = traceprod_sym_packed(tmp, chg_op, nbf)
+      partial_charges(i) = infos%atoms%zn(i) + chg
+      corr = corr + partial_charges(i)
+    end do
+
+    do i = 1, nat
+      partial_charges(i) = partial_charges(i) + (infos%mol_prop%charge-corr)/nat
+    end do
+
+    call print_charges(infos, partial_charges, iw)
+
+    deallocate(tmp, xyz, ttt, chg_op)
+  end subroutine form_esp_charges_excited
+
 
   subroutine espf_op_corr(infos)!,dmat,nbf)
     use precision, only: dp
@@ -655,9 +772,7 @@ module qmmm_mod
 
     espf_grad_ta = 0.0_dp
     dens = dmat_a
-    if (infos%control%scftype > 1) then
-      dens =  dmat_b
-    end if
+    if (infos%control%scftype>=2) dens =  dens + dmat_b
 ! Compute integrals and form ESP operators
 !   Compute the corrected mm potential
     mm_pot_av = sum(mm_potential)/nat
@@ -697,6 +812,141 @@ module qmmm_mod
     end do
 
   end subroutine grad_esp_qmmm
+
+  subroutine grad_esp_qmmm_excited(infos)!, dens, grad, logtol)
+    use oqp_tagarray_driver
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use types, only: information
+    use strings, only: Cstring, fstring
+    use grd1, only: grad_elpot, grad_ee_overlap
+    use lebedev, only: lebedev_get_grid
+    use elements, only: ELEMENTS_VDW_RADII
+    use constants, only: tol_int
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "grad_esp_qmmm_excited"
+
+    type(information), target, intent(inout) :: infos
+!    real(kind=dp), intent(inout) :: grad(:,:)
+!    real(kind=dp), intent(inout) :: dens(:)
+    real(kind=dp) :: logtol
+
+    integer :: nbf, nbf2, ok
+    type(basis_set), pointer :: basis
+    real(kind=dp), allocatable :: wt(:), dens(:)
+    real(kind=dp), allocatable :: xyz(:,:)
+    real(kind=dp), target, allocatable :: ttt(:,:)
+
+    integer :: nat, npt, nptcur
+    integer :: i, j, k
+
+    integer, parameter :: nlayers = 4
+    real(kind=dp), parameter :: &
+      layers(nlayers) = [1.4, 1.6, 1.8, 2.0]
+    integer, parameter :: npt_layer(nlayers) = [132,152,192,350]
+    integer, parameter :: typ_layer(nlayers) = [3,3,3,0]
+
+!tagarray
+    real(kind=dp), contiguous, pointer :: partial_charges(:), mm_potential(:),&
+                                          espf_grad_ta(:,:), &
+                                          dmat_a(:), dmat_b(:)
+    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+    character(len=*), parameter :: tags_qmmm(6) = (/ character(len=80) :: &
+      OQP_partial_charges, OQP_POTMM, OQP_ESPF_GRAD, OQP_DM_A, &
+      OQP_TD_P, OQP_TD_ABXC/)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+      OQP_DM_B/)
+
+    real(kind=dp) :: mm_pot_av
+    logical :: use_relaxed
+
+!   Load basis set
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    use_relaxed = .true.
+!   Allocate memory
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nat = ubound(infos%atoms%zn, 1)
+    npt = nat * sum(npt_layer)
+
+    logtol = log(10.0d0)*tol_int
+    allocate(xyz(npt,3), &
+             wt(npt), &
+             ttt(nat,npt), &
+             dens(nbf2), &
+             stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+
+    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur)
+
+! ESP gradient contribution
+!   Tagarray
+    call infos%dat%reserve_data(OQP_ESPF_GRAD, TA_TYPE_REAL64, nat*3, (/ 3, nat /), comment=OQP_ESPF_GRAD_comment)
+    call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_POTMM, mm_potential)
+    call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_ESPF_GRAD, espf_grad_ta)
+
+   ! Get beta-spin tag arrays if needed
+    if (infos%control%scftype > 1) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
+      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    end if
+
+    espf_grad_ta = 0.0_dp
+    dens = dmat_a
+    if (infos%control%scftype>=2) dens =  dens + dmat_b
+    if (use_relaxed) then
+      call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
+      dens = dens + td_p(:,1) + td_p(:,2)
+    else
+      call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
+      dens = dens + td_abxc
+    end if
+   
+! Compute integrals and form ESP operators
+!   Compute the corrected mm potential
+    mm_pot_av = sum(mm_potential)/nat
+    do i=1,nat
+       mm_potential(i)=mm_pot_av-mm_potential(i)
+    end do
+
+!   Add integral gradient term, mm_potential*[(T^+T)^-1*T^+]*V^x
+    do i=1,nptcur
+       wt(i)=-dot_product(ttt(:,i),mm_potential)
+       call grad_elpot(basis, xyz(i,:), wt(i), dens, espf_grad_ta)
+    end do
+
+!   Add overlap derivative correction for the total charge conservation
+    if(abs(mm_pot_av).gt.1.0e-6) then
+       dens=-mm_pot_av*dens
+       call grad_ee_overlap(basis, dens, espf_grad_ta, logtol)
+       dens=-dens/mm_pot_av
+    end if
+
+!   Add weights gradient term, -mm_potential*[(T^+T)^-1*T^+]*T^xQ + q*mm_potential^x
+    call espf_grad(&
+         x=xyz(:nptcur,1),&
+         y=xyz(:nptcur,2),&
+         z=xyz(:nptcur,3),&
+         at=infos%atoms%xyz,&
+         wt=wt,&
+         zn=infos%atoms%zn,&
+         pchg=partial_charges,&
+         grad=espf_grad_ta)
+!    espf_grad = grad
+
+!   Restablish mm potential to the original one
+    do i=1,nat
+! it seems not to be:  mm_potential(i)= - mm_pot_av-mm_potential(i)
+       mm_potential(i)= mm_pot_av-mm_potential(i)
+    end do
+
+  end subroutine grad_esp_qmmm_excited
 
 !--------------------------------------------------------------------------------
 

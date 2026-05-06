@@ -8,6 +8,7 @@ from oqp.library.single_point import (
     SinglePoint, Gradient, Hessian, LastStep,
     BasisOverlap, NACME, NAC
 )
+from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 
 import oqp
 
@@ -239,16 +240,48 @@ class OpenQpQMMM:
                 )
 
             # --- Gradients: pure QM + ESPF contribution -----------------------
-            oqp.hf_gradient(self.op.mol)
-            grad = self.op.mol.get_grad()
-            gqm = np.array(grad.copy()).reshape(
-                (1, self.op.mol.get_atoms2("natom"), 3)
-            )
-            oqp.grad_esp_qmmm(self.op.mol)
-            gqm += self.op.mol.data["OQP::ESPF_GRAD"]
-            # --- Unit conversion to OpenMM conventions ------------------------
-            self.eqm *= 2625.5 * unit.kilojoule_per_mole
-            self.gqm = gqm[0]*49578.9  # already dimensionless, factor to kJ/mol/nm
+            gradient = Gradient(self.op.mol)
+            if gradient.method == 'hf':
+                oqp.hf_gradient(self.op.mol)
+                grad = self.op.mol.get_grad()
+                gqm = np.array(grad.copy()).reshape(
+                    (1, self.op.mol.get_atoms2("natom"), 3)
+                )
+                oqp.grad_esp_qmmm(self.op.mol)
+                gqm += self.op.mol.data["OQP::ESPF_GRAD"]
+                # --- Unit conversion to OpenMM conventions ------------------------
+                self.eqm *= 2625.5 * unit.kilojoule_per_mole
+                self.gqm = gqm[0]*49578.9  # already dimensionless, factor to kJ/mol/nm
+            if gradient.method == 'tdhf':
+                energies = self.op.sp.excitation([self.eqm])
+                grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
+                for i in gradient.grads:
+                    dump_log(gradient.mol, title='PyOQP: Gradient of Root %s' % i)
+                    gradient.mol.data.set_tdhf_target(i)
+                    gradient.zvec_func[gradient.td](gradient.mol)
+
+                    # check convergence
+                    z_flag = gradient.mol.mol_energy.Z_Vector_converged
+
+                    if not z_flag:
+                        dump_log(gradient.mol, title='PyOQP: TD Z-vector is not converged', section='end')
+
+                        if gradient.exception is True:
+                            raise ZVnotConverged()
+                        else:
+                            exit()
+
+                    gradient.grad_func[gradient.td](gradient.mol)
+                    gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
+                    oqp.grad_esp_qmmm_excited(self.op.mol)
+                    gqm += self.op.mol.data["OQP::ESPF_GRAD"]
+                    grads[i] = gqm.copy()
+                    self.gqm = gqm*49578.9#49614.78
+                    self.eqm = energies[i] * 2625.5 * unit.kilojoule_per_mole
+            self.op.mol.save_data()
+
+
+            print(f"self.gqm:{self.gqm}")
 
         return self.eqm, self.gqm, self.pchg_qm
 
@@ -264,10 +297,11 @@ class OpenQpQMMM:
 
         forces = { force.__class__.__name__ : force for force in system.getForces() }
         nonbonded = forces['NonbondedForce']
-        for i in range(len(pchg_qm)):
-            charge, sigma, epsilon = nonbonded.getParticleParameters(i)
-            charge = pchg_qm[i]*unit.elementary_charge
-            nonbonded.setParticleParameters(i, charge, sigma, epsilon)
+        for k, iatom in enumerate(self.qm_atoms):
+            charge, sigma, epsilon = nonbonded.getParticleParameters(iatom)
+            charge = pchg_qm[k]*unit.elementary_charge
+            nonbonded.setParticleParameters(iatom, charge, sigma, epsilon)
+
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
             if p1 in self.qm_atoms and p2 not in self.qm_atoms:
@@ -303,6 +337,9 @@ class OpenQpQMMM:
 
         for k, i in enumerate(self.qm_atoms):
             total_forces[i] = total_forces[i] - self.gqm[k]
+        cmm=np.sum(total_forces,axis=0)
+        for i in range(len(total_forces)):
+            total_forces[i]-=cmm/float(len(total_forces))
 
         return total_energy, total_forces
 
@@ -313,24 +350,24 @@ class OpenQpQMMM:
         forcefield=self.forcefield
         qm_atoms =self.qm_atoms
         Cutoff=self.Cutoff
-    
+
         system=forcefield.createSystem(topology,nonbondedMethod=Cutoff,constraints=None,rigidWater=False)
         nonbonded = next(f for f in system.getForces() if isinstance(f, mm.NonbondedForce))
-    
+
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chgProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
             if (p1 not in qm_atoms) or (p2 not in qm_atoms):
                nonbonded.setExceptionParameters(i, p1, p2, chgProd, 0.0, 0.0)
-    
+
         for p1 in qm_atoms:
            for p2 in qm_atoms:
               if p1 != p2:
                  nonbonded.addException(p1,p2,0,0,0,replace=True)
-    
+
         int0=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
         simulation=app.Simulation(topology, system, int0)
         simulation.context.setPositions(positions)
-    
+
         #Deactivate QM-QM interactions
         for f in system.getForces():
         #Deactivating non-bonded terms between QM atoms (but keep QM-MM)
@@ -389,13 +426,13 @@ class OpenQpQMMM:
         #Exception, unless CMMotionRemover
            else:
               if not isinstance(f, mm.CMMotionRemover): exit(f"Force not found")
-    
+
         if Cutoff is not app.NoCutoff:
            sysew=forcefield.createSystem(topology,nonbondedMethod=app.Ewald,constraints=None,rigidWater=False)
            intew=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
            simew=app.Simulation(topology, sysew, intew)
            simew.context.setPositions(positions)
-    
+
            sysor=forcefield.createSystem(topology,nonbondedMethod=app.NoCutoff,constraints=None,rigidWater=False)
            intor=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
            simor=app.Simulation(topology, sysor, intor)
