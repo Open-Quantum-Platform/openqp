@@ -99,6 +99,8 @@ contains
 
     open (unit=IW, file=infos%log_filename, position="append")
 
+
+    nat = ubound(infos%atoms%zn, 1)
     select case(infos%control%esp)
     case(0,1)
       restr = .false.
@@ -135,7 +137,6 @@ contains
 !   Allocate memory
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
-    nat = ubound(infos%atoms%zn, 1)
     npt = nat * sum(npt_layer)
     urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
 
