@@ -47,7 +47,7 @@ def path(strng):
 OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
-        'basis': {'type': string, 'default': ''},
+        'basis': {'type': string, 'default': '6-31g*'},
         'library': {'type': string, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
