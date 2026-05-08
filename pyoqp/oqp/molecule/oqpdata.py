@@ -46,7 +46,7 @@ def path(strng):
 OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
-        'basis': {'type': string, 'default': '6-31g'},
+        'basis': {'type': string, 'default': '6-31g*'},
         'library': {'type': string, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
@@ -132,7 +132,7 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
-        'zvconv': {'type': float, 'default': '1.0e-10'},
+        'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
         'tlf': {'type': int, 'default': '2'},
         'hfscale': {'type': float, 'default': '-1.0'},
