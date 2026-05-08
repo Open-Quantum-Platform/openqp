@@ -459,6 +459,7 @@ class Gradient(Calculator):
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]
         self.nstate = mol.config['tdhf']['nstate']
+        self.td_prop = mol.config['properties']['td_prop']
 
         self.zvec_func = {
             'rpa': oqp.tdhf_z_vector,
@@ -528,7 +529,9 @@ class Gradient(Calculator):
                     raise ZVnotConverged()
                 else:
                     exit()
-            oqp.electric_moments_excited(self.mol)
+            if self.td_prop == True:
+                oqp.electric_moments_excited(self.mol)
+                oqp.mulliken_excited(self.mol)
 
             self.grad_func[self.td](self.mol)
             grad = self.mol.get_grad().reshape((self.natom, 3))
