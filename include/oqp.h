@@ -220,10 +220,12 @@ void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
+void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
+void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);

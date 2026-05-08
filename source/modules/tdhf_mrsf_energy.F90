@@ -314,7 +314,7 @@ contains
     if (infos%tddft%spc_coov==-1.0_dp) &
           infos%tddft%spc_coov = infos%tddft%HFscale
 
-    if(debug_mode.or..true.)then
+    if(debug_mode)then
       write(*,'(/,5x,"Input parameters:")')
       write(*,'(5x,"Number of states:                 ",1x,I0)') nstates
       write(*,'(5x,"Number of single excitations:     ",1x,I0)') xvec_dim
@@ -488,14 +488,7 @@ contains
           if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
              fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
           if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-             fmrst2(:,1,:,:) = fmrst2(:,1,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,2,:,:) = fmrst2(:,2,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,3,:,:) = fmrst2(:,3,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,4,:,:) = fmrst2(:,4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,7,:,:) = fmrst2(:,7,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-             fmrst2(:,8,:,:) = fmrst2(:,8,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+             fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
         else
           if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
              fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale

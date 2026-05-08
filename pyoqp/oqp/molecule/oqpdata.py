@@ -23,8 +23,9 @@ def iarray(strng):
 
 
 def barray(strng):
-    """Convert array of parameters to list of booleans"""
-    return list(bool(s) for s in strng.split(',')) if strng else ()
+    """Convert comma-separated boolean parameters to a list of booleans."""
+    return [s.strip().lower() in ("true", "t", "1", "yes", ".true.")
+            for s in strng.split(",")] if strng else ()
 
 
 def parray(strng):
