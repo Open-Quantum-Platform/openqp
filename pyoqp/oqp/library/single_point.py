@@ -76,7 +76,8 @@ class LastStep(Calculator):
         natom = len(atoms)
         if self.do_d4:
             model = DispersionModel(atoms, coordinates)
-            res = model.get_dispersion(DampingParam(method=self.functional),
+            func_for_d4 = 'bhlyp' if self.functional.lower() in ('bhhlyp') else self.functional
+            res = model.get_dispersion(DampingParam(method=func_for_d4),
                                        grad=do_grad)
 
             energy = res['energy']
