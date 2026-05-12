@@ -10,7 +10,7 @@ system=
 charge=0
 runtype=energy
 functional=bhhlyp
-basis=aug-cc-pVDZ-PP,aug-cc-pVDZ
+basis=aug-cc-pVDZ-PP;aug-cc-pVDZ
 method=hf
 
 [guess]
