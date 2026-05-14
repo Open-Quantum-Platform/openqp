@@ -132,6 +132,7 @@ module types
                                                      !< 0   - no DKH correction
                                                      !< 1   - first-order  DKH
                                                      !< 2   - second-order DKH
+    integer(c_int64_t) :: soc_2e   = 1               !< SOC 2e solution: 0=off (1e only), 1=on (1e+2e) 
     ! SOSCF Parameters
     integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF

@@ -70,11 +70,53 @@ module grd2_rys
         procedure :: set_ids => gdat_set_ids
     end type
 
+type soc2e_int_data_t
+      integer :: id(4)
+      integer :: at(4)
+      integer :: am(4)
+      integer :: nbf(4)
+      integer :: nder = 1   ! derivatives only on IJ (electron 1)
+      integer :: nroots
+      real(kind=dp), allocatable :: gijkl(:)
+      real(kind=dp), allocatable :: gnkl (:)
+      real(kind=dp), allocatable :: gnm  (:)
+      real(kind=dp), allocatable :: dij  (:,:)
+      real(kind=dp), allocatable :: dkl  (:,:)
+      real(kind=dp), allocatable :: b00  (:)
+      real(kind=dp), allocatable :: b01  (:)
+      real(kind=dp), allocatable :: b10  (:)
+      real(kind=dp), allocatable :: c00  (:)
+      real(kind=dp), allocatable :: d00  (:)
+      real(kind=dp), allocatable :: f00  (:)
+      real(kind=dp), allocatable :: abv  (:,:)
+      real(kind=dp), allocatable :: PQ   (:,:)
+      real(kind=dp), allocatable :: PB   (:,:)
+      real(kind=dp), allocatable :: QD   (:,:)
+      real(kind=dp), allocatable :: rw   (:,:)
+      real(kind=dp), allocatable :: ai   (:)
+      real(kind=dp), allocatable :: aj   (:)
+      real(kind=dp), allocatable :: ak   (:)
+      real(kind=dp), allocatable :: al   (:)
+      real(kind=dp), allocatable :: fi   (:)
+      real(kind=dp), allocatable :: fj   (:)
+      integer :: ijklxyz(4,BAS_MXCART,4)
+      integer :: ao_offset(4)
+      real(kind=dp) :: dtol
+      real(kind=dp) :: dabcut
+    contains
+      procedure :: init => soc2e_gdat_init
+      procedure :: clean => soc2e_gdat_clean
+      procedure :: set_ids => soc2e_gdat_set_ids
+    end type
+
     logical :: dbg = .false.
 
     private
     public :: grd2_int_data_t
     public :: grd2_rys_compute
+    public :: soc2e_int_data_t
+    public :: soc2e_rys_compute
+    public :: soc2e_driver
 
 contains
 
@@ -464,6 +506,27 @@ contains
     end do
 
   end subroutine compute_rys_rw
+
+  subroutine soc2e_compute_rys_rw(gdat, rwv, numg)
+    use rys, only: rys_root_t
+    implicit none
+
+    type(soc2e_int_data_t), intent(inout) :: gdat
+    real(kind=dp), intent(out) :: rwv(2,numg,*)
+    integer, intent(in) :: numg
+
+    type(rys_root_t) :: root
+    integer :: ng
+
+    root%nroots = gdat%nroots
+    do ng = 1, numg
+      root%x = gdat%abv(6,ng)
+      call root%evaluate
+      rwv(1,ng,1:gdat%nroots) = root%u(1:gdat%nroots)
+      rwv(2,ng,1:gdat%nroots) = root%w(1:gdat%nroots)
+    end do
+
+  end subroutine soc2e_compute_rys_rw
 
   subroutine compute_coefficients(b00,b01,b10,c00,d00,f00,abv,pq,pb,qd,rwv,nmax,mmax,numg,nroots)
 
@@ -864,4 +927,644 @@ contains
 end associate
 
   end subroutine apply_translation_invariance
+
+subroutine soc2e_gdat_init(gdat, maxang, dtol, dabcut, stat)
+
+    implicit none
+
+    class(soc2e_int_data_t), intent(inout) :: gdat
+    integer, intent(in) :: maxang
+    real(kind=dp), intent(in) :: dtol, dabcut
+    integer, intent(out) :: stat
+    integer :: mxbra, mxcart, mxrys
+
+    gdat%dtol   = dtol
+    gdat%dabcut = dabcut**2
+
+    mxrys  = (4*maxang + 2 + gdat%nder)/2
+    mxcart = maxang + 1 + gdat%nder
+    mxbra  = 2*mxcart - 1
+
+    allocate(&
+      gdat%gijkl(mxcart**4      *MAXCONTR*3), &
+      gdat%gnkl (mxcart**2*mxbra*MAXCONTR*3), &
+      gdat%gnm  (mxbra**2       *MAXCONTR*3), &
+      gdat%dij  (3,mxcart**2    *MAXCONTR  ), &
+      gdat%dkl  (3,mxbra        *MAXCONTR  ), &
+      gdat%b00  (mxrys*MAXCONTR  ), &
+      gdat%b01  (mxrys*MAXCONTR  ), &
+      gdat%b10  (mxrys*MAXCONTR  ), &
+      gdat%c00  (mxrys*MAXCONTR*3), &
+      gdat%d00  (mxrys*MAXCONTR*3), &
+      gdat%f00  (mxrys*MAXCONTR*3), &
+      gdat%abv  (  6, MAXCONTR  ), &
+      gdat%PQ   (  3, MAXCONTR  ), &
+      gdat%PB   (  3, MAXCONTR  ), &
+      gdat%QD   (  3, MAXCONTR  ), &
+      gdat%rw   (mxrys*2, MAXCONTR), &
+      gdat%ai   (MAXCONTR), &
+      gdat%aj   (MAXCONTR), &
+      gdat%ak   (MAXCONTR), &
+      gdat%al   (MAXCONTR), &
+      gdat%fi   (mxcart**4 *MAXCONTR*3), &
+      gdat%fj   (mxcart**4 *MAXCONTR*3), &
+      stat=stat)
+
+  end subroutine soc2e_gdat_init
+
+subroutine soc2e_gdat_clean(gdat)
+
+    implicit none
+
+    class(soc2e_int_data_t), intent(inout) :: gdat
+
+    if (allocated(gdat%gijkl)) deallocate(gdat%gijkl)
+    if (allocated(gdat%gnkl )) deallocate(gdat%gnkl )
+    if (allocated(gdat%gnm  )) deallocate(gdat%gnm  )
+    if (allocated(gdat%dij  )) deallocate(gdat%dij  )
+    if (allocated(gdat%dkl  )) deallocate(gdat%dkl  )
+    if (allocated(gdat%b00  )) deallocate(gdat%b00  )
+    if (allocated(gdat%b01  )) deallocate(gdat%b01  )
+    if (allocated(gdat%b10  )) deallocate(gdat%b10  )
+    if (allocated(gdat%c00  )) deallocate(gdat%c00  )
+    if (allocated(gdat%d00  )) deallocate(gdat%d00  )
+    if (allocated(gdat%f00  )) deallocate(gdat%f00  )
+    if (allocated(gdat%abv  )) deallocate(gdat%abv  )
+    if (allocated(gdat%PQ   )) deallocate(gdat%PQ   )
+    if (allocated(gdat%PB   )) deallocate(gdat%PB   )
+    if (allocated(gdat%QD   )) deallocate(gdat%QD   )
+    if (allocated(gdat%rw   )) deallocate(gdat%rw   )
+    if (allocated(gdat%ai   )) deallocate(gdat%ai   )
+    if (allocated(gdat%aj   )) deallocate(gdat%aj   )
+    if (allocated(gdat%ak   )) deallocate(gdat%ak   )
+    if (allocated(gdat%al   )) deallocate(gdat%al   )
+    if (allocated(gdat%fi   )) deallocate(gdat%fi   )
+    if (allocated(gdat%fj   )) deallocate(gdat%fj   )
+
+  end subroutine soc2e_gdat_clean
+
+
+subroutine soc2e_gdat_set_ids(gdat, basis, i, j, k, l)
+
+    implicit none
+
+    class(soc2e_int_data_t), intent(inout) :: gdat
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: i, j, k, l
+
+    integer :: id(4), am(4), flips(4), tmp(2)
+
+    flips = [1,2,3,4]
+    id = [i,j,k,l]
+    am = basis%am([i,j,k,l])
+    ! Sort within IJ pair and within KL pair only
+    ! Never swap IJ with KL: derivatives are on IJ side only
+    if (am(1) > am(2)) flips(1:2) = [2,1]
+    if (am(3) > am(4)) flips(3:4) = [4,3]
+
+    gdat%id = id(flips)
+    gdat%am = am(flips)
+    gdat%at = basis%origin(gdat%id)
+    gdat%ao_offset = basis%ao_offset(gdat%id)
+
+  end subroutine soc2e_gdat_set_ids
+
+  subroutine soc2e_set_shells(gdat)
+
+    implicit none
+
+    type(soc2e_int_data_t) :: gdat
+
+    gdat%nbf    = num_cart_bf(gdat%am)
+    gdat%nroots = (sum(gdat%am) + 2 + gdat%nder) / 2
+
+    call soc2e_prepare_xyz_ids(gdat)
+
+  end subroutine soc2e_set_shells
+
+  subroutine soc2e_prepare_xyz_ids(gdat)
+
+    implicit none
+
+    type(soc2e_int_data_t) :: gdat
+    integer :: i, nj, nk, nl, njkl, nkl
+    integer :: nd
+
+    nd = gdat%nder
+
+    nj   = gdat%am(2) + nd + 1
+    nk   = gdat%am(3) + 1        ! no derivative on KL
+    nl   = gdat%am(4) + 1        ! no derivative on KL
+    njkl = nl*nk*nj
+
+    do i = 1, gdat%nbf(1)
+      gdat%ijklxyz(1,i,1) = cart_x(i,gdat%am(1))*njkl
+      gdat%ijklxyz(2,i,1) = cart_y(i,gdat%am(1))*njkl
+      gdat%ijklxyz(3,i,1) = cart_z(i,gdat%am(1))*njkl
+    end do
+
+    nkl = nl*nk
+    do i = 1, gdat%nbf(2)
+      gdat%ijklxyz(1,i,2) = cart_x(i,gdat%am(2))*nkl
+      gdat%ijklxyz(2,i,2) = cart_y(i,gdat%am(2))*nkl
+      gdat%ijklxyz(3,i,2) = cart_z(i,gdat%am(2))*nkl
+    end do
+
+    do i = 1, gdat%nbf(3)
+      gdat%ijklxyz(1,i,3) = cart_x(i,gdat%am(3))*nl
+      gdat%ijklxyz(2,i,3) = cart_y(i,gdat%am(3))*nl
+      gdat%ijklxyz(3,i,3) = cart_z(i,gdat%am(3))*nl
+    end do
+
+    do i = 1, gdat%nbf(4)
+      gdat%ijklxyz(1,i,4) = cart_x(i,gdat%am(4))+1
+      gdat%ijklxyz(2,i,4) = cart_y(i,gdat%am(4))+1
+      gdat%ijklxyz(3,i,4) = cart_z(i,gdat%am(4))+1
+    end do
+
+  end subroutine soc2e_prepare_xyz_ids
+
+subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    type(soc2e_int_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(in) :: gmax
+    real(kind=dp), intent(in) :: den(:,:)
+    real(kind=dp), intent(inout) :: wao(:,:,:)
+
+    integer :: ijg, klg, maxgg, mmax, ng
+    integer :: nimax, njmax, nkmax, nlmax, nmax
+    real(kind=dp) :: aa, ab, aandb1, bb, da, db, test
+    real(kind=dp) :: pfac, rho
+    real(kind=dp) :: p(3), q(3)
+    logical :: last
+    integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
+    integer :: mk, ml, ao_k, ao_l, nbf_k, nbf_l
+    real(kind=dp) :: dabmax
+    real(kind=dp), allocatable :: den_kl(:)
+
+    call soc2e_set_shells(gdat)
+
+    nbf_k = gdat%nbf(3)
+    nbf_l = gdat%nbf(4)
+    ao_k  = gdat%ao_offset(3) - 1
+    ao_l  = gdat%ao_offset(4) - 1
+
+    allocate(den_kl(nbf_k * nbf_l))
+    do mk = 1, nbf_k
+      do ml = 1, nbf_l
+        den_kl((mk-1)*nbf_l+ml) = den(ao_l+ml, ao_k+mk)
+      end do
+    end do
+    dabmax = maxval(abs(den_kl))
+
+    if (dabmax * gmax < 5.0d-11) then
+      deallocate(den_kl)
+      return
+    end if
+
+    id1 = maxval(gdat%id(1:2))
+    id2 = minval(gdat%id(1:2))
+    npp_p = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p = ppairs%ppid(2,id1*(id1-1)/2+id2)
+
+    id1 = maxval(gdat%id(3:4))
+    id2 = minval(gdat%id(3:4))
+    npp_q = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q = ppairs%ppid(2,id1*(id1-1)/2+id2)
+    if (npp_p*npp_q == 0) return
+
+    nimax = gdat%am(1) + gdat%nder + 1
+    njmax = gdat%am(2) + gdat%nder + 1
+    nkmax = gdat%am(3) + 1                ! no derivative on KL
+    nlmax = gdat%am(4) + 1                ! no derivative on KL
+
+    nmax = gdat%am(1) + gdat%am(2) + 1 + gdat%nder
+    mmax = gdat%am(3) + gdat%am(4) + 1   ! no extra for KL
+
+    maxgg = MAXCONTR / gdat%nroots
+
+    ng = 0
+
+    do klg = 1, npp_q
+      db = ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb = ppairs%g(ppid_q-1+klg)
+      q  = ppairs%P(:,ppid_q-1+klg)
+
+      do ijg = 1, npp_p
+        da = ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa = ppairs%g(ppid_p-1+ijg)
+        p  = ppairs%P(:,ppid_p-1+ijg)
+
+        ab   = aa + bb
+        pfac = da*db
+        test = pfac*pfac
+
+        if (test < gdat%dtol*ab) cycle
+        if (test*dabmax*dabmax < gdat%dabcut*ab) cycle
+
+        aandb1 = 1.0_dp/ab
+        rho    = aa*bb*aandb1
+
+        ng = ng+1
+
+        gdat%abv(1,ng) = ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng) = ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng) = rho
+        gdat%abv(4,ng) = pfac*sqrt(aandb1)
+        gdat%abv(5,ng) = aandb1
+        gdat%abv(6,ng) = rho*sum((p-q)**2)
+
+        gdat%ai(ng) = 2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng) = 2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng) = 2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng) = 2*ppairs%alpha_b(ppid_q-1+klg)
+
+        gdat%PQ(:,ng) = p - q
+
+        if (nmax>1) gdat%PB(:,ng) = ppairs%PB(:,ppid_p-1+ijg)
+        if (mmax>1) gdat%QD(:,ng) = ppairs%PB(:,ppid_q-1+klg)
+
+        gdat%dij(:,ng) = ppairs%PA(:,ppid_p-1+ijg) - ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng) = ppairs%PA(:,ppid_q-1+klg) - ppairs%PB(:,ppid_q-1+klg)
+
+        last = klg==npp_q .and. ijg==npp_p
+
+        if (ng==maxgg .or. last) then
+          if (ng==0) return
+
+          call compute_soc2e_ints(gdat, den, wao, &
+                  ng, nmax, mmax, nimax, njmax, nkmax, nlmax)
+
+          ng = 0
+        end if
+
+      end do
+    end do
+
+    deallocate(den_kl)
+
+  end subroutine soc2e_rys_compute
+
+
+
+subroutine compute_soc2e_ints(gdat, den, wao, &
+                  ng, nmax, mmax, nimax, njmax, nkmax, nlmax)
+
+    type(soc2e_int_data_t), intent(inout) :: gdat
+    real(kind=dp), intent(in) :: den(:,:)
+    real(kind=dp), intent(inout) :: wao(:,:,:)
+
+    integer, intent(in) :: ng, nmax, mmax
+    integer, intent(in) :: nimax, njmax, nkmax, nlmax
+
+
+    !TEST
+!    write(*,'(a,i0)') 'DEBUG compute_soc2e_ints called, ng=', ng
+
+
+
+!   Compute roots and weights for quadrature
+    call soc2e_compute_rys_rw(gdat, gdat%rw, ng)
+
+!   Compute coefficients for recursion formulae
+    call compute_coefficients(gdat%b00, gdat%b01, gdat%b10, &
+                gdat%c00, gdat%d00, gdat%f00, &
+                gdat%abv, gdat%pq, gdat%pb, gdat%qd, gdat%rw, nmax, mmax, ng, gdat%nroots)
+
+!   Compute x, y, z integrals (2 centers)
+    call compute_xyz_p0q0(gdat%gnm, ng*gdat%nroots, nmax, mmax, &
+                gdat%b00, gdat%b01, gdat%b10, gdat%c00, gdat%d00, gdat%f00)
+
+!   Compute x, y, z integrals (4 centers)
+    call compute_xyz_ijkl(gdat%gijkl, gdat%gnkl, gdat%gnm, &
+                ng, gdat%nroots, nmax, mmax, nimax, njmax, nkmax, nlmax, &
+                gdat%dij, gdat%dkl)
+
+!if (gdat%am(1)==0 .and. gdat%am(2)==0 .and. &
+!    gdat%am(3)==0 .and. gdat%am(4)==0) then
+!  write(*,'(a,6es14.6)') 'DEBUG fi/fj:', &
+!    gdat%fi(1), gdat%fi(2), gdat%fi(3), &
+!    gdat%fj(1), gdat%fj(2), gdat%fj(3)
+!end if            
+            
+            
+            !   Compute SOC derivative integrals (IJ side only)
+    call compute_soc2e_xyz(gdat, gdat%gijkl, &
+                ng, gdat%nroots*3, nimax, njmax, nkmax, nlmax, &
+                gdat%ai, gdat%aj, gdat%fi, gdat%fj)
+
+    !TEST
+!    write(*,'(a,2es14.6)') 'DEBUG fi/fj norm: ', &
+!         sqrt(sum(gdat%fi**2)), sqrt(sum(gdat%fj**2))
+
+!   Contract with density, accumulate into wao
+!    call compute_soc2e_ao(gdat, ng*gdat%nroots, gdat%ijklxyz, &
+!                gdat%gijkl, gdat%fi, gdat%fj, den, wao)
+call compute_soc2e_ao(gdat, ng, gdat%nroots*3, gdat%ijklxyz, &
+            gdat%gijkl, gdat%fi, gdat%fj, den, wao)
+
+  end subroutine compute_soc2e_ints
+
+
+subroutine compute_soc2e_xyz(gdat, g, &
+       ng, nr3, nimax, njmax, nkmax, nlmax, &
+       aai, aaj, fi, fj)
+
+    implicit none
+
+    type(soc2e_int_data_t) :: gdat
+    integer, intent(in) :: ng, nr3, nimax, njmax, nkmax, nlmax
+    real(kind=dp) :: g(ng,nr3,nlmax,nkmax,njmax,*)
+    real(kind=dp) :: aai(*), aaj(*)
+    real(kind=dp) :: fi(ng,nr3,nlmax,nkmax,njmax,*)
+    real(kind=dp) :: fj(ng,nr3,nlmax,nkmax,njmax,*)
+
+    integer :: i, j, n
+    integer :: ni, nj
+
+    ni = gdat%am(1) + 1
+    nj = gdat%am(2) + 1
+
+!   Electronic derivative: d/dr phi_i = i*phi_{i-1} - 2*alpha*phi_{i+1}
+!   Same formula as in GAMESS XYZ2E (XINTI/XINTJ)
+
+!   FI: derivative over I index (electron 1, shell i)
+    do n = 1, ng
+      fi(n,:,:,:,:,1) = -g(n,:,:,:,:,2)*aai(n)
+    end do
+    if (ni/=1) then
+      do i = 2, ni
+        do n = 1, ng
+          fi(n,:,:,:,:,i) = g(n,:,:,:,:,i-1)*(i-1) &
+                          - g(n,:,:,:,:,i+1)*aai(n)
+        end do
+      end do
+    end if
+
+!   FJ: derivative over J index (electron 1, shell j)
+    do i = 1, nimax
+      do n = 1, ng
+        fj(n,:,:,:,1,i) = -g(n,:,:,:,2,i)*aaj(n)
+      end do
+    end do
+    if (nj/=1) then
+      do i = 1, nimax
+        do j = 2, nj
+          do n = 1, ng
+            fj(n,:,:,:,j,i) = g(n,:,:,:,j-1,i)*(j-1) &
+                             - g(n,:,:,:,j+1,i)*aaj(n)
+          end do
+        end do
+      end do
+    end if
+
+  end subroutine compute_soc2e_xyz
+
+
+
+
+
+
+
+
+
+!  subroutine compute_soc2e_ao(gdat, ngnr, ijklxyz, g0, fi, fj, den, wao)
+subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
+    implicit none
+    integer, intent(in) :: ng, nr3
+    real(kind=dp), intent(in) :: g0(ng,nr3,*)
+    real(kind=dp), intent(in) :: fi(ng,nr3,*)
+    real(kind=dp), intent(in) :: fj(ng,nr3,*)
+
+    type(soc2e_int_data_t), intent(inout) :: gdat
+!    integer, intent(in) :: ngnr
+    integer, intent(in) :: ijklxyz(:,:,:)
+!    real(kind=dp), intent(in) :: g0(ngnr,3,*)
+!    real(kind=dp), intent(in) :: fi(ngnr,3,*)
+!    real(kind=dp), intent(in) :: fj(ngnr,3,*)
+    real(kind=dp), intent(in) :: den(:,:)
+    real(kind=dp), intent(inout) :: wao(:,:,:)
+    integer :: r, rx, ry, rz
+    integer :: i, j, k, l
+    integer :: nx, ny, nz
+    integer :: ao_I, ao_J, ao_K, ao_L
+    integer :: pi, pj, pk, pl
+    integer :: jmax
+    real(kind=dp) :: sol(3), val2, val3, val4
+    logical :: same_KL, same_IJ
+
+    ao_I = gdat%ao_offset(1) - 1
+    ao_J = gdat%ao_offset(2) - 1
+    ao_K = gdat%ao_offset(3) - 1
+    ao_L = gdat%ao_offset(4) - 1
+
+
+!   Check if KL shells are the same — determines if off-diagonal KL factor applies
+    same_KL = (gdat%id(3) == gdat%id(4))
+    same_IJ = (gdat%id(1) == gdat%id(2))
+
+
+    do i = 1, gdat%nbf(1)
+      pi = ao_I + i
+        if (same_IJ) then
+            jmax = i - 1
+        else
+            jmax = gdat%nbf(2)
+        end if
+
+      do j = 1, jmax!gdat%nbf(2)
+        pj = ao_J + j
+        do k = 1, gdat%nbf(3)
+          pk = ao_K + k
+          do l = 1, gdat%nbf(4)
+            pl = ao_L + l
+
+            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4) !+ 1
+            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4) !+ 1
+            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4) !+ 1
+
+!           Lx: (fi_y*fj_z - fj_y*fi_z) * g_x
+!            sol(1) = sum((fi(:,2,ny)*fj(:,3,nz) - fj(:,2,ny)*fi(:,3,nz)) * g0(:,1,nx))
+!           Ly: (fi_z*fj_x - fj_z*fi_x) * g_y
+!            sol(2) = sum((fi(:,3,nz)*fj(:,1,nx) - fj(:,3,nz)*fi(:,1,nx)) * g0(:,2,ny))
+!           Lz: (fi_x*fj_y - fj_x*fi_y) * g_z
+!            sol(3) = sum((fi(:,1,nx)*fj(:,2,ny) - fj(:,1,nx)*fi(:,2,ny)) * g0(:,3,nz))
+sol = 0.0_dp
+do r = 1, nr3/3
+!  rx = (r-1)*3 + 1
+!  ry = (r-1)*3 + 2
+!  rz = (r-1)*3 + 3
+  rx = r
+  ry = nr3/3 + r
+  rz = 2*(nr3/3) + r
+  sol(1) = sol(1) + sum((fi(:,ry,ny)*fj(:,rz,nz) - fj(:,ry,ny)*fi(:,rz,nz)) * g0(:,rx,nx))
+  sol(2) = sol(2) + sum((fi(:,rz,nz)*fj(:,rx,nx) - fj(:,rz,nz)*fi(:,rx,nx)) * g0(:,ry,ny))
+  sol(3) = sol(3) + sum((fi(:,rx,nx)*fj(:,ry,ny) - fj(:,rx,nx)*fi(:,ry,ny)) * g0(:,rz,nz))
+end do
+sol = -sol
+!if (gdat%am(1)==1 .and. gdat%am(2)==1 .and. &
+!    gdat%am(3)==1 .and. gdat%am(4)==1 .and. &
+!    i==3 .and. j==2 .and. k==1 .and. l==1) then
+!  write(*,'(a,3es16.8)') 'SOL pp|pp (pz,py,px,px):', sol(1), sol(2), sol(3)
+!end if
+
+!           ---- Coulomb 21 ----
+!           W(I,J) += 2*(1+delta_KL)*D(K,L)*VAL
+!           W(J,I) -= 2*(1+delta_KL)*D(K,L)*VAL
+            val2 = den(pk, pl) * 2.0_dp
+            if (.not. same_KL) val2 = val2 * 2.0_dp
+            wao(:, pi, pj) = wao(:, pi, pj) + val2 * sol
+            wao(:, pj, pi) = wao(:, pj, pi) - val2 * sol
+
+!           ---- Exchange 12 ----
+!           W(K,J) += -3*D(I,L)*VAL
+!           W(K,I) -= -3*D(J,L)*VAL
+            val3 = -3.0_dp
+            wao(:, pk, pj) = wao(:, pk, pj) + val3 * den(pi, pl) * sol
+            wao(:, pk, pi) = wao(:, pk, pi) - val3 * den(pj, pl) * sol
+            if (.not. same_KL) then
+!             W(L,J) += -3*D(I,K)*VAL
+!             W(L,I) -= -3*D(J,K)*VAL
+              wao(:, pl, pj) = wao(:, pl, pj) + val3 * den(pi, pk) * sol
+              wao(:, pl, pi) = wao(:, pl, pi) - val3 * den(pj, pk) * sol
+            end if
+
+!           ---- Exchange 21 ----
+!           W(I,L) += -3*D(K,J)*VAL
+!           W(J,L) -= -3*D(K,I)*VAL
+            val4 = -3.0_dp
+            wao(:, pi, pl) = wao(:, pi, pl) + val4 * den(pk, pj) * sol
+            wao(:, pj, pl) = wao(:, pj, pl) - val4 * den(pk, pi) * sol
+            if (.not. same_KL) then
+!             W(I,K) += -3*D(L,J)*VAL
+!             W(J,K) -= -3*D(L,I)*VAL
+              wao(:, pi, pk) = wao(:, pi, pk) + val4 * den(pl, pj) * sol
+              wao(:, pj, pk) = wao(:, pj, pk) - val4 * den(pl, pi) * sol
+            end if
+
+          end do
+        end do
+      end do
+    end do
+
+! TEST
+!    write(*,'(a,4i4,3es14.6)') 'SOC ao: am=', gdat%am, sol(1), sol(2), sol(3)
+  end subroutine compute_soc2e_ao
+
+  subroutine soc2e_driver(infos, basis, den, wao)
+
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use int2_compute, only: ints_exchange
+    use parallel, only: par_env_t
+    use constants, only: tol_int
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: den(:,:)
+    real(kind=dp), intent(inout) :: wao(:,:,:)
+
+    type(soc2e_int_data_t) :: gdat
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp), allocatable :: den_phys(:,:)
+
+
+    real(kind=dp) :: cutoff, dabcut, gmax
+    real(kind=dp) :: dtol, rtol, zbig
+    integer :: i, j, k, l, ij, kl, iok, mpi_ij
+
+    integer iao, jao
+
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    cutoff = 1.0d-10
+
+    zbig = maxval(basis%ex)
+    dabcut = 1.0d-11
+    if (zbig>1.0d+06) dabcut = dabcut/10
+    if (zbig>1.0d+07) dabcut = dabcut/10
+
+    dtol = 10.0d0**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+
+    call cutoffs%set(&
+            cutoff_integral_value=dabcut, &
+            cutoff_exp=rtol, &
+            cutoff_prefactor_pq=dtol, &
+            cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+
+    allocate(schwarz_ints(basis%nshell, basis%nshell))
+    call ints_exchange(basis, schwarz_ints)
+
+    dtol = dtol*dtol
+
+    call gdat%init(basis%mxam, dtol, dabcut, iok)
+
+    allocate(den_phys(basis%nbf, basis%nbf))
+
+    do jao = 1, basis%nbf
+      do iao = 1, basis%nbf
+        den_phys(iao, jao) = den(iao, jao) * basis%bfnrm(iao) * basis%bfnrm(jao)
+      end do
+    end do
+
+
+
+    if (infos%mpiinfo%usempi) mpi_ij = 0
+
+    do i = 1, basis%nshell
+      do j = 1, i
+        ij = i*(i-1)/2+j
+        if (ppairs%ppid(1,ij)==0) cycle
+        if (infos%mpiinfo%usempi) then
+          mpi_ij = mpi_ij+1
+          if (mod(mpi_ij, pe%size) /= pe%rank) cycle
+        end if
+
+        do k = 1, basis%nshell
+          do l = 1, k
+            kl = k*(k-1)/2+l
+            if (ppairs%ppid(1,kl)==0) cycle
+
+            gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+            if (gmax < cutoff) cycle
+
+            call gdat%set_ids(basis, i, j, k, l)
+
+!            call soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
+            call soc2e_rys_compute(gdat, ppairs, gmax, den_phys, wao)
+          end do
+        end do
+
+      end do
+    end do
+
+    call gdat%clean()
+
+    call pe%allreduce(wao, size(wao))
+
+    do jao = 1, basis%nbf
+      do iao = 1, basis%nbf
+        wao(:, iao, jao) = wao(:, iao, jao) * basis%bfnrm(iao) * basis%bfnrm(jao)
+      end do
+    end do
+    call ppairs%clean()
+    deallocate(schwarz_ints)
+    
+    deallocate(den_phys)
+
+  end subroutine soc2e_driver
+
 end module grd2_rys

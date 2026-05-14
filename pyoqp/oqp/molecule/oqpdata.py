@@ -54,6 +54,7 @@ OQP_CONFIG_SCHEMA = {
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
+        'soc_2e': {'type': int,  'default': '1'},    
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -154,7 +155,6 @@ OQP_CONFIG_SCHEMA = {
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
         'nac': {'type': str, 'default': ''},
-        'soc': {'type': str, 'default': ''},
         'export': {'type': bool, 'default': 'False'},
         'title': {'type': str, 'default': ''},
         'back_door': {'type': bool, 'default': False}
@@ -244,6 +244,7 @@ class OQPData:
             "functional": "set_dft_functional",
             "system": "set_system",
             "system2": "set_system2",
+            "soc_2e":     "set_soc_2e",
         },
         "guess": {
         },
@@ -833,6 +834,9 @@ class OQPData:
         if system.strip():
             num_atoms, x, y, z, q, mass = read_system(system)
             self.mol2 = np.array(x + y + z).reshape((3, num_atoms)).T.reshape(-1)
+
+    def set_soc_2e(self, soc_2e):
+        self._data.control.soc_2e = soc_2e
 
     def parse_section(self, config, section):
         cfg_input = config[section]

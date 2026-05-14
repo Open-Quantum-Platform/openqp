@@ -150,7 +150,7 @@ class BasisData:
             self.basis_names = [basis_dict.get(tag, "UNKNOWN") for tag in basis_tags]
             return self.basis_names
 
-        self.basis_names = self.mol.config["input"]["basis"].split(',')
+        self.basis_names = self.mol.config["input"]["basis"].split(':')
         if len(self.basis_names) == 1:
             self.basis_names = [self.basis_names[0]] * self.num_atoms
 

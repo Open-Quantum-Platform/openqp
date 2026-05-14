@@ -39,6 +39,7 @@ contains
     use precision, only: dp
     use printing, only: print_module_info
     use messages, only: show_message, with_abort
+    use grd2_rys, only: soc2e_driver
 
     implicit none
 
@@ -51,23 +52,44 @@ contains
     real(kind=dp) :: e_ref
     integer :: ok, nbf, nbf2
     real(kind=dp), allocatable :: lx_ao(:), ly_ao(:), lz_ao(:)
-    integer :: ns, nt, ist, jst, ims, ims_i, ims_j
+    real(kind=dp), allocatable :: lx_2e_ao(:), ly_2e_ao(:), lz_2e_ao(:)
+    integer :: ns, nt, ist, jst, ims, ims_i, ims_j, itemp, i, idx, j
     real(kind=dp), allocatable :: lx_mo(:,:), ly_mo(:,:), lz_mo(:,:)
     real(kind=dp), allocatable :: t00aa(:,:,:,:), t110aa(:,:,:,:), t11ab(:,:,:,:)
     integer :: nocca, noccb
 
-    complex(kind=dp), allocatable :: hsoc(:,:)
+    complex(kind=dp), allocatable :: hsoc(:,:), h1soc(:,:), h2soc(:,:)
     real(kind=dp), allocatable :: eval(:)
     complex(kind=dp), allocatable :: evec(:,:)
     real(kind=dp), parameter :: alpha = 7.2973506e-3_dp
     real(kind=dp), parameter :: ha2wn = 219474.6_dp
     real(kind=dp), parameter :: dfac  = alpha**2 / 2.0_dp * ha2wn  ! 5.8438 cm-1/a.u.
-    real(kind=dp) :: re1e, im1e, abs1e
+    real(kind=dp) :: re1e, im1e, re2e, im2e, abs12e
     character(len=7), dimension(3), parameter :: trip = ['(Ms=-1)', '(Ms= 0)', '(Ms=+1)']
 
-    open(unit=iw, file=infos%log_filename, position="append")
-    call print_module_info('SOC_MRSF', 'Spin-Orbit Coupling: MRSF Energies')
+    real(kind=dp), allocatable :: den_rohf(:,:)
+    real(kind=dp), allocatable :: wao(:,:,:)
+    real(kind=dp), allocatable :: lx_2e_mo(:,:), ly_2e_mo(:,:), lz_2e_mo(:,:)
+    real(kind=dp), allocatable :: lx_12e_mo(:,:), ly_12e_mo(:,:), lz_12e_mo(:,:)
 
+    logical :: do_2e_soc
+    logical, parameter :: debug_soc_prints = .true.
+
+    ! Temporary switch for the two-electron SOC mean-field correction.
+
+
+
+    open(unit=iw, file=infos%log_filename, position="append")
+
+    do_2e_soc = (infos%control%soc_2e /= 0)
+    
+    if (do_2e_soc) then
+        call print_module_info('SOC_MRSF (1e+2e)', 'Spin-Orbit Coupling: MRSF Energies')
+    else
+        call print_module_info('SOC_MRSF (1e)', 'Spin-Orbit Coupling: MRSF Energies')
+    endif
+
+!    write(iw, *) 'Do we 2e?', infos%control%soc_2e
     e_ref = infos%mol_energy%energy
 
     call data_has_tags(infos%dat, &
@@ -100,50 +122,133 @@ contains
     call ao2mo_soc(lx_ao, lx_mo, mo_a, nbf)
     call ao2mo_soc(ly_ao, ly_mo, mo_a, nbf)
     call ao2mo_soc(lz_ao, lz_mo, mo_a, nbf)
+
+    allocate(lx_12e_mo(nbf, nbf), ly_12e_mo(nbf, nbf), lz_12e_mo(nbf, nbf), stat=ok)
+    if (ok /= 0) call show_message('soc_mrsf: cannot allocate total MO L matrices', WITH_ABORT)
+
+    ! --- Step 2b: 2e mean-field SOC correction ---
+    if (do_2e_soc) then
+      allocate(den_rohf(nbf, nbf), stat=ok)
+      if (ok /= 0) call show_message('soc_mrsf: cannot allocate ROHF density', WITH_ABORT)
+      allocate(lx_2e_mo(nbf, nbf), ly_2e_mo(nbf, nbf), lz_2e_mo(nbf, nbf), stat=ok)
+      if (ok /= 0) call show_message('soc_mrsf: cannot allocate 2e MO L matrices', WITH_ABORT)
+
+      den_rohf = 0.0_dp
+      call dgemm('N','T', nbf, nbf, noccb, 1.0_dp, &
+                 mo_a, nbf, mo_a, nbf, 0.0_dp, den_rohf, nbf)
+
+      allocate(wao(3, nbf, nbf), stat=ok)
+      if (ok /= 0) call show_message('soc_mrsf: cannot allocate 2e AO L matrices', WITH_ABORT)
+      wao = 0.0_dp
+
+      if (debug_soc_prints) then
+        do i = 1, infos%basis%nshell
+          write(iw,'(a,3i4)') 'shell ao_offset am:', i, &
+            infos%basis%ao_offset(i), infos%basis%am(i)
+        end do
+        write(iw,'(a,2i4)') ' nocca, noccb = ', nocca, noccb
+      end if
+
+      call soc2e_driver(infos, infos%basis, den_rohf, wao)
+
+      if (debug_soc_prints) then
+        write(iw,'(/,a)') ' LX in AO (our wao)'
+        do i = 1, nbf
+          write(iw,'(*(f12.6))') (wao(1,i,j), j=1,i)
+        end do
+        write(iw,'(/,a)') ' LY in AO (our wao)'
+        do i = 1, nbf
+          write(iw,'(*(f12.6))') (wao(2,i,j), j=1,i)
+        end do
+        write(iw,'(/,a)') ' LZ in AO (our wao)'
+        do i = 1, nbf
+          write(iw,'(*(f12.6))') (wao(3,i,j), j=1,i)
+        end do
+        write(iw,'(/,a,3es14.6)') '  ||wao|| (Lx,Ly,Lz) = ', &
+          sqrt(sum(wao(1,:,:)**2)), &
+          sqrt(sum(wao(2,:,:)**2)), &
+          sqrt(sum(wao(3,:,:)**2))
+      end if
+
+      deallocate(den_rohf)
+
+      call ao2mo_full(wao(1,:,:), lx_2e_mo, mo_a, nbf)
+      call ao2mo_full(wao(2,:,:), ly_2e_mo, mo_a, nbf)
+      call ao2mo_full(wao(3,:,:), lz_2e_mo, mo_a, nbf)
+      deallocate(wao)
+
+      lx_12e_mo = lx_mo + lx_2e_mo
+      ly_12e_mo = ly_mo + ly_2e_mo
+      lz_12e_mo = lz_mo + lz_2e_mo
+    else
+      lx_12e_mo = lx_mo
+      ly_12e_mo = ly_mo
+      lz_12e_mo = lz_mo
+    end if
+
     deallocate(lx_ao, ly_ao, lz_ao)
 
     ! --- Step 3: Build spin-dependent transition density matrices ---
     allocate(t00aa (ns, nt, nbf, nbf), &
-             t110aa(ns, nt, nbf, nbf), &
-             t11ab (ns, nt, nbf, nbf), stat=ok)
+             t110aa(nt, nt, nbf, nbf), &
+             t11ab (nt, nt, nbf, nbf), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate TDM arrays', WITH_ABORT)
     call compute_tdm(bvec_mo_s, bvec_mo_t, nocca, noccb, nbf, ns, nt, &
                      t00aa, t110aa, t11ab)
 
     ! --- Step 4: Assemble the 1e SOC Hamiltonian H_SOC ---
     allocate(hsoc(ns + 3*nt, ns + 3*nt), stat=ok)
+    allocate(h1soc(ns + 3*nt, ns + 3*nt), stat=ok)
+    allocate(h2soc(ns + 3*nt, ns + 3*nt), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate H_SOC matrix', WITH_ABORT)
-    call compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, ns, nt, nbf, hsoc)
+    h2soc = cmplx(0.0_dp, 0.0_dp, kind=dp)
+    call compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, ns, nt, nbf, h1soc)
+    if (do_2e_soc) call compute_soc_matrix(t00aa, t110aa, t11ab, lx_2e_mo, ly_2e_mo, lz_2e_mo, ns, nt, nbf, h2soc)
+    call compute_soc_matrix(t00aa, t110aa, t11ab, lx_12e_mo, ly_12e_mo, lz_12e_mo, ns, nt, nbf, hsoc)
     deallocate(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo)
 
-    ! --- Step 5: Print 1e SOC coupling constants ---
-    write(iw,'(/,11x,65("-"))')
-    write(iw,'(11x,a)') 'Spin-orbit coupling constants (1e, cm-1)'
-    write(iw,'(11x,65("-"))')
-    write(iw,'(2x,a,4x,a,9x,a,6x,a,6x,a)') &
-      'State_i', 'State_j', 'Re(1e)', 'Im(1e)', 'Absolute'
+    ! --- Step 5: Print SOC coupling constants, separated into 1e and 2e parts ---
+    write(iw,'(/,11x,89("-"))')
+    write(iw,'(41x,a)') 'Absolute = sqrt(Re(1e+2e)**2+Im(1e+2e)**2)'
+    write(iw,'(11x,89("-"))')
+    write(iw,'(2x,a,4x,a,9x,a,6x,a,6x,a,6x,a,6x,a)') &
+      'State_i', 'State_j', 'Re(1e)', 'Im(1e)', 'Re(2e)', 'Im(2e)', 'Absolute'
+
     ! S-T block
     do ist = 1, ns
       do jst = 1, nt
         do ims = 1, 3  ! Ms = -1, 0, +1
-          re1e  = real (hsoc(ist, ns+(jst-1)*3+ims)) * dfac
-          im1e  = aimag(hsoc(ist, ns+(jst-1)*3+ims)) * dfac
-          abs1e = sqrt(re1e**2 + im1e**2)
-          write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,2f12.4,f18.6)') &
-            'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, abs1e
+          idx = ns + (jst-1)*3 + ims
+
+          re1e   = real (h1soc(ist, idx)) * dfac
+          im1e   = aimag(h1soc(ist, idx)) * dfac
+          re2e   = real (h2soc(ist, idx)) * dfac
+          im2e   = aimag(h2soc(ist, idx)) * dfac
+          abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
+
+          write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
+            'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
         end do
       end do
     end do
+
     ! T-T block
     do ist = 1, nt
       do jst = 1, nt
         do ims_i = 1, 3
           do ims_j = 1, 3
-            re1e  = real (hsoc(ns+(ist-1)*3+ims_i, ns+(jst-1)*3+ims_j)) * dfac
-            im1e  = aimag(hsoc(ns+(ist-1)*3+ims_i, ns+(jst-1)*3+ims_j)) * dfac
-            abs1e = sqrt(re1e**2 + im1e**2)
-            write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,2f12.4,f18.6)') &
-              'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), re1e, im1e, abs1e
+            i = ns + (ist-1)*3 + ims_i
+            j = ns + (jst-1)*3 + ims_j
+
+            re1e   = real (h1soc(i, j)) * dfac
+            im1e   = aimag(h1soc(i, j)) * dfac
+            re2e   = real (h2soc(i, j)) * dfac
+            im2e   = aimag(h2soc(i, j)) * dfac
+            abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
+
+            write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
+              'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), &
+              re1e, im1e, re2e, im2e, abs12e
           end do
         end do
       end do
@@ -158,7 +263,11 @@ contains
     deallocate(hsoc)
     call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
     deallocate(eval, evec)
+        deallocate(lx_12e_mo, ly_12e_mo, lz_12e_mo)
 
+    if (do_2e_soc) then
+        deallocate(lx_2e_mo, ly_2e_mo, lz_2e_mo)
+    endif
     write(iw,'(/,a)') 'SOC_MRSF done'
     call flush(iw)
     close(iw)
@@ -321,93 +430,29 @@ end subroutine ao2mo_soc
 subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
                        t00aa, t110aa, t11ab)
   !
-  ! Compute spin-dependent transition density matrices (TDM) between
+  ! Compute spin-dependent transition density matrices (TDMs) between
   ! MRSF singlet and triplet states from Davidson vectors.
   !
-  ! Background
-  ! ----------
-  ! MRSF states are linear combinations of CSFs built from a ROHF triplet
-  ! reference. The Davidson vectors bvec_s(:,I) and bvec_t(:,J) contain
-  ! the excitation amplitudes X^{S,I}_{ia} and X^{T,J}_{ia} for each
-  ! single excitation i->a in state I or J.
-  !
-  ! Only 4 independent TDMs need to be computed explicitly (SI, eqs S4-S7).
-  ! All other 10 are related by time-reversal symmetry and are formed in
-  ! compute_soc_matrix without storing them.
-  !
-  ! The 4 independent TDMs
-  ! ----------------------
-  ! t00aa(I,J,t,u) = <Psi^00_I | a+_{u,alpha} a_{t,alpha} | Psi^10_J>
-  !                  Singlet bra, Ms=0 triplet ket, alpha/alpha operator
-  !                  -> drives S-T spin-orbit coupling
-  !
-  ! t110aa(I,J,t,u) = <Psi^10_I | a+_{u,alpha} a_{t,alpha} | Psi^10_J>
-  !                   Ms=0 triplet bra and ket, alpha/alpha operator
-  !                   -> drives T-T spin-orbit coupling (diagonal part)
-  !
-  ! t11ab(I,J,t,u)  = <Psi^10_I | a+_{u,beta} a_{t,alpha} | Psi^11_J>
-  !                   Ms=0 triplet bra, Ms=1 triplet ket, alpha/beta operator
-  !                   -> drives T-T spin-orbit coupling (off-diagonal part)
-  !
-  ! Note: t00bb = -t00aa (time reversal, eq. S5 in SI)
-  !       This fourth TDM is not stored; the sign is applied in compute_soc_matrix.
-  !
-  ! Preprocessing of Davidson vectors (xs, xt)
-  ! -------------------------------------------
-  ! The Davidson vectors are stored in a flat index ij = (j-nocca+1)*nocca + i
-  ! where i = occupied MO index, j = virtual/open MO index (GAMESS convention).
-  !
-  ! Special OO-slots that need to be filled before computing TDMs:
-  !   ijLR1 = (nocca-1) * nocca + (nocca-1)  -> (O1->O1), active in both S and T
-  !   ijG   = (nocca-1) * nocca + nocca       -> (O2->O1), active in singlet only
-  !   ijD   = nocca     * nocca + (nocca-1)   -> (O1->O2), active in singlet only
-  !   ijLR2 = nocca     * nocca + nocca       -> (O2->O2), NOT stored in bvec;
-  !                                              reconstructed as:
-  !                                              xs(ijLR2) = -xs(ijLR1)  (singlet, minus)
-  !                                              xt(ijLR2) = +xt(ijLR1)  (triplet, plus)
-  !   xt(ijG) = 0, xt(ijD) = 0  (these slots are huge in bvec_t, zeroed out)
-  !
-  ! TDM blocks computed (t,u orbital pairs)
-  ! ----------------------------------------
-  ! 1. Diagonal    t=u (all orbitals):    t110aa only; sum over CO->O1, CO->O2, OO slots
-  ! 2. t=C,  u=O1  and  t=O1, u=C:       t00aa, t110aa, t11ab
-  ! 3. t=C,  u=O2  and  t=O2, u=C:       t00aa, t110aa, t11ab
-  ! 4. t=O1, u=O2  and  t=O2, u=O1:      t00aa, t110aa, t11ab
-  ! 5. t=V,  u=O1  and  t=O1, u=V:       t00aa, t110aa, t11ab  (loop over virtual V)
-  ! 6. t=V,  u=O2  and  t=O2, u=V:       t00aa, t110aa, t11ab  (loop over virtual V)
-  ! 7. t!=u, both virtual:                t00aa, t110aa, t11ab  (double loop over V)
-  ! 8. t!=u, both core:                   t00aa, t110aa, t11ab  (double loop over C)
+  ! t00aa  has singlet-triplet dimensions: t00aa(ns,nt,:,:).
+  ! t110aa and t11ab are triplet-triplet objects: t110aa(nt,nt,:,:),
+  ! t11ab(nt,nt,:,:). They must not depend on ns.
   !
   use precision, only: dp
   implicit none
 
-  real(kind=dp), intent(in)  :: bvec_s(nocca*(nbf-noccb), ns)  ! singlet Davidson vectors
-  real(kind=dp), intent(in)  :: bvec_t(nocca*(nbf-noccb), nt)  ! triplet Davidson vectors
-  integer,       intent(in)  :: nocca                     ! alpha occupied MOs
-  integer,       intent(in)  :: noccb                     ! beta  occupied MOs (= nocca-2)
-  integer,       intent(in)  :: nbf                       ! total MOs
-  integer,       intent(in)  :: ns, nt                    ! number of singlet/triplet states
+  real(kind=dp), intent(in)  :: bvec_s(nocca*(nbf-noccb), ns)
+  real(kind=dp), intent(in)  :: bvec_t(nocca*(nbf-noccb), nt)
+  integer,       intent(in)  :: nocca, noccb, nbf, ns, nt
 
-  ! Output: TDMs indexed as (state_bra, state_ket, t, u)
   real(kind=dp), intent(out) :: t00aa (ns, nt, nbf, nbf)
-  real(kind=dp), intent(out) :: t110aa(ns, nt, nbf, nbf)
-  real(kind=dp), intent(out) :: t11ab (ns, nt, nbf, nbf)
+  real(kind=dp), intent(out) :: t110aa(nt, nt, nbf, nbf)
+  real(kind=dp), intent(out) :: t11ab (nt, nt, nbf, nbf)
 
-  ! Local: preprocessed Davidson vectors
-  real(kind=dp), allocatable :: xs(:,:), xt(:,:)   ! (xvec_dim, ns/nt)
+  real(kind=dp), allocatable :: xs(:,:), xt(:,:)
 
-  integer :: xvec_dim   ! = nocca * noccb  = nocca * (nocca-2) ... wait
-
-  ! Orbital labels
-  integer :: iV   ! = nocca + 1           first virtual
-  integer :: iO2  ! = nocca               second open-shell
-  integer :: iO1  ! = nocca - 1           first open-shell
-  integer :: iC   ! = nocca - 2           last core
-
-  ! Special flat indices in Davidson vector
+  integer :: xvec_dim
+  integer :: iV, iO2, iO1, iC
   integer :: ijLR1, ijG, ijD, ijLR2
-
-  ! Loop variables
   integer :: ist, jst, i, it, iu
   integer :: ijiO1, ijiO2, ijO1a, ijO2a
   integer :: iO1a, jO1a, iO2a, jO2a
@@ -416,42 +461,25 @@ subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
   real(kind=dp), parameter :: half  = 0.5_dp
   real(kind=dp), parameter :: sqrt2 = 1.0_dp / sqrt(2.0_dp)
 
-  ! -----------------------------------------------------------------
-  ! Step 1: orbital labels and special flat indices
-  ! -----------------------------------------------------------------
   iV   = nocca + 1
   iO2  = nocca
   iO1  = nocca - 1
   iC   = nocca - 2
 
-  ! xvec_dim = nocca * noccb, where noccb = nocca - 2
-  ! flat index: ij = (j - noccb - 1)*nocca + i
-  !   i = 1..nocca  (occupied alpha)
-  !   j = noccb+1..nbf  (open + virtual alpha, i.e. O1, O2, V1, V2, ...)
   xvec_dim = size(bvec_s, 1)
 
-  ! Special OO slots (using noccb = nocca-2):
-  ijLR1 = (iO1 - noccb - 1)*nocca + iO1   ! = (nocca-1-noccb-1)*nocca + nocca-1
-  ijG   = (iO1 - noccb - 1)*nocca + iO2   ! = (nocca-1-noccb-1)*nocca + nocca
-  ijD   = (iO2 - noccb - 1)*nocca + iO1   ! = (nocca  -noccb-1)*nocca + nocca-1
-  ijLR2 = (iO2 - noccb - 1)*nocca + iO2   ! = (nocca  -noccb-1)*nocca + nocca
+  ijLR1 = (iO1 - noccb - 1)*nocca + iO1
+  ijG   = (iO1 - noccb - 1)*nocca + iO2
+  ijD   = (iO2 - noccb - 1)*nocca + iO1
+  ijLR2 = (iO2 - noccb - 1)*nocca + iO2
 
-  ! -----------------------------------------------------------------
-  ! Step 2: preprocess Davidson vectors into xs, xt
-  ! -----------------------------------------------------------------
   allocate(xs(xvec_dim, ns), xt(xvec_dim, nt))
 
-  ! Singlet xs: copy bvec_s, but slot ijLR2 is not stored ->
-  ! reconstruct as xs(ijLR2) = -xs(ijLR1)  (minus sign, eq. S8 in SI)
   do ist = 1, ns
     xs(:, ist) = bvec_s(:, ist)
     xs(ijLR2, ist) = -bvec_s(ijLR1, ist)
   end do
 
-  ! Triplet xt: copy bvec_t, but:
-  !   xt(ijLR2) = +xt(ijLR1)  (plus sign, eq. S9 in SI)
-  !   xt(ijG)   = 0           (G slot is huge/unphysical in bvec_t)
-  !   xt(ijD)   = 0           (D slot is huge/unphysical in bvec_t)
   do jst = 1, nt
     xt(:, jst) = bvec_t(:, jst)
     xt(ijLR2, jst) =  bvec_t(ijLR1, jst)
@@ -459,28 +487,16 @@ subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
     xt(ijD,   jst) = 0.0_dp
   end do
 
-! -----------------------------------------------------------------
-  ! Step 3: compute TDM blocks
-  ! -----------------------------------------------------------------
-
   t00aa  = 0.0_dp
   t110aa = 0.0_dp
   t11ab  = 0.0_dp
 
-  ! --- Block 1: diagonal t=u (all orbitals) ---
-  ! Only t110aa is nonzero: T110aa(I,J,t,t) = <T_I|a+_{t,a} a_{t,a}|T_J>
-  ! Physically: "orbital t is occupied in both states" contribution.
-  ! Formula:
-  !   sum_{i=1}^{nC} [ Xt(i->O1,I) * Xt(i->O1,J) + Xt(i->O2,I) * Xt(i->O2,J) ]
-  !   + Xt(LR1,I) * Xt(LR1,J)
-  ! t00aa = 0, t11ab = 0 for all diagonal elements.
-
-  do ist = 1, ns
+  ! Diagonal t=u block. Only triplet-triplet TDMs are nonzero.
+  do ist = 1, nt
     do jst = 1, nt
       do iu = 1, nbf
         it = iu
-        t110aa(ist, jst, it, iu) = 0.0_dp
-        do i = 1, noccb              ! i = 1..nC (core)
+        do i = 1, noccb
           ijiO1 = (iO1 - noccb - 1)*nocca + i
           ijiO2 = (iO2 - noccb - 1)*nocca + i
           t110aa(ist, jst, it, iu) = t110aa(ist, jst, it, iu) &
@@ -491,154 +507,129 @@ subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
           + xt(ijLR1, ist) * xt(ijLR1, jst)
       end do
     end do
-  end do  
-  
-  ! --- Block 2a: t=iC, u=iO1 ---
-  ! The flat index for excitation iC->O1 in the Davidson vector:
-  !   ijiO1 = (iO1 - noccb - 1)*nocca + iC
+  end do
 
+  ! Core-open blocks: singlet-triplet part.
   do ist = 1, ns
     do jst = 1, nt
       ijiO1 = (iO1 - noccb - 1)*nocca + iC
       ijiO2 = (iO2 - noccb - 1)*nocca + iC
-      t00aa (ist, jst, iO1, iC) = -half  * xs(ijLR1, ist) * xt(ijiO1, jst) &
-                                  - sqrt2 * xs(ijD,   ist) * xt(ijiO2, jst)
+      t00aa(ist, jst, iO1, iC) = -half  * xs(ijLR1, ist) * xt(ijiO1, jst) &
+                                  -sqrt2 * xs(ijD,   ist) * xt(ijiO2, jst)
+      t00aa(ist, jst, iC, iO1) = -half  * xs(ijiO1, ist) * xt(ijLR1, jst)
+      t00aa(ist, jst, iO2, iC) = -sqrt2 * xs(ijG,   ist) * xt(ijiO1, jst) &
+                                  +half  * xs(ijLR2, ist) * xt(ijiO2, jst)
+      t00aa(ist, jst, iC, iO2) = -half  * xs(ijiO2, ist) * xt(ijLR2, jst)
+    end do
+  end do
+
+  ! Core-open blocks: triplet-triplet part.
+  do ist = 1, nt
+    do jst = 1, nt
+      ijiO1 = (iO1 - noccb - 1)*nocca + iC
+      ijiO2 = (iO2 - noccb - 1)*nocca + iC
       t110aa(ist, jst, iO1, iC) = -half  * xt(ijLR1, ist) * xt(ijiO1, jst)
       t11ab (ist, jst, iO1, iC) = +sqrt2 * xt(ijLR1, ist) * xt(ijiO1, jst)
-    end do
-  end do
-
-  ! --- Block 2b: t=iC, u=iO1 ---
-  do ist = 1, ns
-    do jst = 1, nt
-      ijiO1 = (iO1 - noccb - 1)*nocca + iC
-      t00aa (ist, jst, iC, iO1) = -half  * xs(ijiO1, ist) * xt(ijLR1, jst)
       t110aa(ist, jst, iC, iO1) = -half  * xt(ijiO1, ist) * xt(ijLR1, jst)
       t11ab (ist, jst, iC, iO1) = +sqrt2 * xt(ijiO1, ist) * xt(ijLR1, jst)
-    end do
-  end do
-
-  ! --- Block 3a: t=iO2, u=iC ---
-  do ist = 1, ns
-    do jst = 1, nt
-      ijiO1 = (iO1 - noccb - 1)*nocca + iC
-      ijiO2 = (iO2 - noccb - 1)*nocca + iC
-      t00aa (ist, jst, iO2, iC) = -sqrt2 * xs(ijG,   ist) * xt(ijiO1, jst) &
-                                  + half  * xs(ijLR2, ist) * xt(ijiO2, jst)
       t110aa(ist, jst, iO2, iC) = -half  * xt(ijLR2, ist) * xt(ijiO2, jst)
       t11ab (ist, jst, iO2, iC) = +sqrt2 * xt(ijLR2, ist) * xt(ijiO2, jst)
-    end do
-  end do
-
-  ! --- Block 3b: t=iC, u=iO2 ---
-  do ist = 1, ns
-    do jst = 1, nt
-      ijiO2 = (iO2 - noccb - 1)*nocca + iC
-      t00aa (ist, jst, iC, iO2) = -half  * xs(ijiO2, ist) * xt(ijLR2, jst)
       t110aa(ist, jst, iC, iO2) = -half  * xt(ijiO2, ist) * xt(ijLR2, jst)
       t11ab (ist, jst, iC, iO2) = +sqrt2 * xt(ijiO2, ist) * xt(ijLR1, jst)
     end do
   end do
 
-! --- Block 4a: t=iO1, u=iO2 ---
-  ! sum over all core i: ijiO1=(iO1-noccb-1)*nocca+i, ijiO2=(iO2-noccb-1)*nocca+i
-  ! plus OO special slots G, LR1
-  ! plus sum over virtual a: ijO2a=(a-noccb-1)*nocca+iO2, ijO1a=(a-noccb-1)*nocca+iO1
+  ! Open-open blocks: singlet-triplet part.
   do ist = 1, ns
     do jst = 1, nt
-      t00aa (ist, jst, iO2, iO1) = 0.0_dp
-      t110aa(ist, jst, iO2, iO1) = 0.0_dp
-      t11ab (ist, jst, iO2, iO1) = 0.0_dp
       do i = 1, noccb
         ijiO1 = (iO1 - noccb - 1)*nocca + i
         ijiO2 = (iO2 - noccb - 1)*nocca + i
-        t00aa (ist, jst, iO2, iO1) = t00aa (ist, jst, iO2, iO1) &
-          - half  * xs(ijiO1, ist) * xt(ijiO2, jst)
-        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
-          + half  * xt(ijiO1, ist) * xt(ijiO2, jst)
-        t11ab (ist, jst, iO2, iO1) = t11ab (ist, jst, iO2, iO1) &
-          - sqrt2 * xt(ijiO1, ist) * xt(ijiO2, jst)
+        t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
+          - half * xs(ijiO1, ist) * xt(ijiO2, jst)
+        t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
+          - half * xs(ijiO2, ist) * xt(ijiO1, jst)
       end do
       t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
         - sqrt2 * xs(ijG, ist) * xt(ijLR1, jst)
+      t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
+        - sqrt2 * xs(ijD, ist) * xt(ijLR2, jst)
       do i = 1, nbf - nocca
         ijO2a = (nocca + i - noccb - 1)*nocca + iO2
         ijO1a = (nocca + i - noccb - 1)*nocca + iO1
-        t00aa (ist, jst, iO2, iO1) = t00aa (ist, jst, iO2, iO1) &
-          - half  * xs(ijO2a, ist) * xt(ijO1a, jst)
-        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
-          - half  * xt(ijO2a, ist) * xt(ijO1a, jst)
-        t11ab (ist, jst, iO2, iO1) = t11ab (ist, jst, iO2, iO1) &
-          - sqrt2 * xt(ijO2a, ist) * xt(ijO1a, jst)
+        t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
+          - half * xs(ijO2a, ist) * xt(ijO1a, jst)
+        t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
+          - half * xs(ijO1a, ist) * xt(ijO2a, jst)
       end do
     end do
   end do
 
-  ! --- Block 4b: t=iO1, u=iO2 ---
-  do ist = 1, ns
+  ! Open-open blocks: triplet-triplet part.
+  do ist = 1, nt
     do jst = 1, nt
-      t00aa (ist, jst, iO1, iO2) = 0.0_dp
-      t110aa(ist, jst, iO1, iO2) = 0.0_dp
-      t11ab (ist, jst, iO1, iO2) = 0.0_dp
       do i = 1, noccb
         ijiO1 = (iO1 - noccb - 1)*nocca + i
         ijiO2 = (iO2 - noccb - 1)*nocca + i
-        t00aa (ist, jst, iO1, iO2) = t00aa (ist, jst, iO1, iO2) &
-          - half  * xs(ijiO2, ist) * xt(ijiO1, jst)
+        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
+          + half * xt(ijiO1, ist) * xt(ijiO2, jst)
+        t11ab(ist, jst, iO2, iO1) = t11ab(ist, jst, iO2, iO1) &
+          - sqrt2 * xt(ijiO1, ist) * xt(ijiO2, jst)
         t110aa(ist, jst, iO1, iO2) = t110aa(ist, jst, iO1, iO2) &
-          + half  * xt(ijiO2, ist) * xt(ijiO1, jst)
-        t11ab (ist, jst, iO1, iO2) = t11ab (ist, jst, iO1, iO2) &
+          + half * xt(ijiO2, ist) * xt(ijiO1, jst)
+        t11ab(ist, jst, iO1, iO2) = t11ab(ist, jst, iO1, iO2) &
           - sqrt2 * xt(ijiO2, ist) * xt(ijiO1, jst)
       end do
-      t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
-        - sqrt2 * xs(ijD, ist) * xt(ijLR2, jst)
       do i = 1, nbf - nocca
-        ijO1a = (nocca + i - noccb - 1)*nocca + iO1
         ijO2a = (nocca + i - noccb - 1)*nocca + iO2
-        t00aa (ist, jst, iO1, iO2) = t00aa (ist, jst, iO1, iO2) &
-          - half  * xs(ijO1a, ist) * xt(ijO2a, jst)
+        ijO1a = (nocca + i - noccb - 1)*nocca + iO1
+        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
+          - half * xt(ijO2a, ist) * xt(ijO1a, jst)
+        t11ab(ist, jst, iO2, iO1) = t11ab(ist, jst, iO2, iO1) &
+          - sqrt2 * xt(ijO2a, ist) * xt(ijO1a, jst)
         t110aa(ist, jst, iO1, iO2) = t110aa(ist, jst, iO1, iO2) &
-          - half  * xt(ijO1a, ist) * xt(ijO2a, jst)
-        t11ab (ist, jst, iO1, iO2) = t11ab (ist, jst, iO1, iO2) &
+          - half * xt(ijO1a, ist) * xt(ijO2a, jst)
+        t11ab(ist, jst, iO1, iO2) = t11ab(ist, jst, iO1, iO2) &
           - sqrt2 * xt(ijO1a, ist) * xt(ijO2a, jst)
       end do
     end do
   end do
 
-
-  ! --- Blocks 5 & 6: t=V, u=O1/O2 and t=O1/O2, u=V (loop over virtual) ---
+  ! Virtual-open blocks: singlet-triplet part.
   do ist = 1, ns
     do jst = 1, nt
-      do it = iV, nbf    ! loop over virtual orbitals
+      do it = iV, nbf
         ijO1a = (it - noccb - 1)*nocca + iO1
         ijO2a = (it - noccb - 1)*nocca + iO2
-
-        ! Block 5a: t=it(V), u=iO1
-        t00aa (ist, jst, it, iO1) = - sqrt2 * xs(ijG,   ist) * xt(ijO2a, jst) &
-                                    - half   * xs(ijLR2, ist) * xt(ijO1a, jst)
-        t110aa(ist, jst, it, iO1) = + half   * xt(ijLR2, ist) * xt(ijO1a, jst)
-        t11ab (ist, jst, it, iO1) = + sqrt2  * xt(ijLR1, ist) * xt(ijO1a, jst)
-
-        ! Block 5b: t=iO1, u=it(V)
-        t00aa (ist, jst, iO1, it) = - half   * xs(ijO1a, ist) * xt(ijLR2, jst)
-        t110aa(ist, jst, iO1, it) = + half   * xt(ijO1a, ist) * xt(ijLR2, jst)
-        t11ab (ist, jst, iO1, it) = + sqrt2  * xt(ijO1a, ist) * xt(ijLR1, jst)
-
-        ! Block 6a: t=it(V), u=iO2
-        t00aa (ist, jst, it, iO2) = + half   * xs(ijLR1, ist) * xt(ijO2a, jst) &
-                                    - sqrt2  * xs(ijD,   ist) * xt(ijO1a, jst)
-        t110aa(ist, jst, it, iO2) = + half   * xt(ijLR1, ist) * xt(ijO2a, jst)
-        t11ab (ist, jst, it, iO2) = + sqrt2  * xt(ijLR2, ist) * xt(ijO2a, jst)
-
-        ! Block 6b: t=iO2, u=it(V)
-        t00aa (ist, jst, iO2, it) = - half   * xs(ijO2a, ist) * xt(ijLR1, jst)
-        t110aa(ist, jst, iO2, it) = + half   * xt(ijO2a, ist) * xt(ijLR1, jst)
-        t11ab (ist, jst, iO2, it) = + sqrt2  * xt(ijO2a, ist) * xt(ijLR1, jst)
+        t00aa(ist, jst, it, iO1) = -sqrt2 * xs(ijG,   ist) * xt(ijO2a, jst) &
+                                    -half  * xs(ijLR2, ist) * xt(ijO1a, jst)
+        t00aa(ist, jst, iO1, it) = -half  * xs(ijO1a, ist) * xt(ijLR2, jst)
+        t00aa(ist, jst, it, iO2) = +half  * xs(ijLR1, ist) * xt(ijO2a, jst) &
+                                    -sqrt2 * xs(ijD,   ist) * xt(ijO1a, jst)
+        t00aa(ist, jst, iO2, it) = -half  * xs(ijO2a, ist) * xt(ijLR1, jst)
       end do
     end do
   end do
 
-  ! --- Block 7: t!=u, both virtual ---
+  ! Virtual-open blocks: triplet-triplet part.
+  do ist = 1, nt
+    do jst = 1, nt
+      do it = iV, nbf
+        ijO1a = (it - noccb - 1)*nocca + iO1
+        ijO2a = (it - noccb - 1)*nocca + iO2
+        t110aa(ist, jst, it, iO1) = +half  * xt(ijLR2, ist) * xt(ijO1a, jst)
+        t11ab (ist, jst, it, iO1) = +sqrt2 * xt(ijLR1, ist) * xt(ijO1a, jst)
+        t110aa(ist, jst, iO1, it) = +half  * xt(ijO1a, ist) * xt(ijLR2, jst)
+        t11ab (ist, jst, iO1, it) = +sqrt2 * xt(ijO1a, ist) * xt(ijLR1, jst)
+        t110aa(ist, jst, it, iO2) = +half  * xt(ijLR1, ist) * xt(ijO2a, jst)
+        t11ab (ist, jst, it, iO2) = +sqrt2 * xt(ijLR2, ist) * xt(ijO2a, jst)
+        t110aa(ist, jst, iO2, it) = +half  * xt(ijO2a, ist) * xt(ijLR1, jst)
+        t11ab (ist, jst, iO2, it) = +sqrt2 * xt(ijO2a, ist) * xt(ijLR1, jst)
+      end do
+    end do
+  end do
+
+  ! Off-diagonal virtual-virtual blocks.
   do ist = 1, ns
     do jst = 1, nt
       do iu = iV, nbf
@@ -648,15 +639,32 @@ subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
           jO1a = (it - noccb - 1)*nocca + iO1
           iO2a = (iu - noccb - 1)*nocca + iO2
           jO2a = (it - noccb - 1)*nocca + iO2
-          t00aa (ist, jst, it, iu) = - half  * (xs(iO1a,ist)*xt(jO1a,jst) + xs(iO2a,ist)*xt(jO2a,jst))
-          t110aa(ist, jst, it, iu) = + half  * (xt(iO1a,ist)*xt(jO1a,jst) + xt(iO2a,ist)*xt(jO2a,jst))
-          t11ab (ist, jst, it, iu) = + sqrt2 * (xt(iO1a,ist)*xt(jO1a,jst) + xt(iO2a,ist)*xt(jO2a,jst))
+          t00aa(ist, jst, it, iu) = -half * (xs(iO1a, ist)*xt(jO1a, jst) &
+                                            + xs(iO2a, ist)*xt(jO2a, jst))
         end do
       end do
     end do
   end do
 
-  ! --- Block 8: t!=u, both core ---
+  do ist = 1, nt
+    do jst = 1, nt
+      do iu = iV, nbf
+        do it = iV, nbf
+          if (iu == it) cycle
+          iO1a = (iu - noccb - 1)*nocca + iO1
+          jO1a = (it - noccb - 1)*nocca + iO1
+          iO2a = (iu - noccb - 1)*nocca + iO2
+          jO2a = (it - noccb - 1)*nocca + iO2
+          t110aa(ist, jst, it, iu) = +half  * (xt(iO1a, ist)*xt(jO1a, jst) &
+                                              + xt(iO2a, ist)*xt(jO2a, jst))
+          t11ab (ist, jst, it, iu) = +sqrt2 * (xt(iO1a, ist)*xt(jO1a, jst) &
+                                              + xt(iO2a, ist)*xt(jO2a, jst))
+        end do
+      end do
+    end do
+  end do
+
+  ! Off-diagonal core-core blocks.
   do ist = 1, ns
     do jst = 1, nt
       do iu = 1, noccb
@@ -666,20 +674,32 @@ subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
           jiO1 = (iO1 - noccb - 1)*nocca + it
           iiO2 = (iO2 - noccb - 1)*nocca + iu
           jiO2 = (iO2 - noccb - 1)*nocca + it
-          t00aa (ist, jst, it, iu) = - half  * (xs(iiO1,ist)*xt(jiO1,jst) + xs(iiO2,ist)*xt(jiO2,jst))
-          t110aa(ist, jst, it, iu) = + half  * (xt(iiO1,ist)*xt(jiO1,jst) + xt(iiO2,ist)*xt(jiO2,jst))
-          t11ab (ist, jst, it, iu) = + sqrt2 * (xt(iiO1,ist)*xt(jiO1,jst) + xt(iiO2,ist)*xt(jiO2,jst))
+          t00aa(ist, jst, it, iu) = -half * (xs(iiO1, ist)*xt(jiO1, jst) &
+                                            + xs(iiO2, ist)*xt(jiO2, jst))
         end do
       end do
     end do
   end do
 
-  
-  ! -----------------------------------------------------------------
-  ! Step 4: cleanup
-  ! -----------------------------------------------------------------
+  do ist = 1, nt
+    do jst = 1, nt
+      do iu = 1, noccb
+        do it = 1, noccb
+          if (iu == it) cycle
+          iiO1 = (iO1 - noccb - 1)*nocca + iu
+          jiO1 = (iO1 - noccb - 1)*nocca + it
+          iiO2 = (iO2 - noccb - 1)*nocca + iu
+          jiO2 = (iO2 - noccb - 1)*nocca + it
+          t110aa(ist, jst, it, iu) = +half  * (xt(iiO1, ist)*xt(jiO1, jst) &
+                                              + xt(iiO2, ist)*xt(jiO2, jst))
+          t11ab (ist, jst, it, iu) = +sqrt2 * (xt(iiO1, ist)*xt(jiO1, jst) &
+                                              + xt(iiO2, ist)*xt(jiO2, jst))
+        end do
+      end do
+    end do
+  end do
+
   deallocate(xs, xt)
- 
 
 end subroutine compute_tdm
 
@@ -687,7 +707,7 @@ end subroutine compute_tdm
 subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
                                ns, nt, nbf, hsoc)
   !
-  ! Assemble the full 1e SOC Hamiltonian in the basis of MRSF spin-states.
+  ! Assemble the full SOC Hamiltonian in the basis of MRSF spin-states.
   !
   ! Basis ordering (GAMESS convention):
   !   rows/cols 1..ns              : singlets S_I
@@ -728,8 +748,8 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   implicit none
  
   real(kind=dp),    intent(in)  :: t00aa (ns, nt, nbf, nbf)
-  real(kind=dp),    intent(in)  :: t110aa(ns, nt, nbf, nbf)   ! NEW
-  real(kind=dp),    intent(in)  :: t11ab (ns, nt, nbf, nbf)   ! NEW
+  real(kind=dp),    intent(in)  :: t110aa(nt, nt, nbf, nbf)
+  real(kind=dp),    intent(in)  :: t11ab (nt, nt, nbf, nbf)
   real(kind=dp),    intent(in)  :: lx_mo(nbf, nbf)
   real(kind=dp),    intent(in)  :: ly_mo(nbf, nbf)
   real(kind=dp),    intent(in)  :: lz_mo(nbf, nbf)
@@ -1011,5 +1031,29 @@ subroutine print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energ
 
 end subroutine print_soc_eigenvalues
 
+! 2e part
+
+subroutine ao2mo_full(Xao, Xmo, mo, nbf)
+  implicit none
+  integer, intent(in) :: nbf
+  real(kind=dp), intent(in) :: Xao(nbf,nbf), mo(nbf,nbf)
+  real(kind=dp), intent(out) :: Xmo(nbf,nbf)
+  real(kind=dp), allocatable :: tmp(:,:)
+
+  allocate(tmp(nbf,nbf))
+  ! tmp = Xao * C
+  call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, Xao, nbf, mo, nbf, 0.0_dp, tmp, nbf)
+  ! Xmo = C^T * tmp
+  call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, tmp, nbf, 0.0_dp, Xmo, nbf)
+  deallocate(tmp)
+end subroutine ao2mo_full
+
+
+
+
+
+
 
 end module soc_mrsf_mod
+
+
