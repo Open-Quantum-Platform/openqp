@@ -32,6 +32,21 @@ contains
     call soc_mrsf(inf)
   end subroutine soc_mrsf_C
 
+!> @brief Compute spin-orbit coupling corrections for MRSF-TDDFT states
+!> @details
+!>  Driver for the MRSF SOC calculation. Performs the following steps:
+!>    1. Compute 1e SOC AO integrals <mu|Z*L/r^3|nu> via Breit-Pauli operator
+!>    2. Transform AO integrals to MO basis
+!>    3. Optionally add 2e mean-field SOC correction (controlled by infos%control%soc_2e)
+!>    4. Build spin-dependent transition density matrices from MRSF Davidson vectors
+!>    5. Assemble the SOC Hamiltonian in the (singlet + 3*triplet) basis
+!>    6. Diagonalize to obtain SOC-corrected adiabatic energies and eigenvectors
+!>
+!>  State ordering in the SOC basis follows the GAMESS convention:
+!>    indices 1..ns        -> singlet states S0..S(ns-1)
+!>    indices ns+1..ns+3nt -> triplet Ms sublevels T1(Ms=-1,0,+1), T2(...), ...
+!>
+!> @param[inout] infos  OQP information struct (basis, atoms, control, tagarray, log)
   subroutine soc_mrsf(infos)
     use io_constants, only: iw
     use types, only: information
@@ -262,6 +277,7 @@ contains
     call diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
     deallocate(hsoc)
     call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
+    call print_soc_decomposition(iw, eval, evec, ns, nt) 
     deallocate(eval, evec)
         deallocate(lx_12e_mo, ly_12e_mo, lz_12e_mo)
 
@@ -275,6 +291,20 @@ contains
   end subroutine soc_mrsf
 
 
+!> @brief Compute 1-electron SOC AO integrals using the Breit-Pauli operator
+!> @details
+!>  Evaluates <mu|Z_A * L_A / r_A^3|nu> for each atom A, where L_A is the
+!>  angular momentum operator relative to nucleus A and Z_A is the (effective)
+!>  nuclear charge. Loops over shell pairs (ii >= jj) and accumulates into
+!>  packed lower-triangular arrays. Results are normalised with basis function norms.
+!>
+!>  Note: currently uses bare nuclear charges (ze = Z). Slater effective charges
+!>  (ZEFF_321G) are available but commented out.
+!>
+!> @param[inout] infos   OQP information struct (basis, atoms)
+!> @param[out]   lx_ao   Lx AO integrals, packed lower-triangular (nbf*(nbf+1)/2)
+!> @param[out]   ly_ao   Ly AO integrals, packed lower-triangular
+!> @param[out]   lz_ao   Lz AO integrals, packed lower-triangular
 subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
   use basis_tools,       only: basis_set, bas_norm_matrix
   use mod_1e_primitives, only: comp_soc_int1_prim, update_triang_matrix
@@ -342,6 +372,17 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
 
 end subroutine compute_soc_ao
 
+!> @brief Print a packed SOC AO integral matrix in GAMESS-compatible format
+!> @details
+!>  Writes the lower-triangular AO integral matrix to unit iw in blocks of
+!>  NCOLS=5 columns, with basis function labels and row indices, matching
+!>  the layout used in GAMESS for direct comparison.
+!>
+!> @param[in]  iw     Log file unit
+!> @param[in]  comp   Component label ('LX', 'LY', or 'LZ')
+!> @param[in]  mat    Packed lower-triangular AO matrix (nbf*(nbf+1)/2)
+!> @param[in]  nbf    Number of basis functions
+!> @param[in]  basis  Basis set descriptor (used for bf_label)
 subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
   use basis_tools, only: basis_set
   use precision,   only: dp
@@ -386,6 +427,16 @@ subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
 
 end subroutine print_soc_ao_gamess
 
+!> @brief Transform a packed antisymmetric SOC AO matrix to the MO basis
+!> @details
+!>  Unpacks the lower-triangular AO integral into a full antisymmetric matrix
+!>  (L(nu,mu) = -L(mu,nu), diagonal = 0), then applies the two-step MO
+!>  transformation: tmp = L_AO * C, L_MO = C^T * tmp via DGEMM.
+!>
+!> @param[in]  l_tri  Packed lower-triangular AO integrals (nbf*(nbf+1)/2)
+!> @param[out] l_mo   Full MO integral matrix (nbf x nbf)
+!> @param[in]  cmo    MO coefficient matrix C(mu,p) (nbf x nbf)
+!> @param[in]  nbf    Number of basis functions
 subroutine ao2mo_soc(l_tri, l_mo, cmo, nbf)
   use precision, only: dp
   implicit none
@@ -427,16 +478,28 @@ subroutine ao2mo_soc(l_tri, l_mo, cmo, nbf)
 
 end subroutine ao2mo_soc
 
+!> @brief Build spin-dependent transition density matrices from MRSF Davidson vectors
+!> @details
+!>  Constructs the TDMs needed to assemble the SOC Hamiltonian matrix elements:
+!>    t00aa(I,J,t,u)  -- singlet I / triplet J TDM in the alpha-alpha spin sector
+!>    t110aa(I,J,t,u) -- triplet I / triplet J, Ms=0 component (alpha-alpha)
+!>    t11ab(I,J,t,u)  -- triplet I / triplet J, Ms=+1/-1 component (alpha-beta)
+!>
+!>  The Davidson eigenvectors are first reordered to the Ms-resolved form required
+!>  by the GAMESS SOC convention (see compute_soc_matrix for the state ordering).
+!>  The open-shell ROHF reference determines the active MO indices (iO1, iO2, iC).
+!>
+!> @param[in]  bvec_s   Singlet Davidson vectors (xvec_dim x ns)
+!> @param[in]  bvec_t   Triplet Davidson vectors (xvec_dim x nt)
+!> @param[in]  nocca    Number of alpha occupied MOs
+!> @param[in]  noccb    Number of beta  occupied MOs
+!> @param[in]  nbf      Number of basis functions
+!> @param[in]  ns, nt   Number of singlet/triplet states
+!> @param[out] t00aa    Singlet-triplet TDM (ns x nt x nbf x nbf)
+!> @param[out] t110aa   Triplet-triplet TDM, Ms=0 sector (nt x nt x nbf x nbf)
+!> @param[out] t11ab    Triplet-triplet TDM, Ms=±1 sector (nt x nt x nbf x nbf)
 subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
                        t00aa, t110aa, t11ab)
-  !
-  ! Compute spin-dependent transition density matrices (TDMs) between
-  ! MRSF singlet and triplet states from Davidson vectors.
-  !
-  ! t00aa  has singlet-triplet dimensions: t00aa(ns,nt,:,:).
-  ! t110aa and t11ab are triplet-triplet objects: t110aa(nt,nt,:,:),
-  ! t11ab(nt,nt,:,:). They must not depend on ns.
-  !
   use precision, only: dp
   implicit none
 
@@ -866,31 +929,24 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
  
 end subroutine compute_soc_matrix
 
-!> @brief Diagonalize the SOC Hamiltonian matrix
+!> @brief Diagonalize the SOC Hamiltonian and return adiabatic eigenvalues/eigenvectors
 !> @details
-!>  Builds the full SOC+excitation energy matrix in cm-1:
-!>    H_diag(I,I) = (E_I - E_0) * ha2wn   (non-SOC excitation energies on diagonal)
-!>    H_diag(I,J) = hsoc(I,J) * dfac       (SOC off-diagonal)
-!>  Then calls LAPACK zheev to get eigenvalues (adiabatic SOC-corrected energies)
-!>  and eigenvectors (mixing coefficients), printed in GAMESS format.
-!> @brief Diagonalize the SOC Hamiltonian and print adiabatic eigenvalues/eigenvectors
-!> @details
-!>  Builds the full (ns+3*nt) x (ns+3*nt) matrix:
-!>    diagonal  = excitation energies in cm-1 (relative to lowest state)
-!>    off-diag  = H_SOC elements scaled by dfac
-!>  Diagonalizes via LAPACK zheev and writes results to iw.
+!>  Builds the full (ns+3*nt) x (ns+3*nt) complex Hermitian matrix:
+!>    diagonal  = (E_I - E_0) * ha2wn  [excitation energies in cm-1]
+!>    off-diag  = hsoc(I,J)  * dfac    [SOC couplings in cm-1]
+!>  where E_0 = min(singlet_energies(1), triplet_energies(1)).
+!>  Diagonalizes via LAPACK zheev. The eigenvectors evec are returned in
+!>  column-major order and used for the state decomposition print.
 !>
-!>  State ordering in hsoc:
-!>    rows/cols 1..ns        -> singlets S0..S(ns-1)
-!>    rows/cols ns+1..ns+3nt -> triplets T1(Ms=-1,0,+1)..Tnt(Ms=-1,0,+1)
+!>  Note: uses explicit integer(4) arguments for LP64 LAPACK compatibility.
 !>
-!> @param[in]  iw                  log file unit
-!> @param[in]  hsoc                1e SOC Hamiltonian in Hartree
+!> @param[in]  hsoc                SOC Hamiltonian matrix in Hartree (ns+3*nt x ns+3*nt)
 !> @param[in]  singlet_energies    MRSF singlet excitation energies (Hartree, rel. ROHF)
 !> @param[in]  triplet_energies    MRSF triplet excitation energies (Hartree, rel. ROHF)
 !> @param[in]  e_ref               ROHF reference energy (Hartree)
-!> @param[in]  ns, nt              number of singlet/triplet states
-!> @param[out] eval                adiabatic SOC eigenvalues (cm-1, rel. lowest state)
+!> @param[in]  ns, nt              Number of singlet/triplet states
+!> @param[out] eval                Adiabatic SOC eigenvalues (cm-1, rel. lowest state)
+!> @param[out] evec                SOC eigenvectors (complex, column = adiabat)
 subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
   use precision, only: dp
   implicit none
@@ -958,8 +1014,21 @@ end subroutine diag_soc
 
 
 
+!> @brief Print SOC adiabatic eigenvalues and eigenvector decomposition table
+!> @details
+!>  Writes two blocks to iw:
+!>    1. Eigenvalue table: state index, energy in cm-1, Hartree, and eV
+!>    2. Eigenvector table: mixing coefficients printed in blocks of 5 columns;
+!>       components with |c|^2 < 0.01 are suppressed for readability.
+!>
+!> @param[in]  iw                 Log file unit
+!> @param[in]  eval               Adiabatic SOC eigenvalues (cm-1)
+!> @param[in]  evec               SOC eigenvectors (complex, column = adiabat)
+!> @param[in]  singlet_energies   MRSF singlet excitation energies (Hartree)
+!> @param[in]  triplet_energies   MRSF triplet excitation energies (Hartree)
+!> @param[in]  e_ref              ROHF reference energy (Hartree)
+!> @param[in]  ns, nt             Number of singlet/triplet states
 subroutine print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
-  !> @brief Print SOC adiabatic eigenvalues and eigenvector mixing table
   use precision, only: dp
   implicit none
 
@@ -1033,6 +1102,16 @@ end subroutine print_soc_eigenvalues
 
 ! 2e part
 
+!> @brief Transform a full (non-antisymmetric) AO matrix to the MO basis
+!> @details
+!>  Two-step MO transformation via DGEMM: tmp = Xao * C, Xmo = C^T * tmp.
+!>  Used for the 2e mean-field SOC correction where the AO matrix is symmetric
+!>  (unlike the antisymmetric 1e angular momentum integrals handled by ao2mo_soc).
+!>
+!> @param[in]  Xao  Full AO matrix (nbf x nbf)
+!> @param[out] Xmo  Full MO matrix (nbf x nbf)
+!> @param[in]  mo   MO coefficient matrix C(mu,p) (nbf x nbf)
+!> @param[in]  nbf  Number of basis functions
 subroutine ao2mo_full(Xao, Xmo, mo, nbf)
   implicit none
   integer, intent(in) :: nbf
@@ -1048,12 +1127,103 @@ subroutine ao2mo_full(Xao, Xmo, mo, nbf)
   deallocate(tmp)
 end subroutine ao2mo_full
 
+!> @brief Print per-state SOC decomposition: energy and top-3 diabatic contributions
+!> @details
+!>  For each adiabatic SOC state, computes the diabatic weights |c_I|^2 from
+!>  the eigenvector matrix and identifies the three largest contributions.
+!>  Output format (one line per state):
+!>    index   cm-1   eV   Label1 (wt%)   Label2 (wt%)   Label3 (wt%)
+!>  where labels are S<n> for singlets and T<n>(Ms) for triplet sublevels.
+!>  Contributions below 0.1% are suppressed.
+!>
+!> @param[in]  iw    Log file unit
+!> @param[in]  eval  Adiabatic SOC eigenvalues (cm-1)
+!> @param[in]  evec  SOC eigenvectors (complex, column = adiabat)
+!> @param[in]  ns    Number of singlet states
+!> @param[in]  nt    Number of triplet states
+subroutine print_soc_decomposition(iw, eval, evec, ns, nt)
+  use precision, only: dp
+  implicit none
 
+  integer,          intent(in) :: iw, ns, nt
+  real(kind=dp),    intent(in) :: eval(ns+3*nt)
+  complex(kind=dp), intent(in) :: evec(ns+3*nt, ns+3*nt)
+
+  integer, parameter :: ntop = 3
+  integer  :: nstate, ist, i, j, ms_idx
+  real(kind=dp) :: weight(ns+3*nt), tmpmod
+  real(kind=dp), parameter :: ha2wn = 219474.6_dp
+  real(kind=dp), parameter :: ha2ev = 27.211386245988_dp
+  integer  :: idx(ntop)
+  real(kind=dp) :: best(ntop)
+  character(len=10) :: label
+
+  nstate = ns + 3*nt
+
+  write(iw,'(/,11x,65("-"))')
+  write(iw,'(11x,a)') 'SOC state decomposition (top 3 diabatic contributions)'
+  write(iw,'(11x,65("-"))')
+  write(iw,'(/,2x,a,4x,a,8x,a,8x,a)') 'State', 'cm-1', 'eV', 'Composition'
+  write(iw,*)
+
+  do ist = 1, nstate
+    ! compute weights
+    do i = 1, nstate
+      tmpmod = real(evec(i,ist))**2 + aimag(evec(i,ist))**2
+      weight(i) = tmpmod
+    end do
+
+    ! find top-3 by simple selection
+    idx  = 0
+    best = -1.0_dp
+    do j = 1, ntop
+      do i = 1, nstate
+        if (weight(i) > best(j)) then
+          if (j == 1 .or. all(idx(1:j-1) /= i)) then
+            best(j) = weight(i)
+            idx(j)  = i
+          end if
+        end if
+      end do
+      ! mask already chosen
+      if (idx(j) > 0) weight(idx(j)) = -1.0_dp
+    end do
+
+    ! restore weights for next iteration
+    do i = 1, nstate
+      tmpmod = real(evec(i,ist))**2 + aimag(evec(i,ist))**2
+      weight(i) = tmpmod
+    end do
+
+    write(iw,'(2x,i4,2x,f10.2,2x,f10.6,2x)', advance='no') &
+      ist, eval(ist), eval(ist)/ha2wn * ha2ev
+
+    do j = 1, ntop
+      i = idx(j)
+      if (i == 0) exit
+      if (weight(i) < 0.001_dp) exit
+      if (i <= ns) then
+        write(label,'(a1,i0)') 'S', i-1
+      else
+        ms_idx = mod(i - ns - 1, 3)
+        select case(ms_idx)
+          case(0); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(-1)'
+          case(1); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '( 0)'
+          case(2); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(+1)'
+        end select
+      end if
+      write(iw,'(a8,a,f5.1,a,a)', advance='no') &
+        trim(label), ' (', weight(i)*100.0_dp, '%)', '   '
+    end do
+    write(iw,*)
+  end do
+
+  write(iw,'(11x,65("-"))')
+
+end subroutine print_soc_decomposition
 
 
 
 
 
 end module soc_mrsf_mod
-
-

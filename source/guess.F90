@@ -216,7 +216,7 @@ end subroutine get_ab_initio_density
 !   Permute `a'` set to maximum overlap with `b` set
     unused(:nmo) = .true.
     do i = 1, nmo
-      j = maxloc(abs(tmp(:nmo,i)), dim=1)!, mask=unused)
+      j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused)
       iwrk(i) = j
       unused(j) = .false.
     end do

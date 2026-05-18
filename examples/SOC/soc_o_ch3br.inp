@@ -10,6 +10,7 @@ basis = 6-31g*
 functional = bhhlyp
 method = tdhf
 runtype = soc
+soc_2e = 1
 
 [guess]
 save_mol = True
@@ -27,5 +28,3 @@ nstate = 6
 multiplicity = 1
 conv = 1e-7
 
-[properties]
-soc = mrsf

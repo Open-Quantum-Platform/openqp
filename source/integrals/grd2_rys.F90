@@ -507,6 +507,16 @@ contains
 
   end subroutine compute_rys_rw
 
+  !> @brief Compute Rys quadrature roots and weights for the 2e SOC integrals
+  !> @details
+  !>  Wrapper around the Rys root/weight evaluator for the SOC case.
+  !>  The number of roots is increased by one relative to the standard 2e case
+  !>  to accommodate the higher-order numerator arising from the angular momentum
+  !>  operator: ⟨μν|r^{-3} L|λσ⟩ ~ ⟨∂μ|r^{-1}|∂σ⟩.
+  !>
+  !> @param[inout] gdat   SOC integral data structure (nroots is read from gdat)
+  !> @param[out]   rwv    Roots and weights array (2*nroots x ng)
+  !> @param[in]    numg   Number of primitive pairs in the current batch
   subroutine soc2e_compute_rys_rw(gdat, rwv, numg)
     use rys, only: rys_root_t
     implicit none
@@ -928,6 +938,19 @@ end associate
 
   end subroutine apply_translation_invariance
 
+!> @brief Allocate and initialise the 2e SOC integral data structure
+!> @details
+!>  Extends gdat_init for the 2e mean-field SOC case. Allocates the standard
+!>  Rys quadrature work arrays (b00, b01, b10, c00, d00, f00, rw, abv, PQ, PB, QD,
+!>  gnm, gnkl, gijkl, dij, dkl) plus fi and fj which hold the derivative-shifted
+!>  integrals needed by the SOC recurrence (fi = d/dA phi_i, fj = d/dB phi_j).
+!>  Sizes are determined by maxang and gdat%nder.
+!>
+!> @param[inout] gdat    SOC integral data structure (soc2e_int_data_t)
+!> @param[in]    maxang  Maximum angular momentum in the basis
+!> @param[in]    dtol    Distance screening threshold
+!> @param[in]    dabcut  |AB|^2 cut-off for shell-pair prescreening
+!> @param[out]   stat    Allocate status (0 = success)
 subroutine soc2e_gdat_init(gdat, maxang, dtol, dabcut, stat)
 
     implicit none
@@ -972,6 +995,8 @@ subroutine soc2e_gdat_init(gdat, maxang, dtol, dabcut, stat)
 
   end subroutine soc2e_gdat_init
 
+!> @brief Deallocate all arrays in the 2e SOC integral data structure
+!> @param[inout] gdat  SOC integral data structure to be cleaned
 subroutine soc2e_gdat_clean(gdat)
 
     implicit none
@@ -1004,6 +1029,14 @@ subroutine soc2e_gdat_clean(gdat)
   end subroutine soc2e_gdat_clean
 
 
+!> @brief Store shell quartet (i,j,k,l) metadata in the SOC integral data structure
+!> @details
+!>  Records angular momenta, AO offsets, and contraction degrees for the four
+!>  shells of the current quartet. Called once per quartet before soc2e_rys_compute.
+!>
+!> @param[inout] gdat   SOC integral data structure
+!> @param[in]    basis  Basis set descriptor
+!> @param[in]    i,j,k,l  Shell indices of the current quartet (1-based)
 subroutine soc2e_gdat_set_ids(gdat, basis, i, j, k, l)
 
     implicit none
@@ -1029,6 +1062,14 @@ subroutine soc2e_gdat_set_ids(gdat, basis, i, j, k, l)
 
   end subroutine soc2e_gdat_set_ids
 
+  !> @brief Set shell parameters for a given quartet in the SOC integral data structure
+  !> @details
+  !>  Mirrors gdat_set_ids but with a SOC-specific shell ordering constraint:
+  !>  shells i,j (bra) may be swapped to put lower-am shell first, and similarly
+  !>  for k,l (ket), but the bra-ket pair is never exchanged because the derivative
+  !>  recurrence (d/dA phi_i) acts only on the bra side.
+  !>
+  !> @param[inout] gdat  SOC integral data structure
   subroutine soc2e_set_shells(gdat)
 
     implicit none
@@ -1042,6 +1083,15 @@ subroutine soc2e_gdat_set_ids(gdat, basis, i, j, k, l)
 
   end subroutine soc2e_set_shells
 
+  !> @brief Prepare Cartesian index tables for the 2e SOC integral recurrence
+  !> @details
+  !>  Builds the ijklxyz index array that maps each Cartesian component (nx,ny,nz)
+  !>  of each shell function to a flat position in the integral array. Also sets
+  !>  nroots (number of Rys roots) from the total angular momentum of the quartet.
+  !>  Analogous to prepare_xyz_ids but extended to include the derivative index
+  !>  dimension needed for d/dA phi_i and d/dB phi_j.
+  !>
+  !> @param[inout] gdat  SOC integral data structure
   subroutine soc2e_prepare_xyz_ids(gdat)
 
     implicit none
@@ -1084,6 +1134,22 @@ subroutine soc2e_gdat_set_ids(gdat, basis, i, j, k, l)
 
   end subroutine soc2e_prepare_xyz_ids
 
+!> @brief Compute 2e SOC AO integrals for a shell quartet (i,j,k,l) via Rys quadrature
+!> @details
+!>  Outer loop over primitive pairs on the bra (ij) and ket (kl) sides.
+!>  For each pair batch, calls:
+!>    soc2e_compute_rys_rw   -- Rys roots and weights
+!>    compute_coefficients   -- recursion coefficients (b00, b01, b10, c00, d00, f00)
+!>    compute_xyz_p0q0       -- base integrals [p0|q0] in gnm
+!>    compute_soc2e_xyz      -- apply derivative recurrence to get Cartesian ints
+!>    compute_soc2e_ao       -- contract with density and accumulate into wao
+!>  Prescreening is applied via the Schwarz bound gmax * dabmax.
+!>
+!> @param[inout] gdat   SOC integral data structure (set for the current quartet)
+!> @param[in]    ppairs Shell-pair list with pre-screened primitive pairs
+!> @param[in]    gmax   Maximum Schwarz estimate over all ket pairs (for screening)
+!> @param[in]    den    ROHF density matrix (nbf x nbf)
+!> @param[inout] wao    2e SOC AO contribution matrix (3 x nbf x nbf); accumulated
 subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
 
     use int2_pairs, only: int2_pair_storage
@@ -1211,6 +1277,19 @@ subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
 
 
 
+!> @brief Evaluate 2e SOC integrals for one primitive batch after Rys setup
+!> @details
+!>  Called from soc2e_rys_compute after Rys roots/weights and recursion
+!>  coefficients are ready in gdat. Evaluates the base integrals [p0|q0]
+!>  via compute_xyz_p0q0, then calls compute_soc2e_xyz (derivative recurrence)
+!>  and compute_soc2e_ao (density contraction and accumulation into wao).
+!>
+!> @param[inout] gdat              SOC integral data structure
+!> @param[in]    den               ROHF density matrix (nbf x nbf)
+!> @param[inout] wao               2e SOC AO matrix (3 x nbf x nbf)
+!> @param[in]    ng                Number of primitive pairs in this batch
+!> @param[in]    nmax, mmax        Maximum angular momentum orders for the recursion
+!> @param[in]    nimax..nlmax      Per-shell Cartesian dimension bounds
 subroutine compute_soc2e_ints(gdat, den, wao, &
                   ng, nmax, mmax, nimax, njmax, nkmax, nlmax)
 
@@ -1270,6 +1349,20 @@ call compute_soc2e_ao(gdat, ng, gdat%nroots*3, gdat%ijklxyz, &
   end subroutine compute_soc2e_ints
 
 
+!> @brief Apply derivative recurrence to build Cartesian 2e SOC integrals
+!> @details
+!>  Uses the relation d/dA phi_i(A) = i*phi_{i-1}(A) - 2*alpha*phi_{i+1}(A)
+!>  (identical to GAMESS XYZ2E, routines XINTI/XINTJ) to build the fi and fj
+!>  arrays from the base integrals g0. These are subsequently contracted in
+!>  compute_soc2e_ao to form the mean-field SOC AO matrix element.
+!>
+!> @param[inout] gdat             SOC integral data structure
+!> @param[inout] g                Base Cartesian integral array (in/out)
+!> @param[in]    ng, nr3          Batch size and Cartesian xyz dimension
+!> @param[in]    nimax..nlmax     Per-shell Cartesian dimension bounds
+!> @param[in]    aai, aaj         Exponents for shells i and j
+!> @param[out]   fi               d/dA integrals (derivative on shell i side)
+!> @param[out]   fj               d/dB integrals (derivative on shell j side)
 subroutine compute_soc2e_xyz(gdat, g, &
        ng, nr3, nimax, njmax, nkmax, nlmax, &
        aai, aaj, fi, fj)
@@ -1333,6 +1426,24 @@ subroutine compute_soc2e_xyz(gdat, g, &
 
 
 !  subroutine compute_soc2e_ao(gdat, ngnr, ijklxyz, g0, fi, fj, den, wao)
+!> @brief Contract 2e SOC integrals with the density matrix and accumulate into wao
+!> @details
+!>  Implements the mean-field contraction of the two-electron SOC integrals:
+!>    W_x(mu,nu) += sum_{lambda,sigma} P(lambda,sigma) * [d_y phi_mu  | r^{-1} | d_z phi_sigma] * D(nu,lambda)
+!>                                                      - [d_z phi_mu  | r^{-1} | d_y phi_sigma] * D(nu,lambda)
+!>  (and cyclic permutations for Wy, Wz). The derivative integrals fi (on shell i)
+!>  and fj (on shell j) are provided by compute_soc2e_xyz. The routine exploits
+!>  8-fold permutation symmetry (IJ <-> JI, KL <-> LK, IJ <-> KL) to reduce cost.
+!>
+!> @param[inout] gdat    SOC integral data structure (shell quartet metadata)
+!> @param[in]    ng      Number of primitive pairs in this batch
+!> @param[in]    nr3     xyz dimension of the integral arrays (3 for x,y,z)
+!> @param[in]    ijklxyz Cartesian index table from soc2e_prepare_xyz_ids
+!> @param[in]    g0      Base (unshifted) Cartesian integrals
+!> @param[in]    fi      Derivative integrals d/dA on shell i
+!> @param[in]    fj      Derivative integrals d/dB on shell j
+!> @param[in]    den     ROHF density matrix (nbf x nbf)
+!> @param[inout] wao     2e SOC AO matrix (3 x nbf x nbf); Lx,Ly,Lz accumulated
 subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
     implicit none
     integer, intent(in) :: ng, nr3
@@ -1455,6 +1566,25 @@ sol = -sol
 !    write(*,'(a,4i4,3es14.6)') 'SOC ao: am=', gdat%am, sol(1), sol(2), sol(3)
   end subroutine compute_soc2e_ao
 
+  !> @brief Top-level driver for the 2e mean-field SOC correction
+  !> @details
+  !>  Computes the mean-field two-electron spin-orbit coupling matrix in the AO basis:
+  !>    W_x(mu,nu) = sum_{lambda,sigma} P(lambda,sigma) *
+  !>                 [<d_y phi_mu | r^{-1} | d_z phi_sigma> - <d_z phi_mu | r^{-1} | d_y phi_sigma>]
+  !>  (and cyclic permutations for Wy, Wz). The result is stored in wao(3, nbf, nbf).
+  !>
+  !>  Procedure:
+  !>    1. Build shell-pair list with Schwarz prescreening (cutoff = 1e-10)
+  !>    2. Compute Schwarz estimates for screening
+  !>    3. Loop over shell quartet (ij, kl); for each quartet call soc2e_rys_compute
+  !>
+  !>  The physical identity used is:
+  !>    <mu | Z * L_x / r^3 | nu>  =  <d_y mu | 1/r | d_z nu> - <d_z mu | 1/r | d_y nu>
+  !>
+  !> @param[inout] infos  OQP information struct (basis, atoms, MPI info)
+  !> @param[in]    basis  Basis set descriptor
+  !> @param[in]    den    ROHF density matrix (nbf x nbf)
+  !> @param[inout] wao    Output: 2e SOC AO matrix (3 x nbf x nbf), zero-initialised by caller
   subroutine soc2e_driver(infos, basis, den, wao)
 
     use types, only: information
