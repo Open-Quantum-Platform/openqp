@@ -50,12 +50,15 @@ class OQPTester:
             total_cpus (int): Total number of CPUs to use.
             omp_threads (int): Number of OMP threads per test.
         """
-        oqp_root = os.environ.get('OPENQP_ROOT')
+        try:
+            oqp_root = os.environ["OPENQP_ROOT"]
+        except KeyError:
+            oqp_root =  os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
         if not oqp_root:
             raise EnvironmentError("OPENQP_ROOT environment variable is not set")
 
         self.base_test_dir = base_test_dir or os.path.join(oqp_root,
-                                                           'examples')
+                                                           'share/examples')
         self.mpi_manager = mpi_manager
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.output_dir = os.path.abspath(f"{output_dir}_{timestamp}")

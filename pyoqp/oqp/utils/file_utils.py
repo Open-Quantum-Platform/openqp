@@ -15,10 +15,14 @@ def try_basis(basis, path=None, fallback='6-31g'):
 
     if path:
         basis_path = path
-    elif os.environ["OPENQP_ROOT"]:
-        basis_path = os.environ["OPENQP_ROOT"] + "/share/basis_sets"
+#    elif os.environ["OPENQP_ROOT"]:
+#        basis_path = os.environ["OPENQP_ROOT"] + "/share/basis_sets"
     else:
-        basis_path = '.'
+        try:
+            os.environ["OPENQP_ROOT"]
+        except KeyError:
+            os.environ["OPENQP_ROOT"] = os.path.abspath(os.path.dirname(__file__), os.pardir)
+        basis_path = os.environ["OPENQP_ROOT"] + "/share/basis_sets"
 
     if not basis:
         basis = fallback
