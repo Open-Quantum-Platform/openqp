@@ -1,0 +1,3 @@
+include README.md LICENSE
+recursive-include basis_sets *
+recursive-include examples *

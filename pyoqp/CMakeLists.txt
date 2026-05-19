@@ -3,7 +3,7 @@ project(pyoqp)
 find_package(Python3
     REQUIRED
     COMPONENTS
-    Interpreter Development
+    #    Interpreter Development
 )
 #find_package(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR} EXACT REQUIRED)
 #find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
@@ -103,4 +103,8 @@ INSTALL(
     DIRECTORY ${CMAKE_SOURCE_DIR}/basis_sets/
     DESTINATION share/basis_sets
     FILES_MATCHING PATTERN "*.basis"
+)
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/examples/
+    DESTINATION share/examples
 )

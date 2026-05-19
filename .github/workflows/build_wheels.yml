@@ -1,0 +1,42 @@
+name: Build wheels
+
+on:
+  push:
+    branches: [pypi]
+  pull_request:
+    branches: [pypi]
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel
+
+      - name: Build wheels
+        env:
+          CIBW_PLATFORM: linux
+          CIBW_SKIP: "*-musllinux_*"
+          CIBW_BEFORE_ALL_LINUX: "yum install -y openblas-devel gcc-gfortran"
+          CIBW_ENVIRONMENT: "CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH'"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "LD_LIBRARY_PATH=\"oqp/lib:$LD_LIBRARY_PATH\" auditwheel repair -w {dest_dir} {wheel}"
+
+        run: cibuildwheel --output-dir dist
+
+        #      - name: Upload wheels as artifacts
+        #        uses: actions/upload-artifact@v4
+        #        with:
+        #          name: wheels-${{ matrix.os }}
+        #          path: wheelhouse/*.whl

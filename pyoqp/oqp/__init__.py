@@ -13,7 +13,8 @@ except ModuleNotFoundError:
 try:
     os.environ["OPENQP_ROOT"]
 except KeyError:
-    exit('\nPyQOP: cannot find environment variable $OPENQP_ROOT\n')
+    os.environ["OPENQP_ROOT"] = os.path.abspath(os.path.dirname(__file__))
+#    exit('\nPyQOP: cannot find environment variable $OPENQP_ROOT\n')
 
 try:
     int(os.environ['OMP_NUM_THREADS'])
