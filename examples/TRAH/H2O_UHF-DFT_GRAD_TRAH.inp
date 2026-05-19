@@ -1,0 +1,30 @@
+# DFT/cc-pVDZ/B3LYPV1R/UHF/ENERGY of H2O
+# For Open-Shell systems we use UHF, when we use UHF, we have to choose multiplicity=3. 
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation, 
+# we dont need [tdhf] section. 
+[input]
+system=
+   8   0.000000000   0.000000000   0.000000000
+   1   0.000000000  -0.757000000   0.587000000
+   1   0.000000000   0.757000000   0.587000000 
+charge=0
+runtype=grad
+basis=cc-pVDZ
+functional=B3LYPV1R
+method=hf
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+multiplicity=3
+type=uhf
+converger_type=trah
+conv=1e-8
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+

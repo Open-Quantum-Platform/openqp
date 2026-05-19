@@ -14,9 +14,11 @@ from oqp.utils.mpi_utils import MPIManager, MPIPool
 
 try:
     from dftd4.interface import DampingParam, DispersionModel
+
     dftd_installed = 'dftd4'
 except ModuleNotFoundError:
     from oqp.utils.matrix import DampingParam, DispersionModel
+
     dftd_installed = 'not installed'
 
 from oqp.library.frequency import normal_mode, thermal_analysis
@@ -43,6 +45,7 @@ class LastStep(Calculator):
     OQP last step single point calculation class
 
     """
+
     def __init__(self, mol, param=None):
         super().__init__(mol)
 
@@ -73,7 +76,8 @@ class LastStep(Calculator):
         natom = len(atoms)
         if self.do_d4:
             model = DispersionModel(atoms, coordinates)
-            res = model.get_dispersion(DampingParam(method=self.functional),
+            func_for_d4 = 'bhlyp' if self.functional.lower() in ('bhhlyp') else self.functional
+            res = model.get_dispersion(DampingParam(method=func_for_d4),
                                        grad=do_grad)
 
             energy = res['energy']
@@ -138,7 +142,8 @@ class LastStep(Calculator):
 
         # export data
         if self.export:
-            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list), title='GRADIENT', fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list), title='GRADIENT',
+                      fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -169,7 +174,7 @@ class SinglePoint(Calculator):
         self.init_it = mol.config['scf']['init_it']
         self.init_basis = mol.config['scf']['init_basis']
         self.init_library = mol.config['scf']['init_library']
-        self.init_conv =  mol.config['scf']['init_conv']
+        self.init_conv = mol.config['scf']['init_conv']
         self.conv = mol.config['scf']['conv']
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
@@ -180,6 +185,7 @@ class SinglePoint(Calculator):
             'tda': oqp.tdhf_energy,
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
+            'umrsf': oqp.tdhf_umrsf_energy,
         }
 
         # initialize state sign
@@ -189,6 +195,7 @@ class SinglePoint(Calculator):
         oqp.library.set_basis(self.mol)
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
+
     def _project_basis(self):
         oqp.library.project_basis(self.mol)
 
@@ -199,19 +206,18 @@ class SinglePoint(Calculator):
         if self.init_basis == 'none':
             init_basis = target_basis
             init_library = target_library
-        else :
+        else:
             init_basis = self.init_basis
             init_library = self.init_library
 
         init_converger = self.mol.config['scf']['init_converger']
-        target_converger = self.mol.config['scf']['soscf_type']
-        self.mol.data.set_scf_soscf_type(init_converger)
+        target_converger = self.mol.config['scf']['converger_type']
+        self.mol.data.set_scf_converger_type(init_converger)
         self.mol.data.set_scf_conv(self.init_conv)
 
         if init_basis:
             self.mol.config['input']['basis'] = init_basis
             self.mol.config['input']['library'] = init_library
-
 
         self.mol.data.set_scf_maxit(self.init_it)
 
@@ -265,18 +271,17 @@ class SinglePoint(Calculator):
             self.mol.config['input']['library'] = target_library
             oqp.library.set_basis(self.mol)
 
-
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
         self.mol.config['input']['functional'] = self.functional
-        self.mol.data.set_scf_soscf_type(target_converger)
+        self.mol.data.set_scf_converger_type(target_converger)
         self.mol.data.set_dft_functional(self.functional)
         self.mol.data.set_scf_type(self.scf_type)
         self.mol.data.set_scf_maxit(self.scf_maxit)
         self.mol.data.set_scf_conv(self.conv)
         self.mol.data.set_mol_multiplicity(self.scf_mult)
         self._project_basis()
-#        oqp.library.update_guess(self.mol)
+        #        oqp.library.update_guess(self.mol)
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps done, switching back to normal SCF', section='scf')
 
@@ -318,16 +323,16 @@ class SinglePoint(Calculator):
     # Fock matrix is in AO here, so we need to shift it in Fortran after transform it into MO
     def ixcore_shift(self):
         from oqp import ffi
-        ixcore= self.mol.config["tdhf"]["ixcore"]
+        ixcore = self.mol.config["tdhf"]["ixcore"]
         if ixcore == "-1":  # if default
             return
         ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
         # shift MO energies 
         noccB = self.mol.data['nelec_B']
         tmp = self.mol.data["OQP::E_MO_A"]
-        for i in range(noccB+1):  # up to HOMO-1
+        for i in range(noccB + 1):  # up to HOMO-1
             if i not in ixcore_array:
-                tmp[i-1] = -100000  # shift the MO energy down
+                tmp[i - 1] = -100000  # shift the MO energy down
 
     def energy(self, do_init_scf=True):
         # check method
@@ -350,8 +355,8 @@ class SinglePoint(Calculator):
 
     def swapmo(self):
         # swap MO energy and AO coefficient depending on user's request
-        swapmo= self.mol.config["guess"]["swapmo"]
-        if swapmo:   # if not default (empty)
+        swapmo = self.mol.config["guess"]["swapmo"]
+        if swapmo:  # if not default (empty)
             swapmo_array = [int(x.strip()) for x in swapmo.split(',')]
 
             # Initial MO energy and coefficient
@@ -359,8 +364,8 @@ class SinglePoint(Calculator):
             og_vec = self.mol.data["OQP::VEC_MO_A"]
             # It only takes pairs. If it is not pair, it will be ignored.
             for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
-                og_val[[i-1, j-1]] = og_val[[j-1, i-1]]
-                og_vec[[i-1, j-1]] = og_vec[[j-1, i-1]]
+                og_val[[i - 1, j - 1]] = og_val[[j - 1, i - 1]]
+                og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
 
     def reference(self, do_init_scf=True):
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
@@ -374,6 +379,8 @@ class SinglePoint(Calculator):
         self.swapmo()
 
         scf_flag = False
+        itr = 0
+        energy = 0
         for itr in range(self.forced_attempt):
             self.scf()
             energy = [self.mol.mol_energy.energy]
@@ -386,25 +393,16 @@ class SinglePoint(Calculator):
                 break
             else:
                 dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
-
+                self.mol.data.set_scf_converger_type(self.alternative_scf)
+                self.mol.data.set_sd_scf(False)
+                dump_log(self.mol, title=f'PyOQP: Enable the {self.alternative_scf} in SCF to improve convergence.', section='input')
 
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
-
-            if self.alternative_scf:
-                dump_log(self.mol, title='PyOQP: Enable the SOSCF flag in SCF to improve convergence.', section='input')
-                self.mol.data.set_scf_soscf_type(1)
-                self.scf()
-                energy = [self.mol.mol_energy.energy]
-                scf_flag = self.mol.mol_energy.SCF_converged
-                if scf_flag:
-                    dump_log(self.mol, title='PyOQP: SCF energy is converged after %s attempts' % (itr + 1), section='')
-
-
             if self.exception is True:
                 raise SCFnotConverged()
             else:
-                exit()
+                raise RuntimeError("SCF did not converge — stopping current run.")
 
         if self.save_molden:
             guess_file = self.pack_molden_name('scf', self.scf_type, self.functional)
@@ -440,7 +438,7 @@ class SinglePoint(Calculator):
 
     def tddft(self):
         # check td type
-        if self.td not in ['rpa', 'tda', 'sf', 'mrsf']:
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 
         # do TDDFT
@@ -462,6 +460,7 @@ class Gradient(Calculator):
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]
         self.nstate = mol.config['tdhf']['nstate']
+        self.td_prop = mol.config['properties']['td_prop']
 
         self.zvec_func = {
             'rpa': oqp.tdhf_z_vector,
@@ -531,6 +530,9 @@ class Gradient(Calculator):
                     raise ZVnotConverged()
                 else:
                     exit()
+            if self.td_prop == True:
+                oqp.electric_moments_excited(self.mol)
+                oqp.mulliken_excited(self.mol)
 
             self.grad_func[self.td](self.mol)
             grad = self.mol.get_grad().reshape((self.natom, 3))
@@ -692,6 +694,7 @@ class Hessian(Calculator):
             shutil.rmtree(dir_hess)
 
         return hessian, flags
+
 
 def grad_wrapper(key_dict):
     start_time = time.time()
@@ -981,7 +984,8 @@ class NACME(BasisOverlap):
         dump_log(self.mol, title='PyOQP: phase corrected state overlap (s_ij)', section='nacm', info=state_overlap)
         dump_log(self.mol, title='PyOQP: phase corrected derivative coupling (d_ij)', section='nacm', info=dc_matrix)
         dump_log(self.mol, title='PyOQP: state energy gap (e_ji)', section='nacm', info=gap)
-        dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm', info=nac_matrix)
+        dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm',
+                 info=nac_matrix)
 
         # save corrected data
         self.mol.save_data()
@@ -1055,7 +1059,7 @@ class NAC(Calculator):
                          title='PyOQP: Final Gradient',
                          section='grad',
                          info={'el': grads, 'd4': np.zeros_like(g1), 'grad_list': [i, j]}
-                        )
+                         )
                 dump_log(self.mol,
                          title='PyOQP: Branching Plane Info %s - %s' % (i, j),
                          section='bp',
@@ -1088,13 +1092,13 @@ class NAC(Calculator):
         sy = np.sum(s * y)
 
         th = ((sx / pitch) ** 2 + (sy / pitch) ** 2) ** 0.5
-        ts = np.arctan(sy/sx)
+        ts = np.arctan(sy / sx)
 
         peak = th ** 2 / (1 - tilt ** 2) * (1 - tilt * np.cos(2 * ts))
-        bifu = (th ** 2 / (4 * tilt ** 2)) ** (1/3) *\
+        bifu = (th ** 2 / (4 * tilt ** 2)) ** (1 / 3) * \
                (
-                       ((1 + tilt) * np.cos(ts) ** 2) ** (1/3) +
-                       ((1 - tilt) * np.sin(ts) ** 2) ** (1/3)
+                       ((1 + tilt) * np.cos(ts) ** 2) ** (1 / 3) +
+                       ((1 - tilt) * np.sin(ts) ** 2) ** (1 / 3)
                )
         return x, y, sx, sy, pitch, tilt, peak, bifu
 
@@ -1277,8 +1281,10 @@ def nacme_wrapper(key_dict):
 class SCFnotConverged(Exception):
     pass
 
+
 class TDnotConverged(Exception):
     pass
+
 
 class ZVnotConverged(Exception):
     pass

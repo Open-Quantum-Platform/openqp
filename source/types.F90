@@ -125,14 +125,26 @@ module types
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
-
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
-    ! SOSCF parameters
-    integer(c_int64_t) :: soscf_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
+    ! SOSCF Parameters
+    integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
+    integer(c_int64_t) :: soscf_mode = 0       !0: plane, 1: Stability, 2: Stability+Performance
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
+    ! Opentrustregion Parameter
+    logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
+    logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
+    integer(c_int64_t)     :: trh_sub_solver=0      !< subsystem solver. 0: "davidson", 1 :"jacobi-davidson",2: "tcg" 
+    integer(c_int64_t)     :: trh_nrtv = 1          !< # of random trial vectors for initial subspace
+    real(c_double)         :: trh_r0   = 0.4d0      !< Initial trust-region radius
+    integer(c_int64_t)     :: trh_jd_start = 30     !< Number of micro iterations -> switches to the Jacobi-Davidson method.
+    integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
+    real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
+    real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
+    ! SD parameters
+    logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
@@ -157,6 +169,9 @@ module types
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
     integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
+    integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES)
+    integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
+    logical(c_bool) :: umrsf= .False.      !< UMRSF branch calculations switch in td_mrsf_energy module
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator

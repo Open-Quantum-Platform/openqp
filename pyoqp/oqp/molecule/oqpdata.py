@@ -23,8 +23,9 @@ def iarray(strng):
 
 
 def barray(strng):
-    """Convert array of parameters to list of booleans"""
-    return list(bool(s) for s in strng.split(',')) if strng else ()
+    """Convert comma-separated boolean parameters to a list of booleans."""
+    return [s.strip().lower() in ("true", "t", "1", "yes", ".true.")
+            for s in strng.split(",")] if strng else ()
 
 
 def parray(strng):
@@ -46,7 +47,7 @@ def path(strng):
 OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
-        'basis': {'type': string, 'default': ''},
+        'basis': {'type': string, 'default': '6-31g*'},
         'library': {'type': string, 'default': ''},
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
@@ -61,12 +62,12 @@ OQP_CONFIG_SCHEMA = {
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
-        'swapmo': {'type' : string, 'default' : ''},
+        'swapmo': {'type': string, 'default': ''},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
-        'forced_attempt': {'type': int, 'default': '1'},
+        'forced_attempt': {'type': int, 'default': '2'},
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},
@@ -85,20 +86,31 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
-        'init_scf': {'type': string, 'default': 'no'},
+        'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
         'init_it': {'type': int, 'default': '15'},
-        'init_conv': {'type': float, 'default': '0.001'}, 
-        'init_converger': {'type': int, 'default': '0'},
+        'init_conv': {'type': float, 'default': '0.001'},
+        'init_converger': {'type': string, 'default': 'None'},
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
-        'soscf_type': {'type': int, 'default': '0'},
+        'converger_type': {'type': string, 'default': 'diis'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
+        'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
-        'alternative_scf': {'type': bool, 'default': 'False'},
+        'alternative_scf': {'type': string, 'default': 'trah'},
         'verbose': {'type': int, 'default': '1'},
+        'trh_stab': {'type': bool,  'default': 'False'},
+        'trh_ls': {'type': bool,  'default': 'False'},
+        'trh_sub_solver': {'type': string,   'default': 'davidson'},
+        'trh_nrtv': {'type': int,   'default': '1'},
+        'trh_r0': {'type': float, 'default': '0.4'},
+        'trh_jd_start': {'type': int,   'default': '30'},
+        'trh_nmic': {'type': int,   'default': '50'},
+        'trh_gred': {'type': float, 'default': '0.001'},
+        'trh_lred': {'type': float, 'default': '0.0001'},
     },
+
     'dftgrid': {
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_flag': {'type': bool, 'default': 'False'},
@@ -132,7 +144,9 @@ OQP_CONFIG_SCHEMA = {
         'spc_ovov': {'type': float, 'default': '-1.0'},
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
-        'ixcore': {'type' : string, 'default' : '-1'},
+        'ixcore': {'type': string, 'default': '-1'},
+        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -197,7 +211,7 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
-    'json':{
+    'json': {
             'scf_type': {'type': string, 'default': ''},
             'basis': {'type': string, 'default': ''},
             'library': {'type': string, 'default': ''},
@@ -255,11 +269,22 @@ class OQPData:
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
-            "rstctmo" : "set_scf_rstctmo",
-            "soscf_type": "set_scf_soscf_type",
+            "rstctmo": "set_scf_rstctmo",
+            "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
+            "soscf_mode": "set_scf_soscf_mode",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
+            "trh_stab": "set_trah_stability",
+            "trh_ls": "set_trah_line_search",
+            "trh_sub_solver": "set_subsystem_solver",
+            "trh_nrtv": "set_trah_n_random_trial_vectors",
+            "trh_r0": "set_trah_start_trust_radius",
+            "trh_jd_start": "set_trah_jacobi_davidson_start",
+            "trh_nmic": "set_trah_n_micro",
+            "trh_gred": "set_trah_global_red_factor",
+            "trh_lred": "set_trah_local_red_factor",
+            "sd_scf": "set_sd_scf"
         },
         "dftgrid": {
             "rad_type": "set_dftgrid_rad_type",
@@ -293,7 +318,9 @@ class OQPData:
             "spc_ovov": "set_tdhf_spc_ovov",
             "spc_coov": "set_tdhf_spc_coov",
             "conf_threshold": "set_conf_threshold",
-            "ixcore" : "set_tdhf_ixcore",
+            "ixcore": "set_tdhf_ixcore",
+            "z_solver": "set_tdhf_z_solver",
+            "gmres_dim": "set_tdhf_gmres_dim",
         },
     }
     _typemap = [np.void,
@@ -398,7 +425,7 @@ class OQPData:
             try:
                 _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)
             except Exception as e:
-                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e            
+                raise TypeError("CData pointer is not buffer-backed or dtype mismatch") from e
         else:
             _value = np.array(value)
 
@@ -511,7 +538,7 @@ class OQPData:
         """pfon_cooling_rate """
         self._data.control.pfon_nsmear = pfon_nsmear
 
-    def set_scf_rstctmo(self, rstctmo): 
+    def set_scf_rstctmo(self, rstctmo):
         """restrict MO """
         self._data.control.rstctmo = rstctmo
 
@@ -528,19 +555,34 @@ class OQPData:
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
 
-    def set_scf_soscf_type(self, soscf_type):
-        """Set SOSCF type for SCF convergence:
-            soscf_type (int): SOSCF algorithm type
-                0: SOSCF disabled
-                1: SOSCF only
-                2: SOSCF+DIIS combined mode
+    def set_scf_converger_type(self, converger_type):
+        """Set SCF solver for SCF convergence:
+            converger_type (int): SOSCF algorithm type
+                0: DIIS
+                1: BFGS/SOSCF
+                2: TRAH
         """
-        self._data.control.soscf_type = soscf_type
+        if converger_type == "diis":
+            self._data.control.converger_type = 0
+        elif converger_type == "soscf":
+            self._data.control.converger_type = 1
+        elif converger_type == "trah":
+            self._data.control.converger_type = 2
 
     def set_soscf_lvl_shift(self, soscf_lvl_shift):
         """Reset the orbital Hessian. If it is zero, we don't reset by default.
         """
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
+
+    def set_scf_soscf_mode(self, soscf_mode):
+        """Set the SOSCF mode
+        Parameters:
+            soscf_mode (int):
+                0   : Plane 
+                1   : Stability Improved
+                2   : Stability + Performance
+        """
+        self._data.control.soscf_mode = soscf_mode
 
     def set_scf_soscf_reset_mod(self, soscf_reset_mod):
         """Set the SOSCF Hessian reset mode.
@@ -554,6 +596,71 @@ class OQPData:
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""
         self._data.control.verbose = verbose
+
+    def set_trah_stability(self, flag: bool):
+        """Enable/disable Hessian/eigenspectrum stability analysis before TRAH."""
+        self._data.control.trh_stab = bool(flag)
+
+    def set_trah_line_search(self, flag: bool):
+        """Enable line search within TRAH micro-iterations."""
+        self._data.control.trh_ls = bool(flag)
+
+    def set_subsystem_solver(self, trh_sub_solver) -> None:
+        """
+        Select the TRAH subsystem solver.
+        Valid values:
+          0 : Davidson
+          1 : Jacobi–Davidson
+          2 : TCG
+        """
+        solver_map = {
+            "davidson": 0,
+            "jacobi_davidson": 1,
+            "tcg": 2,
+        }
+        if not isinstance(trh_sub_solver, str):
+            raise TypeError("trh_sub_solver must be a string")
+        key = trh_sub_solver.strip().lower()
+        self._data.control.trh_sub_solver = solver_map[key]
+
+    def set_trah_n_random_trial_vectors(self, n: int):
+        """Number of random trial vectors for initial subspace."""
+        if n < 0:
+            raise ValueError("n_random_trial_vectors must be non-negative")
+        self._data.control.trh_nrtv = int(n)
+
+    def set_trah_start_trust_radius(self, r0: float):
+        """Initial trust-region radius."""
+        if r0 <= 0.0:
+            raise ValueError("start_trust_radius must be > 0")
+        self._data.control.trh_r0 = float(r0)
+
+    def set_trah_jacobi_davidson_start(self, trh_jd_start: int):
+        """
+        Jacobi-Davidson start mode / option.
+        """
+        self._data.control.trh_jd_start = int(trh_jd_start)
+
+    def set_trah_n_micro(self, k: int):
+        """Max micro-iterations per macro step."""
+        if k <= 0:
+            raise ValueError("n_micro must be > 0")
+        self._data.control.trh_nmic = int(k)
+
+    def set_trah_global_red_factor(self, f: float):
+        """Global trust-radius reduction factor (0 < f < 1)."""
+        if not (0.0 < f < 1.0):
+            raise ValueError("global_red_factor must be in (0,1)")
+        self._data.control.trh_gred = float(f)
+
+    def set_trah_local_red_factor(self, f: float):
+        """Local trust-radius reduction factor (0 < f < 1)."""
+        if not (0.0 < f < 1.0):
+            raise ValueError("local_red_factor must be in (0,1)")
+        self._data.control.trh_lred = float(f)
+    def set_sd_scf(self, sd_scf):
+        """prevent running the first SD-SCF calculation"""
+        self._data.control.sd_scf = sd_scf
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
@@ -625,7 +732,7 @@ class OQPData:
         self._data.tddft.spc_coov = spc_coov
 
     def set_tdhf_ixcore(self, ixcore):
-        if ixcore == '-1' :
+        if ixcore == '-1':
             self.ixcore_array = None
             self._data.tddft.ixcore = ffi.NULL
             self._data.tddft.ixcore_len = 0
@@ -634,6 +741,19 @@ class OQPData:
             self.ixcore_array = arr  # keep reference!
             self._data.tddft.ixcore = ffi.cast("int32_t*", ffi.from_buffer(arr))
             self._data.tddft.ixcore_len = arr.size
+
+    def set_tdhf_gmres_dim(self, gmres_dim):
+        """Set the restart dimension of GMRES during z-vector:
+           50 (default)
+        """
+        self._data.tddft.gmres_dim = gmres_dim
+
+    def set_tdhf_z_solver(self, z_solver):
+        """Set z-vector solver type:
+           0: CG (Conjugate Gradient) only
+           1: GMRES (Generalized Minimal Residual)
+        """
+        self._data.tddft.z_solver = z_solver
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
@@ -754,7 +874,10 @@ class OQPData:
         if molecule.control.scftype == 3 and molecule.mol_prop.mult == 1:
             print("WARNING! ROHF + multiplicity = 1 has bugs!")
             print("Do not trust to these results!")
-
+        elif molecule.control.scftype == 2 and molecule.mol_prop.mult == 1:
+            print("WARNING! UHF + multiplicity = 1 has bugs!")
+            print("Do not trust to these results!")
+ 
     def get_basis(self):
         """Get basis set from a molecule"""
         pex = ffi.new('double **')
@@ -845,4 +968,3 @@ def read_system(system):
     mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass
-

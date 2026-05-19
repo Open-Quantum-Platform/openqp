@@ -103,6 +103,25 @@ ExternalProject_Add(libecpint
 		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
+ExternalProject_Add(libopentrustregion
+    PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
+    URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v2.0.0.tar.gz
+    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c 
+    UPDATE_COMMAND ""
+    PATCH_COMMAND
+    UPDATE_COMMAND ""
+    CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/external/install/opentrustregion
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
+        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_TESTS=OFF
+    BINARY_DIR ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}
+    #    INSTALL_DIR ${CMAKE_BINARY_DIR}/external/install/opentrustregion
+    #    STEP_TARGETS build install
+)
+
+set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)
   find_package(Python3 REQUIRED)
   ExternalProject_Add(fprettify

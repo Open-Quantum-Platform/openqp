@@ -1,0 +1,32 @@
+# DFT/6-31G*/BHHLYP/RHF/ENERGY of H2O
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation, 
+# we dont need [tdhf] section. 
+[input]
+system=
+   8   0.000000000   0.000000000   0.000000000
+   1   0.000000000  -0.757000000   0.587000000
+   1   0.000000000   0.757000000   0.587000000 
+charge=0
+runtype=grad
+basis=6-31g*
+functional=bhhlyp
+method=hf
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+type=rhf
+converger_type=trah
+conv=1e-8
+
+[tdhf]
+type=mrsf
+nstate=3
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+

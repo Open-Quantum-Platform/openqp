@@ -16,6 +16,7 @@ typedef struct oqp_handle_t {
     struct control_parameters *control;
     struct mpi_communicator *mpiinfo;
     struct electron_shell *elshell;
+    struct trah_control *trah;
 } oqp_handle_t;
 
 struct Cstring{
@@ -97,6 +98,9 @@ struct dft_parameters {
     double spc_coov;
     int32_t* ixcore;
     int64_t ixcore_len;
+    int64_t z_solver;
+    int64_t gmres_dim;
+    bool umrsf;
 };
 
 struct control_parameters {
@@ -132,11 +136,21 @@ struct control_parameters {
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
-    // SOSCF parameters
-    int64_t   soscf_type;
+    int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   soscf_reset_mod;
+    int64_t   soscf_mode;
     int64_t   verbose;
+    bool      trh_stab;
+    bool      trh_ls;
+    int64_t   trh_sub_solver;
+    int64_t   trh_nrtv;
+    double    trh_r0;
+    int64_t   trh_jd_start;
+    int64_t   trh_nmic;
+    double    trh_gred;
+    double    trh_lred;
+    bool      sd_scf;
 };
 
 struct mpi_communicator {
@@ -199,13 +213,16 @@ void tdhf_sf_z_vector(struct oqp_handle_t *inf);
 void tdhf_sf_gradient(struct oqp_handle_t *inf);
 
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
+void tdhf_umrsf_energy(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
+void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
+void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
 

@@ -199,4 +199,3 @@ for key, value in SYMBOL_MAP_1.items():
 
     if isinstance(key, int):
         SYMBOL_MAP[f'{key:.1f}'] = value
-

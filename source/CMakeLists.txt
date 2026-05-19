@@ -11,9 +11,10 @@ add_subdirectory(dftlib)
 
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
+set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
-add_dependencies(oqp libxc libtagarray libecpint)
-target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
+add_dependencies(oqp libxc libtagarray libecpint libopentrustregion)
+target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva ${OTR_LIB_NAME})
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()
@@ -27,6 +28,9 @@ target_link_directories(oqp PUBLIC    ${CMAKE_BINARY_DIR}/external/libecpint/src
 	                              ${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}/external/Faddeeva)
 target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/libecpint/install/include/libecpint
 			              ${CMAKE_BINARY_DIR}/external/libecpint/install/include)
+target_link_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID})
+target_include_directories(oqp PUBLIC ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID})
+
 set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(ENABLE_OPENMP)
   target_link_libraries(oqp OpenMP::OpenMP_Fortran OpenMP::OpenMP_C OpenMP::OpenMP_CXX)

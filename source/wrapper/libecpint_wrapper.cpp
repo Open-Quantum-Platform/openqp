@@ -1,4 +1,9 @@
-// libecpint_wrapper.cpp
+/**
+ * @file libecpint_c_api.cpp
+ * @brief C ABI wrapper around libecpint::ECPIntegrator for use from Fortran/C.
+ * @author Mohsen Mazaherifar
+ * @date January 2025
+ */
 #include "api.hpp"
 #include <vector>
 #include <iostream>
