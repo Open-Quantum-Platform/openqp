@@ -90,6 +90,11 @@ contains
     logical :: do_2e_soc
     logical, parameter :: debug_soc_prints = .true.
 
+    integer :: nstate_soc
+    real(kind=dp), pointer :: eval_out(:)
+    real(kind=dp), pointer :: evec_re_out(:,:), evec_im_out(:,:)
+    real(kind=dp), pointer :: hsoc_re_out(:,:), hsoc_im_out(:,:)
+
     ! Temporary switch for the two-electron SOC mean-field correction.
 
 
@@ -121,6 +126,8 @@ contains
 
     ns = size(singlet_energies)
     nt = size(triplet_energies)
+
+    nstate_soc = ns + 3*nt
 
     ! Number of alpha/beta occupied MOs, needed for TDM flat index mapping
     nocca = infos%mol_prop%nelec_a
@@ -275,12 +282,39 @@ contains
     allocate(evec(ns + 3*nt, ns + 3*nt), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate eigenvector array', WITH_ABORT)
     call diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
-    deallocate(hsoc)
     call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
     call print_soc_decomposition(iw, eval, evec, ns, nt) 
+
+    call infos%dat%reserve_data(OQP_soc_eval, TA_TYPE_REAL64, &
+        nstate_soc, (/nstate_soc/), comment=OQP_soc_eval_comment)
+    call infos%dat%reserve_data(OQP_soc_evec_re, TA_TYPE_REAL64, &
+        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_re_comment)
+    call infos%dat%reserve_data(OQP_soc_evec_im, TA_TYPE_REAL64, &
+        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_im_comment)
+    call infos%dat%reserve_data(OQP_soc_hsoc_re, TA_TYPE_REAL64, &
+        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_re_comment)
+    call infos%dat%reserve_data(OQP_soc_hsoc_im, TA_TYPE_REAL64, &
+        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_im_comment)
+    
+    call tagarray_get_data(infos%dat, OQP_soc_eval,    eval_out)
+    call tagarray_get_data(infos%dat, OQP_soc_evec_re, evec_re_out)
+    call tagarray_get_data(infos%dat, OQP_soc_evec_im, evec_im_out)
+    call tagarray_get_data(infos%dat, OQP_soc_hsoc_re, hsoc_re_out)
+    call tagarray_get_data(infos%dat, OQP_soc_hsoc_im, hsoc_im_out)
+    
+    eval_out     = eval
+    evec_re_out  = real(evec,  kind=dp)
+    evec_im_out  = aimag(evec)
+    hsoc_re_out  = real(hsoc,  kind=dp)
+    hsoc_im_out  = aimag(hsoc)
+    
+    
+    
+    
     deallocate(eval, evec)
         deallocate(lx_12e_mo, ly_12e_mo, lz_12e_mo)
 
+    deallocate(hsoc)
     if (do_2e_soc) then
         deallocate(lx_2e_mo, ly_2e_mo, lz_2e_mo)
     endif

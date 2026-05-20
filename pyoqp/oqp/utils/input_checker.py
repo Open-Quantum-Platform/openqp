@@ -12,9 +12,9 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "prop", "data",
+    "meci", "mecp", "mep", "ts", "prop", "data", "soc",
 }
-NOT_AVAILABLE_RUNTYPES = {"soc", "neb"}
+NOT_AVAILABLE_RUNTYPES = {"neb"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 
 METHODS = {"hf", "tdhf"}
@@ -738,6 +738,9 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
     if runtype == "nacme":
         _check_nacme(config, report)
 
+    if runtype == "soc":       
+        _check_soc(config, report)
+
     if runtype == "hess":
         _check_hess(config, report)
 
@@ -952,6 +955,51 @@ def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use icoord 0-4 for TS optimization.",
             )
 
+def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    scf_mult = _get(config, "scf", "multiplicity", 1)
+
+    if method != "tdhf":
+        report.add(
+            "ERROR",
+            "input.method",
+            "SOC requires method=tdhf.",
+            value=method,
+            expected="tdhf",
+            action="Set [input] method=tdhf.",
+        )
+
+    if td_type != "mrsf":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "SOC requires tdhf.type=mrsf.",
+            value=td_type,
+            expected="mrsf",
+            action="Set [tdhf] type=mrsf.",
+        )
+
+    if scf_type != "rohf":
+        report.add(
+            "ERROR",
+            "scf.type",
+            "SOC requires an ROHF reference.",
+            value=scf_type,
+            expected="rohf",
+            action="Set [scf] type=rohf.",
+        )
+
+    if scf_mult != 3:
+        report.add(
+            "ERROR",
+            "scf.multiplicity",
+            "SOC requires a triplet ROHF reference (multiplicity=3).",
+            value=scf_mult,
+            expected="3",
+            action="Set [scf] multiplicity=3.",
+        )
 
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))

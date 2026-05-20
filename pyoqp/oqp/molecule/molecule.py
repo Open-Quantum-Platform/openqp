@@ -59,6 +59,11 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
+            'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
+            'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::soc_eval',
+            'OQP::soc_evec_re', 'OQP::soc_evec_im',
+            'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],

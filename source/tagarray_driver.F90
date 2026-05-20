@@ -49,6 +49,11 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
+  character(len=*), parameter, public :: OQP_soc_evec_re = OQP_prefix // "soc_evec_re"
+  character(len=*), parameter, public :: OQP_soc_evec_im = OQP_prefix // "soc_evec_im"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re = OQP_prefix // "soc_hsoc_re"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
@@ -79,6 +84,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
+  character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
+  character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
+  
   character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &

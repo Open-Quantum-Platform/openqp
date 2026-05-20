@@ -97,6 +97,8 @@ def compute_soc(mol):
 
     oqp.soc_mrsf(mol)
 
+    LastStep(mol).compute(mol) 
+
 #    mol.data['OQP::soc_']
 
 
