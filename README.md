@@ -46,7 +46,13 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 git clone https://github.com/Open-Quantum-Platform/openqp.git
 ```
 
-#### Compile
+#### Pip install
+```bash
+cd openqp
+pip install .
+```
+or 
+#### Detailed Compile
 
 ##### OpenMP Support
 
