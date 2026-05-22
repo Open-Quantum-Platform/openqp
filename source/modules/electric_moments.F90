@@ -196,7 +196,7 @@ contains
     write(iw,'(4x,34x,a6,3f15.8)') 'Q_Y', quad(:,2)
     write(iw,'(4x,34x,a6,3f15.8)') 'Q_Z', quad(:,3)
 
-    write(iw,'(/4x,a)') 'electric octoupole (Buckingham*Angstrom):'
+    write(iw,'(/4x,a)') 'electric octupole (Buckingham*Angstrom):'
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxx', oct(XXX)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxy', oct(XXY)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxz', oct(XXZ)
@@ -205,7 +205,7 @@ contains
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xzz', oct(ZZX)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_yyy', oct(YYY)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_yyz', oct(YYZ)
-    write(iw,'(4x,34x,a6,*(F15.8))') 'O_yyz', oct(ZZY)
+    write(iw,'(4x,34x,a6,*(F15.8))') 'O_zzy', oct(ZZY)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_zzz', oct(ZZZ)
 
     close(iw)
@@ -381,7 +381,7 @@ contains
     write(iw,'(4x,34x,a6,3f15.8)') 'Q_Y', quad(:,2)
     write(iw,'(4x,34x,a6,3f15.8)') 'Q_Z', quad(:,3)
 
-    write(iw,'(/4x,a)') 'electric octoupole (Buckingham*Angstrom) - excited state:'
+    write(iw,'(/4x,a)') 'electric octupole (Buckingham*Angstrom) - excited state:'
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxx', oct(XXX)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxy', oct(XXY)
     write(iw,'(4x,34x,a6,*(F15.8))') 'O_xxz', oct(XXZ)
