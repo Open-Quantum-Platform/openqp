@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
 
     steps:
       - name: Checkout Repository
@@ -20,7 +22,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: github.event_name == 'push' && secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != ''
+        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
@@ -46,7 +48,7 @@ jobs:
             .
 
       - name: Verify Docker Image
-        if: github.event_name == 'push' && secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != ''
+        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         run: |
           docker pull openqp/openqp:v1.0
           docker inspect openqp/openqp:v1.0
