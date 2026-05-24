@@ -185,7 +185,8 @@ def main():
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
-    parser.add_argument('--run_tests',
+    parser.add_argument('--run_tests', '--test',
+                        dest='run_tests',
                         metavar='path',
                         help='run tests from a specified folder or:\n'
                              '  all    - Run all tests in examples\n'
