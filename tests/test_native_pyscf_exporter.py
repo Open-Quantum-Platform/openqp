@@ -40,10 +40,15 @@ def install_external_stubs():
     constants.ANGSTROM_TO_BOHR = 1.8897259886
     sys.modules["oqp.utils.constants"] = constants
 
-    periodic_table = types.ModuleType("oqp.periodic_table")
-    periodic_table.SYMBOL_MAP = {1: "H", 6: "C"}
-    periodic_table.ELEMENTS_NAME = {"H": "H", "C": "C"}
+    periodic_table_spec = importlib.util.spec_from_file_location(
+        "oqp.periodic_table",
+        ROOT / "pyoqp/oqp/periodic_table/__init__.py",
+    )
+    assert periodic_table_spec is not None
+    assert periodic_table_spec.loader is not None
+    periodic_table = importlib.util.module_from_spec(periodic_table_spec)
     sys.modules["oqp.periodic_table"] = periodic_table
+    periodic_table_spec.loader.exec_module(periodic_table)
 
     # The native exporter must not depend on mokit being importable.
     sys.modules.pop("mokit", None)
@@ -109,6 +114,50 @@ class TestNativePySCFExporter(unittest.TestCase):
         self.assertEqual(data["OQP::DM_A"], [1.0, 0.0, 0.0])
         self.assertEqual(data["OQP::DM_B"], [1.0, 0.0, 0.0])
         self.assertEqual(data["energy"], -40.5)
+
+    def test_exporter_handles_cr2_basis_with_g_functions(self):
+        try:
+            from pyscf import gto, scf
+        except ModuleNotFoundError:
+            self.skipTest("PySCF is not installed")
+
+        pyscf_mol = gto.Mole()
+        pyscf_mol.atom = "Cr 0.000000000 0.000000000 -0.840000000; Cr 0.000000000 0.000000000 0.840000000"
+        pyscf_mol.unit = "Angstrom"
+        pyscf_mol.basis = "cc-pvtz"
+        pyscf_mol.charge = 0
+        pyscf_mol.spin = 0
+        pyscf_mol.verbose = 0
+        pyscf_mol.build(cart=True)
+        self.assertEqual(max(pyscf_mol.bas_angular(i) for i in range(pyscf_mol.nbas)), 4)
+
+        mf = scf.RHF(pyscf_mol)
+        mf.max_cycle = 0
+        mf.kernel(dm0=mf.get_init_guess(key="atom"))
+
+        oqp_mol = FakeOQPMol()
+        oqp_mol.config["input"]["basis"] = "cc-pvtz"
+        oqp_mol.get_atoms = lambda: np.array([24, 24])
+        oqp_mol.get_system = lambda: np.array([
+            0.000000000, 0.000000000, -0.840000000,
+            0.000000000, 0.000000000, 0.840000000,
+        ])
+
+        output = ROOT / "tests" / "tmp_native_pyscf_cr2_g_guess.json"
+        try:
+            self.external.export_pyscf_guess_to_openqp_json(mf, oqp_mol, output)
+            data = json.loads(output.read_text())
+        finally:
+            output.unlink(missing_ok=True)
+
+        nbf = pyscf_mol.nao_nr()
+        self.assertEqual(nbf, 168)
+        self.assertEqual(len(data["OQP::VEC_MO_A"]), nbf)
+        self.assertEqual(len(data["OQP::VEC_MO_A"][0]), nbf)
+        self.assertEqual(len(data["OQP::E_MO_A"]), nbf)
+        self.assertEqual(len(data["OQP::DM_A"]), nbf * (nbf + 1) // 2)
+        self.assertEqual(data["atoms"], [24, 24])
+        self.assertEqual(data["json"]["basis"], "cc-pvtz")
 
 
 if __name__ == "__main__":
