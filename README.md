@@ -51,6 +51,8 @@ git clone https://github.com/Open-Quantum-Platform/openqp.git
 cd openqp
 pip install .
 ```
+This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically. MOKIT is required for `guess.type=pyscf`, `sad`, and `sap`; install MOKIT separately if it is not already available in the Python environment.
+
 or 
 #### Detailed Compile
 

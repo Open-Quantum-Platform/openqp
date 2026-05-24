@@ -189,6 +189,13 @@ OQP_CONFIG_SCHEMA = {
         'iopt': {'type': int, 'default': '3'},
         'ims': {'type': int, 'default': '0'},
     },
+    'geometric': {
+        'coordsys': {'type': str, 'default': 'tric'},
+        'trust': {'type': float, 'default': '0.1'},
+        'tmax': {'type': float, 'default': '0.3'},
+        'convergence_set': {'type': str, 'default': 'GAU'},
+        'prefix': {'type': str, 'default': 'geometric'},
+    },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
         'state': {'type': int, 'default': '0'},

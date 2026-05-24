@@ -235,10 +235,17 @@ class DLFindMECI(DLFinder):
         return (energy_1, energy_2), (grad_1.reshape((self.natom, 3)), grad_2.reshape((self.natom, 3)))
 
     def optimize(self):
+        def _get_msg_callback(coordinates, needcoupling=None, iimage=None):
+            try:
+                energies, grads = self.one_step(coordinates)
+                return energies[0], energies[1], grads[0], grads[1], None
+            except StopIteration:
+                self.early_stop()
+
         dl_find(
             nvarin=int(self.natom * 3),
             dlf_get_params=self.dlf_get_params,
-            dlf_get_multistate_gradients=functools.partial(get_msg, calculator=self.one_step, stopper=self.early_stop),
+            dlf_get_multistate_gradients=dlf_get_multistate_gradients_wrapper(_get_msg_callback),
             dlf_put_coords=store_results,
         )
 

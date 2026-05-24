@@ -829,7 +829,7 @@ def write_xyz(atoms, coord, info):
     natom = len(coord)
     xyz = '%s\nGeom %s\n' % (natom, ' '.join([str(x) for x in info]))
     for n, line in enumerate(coord):
-        a = atoms[n]
+        a = np.asarray(atoms[n]).reshape(-1)[0]
         x, y, z = line[0: 3]
         xyz += '%-5s %24.16f %24.16f %24.16f\n' % (
             ELEMENTS_NAME[SYMBOL_MAP[int(a)]],
