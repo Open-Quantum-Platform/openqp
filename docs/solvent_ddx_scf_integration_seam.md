@@ -161,7 +161,8 @@ The branch now includes two ddX adapter smoke paths:
 
 1. `oqp_ddx_run_point_charge_smoke`: the original high-level ddX point-charge lifecycle using `ddx_ddrun`.
 2. `oqp_ddx_run_explicit_pcm_smoke`: an explicit host-code PCM path that builds host-supplied `psi` and `phi_cav`, then calls `ddx_pcm_setup`, `ddx_pcm_solve`, `ddx_pcm_solve_adjoint`, `ddx_pcm_energy`, and `ddx_get_xi` to retrieve the cavity-projected `state%q` as `q_cav_norm` in the smoke result.
-3. `oqp_ddx_run_explicit_pcm_reaction_field_smoke`: the same explicit PCM path, but it also copies caller-owned arrays `cavity_xyz[3*ncav]` and `q_cav[ncav]`. This matches the OpenQP-side `external_charge_potential(basis, v, x, y, z, chg, ...)` handoff shape: split `cavity_xyz` into x/y/z arrays and pass `q_cav` as the candidate external-charge vector.
+3. `oqp_ddx_run_explicit_pcm_reaction_field_smoke`: the same explicit PCM path, but it also copies caller-owned arrays `cavity_xyz[3*ncav]` and `q_cav[ncav]`. This matches the OpenQP-side `external_charge_potential(basis, v, x, y, z, chg, ...)` handoff shape: split `cavity_xyz` into x/y/z arrays and pass a sign/scale-adjusted candidate external-charge vector.
+4. A finite-difference check perturbing `phi_cav[0]` shows the local derivative obeys `dE/dphi_cav[0] ≈ -0.5*q_cav[0]` for the smoke case. In the current smoke, direct use of `q_cav[0]` misses the derivative by about `0.0000971173`, while the `-0.5*q_cav[0]` relation is within about `0.0000000140`.
 
 The explicit path is still a smoke/proof-of-seam, not production OpenQP SCF coupling. It verifies that OpenQP can drive the lower-level ddPCM setup/forward/adjoint API that will be needed after `psi` and `phi_cav` come from AO density and nuclear potentials.
 
@@ -169,7 +170,7 @@ The explicit path is still a smoke/proof-of-seam, not production OpenQP SCF coup
 
 Before adding a production SCF hook, the remaining ddX/OpenQP mapping question is now narrower:
 
-A. Preferred: validate whether `q_cav` from `oqp_ddx_run_explicit_pcm_reaction_field_smoke` has the sign/scale expected by `external_charge_potential` against an independent reference or finite-difference derivative check.
+A. Preferred: for the first prototype AO reaction-field matrix, test `chg = -0.5*q_cav` as the finite-difference-consistent derivative of the ddPCM energy with respect to `phi_cav`; keep this explicitly marked as a candidate until cross-checked against a package/reference implementation.
 
 B. If upstream ddX already has a public routine for the Fock/KS contribution that was missed, wrap that routine directly instead of reconstructing charges in OpenQP.
 

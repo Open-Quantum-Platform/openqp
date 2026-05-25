@@ -36,6 +36,11 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("cavity_xyz_out", source)
         self.assertIn("q_cav_out", source)
         self.assertIn("q_cav_out[icav] = xi[icav]", source)
+        self.assertIn("q_cav_fd_derivative", header)
+        self.assertIn("q_cav_fd_direct_abs_error", header)
+        self.assertIn("q_cav_fd_abs_error", header)
+        self.assertIn("finite_difference_delta", source)
+        self.assertIn("fabs(q_cav_fd_derivative", source)
 
     def test_scf_fock_builder_is_identified_for_solvent_hook(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")

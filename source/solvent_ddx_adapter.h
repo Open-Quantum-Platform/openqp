@@ -11,6 +11,9 @@ typedef struct oqp_ddx_smoke_result_s {
   double s_norm;
   double xi_norm;
   double q_cav_norm;
+  double q_cav_fd_derivative;
+  double q_cav_fd_direct_abs_error;
+  double q_cav_fd_abs_error;
   double first_cavity_value;
   int nbasis;
   int ncav;

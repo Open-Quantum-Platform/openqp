@@ -457,6 +457,8 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
   void* error = NULL;
   void* model = NULL;
   void* state = NULL;
+  void* state_plus = NULL;
+  void* state_minus = NULL;
   double* solute_multipoles = NULL;
   double* psi = NULL;
   double* phi_cav = NULL;
@@ -599,12 +601,46 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
     goto cleanup;
   }
 
+  const double finite_difference_delta = 1.0e-6;
+  state_plus = ddx_allocate_state(model, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  phi_cav[0] += finite_difference_delta;
+  ddx_pcm_setup(model, state_plus, ncav, nbasis, nsph, psi, phi_cav, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess(model, state_plus, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve(model, state_plus, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  const double energy_plus = ddx_pcm_energy(model, state_plus, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  state_minus = ddx_allocate_state(model, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  phi_cav[0] -= 2.0 * finite_difference_delta;
+  ddx_pcm_setup(model, state_minus, ncav, nbasis, nsph, psi, phi_cav, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess(model, state_minus, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve(model, state_minus, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  const double energy_minus = ddx_pcm_energy(model, state_minus, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  phi_cav[0] += finite_difference_delta;
+
+  const double q_cav_fd_derivative =
+      (energy_plus - energy_minus) / (2.0 * finite_difference_delta);
+  const double q_cav_fd_direct_abs_error = fabs(q_cav_fd_derivative - q_cav_out[0]);
+  const double q_cav_fd_abs_error = fabs(q_cav_fd_derivative + 0.5 * q_cav_out[0]);
+
   if (result != NULL) {
     result->energy = energy;
     result->x_norm = x_norm;
     result->s_norm = s_norm;
     result->xi_norm = q_cav_norm;
     result->q_cav_norm = q_cav_norm;
+    result->q_cav_fd_derivative = q_cav_fd_derivative;
+    result->q_cav_fd_direct_abs_error = q_cav_fd_direct_abs_error;
+    result->q_cav_fd_abs_error = q_cav_fd_abs_error;
     result->first_cavity_value = cavity[0];
     result->nbasis = nbasis;
     result->ncav = ncav;
@@ -616,6 +652,8 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
   status = 0;
 
 cleanup:
+  if (state_minus != NULL && error != NULL) ddx_deallocate_state(state_minus, error);
+  if (state_plus != NULL && error != NULL) ddx_deallocate_state(state_plus, error);
   if (state != NULL && error != NULL) ddx_deallocate_state(state, error);
   if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
   free(solute_multipoles);

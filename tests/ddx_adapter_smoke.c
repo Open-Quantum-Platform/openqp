@@ -53,9 +53,11 @@ int main(void) {
   }
 
   printf("%s\n", message);
-  printf("reaction_field_ncav=%d q_cav_norm=%.8e first_q_cav=%.8e first_cavity_xyz=(%.8e,%.8e,%.8e)\n",
-         ncav_written, result.q_cav_norm, q_cav[0], cavity_xyz[0],
-         cavity_xyz[1], cavity_xyz[2]);
+  printf("reaction_field_ncav=%d q_cav_norm=%.8e first_q_cav=%.8e fd_dE_dphi0=%.8e fd_direct_abs_error=%.8e fd_minus_neg_half_q_abs_error=%.8e first_cavity_xyz=(%.8e,%.8e,%.8e)\n",
+         ncav_written, result.q_cav_norm, q_cav[0],
+         result.q_cav_fd_derivative, result.q_cav_fd_direct_abs_error,
+         result.q_cav_fd_abs_error, cavity_xyz[0], cavity_xyz[1],
+         cavity_xyz[2]);
   free(cavity_xyz);
   free(q_cav);
   return 0;
