@@ -13,6 +13,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("option(ENABLE_DDX", text)
         self.assertIn("find_package(DDX REQUIRED)", text)
         self.assertIn("oqp_ddx_link_smoke", text)
+        self.assertIn("oqp_ddx_adapter_smoke", text)
 
     def test_find_ddx_module_creates_imported_target(self):
         text = (ROOT / "cmake" / "FindDDX.cmake").read_text(encoding="utf-8")

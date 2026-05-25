@@ -96,6 +96,7 @@ This branch only adds input-level scaffolding, tests, optional backend link plum
 - optional `ENABLE_DDX` CMake link plumbing in `CMakeLists.txt`, `cmake/FindDDX.cmake`, and `source/CMakeLists.txt`
 - tests in `tests/test_pcm_scaffold.py` and `tests/test_ddx_cmake_scaffold.py`
 - C link smoke test source in `tests/ddx_link_smoke.c`
+- C adapter smoke test source in `tests/ddx_adapter_smoke.c`
 - ddX API probe notes/script in `spikes/001-ddx-api-probe/`
 
 The guardrail is deliberate: `pcm.enabled=true` currently produces an input-check error because no runtime Fock/energy coupling has been implemented yet.
@@ -109,6 +110,7 @@ The branch now includes optional `ENABLE_DDX` CMake plumbing:
 - `cmake/FindDDX.cmake` finds `ddx.h` and `libddx` from `DDX_ROOT`/`$DDX_ROOT`.
 - `ENABLE_DDX=ON` requires the backend and links `oqp` against imported target `DDX::ddx`.
 - A `oqp_ddx_link_smoke` CTest executable verifies compile/link/runtime access to `ddx_get_banner` without touching SCF internals.
+- A `oqp_ddx_adapter_smoke` CTest executable exercises the minimal adapter lifecycle: allocate model/electrostatics/state, build multipole RHS, solve, retrieve `x/s/xi/cavity`, validate energy/norms, and deallocate.
 
 Verified locally with a ddX source build under `/tmp/ddx-openqp-smoke`:
 
@@ -116,8 +118,8 @@ Verified locally with a ddX source build under `/tmp/ddx-openqp-smoke`:
 cmake -S . -B /tmp/openqp-ddx-on-config -G Ninja \
   -DENABLE_DDX=ON -DDDX_ROOT=/tmp/ddx-openqp-smoke \
   -DENABLE_PYTHON=OFF -DUSE_LIBINT=OFF -DLINALG_LIB=none
-cmake --build /tmp/openqp-ddx-on-config --target oqp_ddx_link_smoke
-ctest --test-dir /tmp/openqp-ddx-on-config -R oqp_ddx_link_smoke --output-on-failure
+cmake --build /tmp/openqp-ddx-on-config --target oqp_ddx_adapter_smoke
+ctest --test-dir /tmp/openqp-ddx-on-config -R 'oqp_ddx_(link|adapter)_smoke' --output-on-failure
 ```
 
-Result: `oqp_ddx_link_smoke` passed. The next OpenQP step is a minimal adapter that allocates a ddX model, solves, retrieves `x/s/xi`, and deallocates cleanly before touching SCF internals.
+Result: both `oqp_ddx_link_smoke` and `oqp_ddx_adapter_smoke` passed. The next OpenQP step is to move the adapter lifecycle behind an OpenQP-owned solvent module/API, then identify the AO-integral path for turning ddX reaction-field outputs into an RHF/ROHF Fock contribution.

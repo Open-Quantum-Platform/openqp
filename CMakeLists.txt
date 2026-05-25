@@ -182,6 +182,10 @@ if(BUILD_TESTING)
     add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
     target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
     add_test(NAME oqp_ddx_link_smoke COMMAND oqp_ddx_link_smoke)
+
+    add_executable(oqp_ddx_adapter_smoke tests/ddx_adapter_smoke.c)
+    target_link_libraries(oqp_ddx_adapter_smoke PRIVATE DDX::ddx m)
+    add_test(NAME oqp_ddx_adapter_smoke COMMAND oqp_ddx_adapter_smoke)
   endif()
 endif()
 
