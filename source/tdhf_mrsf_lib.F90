@@ -4,6 +4,7 @@ module tdhf_mrsf_lib
     use int2_compute, only: int2_fock_data_t, int2_storage_t
     use basis_tools, only: basis_set
     use oqp_linalg
+    use gpu_backend, only: gpu_backend_metc_enabled, gpu_backend_metc_contract
 
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
@@ -156,11 +157,23 @@ contains
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, gpu_ierr
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
+
+    if (gpu_backend_metc_enabled()) then
+      call gpu_backend_metc_contract(buf%ids(:,1:buf%ncur), buf%ints(1:buf%ncur), buf%ncur, &
+                                     this%f3(:,:,:,:,mythread), this%d3, this%nfocks, &
+                                     ubound(this%d3, 2), ubound(this%d3, 3), this%cur_pass, &
+                                     this%scale_exchange, this%scale_coulomb, &
+                                     is_umrsf=.false., ierr=gpu_ierr)
+      if (gpu_ierr == 0) then
+        buf%ncur = 0
+        return
+      end if
+    end if
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -225,13 +238,25 @@ subroutine int2_umrsf_data_t_update(this, buf)
   type(int2_storage_t), intent(inout) :: buf
   integer :: i, j, k, l, n
   real(kind=dp) :: val, xval, cval
-  integer :: mythread
+  integer :: mythread, gpu_ierr
 
   mythread = buf%thread_id
 
   debug_mode = .True.
 
   if (.not.this%tamm_dancoff) return
+
+  if (gpu_backend_metc_enabled()) then
+    call gpu_backend_metc_contract(buf%ids(:,1:buf%ncur), buf%ints(1:buf%ncur), buf%ncur, &
+                                   this%f3(:,:,:,:,mythread), this%d3, this%nfocks, &
+                                   ubound(this%d3, 2), ubound(this%d3, 3), this%cur_pass, &
+                                   this%scale_exchange, this%scale_coulomb, &
+                                   is_umrsf=.true., ierr=gpu_ierr)
+    if (gpu_ierr == 0) then
+      buf%ncur = 0
+      return
+    end if
+  end if
 
   associate ( f3 => this%f3(:,:,:,:,mythread), &
               d3 => this%d3, &

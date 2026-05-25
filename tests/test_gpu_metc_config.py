@@ -117,6 +117,7 @@ class GpuMetcConfigTests(unittest.TestCase):
         self.assertIn("find_package(CUDAToolkit REQUIRED)", root_cmake)
         self.assertIn("CUDA::cudart", source_cmake)
         self.assertIn("CUDA::cublas", source_cmake)
+        self.assertIn("gpu_metc_cuda.cu", source_cmake)
 
     def test_fortran_gpu_backend_stub_is_present(self):
         source = (ROOT / "source/gpu_backend.F90").read_text()
@@ -124,6 +125,25 @@ class GpuMetcConfigTests(unittest.TestCase):
         self.assertIn("module gpu_backend", source)
         self.assertIn("gpu_backend_available", source)
         self.assertIn("gpu_backend_describe", source)
+        self.assertIn("gpu_backend_metc_enabled", source)
+        self.assertIn("gpu_backend_metc_contract", source)
+
+    def test_cuda_metc_kernel_exports_real_contract_abi(self):
+        source = (ROOT / "source/gpu_metc_cuda.cu").read_text()
+
+        self.assertIn("extern \"C\" int oqp_gpu_metc_contract", source)
+        self.assertIn("__global__", source)
+        self.assertIn("atomicAdd", source)
+        self.assertIn("mrsf_metc_kernel", source)
+        self.assertIn("umrsf_metc_kernel", source)
+
+    def test_mrsf_update_dispatches_to_gpu_backend_before_cpu_fallback(self):
+        source = (ROOT / "source/tdhf_mrsf_lib.F90").read_text()
+
+        self.assertIn("use gpu_backend, only: gpu_backend_metc_enabled", source)
+        self.assertIn("call gpu_backend_metc_contract", source)
+        self.assertIn("is_umrsf=.false.", source)
+        self.assertIn("is_umrsf=.true.", source)
 
 
 if __name__ == "__main__":
