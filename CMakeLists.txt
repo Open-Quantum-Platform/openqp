@@ -62,8 +62,14 @@ option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
 option(ENABLE_CUDA       "Enable experimental CUDA GPU backend" OFF)
+option(CUDA_ALLOW_UNSUPPORTED_COMPILER
+       "Pass -allow-unsupported-compiler to nvcc for site toolchains such as CUDA 11.x with GCC > 11"
+       OFF)
 
 if(ENABLE_CUDA)
+  if(CUDA_ALLOW_UNSUPPORTED_COMPILER)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler")
+  endif()
   enable_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
   add_compile_definitions(OQP_CUDA_ENABLE)

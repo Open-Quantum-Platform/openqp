@@ -112,6 +112,8 @@ class GpuMetcConfigTests(unittest.TestCase):
         source_cmake = (ROOT / "source/CMakeLists.txt").read_text()
 
         self.assertIn("option(ENABLE_CUDA", root_cmake)
+        self.assertIn("option(CUDA_ALLOW_UNSUPPORTED_COMPILER", root_cmake)
+        self.assertIn("-allow-unsupported-compiler", root_cmake)
         self.assertIn("find_package(CUDAToolkit REQUIRED)", root_cmake)
         self.assertIn("CUDA::cudart", source_cmake)
         self.assertIn("CUDA::cublas", source_cmake)
