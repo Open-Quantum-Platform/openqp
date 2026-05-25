@@ -25,21 +25,48 @@ def main() -> None:
     args.outdir.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_csv(args.csv)
-    df["case"] = df.apply(lambda r: f"{r.mode.upper()} nbf={int(r.nbf)}, nf={int(r.nf)}, pass={int(r['pass'])}", axis=1)
+    df["case"] = df.apply(lambda r: f"{str(r['mode']).upper()} nbf={int(r['nbf'])}, nf={int(r['nf'])}, pass={int(r['pass'])}", axis=1)
     df["passed"] = (df["ierr"] == 0) & (df["max_abs_diff"] < 1e-9)
     df.to_csv(args.outdir / "metc_gpu_benchmark_summary.csv", index=False)
+
+    def write_latex_table(frame, path, columns, float_formats):
+        lines = []
+        lines.append("\\begin{tabular}{" + "l" * len(columns) + "}")
+        lines.append("\\hline")
+        lines.append(" & ".join(columns) + r" \\")
+        lines.append("\\hline")
+        for _, row in frame.iterrows():
+            vals = []
+            for col in columns:
+                value = row[col]
+                if col in float_formats:
+                    vals.append(float_formats[col].format(float(value)))
+                else:
+                    vals.append(str(value))
+            lines.append(" & ".join(vals) + r" \\")
+        lines.append("\\hline")
+        lines.append("\\end{tabular}")
+        path.write_text("\n".join(lines) + "\n")
 
     validation_cols = ["mode", "nbf", "nf", "nmatrix", "ncur", "pass", "max_abs_diff", "rms_diff", "rel_l2_diff", "passed"]
     validation = df[validation_cols].copy()
     validation["mode"] = validation["mode"].str.upper()
-    latex = validation.to_latex(index=False, escape=False, float_format=lambda x: f"{x:.3e}")
-    (args.outdir / "table_metc_validation.tex").write_text(latex)
+    write_latex_table(
+        validation,
+        args.outdir / "table_metc_validation.tex",
+        validation_cols,
+        {"max_abs_diff": "{:.3e}", "rms_diff": "{:.3e}", "rel_l2_diff": "{:.3e}"},
+    )
 
     perf_cols = ["mode", "nbf", "nf", "ncur", "pass", "cpu_ms", "gpu_total_ms", "speedup_total"]
     perf = df[perf_cols].copy()
     perf["mode"] = perf["mode"].str.upper()
-    latex = perf.to_latex(index=False, escape=False, float_format=lambda x: f"{x:.3f}")
-    (args.outdir / "table_metc_performance.tex").write_text(latex)
+    write_latex_table(
+        perf,
+        args.outdir / "table_metc_performance.tex",
+        perf_cols,
+        {"cpu_ms": "{:.3f}", "gpu_total_ms": "{:.3f}", "speedup_total": "{:.3f}"},
+    )
 
     plt.rcParams.update({"font.size": 9, "figure.dpi": 160})
     fig, ax = plt.subplots(figsize=(7.0, 3.6))
