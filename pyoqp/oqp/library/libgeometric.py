@@ -51,11 +51,16 @@ class _GeometricRunner:
     """Mixin that runs a PyOQP optimizer objective through geomeTRIC."""
 
     def __init__(self, mol):
-        self.coordsys = mol.config.get("geometric", {}).get("coordsys", "tric")
-        self.trust = mol.config.get("geometric", {}).get("trust", 0.1)
-        self.tmax = mol.config.get("geometric", {}).get("tmax", 0.3)
-        self.convergence_set = mol.config.get("geometric", {}).get("convergence_set", "GAU")
-        self.prefix = mol.config.get("geometric", {}).get("prefix", "geometric")
+        self.geometric_config = mol.config.get("geometric", {})
+        self.coordsys = self.geometric_config.get("coordsys", "tric")
+        self.trust = self.geometric_config.get("trust", 0.1)
+        self.tmax = self.geometric_config.get("tmax", 0.3)
+        self.convergence_set = self.geometric_config.get("convergence_set", "GAU")
+        self.prefix = self.geometric_config.get("prefix", "geometric")
+        self.hessian = self.geometric_config.get("hessian", "never")
+
+    def _optimizer_keywords(self):
+        return {}
 
     def optimize(self):
         try:
@@ -80,6 +85,7 @@ class _GeometricRunner:
         prefix = os.path.join(log_path, self.prefix)
 
         dump_log(self.mol, title="PyOQP: geomeTRIC Optimizer Started")
+        optimizer_keywords = self._optimizer_keywords()
         progress = run_optimizer(
             customengine=engine,
             prefix=prefix,
@@ -87,12 +93,14 @@ class _GeometricRunner:
             maxiter=self.maxit,
             trust=self.trust,
             tmax=self.tmax,
+            hessian=self.hessian,
             convergence_set=self.convergence_set,
             convergence_energy=self.energy_shift,
             convergence_grms=self.rmsd_grad,
             convergence_gmax=self.max_grad,
             convergence_drms=self.rmsd_step * BOHR_TO_ANGSTROM,
             convergence_dmax=self.max_step * BOHR_TO_ANGSTROM,
+            **optimizer_keywords,
         )
 
         if getattr(progress, "xyzs", None):
@@ -126,3 +134,14 @@ class GeometricMECPOpt(_GeometricRunner, MECPOpt):
     def __init__(self, mol):
         MECPOpt.__init__(self, mol)
         _GeometricRunner.__init__(self, mol)
+
+
+class GeometricTSOpt(_GeometricRunner, StateSpecificOpt):
+    """Transition-state optimization driven by geomeTRIC."""
+
+    def __init__(self, mol):
+        StateSpecificOpt.__init__(self, mol)
+        _GeometricRunner.__init__(self, mol)
+
+    def _optimizer_keywords(self):
+        return {"transition": True}

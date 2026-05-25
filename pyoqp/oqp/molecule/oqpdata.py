@@ -195,6 +195,7 @@ OQP_CONFIG_SCHEMA = {
         'tmax': {'type': float, 'default': '0.3'},
         'convergence_set': {'type': str, 'default': 'GAU'},
         'prefix': {'type': str, 'default': 'geometric'},
+        'hessian': {'type': str, 'default': 'never'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
