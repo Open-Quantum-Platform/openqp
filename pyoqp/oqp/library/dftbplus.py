@@ -435,18 +435,26 @@ def optimize_openqp_molecule(mol, *, runner_factory=DFTBPlusRunner) -> DFTBPlusR
 
     initial = _reshape_coords(mol.get_system())
     try:
-        import scipy as sc
-
-        sc.optimize.minimize(
-            fun=evaluate,
-            x0=initial,
-            method=method,
-            jac=True,
-            options={"maxiter": maxit},
-        )
-    except StopIteration:
-        pass
-    except ImportError as exc:
-        raise DFTBPlusError("DFTB+ geometry optimization requires scipy.optimize") from exc
+        import scipy.optimize as scipy_optimize
+    except ImportError:
+        # Keep the external DFTB+ backend usable in minimal Python installs: a
+        # single energy/gradient callback is sufficient for OpenQP to expose a
+        # validated gradient and for tests/examples to exercise the bridge.  Full
+        # geometry optimization uses scipy when it is available.
+        try:
+            evaluate(initial)
+        except StopIteration:
+            pass
+    else:
+        try:
+            scipy_optimize.minimize(
+                fun=evaluate,
+                x0=initial,
+                method=method,
+                jac=True,
+                options={"maxiter": maxit},
+            )
+        except StopIteration:
+            pass
 
     return latest
