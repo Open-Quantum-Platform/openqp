@@ -6,9 +6,25 @@ __device__ __forceinline__ int idx4(int f, int m, int row, int col, int nf, int 
   return f + nf * (m + nmatrix * (row + nbf * col));
 }
 
+__device__ __forceinline__ double atomic_add_double(double* address, double value) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
+  unsigned long long int* address_as_ull = reinterpret_cast<unsigned long long int*>(address);
+  unsigned long long int old = *address_as_ull;
+  unsigned long long int assumed;
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(value + __longlong_as_double(assumed)));
+  } while (assumed != old);
+  return __longlong_as_double(old);
+#else
+  return atomicAdd(address, value);
+#endif
+}
+
 __device__ __forceinline__ void add4(double* f3, int f, int m, int row, int col,
                                      int nf, int nmatrix, int nbf, double value) {
-  atomicAdd(&f3[idx4(f, m, row, col, nf, nmatrix, nbf)], value);
+  atomic_add_double(&f3[idx4(f, m, row, col, nf, nmatrix, nbf)], value);
 }
 
 __device__ __forceinline__ double get4(const double* d3, int f, int m, int row, int col,
