@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
 
     steps:
       - name: Checkout Repository
@@ -20,6 +22,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
@@ -30,16 +33,22 @@ jobs:
         with:
           platforms: all
 
-      - name: Build and Push Docker Image
+      - name: Build Docker Image
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
+          PUSH_ARGS=""
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${DOCKER_USERNAME}" ] && [ -n "${DOCKER_PASSWORD}" ]; then
+            PUSH_ARGS="--push --tag openqp/openqp:v1.0"
+          fi
           docker buildx build \
             --platform linux/amd64 \
-            --push \
-            --tag openqp/openqp:v1.0 \
-            --tag openqp/openqp:v1.0 \
+            ${PUSH_ARGS} \
             .
 
       - name: Verify Docker Image
+        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         run: |
           docker pull openqp/openqp:v1.0
           docker inspect openqp/openqp:v1.0
