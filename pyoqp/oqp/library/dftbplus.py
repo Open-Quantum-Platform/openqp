@@ -223,37 +223,40 @@ class DFTBPlusRunner:
 
     def run(self, atoms: Sequence[int], coords_bohr: Sequence[float], *, gradient: bool = False) -> DFTBPlusResult:
         self._check_prerequisites()
+        if self.keep_workdir:
+            workdir = Path(tempfile.mkdtemp(prefix="openqp-dftbplus-"))
+            return self._run_in_workdir(workdir, atoms, coords_bohr, gradient=gradient)
+
         with tempfile.TemporaryDirectory(prefix="openqp-dftbplus-") as tmp:
-            workdir = Path(tmp)
-            write_dftbplus_input(workdir, atoms, coords_bohr, self.config, gradient=gradient)
-            proc = subprocess.run(
-                [self.executable],
-                cwd=workdir,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=self.timeout,
-                check=False,
+            return self._run_in_workdir(Path(tmp), atoms, coords_bohr, gradient=gradient)
+
+    def _run_in_workdir(self, workdir: Path, atoms: Sequence[int], coords_bohr: Sequence[float], *, gradient: bool) -> DFTBPlusResult:
+        write_dftbplus_input(workdir, atoms, coords_bohr, self.config, gradient=gradient)
+        proc = subprocess.run(
+            [self.executable],
+            cwd=workdir,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=self.timeout,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise DFTBPlusError(
+                f"DFTB+ exited with status {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}"
             )
-            if proc.returncode != 0:
-                raise DFTBPlusError(
-                    f"DFTB+ exited with status {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}"
-                )
-            result_path = workdir / "results.tag"
-            detail_path = workdir / "detailed.out"
-            if result_path.exists():
-                result = parse_results_tag(result_path)
-            elif detail_path.exists():
-                result = parse_detailed_out(detail_path)
-            else:
-                raise DFTBPlusError("DFTB+ completed but neither results.tag nor detailed.out was written")
-            result.stdout = proc.stdout
-            result.stderr = proc.stderr
-            result.workdir = str(workdir)
-            if self.keep_workdir:
-                # Caller can rerun manually by copying the temporary files from stdout logs in future extension.
-                pass
-            return result
+        result_path = workdir / "results.tag"
+        detail_path = workdir / "detailed.out"
+        if result_path.exists():
+            result = parse_results_tag(result_path)
+        elif detail_path.exists():
+            result = parse_detailed_out(detail_path)
+        else:
+            raise DFTBPlusError("DFTB+ completed but neither results.tag nor detailed.out was written")
+        result.stdout = proc.stdout
+        result.stderr = proc.stderr
+        result.workdir = str(workdir)
+        return result
 
 
 def run_openqp_molecule(mol, *, gradient: bool = False) -> DFTBPlusResult:

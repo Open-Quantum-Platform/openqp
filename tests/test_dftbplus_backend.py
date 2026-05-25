@@ -117,6 +117,28 @@ class DFTBPlusWriterRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(self.dftbplus.DFTBPlusError, "DFTB\\+ parameter directory not found"):
             runner.run([1, 1], [0.0, 0.0, 0.0, 0.0, 0.0, 1.4], gradient=False)
 
+    def test_runner_keep_workdir_preserves_generated_inputs_and_parses_outputs(self):
+        fake_code = """#!/usr/bin/env python3
+from pathlib import Path
+Path('results.tag').write_text('total_energy:real:0:\\n-1.25\\nforces:real:2:2,3\\n0.1 0.0 -0.1\\n0.0 0.2 0.0\\n')
+"""
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_dftb = tmp_path / "fake-dftbplus.py"
+            fake_dftb.write_text(fake_code)
+            fake_dftb.chmod(0o755)
+            sk_path = tmp_path / "sk"
+            sk_path.mkdir()
+            runner = self.dftbplus.DFTBPlusRunner({"dftb": {"executable": str(fake_dftb), "sk_path": str(sk_path), "keep_workdir": True}})
+            result = runner.run([1, 1], [0.0, 0.0, 0.0, 0.0, 0.0, 1.4], gradient=True)
+            self.assertAlmostEqual(result.energy, -1.25)
+            self.assertEqual(result.gradient, [[-0.1, -0.0, 0.1], [-0.0, -0.2, -0.0]])
+            self.assertIsNotNone(result.workdir)
+            kept_dir = Path(result.workdir)
+            self.assertTrue(kept_dir.is_dir())
+            self.assertTrue((kept_dir / "dftb_in.hsd").exists())
+            self.assertTrue((kept_dir / "results.tag").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
