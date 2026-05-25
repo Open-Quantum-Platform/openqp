@@ -39,6 +39,21 @@ int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
                                    char* message,
                                    int message_len);
 
+/*
+ * Explicit PCM smoke that also copies the candidate reaction-field handoff
+ * arrays for OpenQP's external_charge_potential seam: cavity_xyz is a
+ * 3*ncav Bohr coordinate array and q_cav is the cavity projection of ddPCM
+ * state%q returned by ddx_get_xi. Caller owns the output buffers.
+ */
+int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
+    oqp_ddx_smoke_result_t* result,
+    double* cavity_xyz,
+    double* q_cav,
+    int max_cav,
+    int* ncav_written,
+    char* message,
+    int message_len);
+
 #ifdef __cplusplus
 }
 #endif
