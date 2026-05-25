@@ -47,6 +47,7 @@ module int1
     public omp_hst
     public multipole_integrals
     public electrostatic_potential
+    public electrostatic_potential_unweighted
     public external_charge_potential
     public basis_overlap
     public overlap
@@ -317,6 +318,46 @@ contains
     call bas_denorm_matrix(d, basis%bfnrm, basis%nbf)
 
  end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute unweighted electronic electrostatic potential on arbitrary points.
+!
+!> @details This is the safe public wrapper around the internal `int1_el_pot`
+!> kernel. Unlike `electrostatic_potential`, this routine does not multiply by
+!> quadrature weights. ddX expects `phi_cav` to be the unweighted electric
+!> potential at cavity points, so this is the intended OpenQP entry point for
+!> building ddX primal RHS data from an AO density.
+!>
+!> @param[inout] basis basis with SP-shells separated
+!> @param[in]    x     x coordinates of evaluation points, in Bohr
+!> @param[in]    y     y coordinates of evaluation points, in Bohr
+!> @param[in]    z     z coordinates of evaluation points, in Bohr
+!> @param[inout] d     packed AO density matrix; restored to input normalization
+!> @param[out]   pot   unweighted electronic potential on points
+!> @param[in]    logtol optional 1-e exponential prefactor tolerance
+!>
+ subroutine electrostatic_potential_unweighted(basis, x, y, z, d, pot, logtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(inout)          :: basis
+    real(real64), contiguous, intent(in)    :: x(:), y(:), z(:)
+    real(real64), contiguous, intent(inout) :: d(:)
+    real(real64), contiguous, intent(out)   :: pot(:)
+    real(real64), optional, intent(in)      :: logtol
+    real(real64) :: tol
+
+    call bas_norm_matrix(d, basis%bfnrm, basis%nbf)
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    call int1_el_pot(basis, x, y, z, d, pot, tol)
+
+    call bas_denorm_matrix(d, basis%bfnrm, basis%nbf)
+
+ end subroutine electrostatic_potential_unweighted
 
 !-------------------------------------------------------------------------------
 

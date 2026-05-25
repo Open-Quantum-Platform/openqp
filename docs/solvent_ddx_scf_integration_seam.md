@@ -51,6 +51,24 @@ D_total = D_alpha + D_beta
 
 For RHF, OpenQP stores one density block; existing energy expressions indicate that block is already the density used in traces.
 
+### Existing one-electron electrostatic-potential kernel
+
+`source/integrals/int1.F90` already had a private kernel:
+
+```fortran
+int1_el_pot(basis, x, y, z, d, pot, tol)
+```
+
+This evaluates the electronic electrostatic potential from a packed AO density at arbitrary points. The older public `electrostatic_potential` wrapper multiplies the result by grid weights and is therefore appropriate for quadrature-style property integrations, not for ddX `phi_cav`.
+
+The branch now adds a safe unweighted public wrapper:
+
+```fortran
+electrostatic_potential_unweighted(basis, x, y, z, d, pot, logtol)
+```
+
+This normalizes the density before calling `int1_el_pot`, restores density normalization afterwards, and deliberately does not multiply by weights. It is the intended OpenQP entry point for electronic `phi_cav` construction.
+
 ### Existing one-electron external-charge integral kernel
 
 `source/integrals/int1.F90` already had a private kernel:
@@ -79,11 +97,12 @@ This is the natural first path for converting ddX apparent charges/cavity-point 
 
 1. Add a Fortran/C bridge wrapper around the C ddX adapter for the quantities needed in SCF.
 2. At the start of a PCM-enabled `calc_jk_xc` call, form `D_total` from packed density blocks.
-3. Use `int1:electrostatic_potential` to compute electronic potential on ddX/cavity sites if ddX requires MEP input in cavity-point form.
-4. Use ddX to solve the reaction field and retrieve the point representation needed for OpenQP.
-5. Use `external_charge_potential` to build packed `V_pcm` from reaction charges/sites.
-6. Add `V_pcm` to all spin Fock blocks before diagonalization/convergence acceleration.
-7. Add a dedicated PCM energy term to `scf_energy_t` rather than hiding it inside `ehf1`; this avoids confusing final energy breakdowns.
+3. Use `int1:electrostatic_potential_unweighted` to compute electronic potential on ddX/cavity sites.
+4. Add the nuclear potential at those sites to form total `phi_cav`.
+5. Use ddX to solve the reaction field and retrieve the point representation needed for OpenQP.
+6. Use `external_charge_potential` to build packed `V_pcm` from reaction charges/sites.
+7. Add `V_pcm` to all spin Fock blocks before diagonalization/convergence acceleration.
+8. Add a dedicated PCM energy term to `scf_energy_t` rather than hiding it inside `ehf1`; this avoids confusing final energy breakdowns.
 
 ## Deliberate non-goals for the first implementation
 
@@ -152,5 +171,5 @@ The OpenQP-side AO matrix seam is now ready: once a physically correct point/cav
 
 - What exact ddX quantity should be exposed for the Fock/Kohn-Sham operator: `q`, `qgrid`, `xi`, or a higher-level ddX routine?
 - Whether ddX wants `psi` for arbitrary QM density from spherical projection of the potential, direct source-density projection, or a combination of electronic+nuclear multipoles.
-- Whether OpenQP's public `electrostatic_potential` wrapper is acceptable for `phi_cav`, given it currently multiplies by `wt`; for ddX `phi_cav` should be unweighted, so either expose `int1_el_pot` safely or call it via a new unweighted wrapper.
+- Whether OpenQP's public `electrostatic_potential_unweighted` wrapper should be extended to include nuclear potential assembly, or whether nuclear `phi_cav` should be built separately in the solvent adapter.
 - Where solvent metadata and energy fields should be stored in OpenQP JSON/database output.

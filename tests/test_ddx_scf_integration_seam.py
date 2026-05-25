@@ -8,6 +8,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DDXSCFIntegrationSeamTests(unittest.TestCase):
+    def test_unweighted_electrostatic_potential_is_public(self):
+        text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
+        self.assertIn("public electrostatic_potential_unweighted", text)
+        self.assertIn("subroutine electrostatic_potential_unweighted", text.lower())
+        wrapper = text.split("subroutine electrostatic_potential_unweighted", 1)[1].split(
+            "end subroutine electrostatic_potential_unweighted", 1
+        )[0]
+        self.assertIn("call int1_el_pot", wrapper)
+        self.assertNotIn("pot = pot*wt", wrapper)
+        self.assertIn("call bas_denorm_matrix", wrapper)
+
     def test_external_charge_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public external_charge_potential", text)
