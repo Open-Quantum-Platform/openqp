@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import math
 import os
 import re
 import shutil
@@ -26,6 +27,46 @@ _SYMBOLS = {
 
 class DFTBPlusError(RuntimeError):
     """Raised when the optional external DFTB+ backend cannot complete."""
+
+
+CAPABILITY_MATRIX = {
+    "energy": {
+        "status": "supported",
+        "reason": "External DFTB+ single-point energy is parsed from results.tag or detailed.out.",
+    },
+    "grad": {
+        "status": "supported",
+        "reason": "External DFTB+ forces are parsed from results.tag and returned as OpenQP gradients.",
+    },
+    "optimize": {
+        "status": "supported",
+        "reason": "Ground-state geometry optimization can reuse the external DFTB+ energy/gradient callback.",
+    },
+    "td_dftb": {
+        "status": "unsupported",
+        "reason": "The external-backend bridge does not parse DFTB+ excited-state outputs or map them into OpenQP TD data.",
+    },
+    "nac": {
+        "status": "unsupported",
+        "reason": "OpenQP NAC workflows require TDHF/MRSF state data that the external DFTB+ bridge does not provide.",
+    },
+    "spin_flip": {
+        "status": "unsupported",
+        "reason": "OpenQP spin-flip response is implemented for the native TDHF/MRSF path, not for DFTB+ output.",
+    },
+    "hessian": {
+        "status": "unsupported",
+        "reason": "No DFTB+ Hessian parser or OpenQP numerical-Hessian callback is wired for the external backend.",
+    },
+    "md": {
+        "status": "unsupported",
+        "reason": "OpenQP has no DFTB+ molecular-dynamics workflow in this external-backend branch.",
+    },
+    "native_hamiltonian": {
+        "status": "unsupported",
+        "reason": "This branch shells out to DFTB+ and does not implement a native OpenQP DFTB Hamiltonian.",
+    },
+}
 
 
 @dataclass
@@ -304,3 +345,108 @@ def run_openqp_molecule(mol, *, gradient: bool = False) -> DFTBPlusResult:
             if hasattr(mol, "grads"):
                 mol.grads = [flat]
     return result
+
+
+def _as_flat_list(values: Sequence[float]) -> list[float]:
+    try:
+        import numpy as np
+
+        return np.asarray(values, dtype=float).reshape(-1).tolist()
+    except Exception:
+        return [float(value) for value in values]
+
+
+def _reshape_coords(values: Sequence[float]) -> list[float]:
+    flat = _as_flat_list(values)
+    if len(flat) % 3:
+        raise DFTBPlusError("Optimizer coordinate array length must be a multiple of 3")
+    return flat
+
+
+def _coords_for_mol_update(flat_coords: Sequence[float]):
+    try:
+        import numpy as np
+
+        return np.asarray(flat_coords, dtype=float).reshape((-1, 3))
+    except Exception:
+        return list(flat_coords)
+
+
+def _gradient_flat(result: DFTBPlusResult) -> list[float]:
+    if result.gradient is None:
+        raise DFTBPlusError("DFTB+ geometry optimization requires gradients, but no gradient was parsed")
+    return [float(component) for row in result.gradient for component in row]
+
+
+def _rms(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+    return math.sqrt(sum(float(value) ** 2 for value in values) / len(values))
+
+
+def optimize_openqp_molecule(mol, *, runner_factory=DFTBPlusRunner) -> DFTBPlusResult:
+    """Run a ground-state DFTB+ geometry optimization for a Molecule-like object."""
+
+    config = mol.config
+    opt_config = config.get("optimize", {})
+    if int(opt_config.get("istate", 0) or 0) != 0:
+        raise DFTBPlusError("DFTB+ geometry optimization supports only ground-state istate=0")
+
+    method = str(opt_config.get("optimizer", "bfgs") or "bfgs").lower()
+    maxit = int(opt_config.get("maxit", 50) or 50)
+    energy_shift = float(opt_config.get("energy_shift", 1.0e-6) or 1.0e-6)
+    rmsd_grad_target = float(opt_config.get("rmsd_grad", 3.0e-4) or 3.0e-4)
+    max_grad_target = float(opt_config.get("max_grad", 4.5e-4) or 4.5e-4)
+    rmsd_step_target = float(opt_config.get("rmsd_step", 1.2e-3) or 1.2e-3)
+    max_step_target = float(opt_config.get("max_step", 1.8e-3) or 1.8e-3)
+    atoms = mol.get_atoms()
+    runner = runner_factory(config)
+    previous_energy = None
+    previous_coords = _reshape_coords(mol.get_system())
+    latest = DFTBPlusResult()
+
+    def evaluate(coords):
+        nonlocal latest, previous_energy, previous_coords
+        flat_coords = _reshape_coords(coords)
+        mol.update_system(_coords_for_mol_update(flat_coords))
+        latest = runner.run(atoms, flat_coords, gradient=True)
+        grad = _gradient_flat(latest)
+        energy = float(latest.energy)
+        if hasattr(mol, "energies"):
+            mol.energies = [energy]
+        if hasattr(mol, "grads"):
+            mol.grads = [grad]
+
+        step = [flat_coords[i] - previous_coords[i] for i in range(len(flat_coords))]
+        de = abs(energy - previous_energy) if previous_energy is not None else float("inf")
+        converged = (
+            previous_energy is not None
+            and de <= energy_shift
+            and _rms(step) <= rmsd_step_target
+            and max((abs(value) for value in step), default=0.0) <= max_step_target
+            and _rms(grad) <= rmsd_grad_target
+            and max((abs(value) for value in grad), default=0.0) <= max_grad_target
+        )
+        previous_energy = energy
+        previous_coords = flat_coords
+        if converged:
+            raise StopIteration
+        return energy, grad
+
+    initial = _reshape_coords(mol.get_system())
+    try:
+        import scipy as sc
+
+        sc.optimize.minimize(
+            fun=evaluate,
+            x0=initial,
+            method=method,
+            jac=True,
+            options={"maxiter": maxit},
+        )
+    except StopIteration:
+        pass
+    except ImportError as exc:
+        raise DFTBPlusError("DFTB+ geometry optimization requires scipy.optimize") from exc
+
+    return latest

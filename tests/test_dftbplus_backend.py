@@ -91,10 +91,36 @@ class DFTBPlusSchemaTests(unittest.TestCase):
 
     def test_method_dftb_rejects_unsupported_runtype(self):
         input_checker = load_module("input_checker_dftb_runtype_under_test", "pyoqp/oqp/utils/input_checker.py")
-        config = {"input": {"method": "dftb", "runtype": "hess", "system": "H 0 0 0"}}
+        config = {"input": {"method": "dftb", "runtype": "hess", "system": "\nH 0 0 0"}}
         report = input_checker.check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(report.ok)
-        self.assertIn("DFTB+ backend currently supports runtype=energy or grad", report.to_text())
+        self.assertIn("DFTB+ external backend does not support runtype=hess", report.to_text())
+
+    def test_method_dftb_allows_ground_state_geometry_optimization(self):
+        input_checker = load_module("input_checker_dftb_opt_under_test", "pyoqp/oqp/utils/input_checker.py")
+        config = {
+            "input": {"method": "dftb", "runtype": "optimize", "system": "\nH 0 0 0\nH 0 0 0.74"},
+            "dftb": {"sk_path": "/tmp/3ob-3-1"},
+            "optimize": {"lib": "scipy", "optimizer": "bfgs", "istate": 0},
+        }
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_method_dftb_rejects_excited_state_and_crossing_workflows(self):
+        input_checker = load_module("input_checker_dftb_excited_under_test", "pyoqp/oqp/utils/input_checker.py")
+        unsupported = {
+            "tdhf": {"input": {"method": "dftb", "runtype": "prop", "system": "\nH 0 0 0"}},
+            "nac": {"input": {"method": "dftb", "runtype": "nac", "system": "\nH 0 0 0"}},
+            "meci": {"input": {"method": "dftb", "runtype": "meci", "system": "\nH 0 0 0"}},
+            "mep": {"input": {"method": "dftb", "runtype": "mep", "system": "\nH 0 0 0"}},
+            "ts": {"input": {"method": "dftb", "runtype": "ts", "system": "\nH 0 0 0"}},
+            "md": {"input": {"method": "dftb", "runtype": "md", "system": "\nH 0 0 0"}},
+        }
+        for name, config in unsupported.items():
+            with self.subTest(name=name):
+                report = input_checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertFalse(report.ok)
+                self.assertIn("DFTB+ external backend does not support", report.to_text())
 
     def test_method_dftb_allows_ground_state_gradient_index(self):
         input_checker = load_module("input_checker_dftb_grad_under_test", "pyoqp/oqp/utils/input_checker.py")
@@ -109,6 +135,8 @@ class DFTBPlusSchemaTests(unittest.TestCase):
 
 class DFTBPlusWriterRunnerTests(unittest.TestCase):
     def setUp(self):
+        if "numpy" in sys.modules and not hasattr(sys.modules["numpy"], "__version__"):
+            del sys.modules["numpy"]
         self.dftbplus = load_module("dftbplus_writer_under_test", "pyoqp/oqp/library/dftbplus.py")
 
     def test_write_dftb_input_contains_geometry_driver_and_slakos(self):
@@ -156,6 +184,72 @@ Path('results.tag').write_text('total_energy:real:0:\\n-1.25\\nforces:real:2:2,3
             self.assertTrue(kept_dir.is_dir())
             self.assertTrue((kept_dir / "dftb_in.hsd").exists())
             self.assertTrue((kept_dir / "results.tag").exists())
+
+    def test_capability_matrix_documents_supported_and_unsupported_features(self):
+        matrix = self.dftbplus.CAPABILITY_MATRIX
+        self.assertEqual(matrix["energy"]["status"], "supported")
+        self.assertEqual(matrix["grad"]["status"], "supported")
+        self.assertEqual(matrix["optimize"]["status"], "supported")
+        for capability in ("td_dftb", "nac", "spin_flip", "hessian", "md", "native_hamiltonian"):
+            self.assertEqual(matrix[capability]["status"], "unsupported")
+            self.assertIn("reason", matrix[capability])
+
+    def test_dftb_optimizer_uses_external_gradient_runner(self):
+        class Data:
+            def __getitem__(self, key):
+                if key == "natom":
+                    return 2
+                raise KeyError(key)
+
+        class Mol:
+            config = {
+                "input": {"method": "dftb", "runtype": "optimize"},
+                "dftb": {},
+                "optimize": {
+                    "optimizer": "bfgs",
+                    "maxit": 1,
+                    "rmsd_grad": 1.0e-12,
+                    "max_grad": 1.0e-12,
+                    "rmsd_step": 1.0e-12,
+                    "max_step": 1.0e-12,
+                    "energy_shift": 1.0e-12,
+                },
+            }
+            data = Data()
+
+            def __init__(self):
+                self.coords = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+                self.energies = []
+                self.grads = []
+
+            def get_atoms(self):
+                return [1, 1]
+
+            def get_system(self):
+                return self.coords
+
+            def update_system(self, coords):
+                self.coords = list(coords)
+
+        case = self
+
+        class FakeRunner:
+            calls = 0
+
+            def __init__(self, config):
+                self.config = config
+
+            def run(self, atoms, coords, *, gradient=False):
+                FakeRunner.calls += 1
+                case.assertTrue(gradient)
+                return case.dftbplus.DFTBPlusResult(energy=-1.0, gradient=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+        mol = Mol()
+        result = self.dftbplus.optimize_openqp_molecule(mol, runner_factory=FakeRunner)
+        self.assertAlmostEqual(result.energy, -1.0)
+        self.assertEqual(mol.energies, [-1.0])
+        self.assertEqual(mol.grads, [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        self.assertGreaterEqual(FakeRunner.calls, 1)
 
 
 if __name__ == "__main__":
