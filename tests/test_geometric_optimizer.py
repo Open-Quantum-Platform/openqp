@@ -96,6 +96,8 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.json": None,
             "HCN_RHF-DFT_TS_GEOMETRIC.inp": "runtype=ts",
             "HCN_RHF-DFT_TS_GEOMETRIC.json": None,
+            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.inp": "runtype=ts",
+            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.json": None,
         }
 
         missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
