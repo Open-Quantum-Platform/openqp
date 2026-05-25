@@ -504,12 +504,7 @@ contains
 
           end do
         end do
-! Do not use NOWAIT here. This workshare is encountered once per (i,j)
-! shell pair inside the surrounding parallel region. All threads must leave
-! the current workshare before any thread can enter the next shell-pair
-! workshare, otherwise the OpenMP runtime can see overlapping dynamic
-! workshares with different loop bounds and hand out invalid shell indices.
-!$omp end do
+!$omp end do nowait
       end do
     end do
 
