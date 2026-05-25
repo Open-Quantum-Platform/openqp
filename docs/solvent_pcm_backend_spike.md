@@ -89,10 +89,15 @@ Record:
 
 ## Current branch changes
 
-This branch only adds input-level scaffolding and tests:
+This branch only adds input-level scaffolding, tests, and a disposable ddX API spike:
 
 - `[pcm]` schema defaults in `pyoqp/oqp/molecule/oqpdata.py`
 - input checker validation and guardrails in `pyoqp/oqp/utils/input_checker.py`
 - tests in `tests/test_pcm_scaffold.py`
+- ddX API probe notes/script in `spikes/001-ddx-api-probe/`
 
 The guardrail is deliberate: `pcm.enabled=true` currently produces an input-check error because no runtime Fock/energy coupling has been implemented yet.
+
+## ddX probe outcome
+
+The ddX API still looks like the best first backend candidate, but local `pip install pyddx` produced a macOS import failure in isolated Python environments (`_PyObject_ClearManagedDict` missing). Treat that as packaging friction, not a solvent-model blocker. The next runtime step is to build ddX from source or install via conda-forge, run the point-charge example, then inspect the C/Fortran interface for the exact Fock/Kohn-Sham contribution arrays needed by OpenQP.
