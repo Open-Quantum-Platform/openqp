@@ -89,15 +89,35 @@ Record:
 
 ## Current branch changes
 
-This branch only adds input-level scaffolding, tests, and a disposable ddX API spike:
+This branch only adds input-level scaffolding, tests, optional backend link plumbing, and a disposable ddX API spike:
 
 - `[pcm]` schema defaults in `pyoqp/oqp/molecule/oqpdata.py`
 - input checker validation and guardrails in `pyoqp/oqp/utils/input_checker.py`
-- tests in `tests/test_pcm_scaffold.py`
+- optional `ENABLE_DDX` CMake link plumbing in `CMakeLists.txt`, `cmake/FindDDX.cmake`, and `source/CMakeLists.txt`
+- tests in `tests/test_pcm_scaffold.py` and `tests/test_ddx_cmake_scaffold.py`
+- C link smoke test source in `tests/ddx_link_smoke.c`
 - ddX API probe notes/script in `spikes/001-ddx-api-probe/`
 
 The guardrail is deliberate: `pcm.enabled=true` currently produces an input-check error because no runtime Fock/energy coupling has been implemented yet.
 
 ## ddX probe outcome
 
-The ddX API still looks like the best first backend candidate. Local `pip install pyddx` produced a macOS import failure in isolated Python environments (`_PyObject_ClearManagedDict` missing), but the core ddX C/Fortran library built from source with CMake/Ninja and its C `run_ddx` example ran successfully. Treat the Python wheel issue as packaging friction, not a solvent-model blocker. The next OpenQP step is optional `ENABLE_DDX` CMake plumbing plus a small compile/link smoke test against `ddx.h`/`libddx`, then a minimal adapter that allocates a ddX model, solves, retrieves `x/s/xi`, and deallocates cleanly before touching SCF internals.
+The ddX API still looks like the best first backend candidate. Local `pip install pyddx` produced a macOS import failure in isolated Python environments (`_PyObject_ClearManagedDict` missing), but the core ddX C/Fortran library built from source with CMake/Ninja and its C `run_ddx` example ran successfully.
+
+The branch now includes optional `ENABLE_DDX` CMake plumbing:
+
+- `cmake/FindDDX.cmake` finds `ddx.h` and `libddx` from `DDX_ROOT`/`$DDX_ROOT`.
+- `ENABLE_DDX=ON` requires the backend and links `oqp` against imported target `DDX::ddx`.
+- A `oqp_ddx_link_smoke` CTest executable verifies compile/link/runtime access to `ddx_get_banner` without touching SCF internals.
+
+Verified locally with a ddX source build under `/tmp/ddx-openqp-smoke`:
+
+```bash
+cmake -S . -B /tmp/openqp-ddx-on-config -G Ninja \
+  -DENABLE_DDX=ON -DDDX_ROOT=/tmp/ddx-openqp-smoke \
+  -DENABLE_PYTHON=OFF -DUSE_LIBINT=OFF -DLINALG_LIB=none
+cmake --build /tmp/openqp-ddx-on-config --target oqp_ddx_link_smoke
+ctest --test-dir /tmp/openqp-ddx-on-config -R oqp_ddx_link_smoke --output-on-failure
+```
+
+Result: `oqp_ddx_link_smoke` passed. The next OpenQP step is a minimal adapter that allocates a ddX model, solves, retrieves `x/s/xi`, and deallocates cleanly before touching SCF internals.

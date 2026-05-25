@@ -9,6 +9,7 @@ set(CMAKE_Fortran_STANDARD 2003)
 include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
+option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)
@@ -160,6 +161,11 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(oqp_functions)
 
+if(ENABLE_DDX)
+  find_package(DDX REQUIRED)
+  message(STATUS "ddX continuum-solvation backend is enabled: ${DDX_LIBRARY}")
+endif()
+
 # Fix possible issues with DYLD_LIBRARY_PATH
 if(APPLE)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -172,6 +178,11 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  if(ENABLE_DDX)
+    add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
+    target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
+    add_test(NAME oqp_ddx_link_smoke COMMAND oqp_ddx_link_smoke)
+  endif()
 endif()
 
 if(USE_LIBINT)
