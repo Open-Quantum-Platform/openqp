@@ -12,7 +12,7 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "prop", "data",
+    "meci", "mecp", "mep", "ts", "irc", "prop", "data",
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "neb"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
@@ -837,14 +837,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     if lib == "dlfind":
         _check_dlfind(config, report)
 
-    if lib == "scipy" and runtype == "ts":
+    if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "Transition-state optimization is not wired to the SciPy optimizer map.",
-            value=lib,
-            expected="dlfind",
-            action="Use [optimize] lib=dlfind for runtype=ts.",
+            "This runtype is not wired to the SciPy optimizer map.",
+            value=f"{lib}/{runtype}",
+            expected="geometric" if runtype == "irc" else "dlfind or geometric",
+            action="Use [optimize] lib=geometric for runtype=irc or lib=dlfind/geometric for runtype=ts.",
         )
 
     if lib == "dlfind" and runtype not in {"optimize", "meci", "ts"}:
@@ -857,14 +857,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
         )
 
-    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts"}:
+    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, and TS.",
+            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, and IRC.",
             value=f"{lib}/{runtype}",
-            expected="optimize, meci, mecp, or ts",
-            action="Use [input] runtype=optimize/meci/mecp/ts or choose scipy/dlfind for this runtype.",
+            expected="optimize, meci, mecp, ts, or irc",
+            action="Use [input] runtype=optimize/meci/mecp/ts/irc or choose scipy/dlfind for this runtype.",
         )
 
 

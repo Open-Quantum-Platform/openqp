@@ -74,12 +74,17 @@ def install_runfunc_stubs():
         def __init__(self, mol):
             self.mol = mol
 
+    class GeometricIRCOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
     libgeometric.GeometricOpt = GeometricOpt
     libgeometric.GeometricMECIOpt = GeometricMECIOpt
     libgeometric.GeometricMECPOpt = GeometricMECPOpt
     libgeometric.GeometricTSOpt = GeometricTSOpt
+    libgeometric.GeometricIRCOpt = GeometricIRCOpt
     sys.modules["oqp.library.libgeometric"] = libgeometric
-    return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt
+    return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
 
 class TestGeometricOptimizerConfig(unittest.TestCase):
@@ -98,6 +103,8 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "HCN_RHF-DFT_TS_GEOMETRIC.json": None,
             "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.inp": "runtype=ts",
             "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.json": None,
+            "HCN_RHF-DFT_IRC_GEOMETRIC.inp": "runtype=irc",
+            "HCN_RHF-DFT_IRC_GEOMETRIC.json": None,
         }
 
         missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
@@ -141,7 +148,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertTrue(report.ok, report.to_text())
 
     def test_get_optimizer_dispatches_geometric_optimize(self):
-        GeometricOpt, _, _, _ = install_runfunc_stubs()
+        GeometricOpt, _, _, _, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -160,7 +167,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIs(optimizer.mol, mol)
 
     def test_get_optimizer_dispatches_geometric_meci(self):
-        _, GeometricMECIOpt, _, _ = install_runfunc_stubs()
+        _, GeometricMECIOpt, _, _, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_geometric_meci_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -215,7 +222,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertTrue(report.ok, report.to_text())
 
     def test_get_optimizer_dispatches_geometric_mecp(self):
-        _, _, GeometricMECPOpt, _ = install_runfunc_stubs()
+        _, _, GeometricMECPOpt, _, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_geometric_mecp_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -234,7 +241,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIs(optimizer.mol, mol)
 
     def test_get_optimizer_dispatches_geometric_ts(self):
-        _, _, _, GeometricTSOpt = install_runfunc_stubs()
+        _, _, _, GeometricTSOpt, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_geometric_ts_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -250,6 +257,40 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         optimizer = runfunc.get_optimizer(mol)
 
         self.assertIsInstance(optimizer, GeometricTSOpt)
+        self.assertIs(optimizer.mol, mol)
+
+    def test_input_checker_accepts_geometric_for_irc(self):
+        input_checker = load_module(
+            "input_checker_geometric_irc_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {"runtype": "irc", "method": "hf"},
+            "optimize": {"lib": "geometric", "istate": 0},
+        }
+
+        report = input_checker.CheckReport()
+        input_checker._check_optimize(config, report)
+
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_get_optimizer_dispatches_geometric_irc(self):
+        _, _, _, _, GeometricIRCOpt = install_runfunc_stubs()
+        runfunc = load_module(
+            "runfunc_geometric_irc_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+
+        mol = types.SimpleNamespace(
+            config={
+                "input": {"runtype": "irc"},
+                "optimize": {"lib": "geometric"},
+            }
+        )
+
+        optimizer = runfunc.get_optimizer(mol)
+
+        self.assertIsInstance(optimizer, GeometricIRCOpt)
         self.assertIs(optimizer.mol, mol)
 
 

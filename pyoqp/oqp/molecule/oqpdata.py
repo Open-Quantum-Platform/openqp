@@ -196,6 +196,7 @@ OQP_CONFIG_SCHEMA = {
         'convergence_set': {'type': str, 'default': 'GAU'},
         'prefix': {'type': str, 'default': 'geometric'},
         'hessian': {'type': str, 'default': 'never'},
+        'irc_direction': {'type': str, 'default': 'forward'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},

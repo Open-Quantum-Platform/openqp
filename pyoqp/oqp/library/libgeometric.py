@@ -145,3 +145,23 @@ class GeometricTSOpt(_GeometricRunner, StateSpecificOpt):
 
     def _optimizer_keywords(self):
         return {"transition": True}
+
+
+class GeometricIRCOpt(_GeometricRunner, StateSpecificOpt):
+    """Intrinsic reaction coordinate calculation driven by geomeTRIC."""
+
+    def __init__(self, mol):
+        StateSpecificOpt.__init__(self, mol)
+        _GeometricRunner.__init__(self, mol)
+        self.irc_direction = self.geometric_config.get("irc_direction", "forward").lower()
+        if self.irc_direction == "reverse":
+            self.irc_direction = "backward"
+        if self.irc_direction not in {"forward", "backward"}:
+            raise ValueError("geometric.irc_direction must be forward or backward")
+        if self.hessian == "never":
+            self.hessian = "first"
+        if self.tmax > self.trust:
+            self.tmax = self.trust
+
+    def _optimizer_keywords(self):
+        return {"irc": True, "irc_direction": self.irc_direction}
