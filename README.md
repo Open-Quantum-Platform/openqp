@@ -8,9 +8,11 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **Flexible prototyping through a Python wrapper, PyOQP**
 - **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
 - **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
+- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036), including one-electron and mean-field two-electron SOC terms through `runtype=soc`
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
 - **Ground State Properties** by HF and DFT theories
 - **Geometry Optimization, Transition State Search, and Conical Intersection Search** by SciPy and [DL-Find](https://github.com/digital-chemistry-laboratory/libdlfind)
+- [geomeTRIC](https://github.com/leeping/geomeTRIC) optimizer backend for state-specific optimization, MECI, MECP, transition-state searches, constrained optimizations, and IRC paths
 - [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
 - [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
 - [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) Integration to support a variety of basis sets
@@ -20,10 +22,11 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
 - Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
+- Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
+- [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
   
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
-- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
 - **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
 ### Quickstart
@@ -131,6 +134,9 @@ For more in-depth information, visit:
 
 ### Input Generator
 Easily create input files for OpenQP using our [Web-based Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/).
+
+### OpenqpView
+Inspect OpenQP calculation outputs directly in the browser with [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/). Recent OpenqpView development added a GitHub Pages deployment, full-periodic-table molecule rendering, local file/drop/paste loading, WebGL auto-spin controls, and support for OpenQP log, JSON, Molden, cube, and XYZ data. Files and pasted text are processed locally in the browser and are not uploaded to a server.
 
 ### Citing OpenQP
 If you use OpenQP in your research, please cite the following papers:
