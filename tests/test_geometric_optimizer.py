@@ -292,6 +292,37 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIsInstance(optimizer, GeometricTSOpt)
         self.assertIs(optimizer.mol, mol)
 
+    def test_full_input_checker_rejects_default_scipy_for_irc(self):
+        input_checker = load_module(
+            "input_checker_full_irc_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "runtype": "irc",
+                "method": "hf",
+                "basis": "3-21g",
+                "system": "\nH 0.0 0.0 0.0\nH 0.0 0.0 0.8",
+            },
+            "guess": {},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {},
+            "properties": {},
+            "optimize": {"istate": 0},
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+
+        self.assertFalse(report.ok)
+        self.assertIn("optimize.lib", report.to_text())
+
+    def test_geometric_ts_uses_initial_hessian_by_default(self):
+        text = (ROOT / "pyoqp/oqp/library/libgeometric.py").read_text()
+        ts_block = text.split("class GeometricTSOpt", 1)[1].split("class GeometricIRCOpt", 1)[0]
+
+        self.assertIn('if self.hessian == "never":', ts_block)
+        self.assertIn('self.hessian = "first"', ts_block)
+
     def test_input_checker_accepts_geometric_for_irc(self):
         input_checker = load_module(
             "input_checker_geometric_irc_under_test",

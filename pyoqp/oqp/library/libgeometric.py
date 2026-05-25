@@ -153,6 +153,8 @@ class GeometricTSOpt(_GeometricRunner, StateSpecificOpt):
     def __init__(self, mol):
         StateSpecificOpt.__init__(self, mol)
         _GeometricRunner.__init__(self, mol)
+        if self.hessian == "never":
+            self.hessian = "first"
 
     def _optimizer_keywords(self):
         return {"transition": True}

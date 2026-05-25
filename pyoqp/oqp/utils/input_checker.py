@@ -729,7 +729,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use grad=1,2,... for excited-state gradients.",
             )
 
-    if runtype in {"optimize", "meci", "mecp", "mep", "ts"}:
+    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc"}:
         _check_optimize(config, report)
 
     if runtype in {"nac", "bp"}:
