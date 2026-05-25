@@ -24,7 +24,7 @@ GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
-OPT_LIBS = {"scipy", "dlfind"}
+OPT_LIBS = {"scipy", "dlfind", "geometric"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken"}
@@ -44,7 +44,7 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
-    "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
+    "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts. geometric supports state-specific optimize and meci.",
     "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
@@ -760,7 +760,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy or dlfind.",
+            action="Use scipy, dlfind, or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -855,6 +855,16 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             value=f"{lib}/{runtype}",
             expected="optimize, meci, or ts",
             action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
+        )
+
+    if lib == "geometric" and runtype not in {"optimize", "meci"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "geomeTRIC is currently connected only to state-specific geometry optimization and MECI.",
+            value=f"{lib}/{runtype}",
+            expected="optimize or meci",
+            action="Use [input] runtype=optimize/meci or choose scipy/dlfind for this runtype.",
         )
 
 
