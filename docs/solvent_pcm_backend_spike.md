@@ -94,6 +94,7 @@ This branch only adds input-level scaffolding, tests, optional backend link plum
 - `[pcm]` schema defaults in `pyoqp/oqp/molecule/oqpdata.py`
 - input checker validation and guardrails in `pyoqp/oqp/utils/input_checker.py`
 - optional `ENABLE_DDX` CMake link plumbing in `CMakeLists.txt`, `cmake/FindDDX.cmake`, and `source/CMakeLists.txt`
+- OpenQP-owned ddX adapter API in `source/solvent_ddx_adapter.c` and `source/solvent_ddx_adapter.h`
 - tests in `tests/test_pcm_scaffold.py` and `tests/test_ddx_cmake_scaffold.py`
 - C link smoke test source in `tests/ddx_link_smoke.c`
 - C adapter smoke test source in `tests/ddx_adapter_smoke.c`
@@ -110,7 +111,7 @@ The branch now includes optional `ENABLE_DDX` CMake plumbing:
 - `cmake/FindDDX.cmake` finds `ddx.h` and `libddx` from `DDX_ROOT`/`$DDX_ROOT`.
 - `ENABLE_DDX=ON` requires the backend and links `oqp` against imported target `DDX::ddx`.
 - A `oqp_ddx_link_smoke` CTest executable verifies compile/link/runtime access to `ddx_get_banner` without touching SCF internals.
-- A `oqp_ddx_adapter_smoke` CTest executable exercises the minimal adapter lifecycle: allocate model/electrostatics/state, build multipole RHS, solve, retrieve `x/s/xi/cavity`, validate energy/norms, and deallocate.
+- A `oqp_ddx_adapter_smoke` CTest executable exercises the OpenQP-owned adapter lifecycle: allocate model/electrostatics/state, build multipole RHS, solve, retrieve `x/s/xi/cavity`, validate energy/norms, and deallocate.
 
 Verified locally with a ddX source build under `/tmp/ddx-openqp-smoke`:
 
@@ -122,4 +123,4 @@ cmake --build /tmp/openqp-ddx-on-config --target oqp_ddx_adapter_smoke
 ctest --test-dir /tmp/openqp-ddx-on-config -R 'oqp_ddx_(link|adapter)_smoke' --output-on-failure
 ```
 
-Result: both `oqp_ddx_link_smoke` and `oqp_ddx_adapter_smoke` passed. The next OpenQP step is to move the adapter lifecycle behind an OpenQP-owned solvent module/API, then identify the AO-integral path for turning ddX reaction-field outputs into an RHF/ROHF Fock contribution.
+Result: both `oqp_ddx_link_smoke` and `oqp_ddx_adapter_smoke` passed. The next OpenQP step is to identify the AO-integral path for turning ddX reaction-field output into an RHF/ROHF Fock contribution.

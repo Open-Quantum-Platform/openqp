@@ -14,6 +14,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("find_package(DDX REQUIRED)", text)
         self.assertIn("oqp_ddx_link_smoke", text)
         self.assertIn("oqp_ddx_adapter_smoke", text)
+        self.assertIn("source/solvent_ddx_adapter.c", text)
 
     def test_find_ddx_module_creates_imported_target(self):
         text = (ROOT / "cmake" / "FindDDX.cmake").read_text(encoding="utf-8")
@@ -26,6 +27,14 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("if(ENABLE_DDX)", text)
         self.assertIn("OQP_ENABLE_DDX", text)
         self.assertIn("target_link_libraries(oqp DDX::ddx)", text)
+    def test_oqp_owned_ddx_adapter_api_exists(self):
+        header = (ROOT / "source" / "solvent_ddx_adapter.h").read_text(encoding="utf-8")
+        source = (ROOT / "source" / "solvent_ddx_adapter.c").read_text(encoding="utf-8")
+        self.assertIn("oqp_ddx_smoke_result_t", header)
+        self.assertIn("oqp_ddx_run_point_charge_smoke", header)
+        self.assertIn("oqp_ddx_run_point_charge_smoke", source)
+        self.assertIn("ddx_get_xi", source)
+        self.assertIn("ddx_get_cavity", source)
 
 
 if __name__ == "__main__":

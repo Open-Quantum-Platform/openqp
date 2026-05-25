@@ -183,7 +183,12 @@ if(BUILD_TESTING)
     target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
     add_test(NAME oqp_ddx_link_smoke COMMAND oqp_ddx_link_smoke)
 
-    add_executable(oqp_ddx_adapter_smoke tests/ddx_adapter_smoke.c)
+    add_executable(oqp_ddx_adapter_smoke
+      tests/ddx_adapter_smoke.c
+      source/solvent_ddx_adapter.c
+    )
+    target_compile_definitions(oqp_ddx_adapter_smoke PRIVATE OQP_ENABLE_DDX)
+    target_include_directories(oqp_ddx_adapter_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
     target_link_libraries(oqp_ddx_adapter_smoke PRIVATE DDX::ddx m)
     add_test(NAME oqp_ddx_adapter_smoke COMMAND oqp_ddx_adapter_smoke)
   endif()
