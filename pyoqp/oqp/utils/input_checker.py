@@ -27,6 +27,10 @@ DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
 PCM_BACKENDS = {"ddx", "pcmsolver"}
 PCM_MODES = {"reference_scf", "reference_scf_plus_post_state", "post_state_correction"}
 PCM_MODELS = {"ddcosmo", "ddpcm", "ddlpb", "iefpcm", "cpcm"}
+PCM_BACKEND_MODELS = {
+    "ddx": {"ddcosmo", "ddpcm", "ddlpb"},
+    "pcmsolver": {"iefpcm", "cpcm"},
+}
 OPT_LIBS = {"scipy", "dlfind"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
@@ -436,6 +440,17 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             value=model,
             expected=", ".join(sorted(PCM_MODELS)),
             action="Use ddpcm/ddcosmo with backend=ddx or iefpcm/cpcm with backend=pcmsolver.",
+        )
+
+    if backend in PCM_BACKEND_MODELS and model in PCM_MODELS and model not in PCM_BACKEND_MODELS[backend]:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            f"PCM model {model} is not supported by backend {backend}.",
+            value=model,
+            expected=", ".join(sorted(PCM_BACKEND_MODELS[backend])),
+            action="Use a ddCOSMO/ddPCM/ddLPB model with backend=ddx, or an IEFPCM/CPCM model with backend=pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
         )
 
     if float(epsilon) <= 1.0:

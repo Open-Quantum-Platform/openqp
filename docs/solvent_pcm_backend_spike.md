@@ -26,13 +26,15 @@ The branch reserves a `[pcm]` section but intentionally blocks `enabled=true` un
 ```ini
 [pcm]
 enabled=false
-backend=ddx
+backend=ddx          # ddx supports ddcosmo, ddpcm, ddlpb
 mode=reference_scf
-model=ddpcm
+model=ddpcm          # pcmsolver supports iefpcm, cpcm
 solvent=water
 epsilon=78.3553
 radii=uff
 ```
+
+The input checker rejects backend/model mismatches even while `enabled=false`, so reserved inputs cannot imply unsupported ddX-vs-PCMSolver combinations.
 
 Planned modes:
 

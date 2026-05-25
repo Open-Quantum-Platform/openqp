@@ -142,6 +142,35 @@ epsilon=78.3553
         self.assertIn("input.runtype", errors)
         self.assertIn("single-point energies only", errors["input.runtype"])
 
+    def test_checker_rejects_backend_model_mismatch(self):
+        input_checker = load_module(
+            "input_checker_pcm_model_backend_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "energy",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": False,
+                "backend": "ddx",
+                "mode": "reference_scf",
+                "model": "iefpcm",
+                "epsilon": 78.3553,
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("pcm.model", errors)
+        self.assertIn("is not supported by backend ddx", errors["pcm.model"])
+
 
 if __name__ == "__main__":
     unittest.main()
