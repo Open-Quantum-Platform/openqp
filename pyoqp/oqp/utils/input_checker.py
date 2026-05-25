@@ -24,6 +24,9 @@ GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
+PCM_BACKENDS = {"ddx", "pcmsolver"}
+PCM_MODES = {"reference_scf", "reference_scf_plus_post_state", "post_state_correction"}
+PCM_MODELS = {"ddcosmo", "ddpcm", "ddlpb", "iefpcm", "cpcm"}
 OPT_LIBS = {"scipy", "dlfind"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
@@ -44,6 +47,9 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
+    "pcm.enabled": "PCM input is reserved for the planned energy-only solvent backend. Initial scope is RHF/ROHF reference_scf single-point energy; gradients and state-specific MRSF PCM are out of scope.",
+    "pcm.backend": "Use backend=ddx for the preferred active ddCOSMO/ddPCM library candidate, or backend=pcmsolver for the classic PCM API candidate.",
+    "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
     "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
     "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
@@ -386,6 +392,82 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
                     expected="index pairs",
                     action="Provide pairs like i,j,k,l.",
                 )
+
+
+def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
+    pcm = config.get("pcm", {})
+    if not pcm:
+        return
+
+    enabled = bool(_get(config, "pcm", "enabled", False))
+    backend = _as_lower(_get(config, "pcm", "backend", "ddx"))
+    mode = _as_lower(_get(config, "pcm", "mode", "reference_scf"))
+    model = _as_lower(_get(config, "pcm", "model", "ddpcm"))
+    epsilon = _get(config, "pcm", "epsilon", 78.3553)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+
+    if backend not in PCM_BACKENDS:
+        report.add(
+            "ERROR",
+            "pcm.backend",
+            "Unknown PCM backend.",
+            value=backend,
+            expected=", ".join(sorted(PCM_BACKENDS)),
+            action="Choose ddx or pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
+        )
+
+    if mode not in PCM_MODES:
+        report.add(
+            "ERROR",
+            "pcm.mode",
+            "Unknown PCM coupling mode.",
+            value=mode,
+            expected=", ".join(sorted(PCM_MODES)),
+            action="Use reference_scf for the first MRSF-compatible solvent mode.",
+            wiki=WIKI_HELP["pcm.mode"],
+        )
+
+    if model not in PCM_MODELS:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            "Unknown PCM model.",
+            value=model,
+            expected=", ".join(sorted(PCM_MODELS)),
+            action="Use ddpcm/ddcosmo with backend=ddx or iefpcm/cpcm with backend=pcmsolver.",
+        )
+
+    if float(epsilon) <= 1.0:
+        report.add(
+            "ERROR",
+            "pcm.epsilon",
+            "PCM dielectric constant must be greater than 1.",
+            value=epsilon,
+            action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+        )
+
+    if enabled:
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            "PCM input parsing is scaffolded but runtime solvent coupling is not implemented yet.",
+            value=True,
+            expected="False until the backend Fock/energy coupling is implemented",
+            action="Leave pcm.enabled=false or continue development by adding the RHF/ROHF reference_scf backend.",
+            wiki=WIKI_HELP["pcm.enabled"],
+        )
+
+        if runtype != "energy":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "The first PCM implementation is scoped to single-point energies only.",
+                value=runtype,
+                expected="energy",
+                action="Use runtype=energy; gradients/optimizations require a separate analytic-gradient implementation.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
 
 
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
@@ -1173,6 +1255,7 @@ def check_input_values(
     _check_system(config, report)
     _check_basis(config, report)
     _check_guess(config, report)
+    _check_pcm(config, report)
     _check_scf(config, report)
     _check_tdhf(config, report)
     _check_properties(config, report)

@@ -1,0 +1,147 @@
+"""Input-scaffold tests for planned PCM solvent support."""
+
+from pathlib import Path
+import importlib.util
+import sys
+import types
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_module(module_name, relative_path):
+    spec = importlib.util.spec_from_file_location(module_name, ROOT / relative_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load {relative_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def install_minimal_oqp_stubs():
+    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    setattr(oqp, "ffi", object())
+    setattr(oqp, "lib", object())
+
+    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    constants = types.ModuleType("oqp.utils.constants")
+    setattr(constants, "ANGSTROM_TO_BOHR", 1.8897261254576558)
+    sys.modules["oqp.utils.constants"] = constants
+
+    periodic_table = types.ModuleType("oqp.periodic_table")
+    setattr(periodic_table, "MASSES", {})
+    setattr(periodic_table, "SYMBOL_MAP", {})
+    sys.modules["oqp.periodic_table"] = periodic_table
+
+    mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+
+    class MPIManager:
+        use_mpi = False
+        size = 1
+
+    setattr(mpi_utils, "MPIManager", MPIManager)
+    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+
+
+class PCMScaffoldTests(unittest.TestCase):
+    def setUp(self):
+        install_minimal_oqp_stubs()
+
+    def test_schema_accepts_pcm_section_defaults(self):
+        oqpdata = load_module(
+            "oqpdata_pcm_schema_under_test",
+            "pyoqp/oqp/molecule/oqpdata.py",
+        )
+        parser_mod = load_module(
+            "input_parser_pcm_schema_under_test",
+            "pyoqp/oqp/utils/input_parser.py",
+        )
+
+        parser = parser_mod.OQPConfigParser(schema=oqpdata.OQP_CONFIG_SCHEMA)
+        parser.read_string(
+            """
+[input]
+system=
+ O 0.000000 0.000000 0.000000
+ H 0.000000 0.757000 0.587000
+ H 0.000000 -0.757000 0.587000
+basis=6-31g*
+
+[pcm]
+enabled=false
+backend=ddx
+mode=reference_scf
+model=ddpcm
+epsilon=78.3553
+"""
+        )
+
+        config = parser.validate()
+        self.assertFalse(config["pcm"]["enabled"])
+        self.assertEqual(config["pcm"]["backend"], "ddx")
+        self.assertEqual(config["pcm"]["mode"], "reference_scf")
+        self.assertAlmostEqual(config["pcm"]["epsilon"], 78.3553)
+
+    def test_checker_blocks_enabled_pcm_until_runtime_exists(self):
+        input_checker = load_module(
+            "input_checker_pcm_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "energy",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": True,
+                "backend": "ddx",
+                "mode": "reference_scf",
+                "model": "ddpcm",
+                "epsilon": 78.3553,
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("pcm.enabled", errors)
+        self.assertIn("runtime solvent coupling is not implemented", errors["pcm.enabled"])
+
+    def test_checker_rejects_pcm_gradients_for_first_scope(self):
+        input_checker = load_module(
+            "input_checker_pcm_grad_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "grad",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": True,
+                "backend": "ddx",
+                "mode": "reference_scf",
+                "model": "ddpcm",
+                "epsilon": 78.3553,
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("input.runtype", errors)
+        self.assertIn("single-point energies only", errors["input.runtype"])
+
+
+if __name__ == "__main__":
+    unittest.main()

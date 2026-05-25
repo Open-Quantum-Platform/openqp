@@ -64,6 +64,15 @@ OQP_CONFIG_SCHEMA = {
         'continue_geom': {'type': bool, 'default': 'False'},
         'swapmo': {'type': string, 'default': ''},
     },
+    'pcm': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'backend': {'type': string, 'default': 'ddx'},
+        'mode': {'type': string, 'default': 'reference_scf'},
+        'model': {'type': string, 'default': 'ddpcm'},
+        'solvent': {'type': string, 'default': 'water'},
+        'epsilon': {'type': float, 'default': '78.3553'},
+        'radii': {'type': string, 'default': 'uff'},
+    },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
@@ -245,6 +254,8 @@ class OQPData:
             "system2": "set_system2",
         },
         "guess": {
+        },
+        "pcm": {
         },
         "scf": {
             "type": "set_scf_type",
