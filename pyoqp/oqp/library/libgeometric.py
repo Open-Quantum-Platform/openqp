@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from oqp.library.libscipy import MECIOpt, StateSpecificOpt
+from oqp.library.libscipy import MECIOpt, MECPOpt, StateSpecificOpt
 from oqp.utils.file_utils import dump_log
 
 BOHR_TO_ANGSTROM = 0.52917721092
@@ -117,4 +117,12 @@ class GeometricMECIOpt(_GeometricRunner, MECIOpt):
 
     def __init__(self, mol):
         MECIOpt.__init__(self, mol)
+        _GeometricRunner.__init__(self, mol)
+
+
+class GeometricMECPOpt(_GeometricRunner, MECPOpt):
+    """MECP objective minimized by geomeTRIC."""
+
+    def __init__(self, mol):
+        MECPOpt.__init__(self, mol)
         _GeometricRunner.__init__(self, mol)

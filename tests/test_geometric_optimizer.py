@@ -65,10 +65,15 @@ def install_runfunc_stubs():
         def __init__(self, mol):
             self.mol = mol
 
+    class GeometricMECPOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
     libgeometric.GeometricOpt = GeometricOpt
     libgeometric.GeometricMECIOpt = GeometricMECIOpt
+    libgeometric.GeometricMECPOpt = GeometricMECPOpt
     sys.modules["oqp.library.libgeometric"] = libgeometric
-    return GeometricOpt, GeometricMECIOpt
+    return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt
 
 
 class TestGeometricOptimizerConfig(unittest.TestCase):
@@ -106,7 +111,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertTrue(report.ok, report.to_text())
 
     def test_get_optimizer_dispatches_geometric_optimize(self):
-        GeometricOpt, _ = install_runfunc_stubs()
+        GeometricOpt, _, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -125,7 +130,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIs(optimizer.mol, mol)
 
     def test_get_optimizer_dispatches_geometric_meci(self):
-        _, GeometricMECIOpt = install_runfunc_stubs()
+        _, GeometricMECIOpt, _ = install_runfunc_stubs()
         runfunc = load_module(
             "runfunc_geometric_meci_under_test",
             "pyoqp/oqp/library/runfunc.py",
@@ -141,6 +146,46 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         optimizer = runfunc.get_optimizer(mol)
 
         self.assertIsInstance(optimizer, GeometricMECIOpt)
+        self.assertIs(optimizer.mol, mol)
+
+    def test_input_checker_accepts_geometric_for_mecp(self):
+        input_checker = load_module(
+            "input_checker_geometric_mecp_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {"runtype": "mecp", "method": "tdhf"},
+            "optimize": {
+                "lib": "geometric",
+                "istate": 1,
+                "jstate": 1,
+                "imult": 1,
+                "jmult": 3,
+            },
+        }
+
+        report = input_checker.CheckReport()
+        input_checker._check_optimize(config, report)
+
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_get_optimizer_dispatches_geometric_mecp(self):
+        _, _, GeometricMECPOpt = install_runfunc_stubs()
+        runfunc = load_module(
+            "runfunc_geometric_mecp_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+
+        mol = types.SimpleNamespace(
+            config={
+                "input": {"runtype": "mecp"},
+                "optimize": {"lib": "geometric"},
+            }
+        )
+
+        optimizer = runfunc.get_optimizer(mol)
+
+        self.assertIsInstance(optimizer, GeometricMECPOpt)
         self.assertIs(optimizer.mol, mol)
 
 
