@@ -53,11 +53,26 @@ Result: the wheel installs, but importing fails on both Python 3.9 and Python 3.
 ImportError: dlopen(.../pyddx.cpython-311-darwin.so, 0x0002): symbol not found in flat namespace '_PyObject_ClearManagedDict'
 ```
 
-This looks like a macOS/PyPI wheel compatibility issue rather than an API-design blocker. The next runtime test should use one of:
+I also built ddX from source with CMake/Ninja and ran its C `examples/run_ddx` target successfully:
 
-1. conda-forge `pyddx`, or
-2. source build of ddX/pyddx, or
-3. C/Fortran build directly, skipping the Python wheel.
+```text
+status=0
+Version: 0.8.0
+nsph   =   12
+nbasis =   81
+ncav   = 1290
+```
+
+So the core library builds and runs on this macOS host; the observed blocker is specific to the PyPI Python wheel/import path, not the ddX library itself.
+
+For OpenQP coupling, the C header also exposes these useful state getters after solve/adjoin solve:
+
+- `ddx_get_x(state, nbasis, nsph, x)` for the forward solution.
+- `ddx_get_s(state, nbasis, nsph, s)` for the adjoint solution.
+- `ddx_get_xi(state, ddx, ncav, xi)` for the adjoint solution projected onto cavity points.
+- `ddx_get_cavity(ddx, ncav, cavity)` for cavity data.
+
+This is enough to continue a Fortran/C-level integration spike without requiring `pyddx`.
 
 The probe script in this spike records the expected point-charge example and fails gracefully if `pyddx` cannot import:
 
@@ -72,12 +87,14 @@ python3.11 spikes/001-ddx-api-probe/probe_pyddx_point_charges.py
 - ddX is still the strongest backend candidate on API/maintenance grounds.
 - Its documented host-code model matches the OpenQP solvent design better than using PySCF as a runtime dependency.
 - It has a plausible path not only for energy, but eventually for force/Fock/KS contributions.
+- The ddX core C/Fortran library built and its C example ran successfully on this macOS host.
+- The C API exposes solution/cavity getters that support a Fortran/C-level OpenQP integration spike.
 - The first OpenQP target remains `reference_scf` energy-only RHF/ROHF coupling.
 
 ### What did not work
 
 - The PyPI `pyddx` macOS wheel does not import on this host, at least with the tested Python 3.9 and Python 3.11 venvs.
-- I did not yet validate a live ddX energy number locally because the import failed before the example could run.
+- I did not yet validate a live `pyddx` Python energy number locally because the import failed before the example could run.
 
 ### Surprises
 
@@ -88,9 +105,9 @@ python3.11 spikes/001-ddx-api-probe/probe_pyddx_point_charges.py
 
 Proceed with ddX-first, but add one more narrow build-system/API spike before touching OpenQP SCF internals:
 
-1. Build/install ddX from source or conda-forge on this host.
-2. Run the point-charge example and record the reference energy/force shape.
-3. Inspect the Fortran/C interface for the Fock/KS contribution path and identify the exact arrays OpenQP must provide.
-4. Only then add optional `ENABLE_DDX`/`ENABLE_SOLVENT` CMake plumbing and a small import/link smoke test.
+1. Add optional `ENABLE_DDX`/`ENABLE_SOLVENT` CMake plumbing and a small compile/link smoke test against `ddx.h`/`libddx`.
+2. Build a minimal OpenQP-side adapter around the C API: allocate model, setup, solve, retrieve `x/s/xi`, and deallocate cleanly.
+3. Identify the exact OpenQP AO-integral path for building the reaction-field matrix from ddX outputs.
+4. Then wire the adapter into RHF/ROHF SCF for `runtype=energy` only.
 
 Keep PCMSolver as fallback if ddX's Fock matrix contribution interface proves too hard to map onto OpenQP's AO integrals.
