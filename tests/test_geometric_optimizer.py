@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EXAMPLES_OPT = ROOT / "examples" / "OPT"
 
 
 def load_module(name, relative_path):
@@ -79,6 +80,26 @@ def install_runfunc_stubs():
 class TestGeometricOptimizerConfig(unittest.TestCase):
     def setUp(self):
         install_minimal_oqp_stubs()
+
+    def test_geometric_optimizer_examples_are_available(self):
+        expected = {
+            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.inp": "runtype=optimize",
+            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.json": None,
+            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.inp": "runtype=meci",
+            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.json": None,
+            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.inp": "runtype=mecp",
+            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.json": None,
+        }
+
+        missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
+        self.assertEqual(missing, [])
+        for name, runtype in expected.items():
+            if not name.endswith(".inp"):
+                continue
+            text = (EXAMPLES_OPT / name).read_text()
+            self.assertIn(runtype, text)
+            self.assertIn("lib=geometric", text)
+            self.assertIn("[geometric]", text)
 
     def test_input_checker_accepts_geometric_for_state_specific_optimize(self):
         input_checker = load_module(
