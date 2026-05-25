@@ -155,9 +155,18 @@ For the OpenQP SCF path this means:
 3. The forward solution `xs` is enough for the ddX energy expression, but ddX documentation says the adjoint solve is required for the Fock/Kohn-Sham operator contribution. Therefore the first SCF implementation should not assume `xs` alone is the reaction-field charge vector for `external_charge_potential`.
 4. For ddPCM, `state%q` appears to be the physically relevant effective adjoint quantity for derivatives/Fock-like response, but the current public C API exposes `s` and projected `xi`, not `q` directly.
 
+## Current implementation status
+
+The branch now includes two ddX adapter smoke paths:
+
+1. `oqp_ddx_run_point_charge_smoke`: the original high-level ddX point-charge lifecycle using `ddx_ddrun`.
+2. `oqp_ddx_run_explicit_pcm_smoke`: an explicit host-code PCM path that builds host-supplied `psi` and `phi_cav`, then calls `ddx_pcm_setup`, `ddx_pcm_solve`, `ddx_pcm_solve_adjoint`, `ddx_pcm_energy`, and `ddx_get_xi`.
+
+The explicit path is still a smoke/proof-of-seam, not production OpenQP SCF coupling. It verifies that OpenQP can drive the lower-level ddPCM setup/forward/adjoint API that will be needed after `psi` and `phi_cav` come from AO density and nuclear potentials.
+
 ## Consequence for the next implementation step
 
-Before adding a production SCF hook, add one of these narrow ddX API extensions/adapters:
+Before adding a production SCF hook, one remaining ddX mapping question must be resolved:
 
 A. Preferred: expose a ddX-backed function that returns the cavity-projected effective adjoint/reaction-field quantity needed for the Fock/Kohn-Sham contribution, especially ddPCM `q`/`qgrid` rather than only `s`/`xi`.
 

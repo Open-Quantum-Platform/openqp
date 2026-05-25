@@ -27,6 +27,16 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
                                    char* message,
                                    int message_len);
 
+/*
+ * Run the same point-charge model through the explicit host-code PCM path:
+ * build host-supplied psi and phi_cav, call ddx_pcm_setup/solve/solve_adjoint,
+ * and retrieve the cavity-projected adjoint xi. This is the next seam needed
+ * before OpenQP can provide psi/phi_cav from AO densities in the SCF loop.
+ */
+int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
+                                   char* message,
+                                   int message_len);
+
 #ifdef __cplusplus
 }
 #endif

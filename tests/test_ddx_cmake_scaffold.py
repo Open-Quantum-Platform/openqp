@@ -33,7 +33,12 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         source = (ROOT / "source" / "solvent_ddx_adapter.c").read_text(encoding="utf-8")
         self.assertIn("oqp_ddx_smoke_result_t", header)
         self.assertIn("oqp_ddx_run_point_charge_smoke", header)
+        self.assertIn("oqp_ddx_run_explicit_pcm_smoke", header)
         self.assertIn("oqp_ddx_run_point_charge_smoke", source)
+        self.assertIn("oqp_ddx_run_explicit_pcm_smoke", source)
+        self.assertIn("ddx_pcm_setup", source)
+        self.assertIn("ddx_pcm_solve", source)
+        self.assertIn("ddx_pcm_solve_adjoint", source)
         self.assertIn("ddx_get_xi", source)
         self.assertIn("ddx_get_cavity", source)
 
