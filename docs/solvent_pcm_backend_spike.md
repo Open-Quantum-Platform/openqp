@@ -95,7 +95,9 @@ This branch only adds input-level scaffolding, tests, optional backend link plum
 - input checker validation and guardrails in `pyoqp/oqp/utils/input_checker.py`
 - optional `ENABLE_DDX` CMake link plumbing in `CMakeLists.txt`, `cmake/FindDDX.cmake`, and `source/CMakeLists.txt`
 - OpenQP-owned ddX adapter API in `source/solvent_ddx_adapter.c` and `source/solvent_ddx_adapter.h`
-- tests in `tests/test_pcm_scaffold.py` and `tests/test_ddx_cmake_scaffold.py`
+- public normalized external-charge integral wrapper `external_charge_potential` in `source/integrals/int1.F90`
+- SCF integration seam notes in `docs/solvent_ddx_scf_integration_seam.md`
+- tests in `tests/test_pcm_scaffold.py`, `tests/test_ddx_cmake_scaffold.py`, and `tests/test_ddx_scf_integration_seam.py`
 - C link smoke test source in `tests/ddx_link_smoke.c`
 - C adapter smoke test source in `tests/ddx_adapter_smoke.c`
 - ddX API probe notes/script in `spikes/001-ddx-api-probe/`

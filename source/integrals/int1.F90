@@ -47,6 +47,7 @@ module int1
     public omp_hst
     public multipole_integrals
     public electrostatic_potential
+    public external_charge_potential
     public basis_overlap
     public overlap
 
@@ -317,6 +318,45 @@ contains
 
  end subroutine
 
+!-------------------------------------------------------------------------------
+
+!> @brief Compute packed one-electron Coulomb potential from external point charges.
+!
+!> @details This is the normalized public wrapper around the internal
+!> `int1_coul_ext_chg` kernel. It is intended for environment/solvent reaction
+!> fields such as ddX apparent charges: given point charges q_k at coordinates
+!> r_k, return the packed AO matrix sum_k q_k <mu|1/|r-r_k||nu>.
+!>
+!> @param[in]     basis  basis with SP-shells separated
+!> @param[out]    v      packed normalized AO potential matrix
+!> @param[in]     x      x coordinates of point charges, in Bohr
+!> @param[in]     y      y coordinates of point charges, in Bohr
+!> @param[in]     z      z coordinates of point charges, in Bohr
+!> @param[in]     chg    point charges
+!> @param[in]     logtol optional 1-e exponential prefactor tolerance
+!> @param[in]     chgtol optional charge screening threshold
+!>
+ subroutine external_charge_potential(basis, v, x, y, z, chg, logtol, chgtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(in)              :: basis
+    real(real64), contiguous, intent(out)    :: v(:)
+    real(real64), contiguous, intent(in)     :: x(:), y(:), z(:), chg(:)
+    real(real64), optional, intent(in)       :: logtol, chgtol
+    real(real64) :: tol, qtol
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    qtol = 1.0d-12
+    if (present(chgtol)) qtol = chgtol
+
+    v = 0.0_real64
+    call int1_coul_ext_chg(v, basis, size(chg), x, y, z, chg, tol, qtol)
+    call bas_norm_matrix(v, basis%bfnrm, basis%nbf)
+
+ end subroutine external_charge_potential
 
 !-------------------------------------------------------------------------------
 
