@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -13,7 +12,7 @@
 
 namespace {
 
-inline std::size_t idx4(int f, int m, int row, int col, int nf, int nmatrix, int nbf) {
+inline std::size_t cpu_idx4(int f, int m, int row, int col, int nf, int nmatrix, int nbf) {
   return static_cast<std::size_t>(f) + static_cast<std::size_t>(nf) *
       (static_cast<std::size_t>(m) + static_cast<std::size_t>(nmatrix) *
       (static_cast<std::size_t>(row) + static_cast<std::size_t>(nbf) * static_cast<std::size_t>(col)));
@@ -21,12 +20,12 @@ inline std::size_t idx4(int f, int m, int row, int col, int nf, int nmatrix, int
 
 inline void add4(std::vector<double>& f3, int f, int m, int row, int col,
                  int nf, int nmatrix, int nbf, double value) {
-  f3[idx4(f, m, row, col, nf, nmatrix, nbf)] += value;
+  f3[cpu_idx4(f, m, row, col, nf, nmatrix, nbf)] += value;
 }
 
 inline double get4(const std::vector<double>& d3, int f, int m, int row, int col,
                    int nf, int nmatrix, int nbf) {
-  return d3[idx4(f, m, row, col, nf, nmatrix, nbf)];
+  return d3[cpu_idx4(f, m, row, col, nf, nmatrix, nbf)];
 }
 
 void cpu_mrsf_contract(const std::vector<int>& ids, const std::vector<double>& ints, int ncur,
@@ -143,24 +142,34 @@ struct CaseConfig {
   int seed;
 };
 
+double deterministic_uniform(unsigned long long& state, double lo, double hi) {
+  state = state * 2862933555777941757ULL + 3037000493ULL;
+  double unit = static_cast<double>((state >> 11) & 0x1fffffffffffffULL) / static_cast<double>(0x1fffffffffffffULL);
+  return lo + (hi - lo) * unit;
+}
+
+int deterministic_int(unsigned long long& state, int lo, int hi) {
+  double x = deterministic_uniform(state, 0.0, 1.0);
+  int value = lo + static_cast<int>(x * static_cast<double>(hi - lo + 1));
+  return std::min(hi, std::max(lo, value));
+}
+
 void run_case(const CaseConfig& c) {
   int nmatrix = (c.mode == "umrsf") ? 11 : 7;
   bool is_umrsf = (c.mode == "umrsf");
-  std::mt19937_64 rng(c.seed);
-  std::uniform_int_distribution<int> iddist(1, c.nbf);
-  std::uniform_real_distribution<double> valdist(-1.0, 1.0);
+  unsigned long long rng = static_cast<unsigned long long>(c.seed) + 0x9e3779b97f4a7c15ULL;
   std::vector<int> ids(4 * c.ncur);
   std::vector<double> ints(c.ncur);
   std::size_t tensor_count = static_cast<std::size_t>(c.nf) * nmatrix * c.nbf * c.nbf;
   std::vector<double> d3(tensor_count), f_cpu(tensor_count, 0.0), f_gpu(tensor_count, 0.0);
   for (int n = 0; n < c.ncur; ++n) {
-    ids[4*n+0] = iddist(rng);
-    ids[4*n+1] = iddist(rng);
-    ids[4*n+2] = iddist(rng);
-    ids[4*n+3] = iddist(rng);
-    ints[n] = valdist(rng) * 0.1;
+    ids[4*n+0] = deterministic_int(rng, 1, c.nbf);
+    ids[4*n+1] = deterministic_int(rng, 1, c.nbf);
+    ids[4*n+2] = deterministic_int(rng, 1, c.nbf);
+    ids[4*n+3] = deterministic_int(rng, 1, c.nbf);
+    ints[n] = deterministic_uniform(rng, -1.0, 1.0) * 0.1;
   }
-  for (auto& x : d3) x = valdist(rng) * 0.01;
+  for (auto& x : d3) x = deterministic_uniform(rng, -1.0, 1.0) * 0.01;
 
   double sx = 0.5;
   double sc = 1.0;
