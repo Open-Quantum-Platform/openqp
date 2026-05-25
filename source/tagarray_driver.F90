@@ -120,15 +120,18 @@ contains
     type(recordinfo_t) :: record_info
 
     ptr = c_null_ptr
-    res = 0
+    res = TA_CONTAINER_RECORD_NOT_FOUND
     if (container%contains(tag)) then
       record_info = container%get(tag)
 
       ptr = record_info%data
-      res = product(record_info%dims(1:record_info%ndims))
+      res = record_info%count
       if (present(type_id)) type_id = record_info%type_id
-      if (present(ndims  )) ndims   = record_info%ndims
-      if (present(dims   )) dims    = record_info%dims
+      if (present(ndims  )) ndims   = int(record_info%ndims, kind=c_int32_t)
+      if (present(dims   )) then
+        dims = 0_c_int64_t
+        dims(1:record_info%ndims) = record_info%dims(1:record_info%ndims)
+      end if
       if (present(data_size)) data_size    = record_info%itemsize
     end if
 
