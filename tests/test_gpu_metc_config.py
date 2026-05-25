@@ -19,6 +19,26 @@ def load_module(name, relative_path):
 
 
 def install_oqpdata_stubs():
+    numpy = types.ModuleType("numpy")
+    for name in (
+        "void",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float32",
+        "float64",
+        "complex64",
+        "complex128",
+    ):
+        setattr(numpy, name, type(name, (), {}))
+    setattr(numpy, "dtype", lambda value: value)
+    sys.modules["numpy"] = numpy
+
     oqp = types.ModuleType("oqp")
     setattr(oqp, "ffi", object())
     setattr(oqp, "lib", object())
