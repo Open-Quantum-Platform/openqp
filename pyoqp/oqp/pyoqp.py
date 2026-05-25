@@ -62,6 +62,7 @@ class Runner:
             'mecp': compute_geom,
             'mep': compute_geom,
             'ts': compute_geom,
+            'irc': compute_geom,
             'hess': compute_hess,
             'thermo': compute_thermo,
             'prop': compute_properties,
