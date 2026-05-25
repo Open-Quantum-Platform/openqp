@@ -14,9 +14,9 @@ int main(void) {
   }
 
   printf("%s\n", message);
-  printf("energy=%.16f nbasis=%d ncav=%d x_norm=%.8e s_norm=%.8e xi_norm=%.8e\n",
+  printf("energy=%.16f nbasis=%d ncav=%d x_norm=%.8e s_norm=%.8e xi_norm=%.8e q_cav_norm=%.8e\n",
          result.energy, result.nbasis, result.ncav, result.x_norm,
-         result.s_norm, result.xi_norm);
+         result.s_norm, result.xi_norm, result.q_cav_norm);
 
   const int explicit_status = oqp_ddx_run_explicit_pcm_smoke(
       &result, message, (int)sizeof(message));
@@ -26,8 +26,8 @@ int main(void) {
   }
 
   printf("%s\n", message);
-  printf("explicit_energy=%.16f nbasis=%d ncav=%d x_norm=%.8e s_norm=%.8e xi_norm=%.8e\n",
+  printf("explicit_energy=%.16f nbasis=%d ncav=%d x_norm=%.8e s_norm=%.8e xi_norm=%.8e q_cav_norm=%.8e\n",
          result.energy, result.nbasis, result.ncav, result.x_norm,
-         result.s_norm, result.xi_norm);
+         result.s_norm, result.xi_norm, result.q_cav_norm);
   return 0;
 }

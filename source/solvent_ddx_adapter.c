@@ -193,6 +193,7 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
     result->x_norm = x_norm;
     result->s_norm = s_norm;
     result->xi_norm = xi_norm;
+    result->q_cav_norm = xi_norm;
     result->first_cavity_value = cavity[0];
     result->nbasis = nbasis;
     result->ncav = ncav;
@@ -387,6 +388,7 @@ int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
     result->x_norm = x_norm;
     result->s_norm = s_norm;
     result->xi_norm = xi_norm;
+    result->q_cav_norm = xi_norm;
     result->first_cavity_value = cavity[0];
     result->nbasis = nbasis;
     result->ncav = ncav;

@@ -34,20 +34,23 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("oqp_ddx_smoke_result_t", header)
         self.assertIn("oqp_ddx_run_point_charge_smoke", header)
         self.assertIn("oqp_ddx_run_explicit_pcm_smoke", header)
+        self.assertIn("q_cav_norm", header)
         self.assertIn("oqp_ddx_run_point_charge_smoke", source)
         self.assertIn("oqp_ddx_run_explicit_pcm_smoke", source)
         self.assertIn("ddx_pcm_setup", source)
         self.assertIn("ddx_pcm_solve", source)
         self.assertIn("ddx_pcm_solve_adjoint", source)
+        self.assertIn("q_cav_norm", source)
         self.assertIn("ddx_get_xi", source)
         self.assertIn("ddx_get_cavity", source)
 
     def test_mapping_doc_records_ddx_fock_uncertainty(self):
         text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
         self.assertIn("state%q", text)
+        self.assertIn("ddx_get_xi` projects ddPCM `state%q", text)
         self.assertIn("Fock/Kohn-Sham operator", text)
         self.assertIn("unweighted total solute electrostatic potential", text)
-        self.assertIn("should not assume `xs` alone", text)
+        self.assertIn("cavity-projected `state%q`", text)
 
 
 if __name__ == "__main__":

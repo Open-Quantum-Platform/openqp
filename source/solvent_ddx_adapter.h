@@ -10,6 +10,7 @@ typedef struct oqp_ddx_smoke_result_s {
   double x_norm;
   double s_norm;
   double xi_norm;
+  double q_cav_norm;
   double first_cavity_value;
   int nbasis;
   int ncav;
@@ -30,8 +31,9 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
 /*
  * Run the same point-charge model through the explicit host-code PCM path:
  * build host-supplied psi and phi_cav, call ddx_pcm_setup/solve/solve_adjoint,
- * and retrieve the cavity-projected adjoint xi. This is the next seam needed
- * before OpenQP can provide psi/phi_cav from AO densities in the SCF loop.
+ * and retrieve ddX's cavity-projected ddPCM state%q through ddx_get_xi.
+ * This is the next seam needed before OpenQP can provide psi/phi_cav from
+ * AO densities in the SCF loop.
  */
 int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
                                    char* message,
