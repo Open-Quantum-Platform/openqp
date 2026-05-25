@@ -105,6 +105,9 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.json": None,
             "HCN_RHF-DFT_IRC_GEOMETRIC.inp": "runtype=irc",
             "HCN_RHF-DFT_IRC_GEOMETRIC.json": None,
+            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
+            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
+            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
         }
 
         missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
@@ -116,6 +119,36 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             self.assertIn(runtype, text)
             self.assertIn("lib=geometric", text)
             self.assertIn("[geometric]", text)
+
+    def test_geometric_config_supports_constraints_file_options(self):
+        text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+
+        self.assertIn("'constraints_file': {'type': str, 'default': ''}", text)
+        self.assertIn("'enforce': {'type': float, 'default': '0.0'}", text)
+        self.assertIn("'conmethod': {'type': int, 'default': '0'}", text)
+
+    def test_geometric_runner_passes_constraints_to_optimizer(self):
+        install_runfunc_stubs()
+        file_utils = types.ModuleType("oqp.utils.file_utils")
+        file_utils.dump_log = lambda *args, **kwargs: None
+        sys.modules["oqp.utils.file_utils"] = file_utils
+        libgeometric = load_module(
+            "libgeometric_constraints_under_test",
+            "pyoqp/oqp/library/libgeometric.py",
+        )
+
+        runner = libgeometric._GeometricRunner.__new__(libgeometric._GeometricRunner)
+        runner.geometric_config = {
+            "constraints_file": "constraints.txt",
+            "enforce": 1e-4,
+            "conmethod": 1,
+        }
+
+        keywords = runner._optimizer_keywords()
+
+        self.assertEqual(keywords["constraints"], "constraints.txt")
+        self.assertEqual(keywords["enforce"], 1e-4)
+        self.assertEqual(keywords["conmethod"], 1)
 
     def test_input_checker_accepts_geometric_for_state_specific_optimize(self):
         input_checker = load_module(

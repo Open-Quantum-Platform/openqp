@@ -60,7 +60,18 @@ class _GeometricRunner:
         self.hessian = self.geometric_config.get("hessian", "never")
 
     def _optimizer_keywords(self):
-        return {}
+        keywords = {}
+        constraints_file = self.geometric_config.get("constraints_file", "")
+        if constraints_file:
+            if not os.path.isabs(constraints_file):
+                mol = getattr(self, "mol", None)
+                input_file = getattr(mol, "input_file", "")
+                if input_file:
+                    constraints_file = os.path.join(os.path.dirname(input_file), constraints_file)
+            keywords["constraints"] = constraints_file
+            keywords["enforce"] = self.geometric_config.get("enforce", 0.0)
+            keywords["conmethod"] = self.geometric_config.get("conmethod", 0)
+        return keywords
 
     def optimize(self):
         try:

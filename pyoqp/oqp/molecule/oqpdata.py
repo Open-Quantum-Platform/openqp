@@ -197,6 +197,9 @@ OQP_CONFIG_SCHEMA = {
         'prefix': {'type': str, 'default': 'geometric'},
         'hessian': {'type': str, 'default': 'never'},
         'irc_direction': {'type': str, 'default': 'forward'},
+        'constraints_file': {'type': str, 'default': ''},
+        'enforce': {'type': float, 'default': '0.0'},
+        'conmethod': {'type': int, 'default': '0'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
