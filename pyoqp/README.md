@@ -6,6 +6,8 @@
 
 - Geometry optimization for arbitrary state local minimum, MECI, MEP with Scipy library
 - Geometry optimization for arbitrary state local minimum, MECI, TS with DL-FIND library
+- Geometry optimization with geomeTRIC for state-specific optimization, MECI, MECP, TS, constrained optimizations, and IRC paths
+- Native PySCF-backed initial guesses: `pyscf`, `sad`, and `sap`
 - Energy gradient calculations interface for nonadiabatic molecular dynamics
 
 ## Prerequisite
@@ -80,6 +82,18 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     file=''
     save_mol=False
     continue_geom=False
+
+[geometric]
+    coordsys=tric
+    trust=0.1
+    tmax=0.3
+    convergence_set=GAU
+    prefix=geometric
+    hessian=never
+    irc_direction=forward
+    constraints_file=''
+    enforce=0.0
+    conmethod=0
 
 [scf]
     type=rhf
@@ -188,6 +202,7 @@ input section handle the basic information of molecular system
       meci       minimum energy conical intersection optimization
       mep        minimum energy path calculation
       ts         transition state optimization
+      irc        intrinsic reaction coordinate with [optimize]lib=geometric
       neb        nudge elasted band calculation (not avaialble yet)
  
 - system // specify molecular structure or xyz file
@@ -217,6 +232,14 @@ guess section handle the guess orbitals
       hcore      hcore guess
       model      read orbital from molden
       json       load data from json
+      auto       load json if the requested file exists; otherwise use huckel
+      pyscf      run a PySCF SCF calculation and import the converged orbitals
+      sad        build a PySCF superposition-of-atomic-density initial guess
+      sap        build a PySCF superposition-of-atomic-potential initial guess
+
+      pyscf, sad, and sap use the native OpenQP JSON restart exporter.
+      PySCF is installed with OpenQP's Python dependencies. MOKIT is not
+      required for these initial guesses.
 
 - file // set the guess orbital or data file
 
@@ -384,6 +407,7 @@ optimize section handle the geometry optimization
 
       scipy       use scipy.optimize library (default)
       dlfind      use DL-FIND library
+      geometric   use geomeTRIC. Supports runtype=optimize, meci, mecp, ts, and irc
 
 - optimizer // choose the scipy optimizer
 
@@ -462,6 +486,52 @@ optimize section handle the geometry optimization
 
       True       do initial SCF iterations in every optimization step
       False      do not do initial SCF iterations after the first optimization step
+
+### [geometric]
+
+geometric section controls the geomeTRIC optimizer backend when [optimize]lib=geometric
+
+- coordsys // coordinate system passed to geomeTRIC
+
+      tric       translation-rotation internal coordinates (default)
+
+- trust // initial trust radius in Angstrom
+
+      0.1 (default)
+
+- tmax // maximum trust radius in Angstrom
+
+      0.3 (default)
+
+- convergence_set // geomeTRIC convergence preset
+
+      GAU (default)
+
+- prefix // prefix for geomeTRIC output files
+
+      geometric (default)
+
+- hessian // initial Hessian option passed to geomeTRIC
+
+      never (default for minima and constrained optimization)
+      first (recommended/automatically used for ts and irc if hessian=never)
+
+- irc_direction // IRC branch direction for runtype=irc
+
+      forward (default)
+      backward
+
+- constraints_file // geomeTRIC constraints file for constrained optimization
+
+      relative paths are resolved relative to the OpenQP input file
+
+- enforce // geomeTRIC constraint enforcement value
+
+      0.0 (default)
+
+- conmethod // geomeTRIC constraint method
+
+      0 (default)
 
 ### [dlfind]
 
