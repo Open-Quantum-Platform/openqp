@@ -148,6 +148,14 @@ OQP_CONFIG_SCHEMA = {
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
+    'gpu': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'backend': {'type': string, 'default': 'cuda'},
+        'target': {'type': string, 'default': 'metc'},
+        'device': {'type': int, 'default': '0'},
+        'precision': {'type': string, 'default': 'float64'},
+        'fallback': {'type': string, 'default': 'cpu'},
+    },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
         'td_prop': {'type': bool, 'default': 'False'},

@@ -34,6 +34,10 @@ DLFIND_MIN_IOPT = {0, 1, 2, 3}
 DLFIND_TS_IOPT = {9}
 DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
+GPU_BACKENDS = {"cuda"}
+GPU_TARGETS = {"metc"}
+GPU_PRECISIONS = {"float64"}
+GPU_FALLBACKS = {"cpu", "error"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, prop, or data. soc and neb are recognized but not implemented yet.",
@@ -47,6 +51,7 @@ WIKI_HELP = {
     "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
     "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
+    "gpu": "GPU support is experimental. The first supported target is CUDA METC for MRSF/UMRSF Davidson contractions; CPU fallback remains the default.",
 }
 
 
@@ -1148,6 +1153,83 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _check_gpu(config: dict[str, Any], report: CheckReport) -> None:
+    gpu = config.get("gpu", {}) or {}
+    enabled = bool(gpu.get("enabled", False))
+    backend = _as_lower(gpu.get("backend", "cuda"))
+    target = _as_lower(gpu.get("target", "metc"))
+    precision = _as_lower(gpu.get("precision", "float64"))
+    fallback = _as_lower(gpu.get("fallback", "cpu"))
+    device = gpu.get("device", 0)
+
+    if backend not in GPU_BACKENDS:
+        report.add(
+            "ERROR",
+            "gpu.backend",
+            "Unsupported GPU backend.",
+            value=backend,
+            expected=", ".join(sorted(GPU_BACKENDS)),
+            action="Use backend=cuda for the initial METC GPU prototype.",
+            wiki=WIKI_HELP["gpu"],
+        )
+
+    if target not in GPU_TARGETS:
+        report.add(
+            "ERROR",
+            "gpu.target",
+            "Unsupported GPU acceleration target.",
+            value=target,
+            expected=", ".join(sorted(GPU_TARGETS)),
+            action="Use target=metc for the first MRSF Davidson contraction prototype.",
+            wiki=WIKI_HELP["gpu"],
+        )
+
+    if precision not in GPU_PRECISIONS:
+        report.add(
+            "ERROR",
+            "gpu.precision",
+            "Unsupported GPU precision mode.",
+            value=precision,
+            expected=", ".join(sorted(GPU_PRECISIONS)),
+            action="Use precision=float64 so CPU/GPU MRSF comparisons are meaningful.",
+        )
+
+    if fallback not in GPU_FALLBACKS:
+        report.add(
+            "ERROR",
+            "gpu.fallback",
+            "Unsupported GPU fallback policy.",
+            value=fallback,
+            expected=", ".join(sorted(GPU_FALLBACKS)),
+            action="Use fallback=cpu to continue without CUDA, or fallback=error to stop.",
+        )
+
+    try:
+        if int(device) < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            "gpu.device",
+            "GPU device id must be a non-negative integer.",
+            value=device,
+            expected="0 or greater",
+            action="Set device=0 for the first GPU, or device=1 for the second CHC4 GPU.",
+        )
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if enabled and target == "metc" and not (method == "tdhf" and td_type in {"mrsf", "umrsf"}):
+        report.add(
+            "WARNING",
+            "gpu.target",
+            "GPU METC is currently scoped to MRSF/UMRSF TDHF Davidson contractions.",
+            value={"method": method, "tdhf.type": td_type},
+            action="Use method=tdhf and [tdhf] type=mrsf/umrsf, or disable [gpu] enabled for non-MRSF runs.",
+            wiki=WIKI_HELP["gpu"],
+        )
+
+
 def check_input_values(
     config: dict[str, Any],
     *,
@@ -1178,6 +1260,7 @@ def check_input_values(
     _check_properties(config, report)
     _check_requested_states(config, report)
     _check_runtype(config, report)
+    _check_gpu(config, report)
 
     if _get(config, "input", "d4", False) and not _get(config, "input", "functional", ""):
         report.add(

@@ -61,6 +61,13 @@ endif()
 option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
+option(ENABLE_CUDA       "Enable experimental CUDA GPU backend" OFF)
+
+if(ENABLE_CUDA)
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+  add_compile_definitions(OQP_CUDA_ENABLE)
+endif()
 
 option(ENABLE_PYTHON     "Enable Python Interface"           ON)
 option(ENABLE_MSAN       "Enable MemorySanitizer"            OFF) #not used now
