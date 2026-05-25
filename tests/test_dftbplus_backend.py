@@ -80,6 +80,16 @@ class DFTBPlusSchemaTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("DFTB+ backend currently supports runtype=energy or grad", report.to_text())
 
+    def test_method_dftb_allows_ground_state_gradient_index(self):
+        input_checker = load_module("input_checker_dftb_grad_under_test", "pyoqp/oqp/utils/input_checker.py")
+        config = {
+            "input": {"method": "dftb", "runtype": "grad", "system": "\nH 0 0 0\nH 0 0 0.74"},
+            "properties": {"grad": [0]},
+            "dftb": {"sk_path": "/tmp/3ob-3-1"},
+        }
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertTrue(report.ok, report.to_text())
+
 
 class DFTBPlusWriterRunnerTests(unittest.TestCase):
     def setUp(self):
