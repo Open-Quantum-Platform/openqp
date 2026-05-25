@@ -55,6 +55,22 @@ class DFTBPlusParserTests(unittest.TestCase):
         self.assertEqual(result.gradient[0], [-0.001, -0.0, 0.001])
         self.assertEqual(result.gradient[2], [-0.0, -0.003, -0.0])
 
+    def test_parse_results_tag_with_padded_dftbplus_headers(self):
+        text = """mermin_energy       :real:0:
+ -0.670550865464077E+000
+forces              :real:2:3,2
+ -0.0 -0.0 -0.208705952983491E-002
+ -0.0 -0.0  0.208705952983491E-002
+"""
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "results.tag"
+            path.write_text(text)
+            result = self.dftbplus.parse_results_tag(path)
+        self.assertAlmostEqual(result.energy, -0.670550865464077)
+        self.assertEqual(len(result.gradient), 2)
+        self.assertAlmostEqual(result.gradient[0][2], 0.00208705952983491)
+        self.assertAlmostEqual(result.gradient[1][2], -0.00208705952983491)
+
 
 class DFTBPlusSchemaTests(unittest.TestCase):
     def setUp(self):
@@ -102,9 +118,11 @@ class DFTBPlusWriterRunnerTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             self.dftbplus.write_dftbplus_input(tmp, atoms, coords_bohr, config, gradient=True)
             text = Path(tmp, "dftb_in.hsd").read_text()
-        self.assertIn("Driver = Gradients", text)
+        self.assertIn("Driver = ConjugateGradient { MaxSteps = 0 }", text)
         self.assertIn('Prefix = "/opt/dftb/3ob-3-1/"', text)
         self.assertIn("MaxSCCIterations = 77", text)
+        self.assertIn('O = "p"', text)
+        self.assertIn('H = "s"', text)
         self.assertIn("O H", text)
 
     def test_runner_missing_executable_has_clear_error(self):

@@ -62,7 +62,7 @@ def parse_detailed_out(path: str | os.PathLike[str]) -> DFTBPlusResult:
 def _parse_tag_header(header: str) -> tuple[str, list[int]]:
     # Example: forces:real:2:3,3
     fields = header.strip().split(":")
-    name = fields[0]
+    name = fields[0].strip()
     shape = []
     if len(fields) >= 4 and fields[3]:
         shape = [int(x) for x in fields[3].split(",") if x]
@@ -98,13 +98,18 @@ def parse_results_tag(path: str | os.PathLike[str]) -> DFTBPlusResult:
             if next_line:
                 values.extend(float(token) for token in next_line.split())
             index += 1
-        if name == "total_energy" and values:
-            energy = values[0]
+        if name in {"total_energy", "mermin_energy", "extrapolated0_energy", "forcerelated_energy"} and values:
+            if energy is None or name == "total_energy":
+                energy = values[0]
         elif name == "forces" and values:
-            if not shape or len(shape) != 2 or shape[1] != 3:
+            if not shape or len(shape) != 2 or 3 not in shape:
                 raise DFTBPlusError(f"Unexpected forces shape in {path}: {shape}")
-            natom = shape[0]
-            gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
+            if shape[1] == 3:
+                natom = shape[0]
+                gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
+            else:
+                natom = shape[1]
+                gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
     if energy is None:
         raise DFTBPlusError(f"Could not parse total_energy from {path}")
     return DFTBPlusResult(energy=energy, gradient=gradient)
@@ -128,6 +133,28 @@ def _coords_rows(coords_bohr: Sequence[float]) -> list[list[float]]:
         [float(coords_bohr[3 * i + j]) * BOHR_TO_ANGSTROM for j in range(3)]
         for i in range(len(coords_bohr) // 3)
     ]
+
+
+_DEFAULT_MAX_ANGULAR_MOMENTUM = {
+    "H": "s", "He": "s",
+    "Li": "p", "Be": "p", "B": "p", "C": "p", "N": "p", "O": "p", "F": "p", "Ne": "p",
+    "Na": "p", "Mg": "p", "Al": "p", "Si": "p", "P": "p", "S": "p", "Cl": "p", "Ar": "p",
+    "K": "p", "Ca": "p", "Br": "p", "I": "p",
+    "Cr": "d",
+}
+
+
+def _max_angular_momentum_block(symbols: Sequence[str], config: dict) -> str:
+    dftb = _dftb_config(config)
+    overrides = dftb.get("max_angular_momentum", {}) or {}
+    lines = ["  MaxAngularMomentum = {"]
+    for symbol in dict.fromkeys(symbols):
+        value = overrides.get(symbol, _DEFAULT_MAX_ANGULAR_MOMENTUM.get(symbol))
+        if value is None:
+            raise DFTBPlusError(f"No DFTB+ MaxAngularMomentum default for atom type {symbol}")
+        lines.append(f'    {symbol} = "{value}"')
+    lines.append("  }")
+    return "\n".join(lines)
 
 
 def _dftb_config(config: dict) -> dict:
@@ -155,6 +182,7 @@ def write_dftbplus_input(
     charge = int(config.get("input", {}).get("charge", 0))
     symbols = _symbols_for_atoms(atoms)
     unique_symbols = list(dict.fromkeys(symbols))
+    max_l_block = _max_angular_momentum_block(unique_symbols, config)
     rows = _coords_rows(coords_bohr)
     if len(rows) != len(symbols):
         raise DFTBPlusError("Number of atoms does not match coordinate rows")
@@ -181,18 +209,15 @@ Hamiltonian = DFTB {{
     Separator = "-"
     Suffix = ".skf"
   }}
+{max_l_block}
 }}
 
 Options {{
   WriteResultsTag = Yes
 }}
-
-Analysis {{
-  CalculateForces = {"Yes" if gradient else "No"}
-}}
 '''
     if gradient:
-        hsd += "\nDriver = Gradients {}\n"
+        hsd += "\nDriver = ConjugateGradient { MaxSteps = 0 }\n"
     input_path = workdir / "dftb_in.hsd"
     input_path.write_text(hsd, encoding="utf-8")
     return input_path
