@@ -84,7 +84,7 @@ contains
   subroutine gpu_backend_metc_contract(ids, ints, ncur, f3, d3, nf, nmatrix, nbf, &
                                        cur_pass, scale_exchange, scale_coulomb, &
                                        is_umrsf, ierr)
-    integer, intent(in) :: ids(:,:)
+    integer(2), intent(in) :: ids(:,:)
     real(c_double), intent(in), target, contiguous :: ints(:)
     integer, intent(in) :: ncur, nf, nmatrix, nbf, cur_pass
     real(c_double), intent(inout), target, contiguous :: f3(:,:,:,:)

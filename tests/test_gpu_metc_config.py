@@ -125,8 +125,9 @@ class GpuMetcConfigTests(unittest.TestCase):
         self.assertIn("module gpu_backend", source)
         self.assertIn("gpu_backend_available", source)
         self.assertIn("gpu_backend_describe", source)
-        self.assertIn("gpu_backend_metc_enabled", source)
+        self.assertIn("integer(2), intent(in) :: ids", source)
         self.assertIn("gpu_backend_metc_contract", source)
+        self.assertIn("oqp_gpu_metc_contract", source)
 
     def test_cuda_metc_kernel_exports_real_contract_abi(self):
         source = (ROOT / "source/gpu_metc_cuda.cu").read_text()
