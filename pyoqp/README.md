@@ -76,7 +76,6 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     runtype=energy
     system=''
     d4=False
-    soc_2e=1
 
 [guess]
     type=huckel
@@ -127,6 +126,7 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     td_prop=False
     grad=0
     nac=''
+    soc=''
     export=False
 
 [optimize]
@@ -197,7 +197,7 @@ input section handle the basic information of molecular system
       grad       single-point energy and gradients
       hess       frequency calculation (numerical only)
       nac        non-adiabatic coupling (not available yet)
-      soc        spin-orbit coupling for MRSF-TDDFT
+      soc        spin-orbit coupling (not available yet)
       optimize   local minimum geometry optimization
       meci       minimum energy conical intersection optimization
       mep        minimum energy path calculation
@@ -221,14 +221,6 @@ input section handle the basic information of molecular system
 
       False      do not compute DFTD4 corrections according to functional (default)
       True       compute DFTD4 corrections for energy and gradients. some functional might not be supported
-
-- soc_2e // choose SOC terms for runtype=soc
-
-      0          one-electron SOC only
-      1          one-electron plus mean-field two-electron SOC (default)
-
-      runtype=soc requires method=tdhf, tdhf.type=mrsf, scf.type=rohf,
-      and scf.multiplicity=3.
 
 ### [guess]
 

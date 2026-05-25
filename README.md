@@ -8,7 +8,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **Flexible prototyping through a Python wrapper, PyOQP**
 - **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
 - **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
-- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036), including one-electron and mean-field two-electron SOC terms through `runtype=soc`
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
 - **Ground State Properties** by HF and DFT theories
 - **Geometry Optimization, Transition State Search, and Conical Intersection Search** by SciPy and [DL-Find](https://github.com/digital-chemistry-laboratory/libdlfind)
@@ -27,6 +26,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
   
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
+- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
 - **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
 ### Quickstart
