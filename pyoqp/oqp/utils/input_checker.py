@@ -17,7 +17,7 @@ SUPPORTED_RUNTYPES = {
 NOT_AVAILABLE_RUNTYPES = {"soc", "neb"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 
-METHODS = {"hf", "tdhf"}
+METHODS = {"hf", "tdhf", "dftb"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
 GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
@@ -37,7 +37,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, prop, or data. soc and neb are recognized but not implemented yet.",
-    "input.method": "Use method=hf for HF/DFT and method=tdhf for TDHF/TDDFT/SF/MRSF runs.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, or method=dftb for the optional external DFTB+ backend.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -251,6 +251,9 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_basis(config: dict[str, Any], report: CheckReport) -> None:
+    if _as_lower(_get(config, "input", "method", "hf")) == "dftb":
+        return
+
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
@@ -1176,8 +1179,20 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf or tdhf.",
+            action="Choose hf, tdhf, or dftb.",
             wiki=WIKI_HELP["input.method"],
+        )
+
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if method == "dftb" and runtype not in {"energy", "grad"}:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "DFTB+ backend currently supports runtype=energy or grad only.",
+            value=runtype,
+            expected="energy, grad",
+            action="Use runtype=energy or runtype=grad for method=dftb.",
+            wiki=WIKI_HELP["input.runtype"],
         )
 
     _check_system(config, report)
