@@ -37,6 +37,13 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("ddx_get_xi", source)
         self.assertIn("ddx_get_cavity", source)
 
+    def test_mapping_doc_records_ddx_fock_uncertainty(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("state%q", text)
+        self.assertIn("Fock/Kohn-Sham operator", text)
+        self.assertIn("unweighted total solute electrostatic potential", text)
+        self.assertIn("should not assume `xs` alone", text)
+
 
 if __name__ == "__main__":
     unittest.main()

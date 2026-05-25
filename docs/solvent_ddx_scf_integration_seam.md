@@ -92,8 +92,65 @@ This is the natural first path for converting ddX apparent charges/cavity-point 
 - No SMD surface terms.
 - No incremental-Fock shortcut for PCM until the full non-incremental energy path is validated.
 
+## ddX mapping findings from source inspection
+
+The relevant ddX state fields are documented in `src/ddx_core.f90`:
+
+- `state%phi_cav`: electric potential at cavity points, dimension `ncav`; used to build the primal RHS.
+- `state%psi`: representation of the solute density/potential in spherical harmonics, dimension `(nbasis, nsph)`; used as RHS for the adjoint linear system.
+- `state%xs`: forward ddCOSMO solution, dimension `(nbasis, nsph)`; used by COSMO and PCM.
+- `state%s`: adjoint ddCOSMO solution, dimension `(nbasis, nsph)`.
+- `state%q`: effective total adjoint ddPCM solution, defined in ddX as
+  `Q = S - 4*pi/(eps - 1) * Y`; this is only populated by the ddPCM adjoint solve.
+
+For COSMO/PCM setup, ddX does:
+
+```fortran
+call cav_to_spherical(..., phi_cav, state%phi)
+state%phi = -state%phi
+state%phi_cav = phi_cav
+state%psi = psi
+state%rhs_done = .true.
+state%adjoint_rhs_done = .true.
+```
+
+The ddX solvation energy is:
+
+```fortran
+esolv = 0.5 * dot(state%xs, state%psi)
+```
+
+The Python/C++ API confirms the expected host-code call shape for a general QM host:
+
+```python
+state = pyddx.State(model, psi, phi)
+state.solve()
+state.solve_adjoint()
+energy = state.energy()
+```
+
+For the OpenQP SCF path this means:
+
+1. `phi_cav` should be the unweighted total solute electrostatic potential at ddX cavity points.
+2. `psi` should be ddX's spherical-harmonic representation of the same solute source. ddX exposes helpers for point multipoles (`ddx_multipole_psi`), but not yet a generic C helper that converts an arbitrary QM density potential into `psi` directly.
+3. The forward solution `xs` is enough for the ddX energy expression, but ddX documentation says the adjoint solve is required for the Fock/Kohn-Sham operator contribution. Therefore the first SCF implementation should not assume `xs` alone is the reaction-field charge vector for `external_charge_potential`.
+4. For ddPCM, `state%q` appears to be the physically relevant effective adjoint quantity for derivatives/Fock-like response, but the current public C API exposes `s` and projected `xi`, not `q` directly.
+
+## Consequence for the next implementation step
+
+Before adding a production SCF hook, add one of these narrow ddX API extensions/adapters:
+
+A. Preferred: expose a ddX-backed function that returns the cavity-projected effective adjoint/reaction-field quantity needed for the Fock/Kohn-Sham contribution, especially ddPCM `q`/`qgrid` rather than only `s`/`xi`.
+
+B. If upstream ddX already has a public routine for the Fock/KS contribution that was missed, wrap that routine directly instead of reconstructing charges in OpenQP.
+
+C. For a temporary COSMO-only prototype, test whether `xs` projected to cavity points can reproduce a known ddCOSMO/COSMO Fock contribution, but keep it explicitly marked as a prototype until validated.
+
+The OpenQP-side AO matrix seam is now ready: once a physically correct point/cavity reaction representation is available, use `external_charge_potential` to build the packed AO matrix and add it to all spin Fock blocks.
+
 ## Open questions before coding the SCF hook
 
-- Which ddX output should be mapped to reaction charges for `external_charge_potential`: forward solution `x`, projected adjoint/cavity vector `xi`, or another cavity representation from the ddX API? The point-charge smoke test proves lifecycle and retrieval, not yet the physical mapping for QM density.
-- Whether ddX wants the electronic MEP weighted (`electrostatic_potential` currently multiplies by `wt`) or unweighted (`int1_el_pot` is private and returns unweighted values).
+- What exact ddX quantity should be exposed for the Fock/Kohn-Sham operator: `q`, `qgrid`, `xi`, or a higher-level ddX routine?
+- Whether ddX wants `psi` for arbitrary QM density from spherical projection of the potential, direct source-density projection, or a combination of electronic+nuclear multipoles.
+- Whether OpenQP's public `electrostatic_potential` wrapper is acceptable for `phi_cav`, given it currently multiplies by `wt`; for ddX `phi_cav` should be unweighted, so either expose `int1_el_pot` safely or call it via a new unweighted wrapper.
 - Where solvent metadata and energy fields should be stored in OpenQP JSON/database output.
