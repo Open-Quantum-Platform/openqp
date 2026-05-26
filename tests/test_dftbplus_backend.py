@@ -59,8 +59,9 @@ class DFTBPlusParserTests(unittest.TestCase):
         text = """mermin_energy       :real:0:
  -0.670550865464077E+000
 forces              :real:2:3,2
- -0.0 -0.0 -0.208705952983491E-002
- -0.0 -0.0  0.208705952983491E-002
+ -0.0 -0.0
+ -0.0 -0.0
+ -0.208705952983491E-002 0.208705952983491E-002
 """
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "results.tag"
@@ -70,6 +71,20 @@ forces              :real:2:3,2
         self.assertEqual(len(result.gradient), 2)
         self.assertAlmostEqual(result.gradient[0][2], 0.00208705952983491)
         self.assertAlmostEqual(result.gradient[1][2], -0.00208705952983491)
+
+    def test_parse_results_tag_transposes_three_by_natom_forces(self):
+        text = """forcerelated_energy :real:0:
+ -0.670550865464077E+000
+forces              :real:2:3,2
+  0.10  0.40
+  0.20  0.50
+  0.30  0.60
+"""
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "results.tag"
+            path.write_text(text)
+            result = self.dftbplus.parse_results_tag(path)
+        self.assertEqual(result.gradient, [[-0.10, -0.20, -0.30], [-0.40, -0.50, -0.60]])
 
 
 class DFTBPlusSchemaTests(unittest.TestCase):

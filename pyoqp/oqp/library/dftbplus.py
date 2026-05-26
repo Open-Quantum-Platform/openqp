@@ -150,7 +150,7 @@ def parse_results_tag(path: str | os.PathLike[str]) -> DFTBPlusResult:
                 gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
             else:
                 natom = shape[1]
-                gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
+                gradient = [[-values[component * natom + atom] for component in range(3)] for atom in range(natom)]
     if energy is None:
         raise DFTBPlusError(f"Could not parse total_energy from {path}")
     return DFTBPlusResult(energy=energy, gradient=gradient)
