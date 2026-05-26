@@ -24,7 +24,11 @@ MASSES = (
     227.0278, 232.0381, 231.0359, 238.0508,
     237.0482, 244.0642, 243.0614, 247.0703,
     247.0703, 251.0796, 252.0829, 257.0751,
-    258.0986, 259.1009, 260.1053, 261.1087, 0.0, 0.0)
+    258.0986, 259.1009, 260.1053, 261.1087,
+    262.1141, 266.1219, 264.1247, 277.1341,
+    268.1388, 281.1645, 282.1691, 285.1771,
+    286.1825, 289.1904, 290.1966, 293.2045,
+    294.2104, 294.2139)
 
 ELEMENTS_NAME = (
     None,
@@ -39,7 +43,8 @@ ELEMENTS_NAME = (
     'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn',
     'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U ', 'Np', 'Pu', 'Am', 'Cm',
     'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr', 'Rf', 'Db', 'Sg',
-    'Bh', 'Hs', 'Mt', 'Ds')
+    'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv',
+    'Ts', 'Og')
 
 ELEMENTS_LONG_NAME = (
     None,
@@ -58,7 +63,9 @@ ELEMENTS_LONG_NAME = (
     'neptunium', 'plutonium', 'americium', 'curium',
     'berkelium', 'californium', 'einsteinium', 'fermium',
     'mendelevium', 'nobelium', 'lawrencium', 'rutherfordium',
-    'dubnium', 'seaborgium', 'bohrium', 'hassium', 'meitnerium', 'darmstadtium')
+    'dubnium', 'seaborgium', 'bohrium', 'hassium', 'meitnerium', 'darmstadtium',
+    'roentgenium', 'copernicium', 'nihonium', 'flerovium', 'moscovium', 'livermorium',
+    'tennessine', 'oganesson')
 
 ELEMENTS = (
     {
@@ -199,3 +206,12 @@ for key, value in SYMBOL_MAP_1.items():
 
     if isinstance(key, int):
         SYMBOL_MAP[f'{key:.1f}'] = value
+
+for atomic_number in range(1, len(ELEMENTS_NAME)):
+    symbol = ELEMENTS_NAME[atomic_number].strip()
+    long_name = ELEMENTS_LONG_NAME[atomic_number]
+    SYMBOL_MAP[atomic_number] = atomic_number
+    SYMBOL_MAP[str(atomic_number)] = atomic_number
+    SYMBOL_MAP[f'{atomic_number:.1f}'] = atomic_number
+    for key in {symbol, symbol.upper(), symbol.lower(), long_name.upper(), long_name.lower()}:
+        SYMBOL_MAP[key] = atomic_number

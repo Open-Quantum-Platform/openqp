@@ -1,0 +1,43 @@
+[input]
+system=
+ C          -1.6699351346837055       0.1537249235528157      -1.5459803491111643
+ C          -1.8079415266835852      -0.0386075716896284      -0.1602069788110266
+ H          -2.6609567768367581       0.2572290722092156      -2.0290359598415040
+ H          -1.2898503996116444      -0.7568524635289917      -2.0470428696820342
+ H          -1.3096398768036397       0.6557118321425524       0.5396052278505126
+ H          -2.3820842951209360      -0.7983813277099963       0.4308517619153288
+runtype=mecp
+functional=bhhlyp
+charge=0
+method=tdhf
+basis=6-31g*
+
+[scf]
+type=rohf
+maxit=50
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=5
+
+[optimize]
+lib=geometric
+maxit=2
+istate=1
+jstate=1
+imult=1
+jmult=3
+energy_shift=1
+energy_gap=1e-4
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
+
+[geometric]
+coordsys=tric
+trust=0.1
+tmax=0.3
+convergence_set=GAU
+prefix=c2h4_mrsf_mecp_geometric
