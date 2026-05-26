@@ -25,7 +25,7 @@ module dk_scalar_mod
   character(len=*), parameter :: module_name = "dk_scalar_mod"
 
   !> Set to .true. to enable diagnostic output from DK routines
-  logical, parameter :: dk_debug = .false.
+  logical :: dk_debug = .false.
 
   private compute_and_check_pvp
   public dk_scalar
@@ -93,6 +93,8 @@ contains
         Vp(:),    &  ! V = Hcore-T transformed to p-space, packed triangular
         PVPp(:)      ! pVp transformed to p-space, packed triangular
     integer :: qrnk  ! effective rank after removing linear dependencies in S
+
+    dk_debug = (infos%control%verbose > 1)
 
     open(unit=iw, file=infos%log_filename, position="append")
 

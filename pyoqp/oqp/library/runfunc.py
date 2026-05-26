@@ -99,10 +99,6 @@ def compute_soc(mol):
 
     LastStep(mol).compute(mol) 
 
-#    mol.data['OQP::soc_']
-
-
-
 def compute_hess(mol):
     # compute energy
     SinglePoint(mol).energy()

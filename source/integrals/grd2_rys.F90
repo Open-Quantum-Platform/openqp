@@ -1026,8 +1026,7 @@ subroutine soc2e_gdat_clean(gdat)
     if (allocated(gdat%fi   )) deallocate(gdat%fi   )
     if (allocated(gdat%fj   )) deallocate(gdat%fj   )
 
-  end subroutine soc2e_gdat_clean
-
+end subroutine soc2e_gdat_clean
 
 !> @brief Store shell quartet (i,j,k,l) metadata in the SOC integral data structure
 !> @details
@@ -1273,9 +1272,7 @@ subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
 
     deallocate(den_kl)
 
-  end subroutine soc2e_rys_compute
-
-
+end subroutine soc2e_rys_compute
 
 !> @brief Evaluate 2e SOC integrals for one primitive batch after Rys setup
 !> @details
@@ -1300,12 +1297,6 @@ subroutine compute_soc2e_ints(gdat, den, wao, &
     integer, intent(in) :: ng, nmax, mmax
     integer, intent(in) :: nimax, njmax, nkmax, nlmax
 
-
-    !TEST
-!    write(*,'(a,i0)') 'DEBUG compute_soc2e_ints called, ng=', ng
-
-
-
 !   Compute roots and weights for quadrature
     call soc2e_compute_rys_rw(gdat, gdat%rw, ng)
 
@@ -1323,31 +1314,14 @@ subroutine compute_soc2e_ints(gdat, den, wao, &
                 ng, gdat%nroots, nmax, mmax, nimax, njmax, nkmax, nlmax, &
                 gdat%dij, gdat%dkl)
 
-!if (gdat%am(1)==0 .and. gdat%am(2)==0 .and. &
-!    gdat%am(3)==0 .and. gdat%am(4)==0) then
-!  write(*,'(a,6es14.6)') 'DEBUG fi/fj:', &
-!    gdat%fi(1), gdat%fi(2), gdat%fi(3), &
-!    gdat%fj(1), gdat%fj(2), gdat%fj(3)
-!end if            
-            
-            
-            !   Compute SOC derivative integrals (IJ side only)
+!   Compute SOC derivative integrals (IJ side only)
     call compute_soc2e_xyz(gdat, gdat%gijkl, &
                 ng, gdat%nroots*3, nimax, njmax, nkmax, nlmax, &
                 gdat%ai, gdat%aj, gdat%fi, gdat%fj)
 
-    !TEST
-!    write(*,'(a,2es14.6)') 'DEBUG fi/fj norm: ', &
-!         sqrt(sum(gdat%fi**2)), sqrt(sum(gdat%fj**2))
-
-!   Contract with density, accumulate into wao
-!    call compute_soc2e_ao(gdat, ng*gdat%nroots, gdat%ijklxyz, &
-!                gdat%gijkl, gdat%fi, gdat%fj, den, wao)
-call compute_soc2e_ao(gdat, ng, gdat%nroots*3, gdat%ijklxyz, &
-            gdat%gijkl, gdat%fi, gdat%fj, den, wao)
-
-  end subroutine compute_soc2e_ints
-
+    call compute_soc2e_ao(gdat, ng, gdat%nroots*3, gdat%ijklxyz, &
+                gdat%gijkl, gdat%fi, gdat%fj, den, wao)
+end subroutine compute_soc2e_ints
 
 !> @brief Apply derivative recurrence to build Cartesian 2e SOC integrals
 !> @details
@@ -1382,9 +1356,6 @@ subroutine compute_soc2e_xyz(gdat, g, &
     ni = gdat%am(1) + 1
     nj = gdat%am(2) + 1
 
-!   Electronic derivative: d/dr phi_i = i*phi_{i-1} - 2*alpha*phi_{i+1}
-!   Same formula as in GAMESS XYZ2E (XINTI/XINTJ)
-
 !   FI: derivative over I index (electron 1, shell i)
     do n = 1, ng
       fi(n,:,:,:,:,1) = -g(n,:,:,:,:,2)*aai(n)
@@ -1417,14 +1388,6 @@ subroutine compute_soc2e_xyz(gdat, g, &
 
   end subroutine compute_soc2e_xyz
 
-
-
-
-
-
-
-
-
 !  subroutine compute_soc2e_ao(gdat, ngnr, ijklxyz, g0, fi, fj, den, wao)
 !> @brief Contract 2e SOC integrals with the density matrix and accumulate into wao
 !> @details
@@ -1452,11 +1415,7 @@ subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
     real(kind=dp), intent(in) :: fj(ng,nr3,*)
 
     type(soc2e_int_data_t), intent(inout) :: gdat
-!    integer, intent(in) :: ngnr
     integer, intent(in) :: ijklxyz(:,:,:)
-!    real(kind=dp), intent(in) :: g0(ngnr,3,*)
-!    real(kind=dp), intent(in) :: fi(ngnr,3,*)
-!    real(kind=dp), intent(in) :: fj(ngnr,3,*)
     real(kind=dp), intent(in) :: den(:,:)
     real(kind=dp), intent(inout) :: wao(:,:,:)
     integer :: r, rx, ry, rz
@@ -1472,12 +1431,9 @@ subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
     ao_J = gdat%ao_offset(2) - 1
     ao_K = gdat%ao_offset(3) - 1
     ao_L = gdat%ao_offset(4) - 1
-
-
 !   Check if KL shells are the same — determines if off-diagonal KL factor applies
     same_KL = (gdat%id(3) == gdat%id(4))
     same_IJ = (gdat%id(1) == gdat%id(2))
-
 
     do i = 1, gdat%nbf(1)
       pi = ao_I + i
@@ -1486,7 +1442,6 @@ subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
         else
             jmax = gdat%nbf(2)
         end if
-
       do j = 1, jmax!gdat%nbf(2)
         pj = ao_J + j
         do k = 1, gdat%nbf(3)
@@ -1497,31 +1452,16 @@ subroutine compute_soc2e_ao(gdat, ng, nr3, ijklxyz, g0, fi, fj, den, wao)
             nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4) !+ 1
             ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4) !+ 1
             nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4) !+ 1
-
-!           Lx: (fi_y*fj_z - fj_y*fi_z) * g_x
-!            sol(1) = sum((fi(:,2,ny)*fj(:,3,nz) - fj(:,2,ny)*fi(:,3,nz)) * g0(:,1,nx))
-!           Ly: (fi_z*fj_x - fj_z*fi_x) * g_y
-!            sol(2) = sum((fi(:,3,nz)*fj(:,1,nx) - fj(:,3,nz)*fi(:,1,nx)) * g0(:,2,ny))
-!           Lz: (fi_x*fj_y - fj_x*fi_y) * g_z
-!            sol(3) = sum((fi(:,1,nx)*fj(:,2,ny) - fj(:,1,nx)*fi(:,2,ny)) * g0(:,3,nz))
-sol = 0.0_dp
-do r = 1, nr3/3
-!  rx = (r-1)*3 + 1
-!  ry = (r-1)*3 + 2
-!  rz = (r-1)*3 + 3
-  rx = r
-  ry = nr3/3 + r
-  rz = 2*(nr3/3) + r
-  sol(1) = sol(1) + sum((fi(:,ry,ny)*fj(:,rz,nz) - fj(:,ry,ny)*fi(:,rz,nz)) * g0(:,rx,nx))
-  sol(2) = sol(2) + sum((fi(:,rz,nz)*fj(:,rx,nx) - fj(:,rz,nz)*fi(:,rx,nx)) * g0(:,ry,ny))
-  sol(3) = sol(3) + sum((fi(:,rx,nx)*fj(:,ry,ny) - fj(:,rx,nx)*fi(:,ry,ny)) * g0(:,rz,nz))
-end do
-sol = -sol
-!if (gdat%am(1)==1 .and. gdat%am(2)==1 .and. &
-!    gdat%am(3)==1 .and. gdat%am(4)==1 .and. &
-!    i==3 .and. j==2 .and. k==1 .and. l==1) then
-!  write(*,'(a,3es16.8)') 'SOL pp|pp (pz,py,px,px):', sol(1), sol(2), sol(3)
-!end if
+            sol = 0.0_dp
+            do r = 1, nr3/3
+              rx = r
+              ry = nr3/3 + r
+              rz = 2*(nr3/3) + r
+              sol(1) = sol(1) + sum((fi(:,ry,ny)*fj(:,rz,nz) - fj(:,ry,ny)*fi(:,rz,nz)) * g0(:,rx,nx))
+              sol(2) = sol(2) + sum((fi(:,rz,nz)*fj(:,rx,nx) - fj(:,rz,nz)*fi(:,rx,nx)) * g0(:,ry,ny))
+              sol(3) = sol(3) + sum((fi(:,rx,nx)*fj(:,ry,ny) - fj(:,rx,nx)*fi(:,ry,ny)) * g0(:,rz,nz))
+            end do
+            sol = -sol
 
 !           ---- Coulomb 21 ----
 !           W(I,J) += 2*(1+delta_KL)*D(K,L)*VAL
@@ -1561,10 +1501,7 @@ sol = -sol
         end do
       end do
     end do
-
-! TEST
-!    write(*,'(a,4i4,3es14.6)') 'SOC ao: am=', gdat%am, sol(1), sol(2), sol(3)
-  end subroutine compute_soc2e_ao
+end subroutine compute_soc2e_ao
 
   !> @brief Top-level driver for the 2e mean-field SOC correction
   !> @details
@@ -1650,8 +1587,6 @@ sol = -sol
       end do
     end do
 
-
-
     if (infos%mpiinfo%usempi) mpi_ij = 0
 
     do i = 1, basis%nshell
@@ -1670,21 +1605,14 @@ sol = -sol
 
             gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
             if (gmax < cutoff) cycle
-
             call gdat%set_ids(basis, i, j, k, l)
-
-!            call soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
             call soc2e_rys_compute(gdat, ppairs, gmax, den_phys, wao)
           end do
         end do
-
       end do
     end do
-
     call gdat%clean()
-
     call pe%allreduce(wao, size(wao))
-
     do jao = 1, basis%nbf
       do iao = 1, basis%nbf
         wao(:, iao, jao) = wao(:, iao, jao) * basis%bfnrm(iao) * basis%bfnrm(jao)
@@ -1692,9 +1620,6 @@ sol = -sol
     end do
     call ppairs%clean()
     deallocate(schwarz_ints)
-    
     deallocate(den_phys)
-
   end subroutine soc2e_driver
-
 end module grd2_rys

@@ -55,7 +55,10 @@ contains
     use printing, only: print_module_info
     use messages, only: show_message, with_abort
     use grd2_rys, only: soc2e_driver
-
+    use mathlib, only: orthogonal_transform
+   use physical_constants, only: alpha  => FINE_STRUCTURE, &
+                                 ha2wn  => HA_TO_WAVENUM,  &
+                                 ha2ev  => EV2HTREE
     implicit none
 
     character(len=*), parameter :: subroutine_name = "soc_mrsf"
@@ -76,8 +79,6 @@ contains
     complex(kind=dp), allocatable :: hsoc(:,:), h1soc(:,:), h2soc(:,:)
     real(kind=dp), allocatable :: eval(:)
     complex(kind=dp), allocatable :: evec(:,:)
-    real(kind=dp), parameter :: alpha = 7.2973506e-3_dp
-    real(kind=dp), parameter :: ha2wn = 219474.6_dp
     real(kind=dp), parameter :: dfac  = alpha**2 / 2.0_dp * ha2wn  ! 5.8438 cm-1/a.u.
     real(kind=dp) :: re1e, im1e, re2e, im2e, abs12e
     character(len=7), dimension(3), parameter :: trip = ['(Ms=-1)', '(Ms= 0)', '(Ms=+1)']
@@ -88,7 +89,7 @@ contains
     real(kind=dp), allocatable :: lx_12e_mo(:,:), ly_12e_mo(:,:), lz_12e_mo(:,:)
 
     logical :: do_2e_soc
-    logical, parameter :: debug_soc_prints = .true.
+    logical :: debug_soc_prints
 
     integer :: nstate_soc
     real(kind=dp), pointer :: eval_out(:)
@@ -97,7 +98,7 @@ contains
 
     ! Temporary switch for the two-electron SOC mean-field correction.
 
-
+    debug_soc_prints = (infos%control%verbose > 1)
 
     open(unit=iw, file=infos%log_filename, position="append")
 
@@ -133,7 +134,7 @@ contains
     nocca = infos%mol_prop%nelec_a
     noccb = infos%mol_prop%nelec_b
 
-    ! --- Step 1: Compute SOC AO integrals <mu|Z*L/r^3|nu> ---
+    ! --- Step 1: Compute SOC 1e AO integrals <mu|Z*L/r^3|nu> ---
     allocate(lx_ao(nbf2), ly_ao(nbf2), lz_ao(nbf2), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate AO L matrices', WITH_ABORT)
     call compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
@@ -148,7 +149,7 @@ contains
     allocate(lx_12e_mo(nbf, nbf), ly_12e_mo(nbf, nbf), lz_12e_mo(nbf, nbf), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate total MO L matrices', WITH_ABORT)
 
-    ! --- Step 2b: 2e mean-field SOC correction ---
+    ! --- Step 2b: compute SOC 2e AO integrals, AO2MO transformation ---
     if (do_2e_soc) then
       allocate(den_rohf(nbf, nbf), stat=ok)
       if (ok /= 0) call show_message('soc_mrsf: cannot allocate ROHF density', WITH_ABORT)
@@ -194,9 +195,9 @@ contains
 
       deallocate(den_rohf)
 
-      call ao2mo_full(wao(1,:,:), lx_2e_mo, mo_a, nbf)
-      call ao2mo_full(wao(2,:,:), ly_2e_mo, mo_a, nbf)
-      call ao2mo_full(wao(3,:,:), lz_2e_mo, mo_a, nbf)
+      call orthogonal_transform('n', nbf, mo_a, wao(1,:,:), lx_2e_mo)
+      call orthogonal_transform('n', nbf, mo_a, wao(2,:,:), ly_2e_mo)
+      call orthogonal_transform('n', nbf, mo_a, wao(3,:,:), lz_2e_mo)
       deallocate(wao)
 
       lx_12e_mo = lx_mo + lx_2e_mo
@@ -858,7 +859,7 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   complex(kind=dp) :: celm_aa, celm_bb, celm_ba, celm_ab
   real(kind=dp)    :: t111aa, t111bb, tm11m1aa, tm11m1bb, t110bb
   real(kind=dp), parameter :: sq2   = sqrt(2.0_dp)
-  real(kind=dp), parameter :: sq05  = sqrt(0.5_dp)  ! = 1/sqrt(2)
+  real(kind=dp), parameter :: sq05  = sqrt(0.5_dp)  
   real(kind=dp), parameter :: half  = 0.5_dp
   real(kind=dp), parameter :: quart = 0.25_dp
  
@@ -867,28 +868,6 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   do iu = 1, nbf
     do it = 1, nbf
  
-      ! Spin-orbit matrix elements (GAMESS convention, lines 1108-1126):
-      !   celm_ba = sqrt(0.5)*spnfac * (Ly - i*Lx),  spnfac = sqrt(0.5)
-      !           = 0.5 * (Ly - i*Lx) * 0.5 = 0.25*(Ly - i*Lx)  [with both spnfac]
-      ! Wait: GAMESS has spnfac=sqrt(0.5) for S-T and spnfac=0.5 for T-T.
-      ! For S-T block (spnfac=sqrt(0.5)):
-      !   celm_ba_ST = sqrt(0.5) * (Ly/2 - i*Lx/2) * sqrt(0.5) = 0.5*(Ly/2-i*Lx/2)
-      !              = (Ly/4, -Lx/4)
-      ! For T-T Lz block (spnfac=0.5):
-      !   celm_aa_TT = (0, -Lz/2) * 0.5 = (0, -Lz/4)  -- but GAMESS uses 0.5 directly
-      ! Actually looking at GAMESS code more carefully:
-      !   spnfac for <ua|Lz Sz|ta> = 0.5 (Sz alpha = +1/2 alpha)
-      !   celm_aa = (0, -Lz(iu,it)) * 0.5
-      !   celm_ba = sqrt(0.5)*(Ly(iu,it),-Lx(iu,it)) * sqrt(0.5)
-      !           = 0.5 * (Ly, -Lx)  with the outer sqrt(0.5) already in spnfac
-      ! The outer sqrt(0.5) in "celm1ba=sqrt(0.5)*dcmplx(y,-x)*spnfac"
-      ! and spnfac=sqrt(0.5) gives celm_ba = 0.5*(Ly/2, -Lx/2)... no.
-      !
-      ! Reading literally: celm1ba = sqrt(0.5) * (Ly,-Lx) * sqrt(0.5) = 0.5*(Ly,-Lx)
-      ! Then for S-T: H += celm1ba * T11ab(IST,JST,it,iu)
-      !   where T11ab already has the correct normalization.
-      ! This matches our current S-T formula which works correctly.
-      ! So we keep the SAME celm definition as the current working code:
       celm_aa = cmplx( 0.0_dp,          -lz_mo(it,iu)*half,  kind=dp)
       celm_bb = cmplx( 0.0_dp,          +lz_mo(it,iu)*half,  kind=dp)  ! = -celm_aa
       celm_ba = cmplx(+ly_mo(it,iu)*half, -lx_mo(it,iu)*half, kind=dp)
@@ -983,6 +962,8 @@ end subroutine compute_soc_matrix
 !> @param[out] evec                SOC eigenvectors (complex, column = adiabat)
 subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
   use precision, only: dp
+  use physical_constants, only: ha2wn => HA_TO_WAVENUM, &
+                                 FINE_STRUCTURE
   implicit none
 
   complex(kind=dp), intent(in)  :: hsoc(ns+3*nt, ns+3*nt)
@@ -1000,8 +981,7 @@ subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eva
   complex(kind=dp), allocatable :: work(:)
   real(kind=dp),    allocatable :: rwork(:)
 
-  real(kind=dp), parameter :: dfac  = 5.84375713555_dp  ! alpha^2/2 * ha2wn, cm-1/a.u.
-  real(kind=dp), parameter :: ha2wn = 219474.6_dp
+  real(kind=dp), parameter :: dfac = FINE_STRUCTURE**2 / 2.0_dp * ha2wn
 
   ! Explicit 4-byte integers required by LP64 LAPACK zheev interface
   integer(4) :: info4, nstate4, lwork4
@@ -1135,31 +1115,6 @@ subroutine print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energ
 end subroutine print_soc_eigenvalues
 
 ! 2e part
-
-!> @brief Transform a full (non-antisymmetric) AO matrix to the MO basis
-!> @details
-!>  Two-step MO transformation via DGEMM: tmp = Xao * C, Xmo = C^T * tmp.
-!>  Used for the 2e mean-field SOC correction where the AO matrix is symmetric
-!>  (unlike the antisymmetric 1e angular momentum integrals handled by ao2mo_soc).
-!>
-!> @param[in]  Xao  Full AO matrix (nbf x nbf)
-!> @param[out] Xmo  Full MO matrix (nbf x nbf)
-!> @param[in]  mo   MO coefficient matrix C(mu,p) (nbf x nbf)
-!> @param[in]  nbf  Number of basis functions
-subroutine ao2mo_full(Xao, Xmo, mo, nbf)
-  implicit none
-  integer, intent(in) :: nbf
-  real(kind=dp), intent(in) :: Xao(nbf,nbf), mo(nbf,nbf)
-  real(kind=dp), intent(out) :: Xmo(nbf,nbf)
-  real(kind=dp), allocatable :: tmp(:,:)
-
-  allocate(tmp(nbf,nbf))
-  ! tmp = Xao * C
-  call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, Xao, nbf, mo, nbf, 0.0_dp, tmp, nbf)
-  ! Xmo = C^T * tmp
-  call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, tmp, nbf, 0.0_dp, Xmo, nbf)
-  deallocate(tmp)
-end subroutine ao2mo_full
 
 !> @brief Print per-state SOC decomposition: energy and top-3 diabatic contributions
 !> @details

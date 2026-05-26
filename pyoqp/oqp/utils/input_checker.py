@@ -1132,7 +1132,6 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
                 )
 
     _add_cpu_info(report, "nac.nproc", nproc, False)
->>>>>>> 814d804 (fix: improve input checker diagnostics (#126))
 
 
 def _check_nacme(config: dict[str, Any], report: CheckReport) -> None:

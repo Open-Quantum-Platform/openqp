@@ -1896,9 +1896,9 @@ END SUBROUTINE
 !> @param[in]  aj      ket primitive exponent
 !> @param[in]  nroots  number of Rys roots
 !> @param[out] dxyz    derivative table, same indexing as xyzin
-!>
+!
 !> @author   Vladimir Makhnev
-!>
+!
  subroutine pvp_xyz_ij(xyzin, li, lj, ai, aj, nroots, dxyz)
 !dir$ attributes forceinline :: pvp_xyz_ij
 
@@ -1920,7 +1920,7 @@ END SUBROUTINE
         ! i=0, j=0: only 4*ai*aj term survives
         dxyz(0, 0, :, k) = ai2*aj2 * xyzin(1, 1, :, k)
 
-        ! i=0, j>0: j-1 terms vanish (coefficient j=0 ... wait, here coeff is j)
+        ! i=0, j>0: j-1 terms vanish 
         ! only 4ai*aj and -2ai*j terms survive
         do j = 1, lj
             dxyz(j, 0, :, k) =  ai2*aj2 * xyzin(j+1, 1, :, k) &
@@ -1960,9 +1960,9 @@ END SUBROUTINE
 !> @param[in]     c      coordinates of the nucleus
 !> @param[in]     znuc   nuclear charge (passed as -Z, same as coulomb)
 !> @param[inout]  pvpblk block of PVP integrals (accumulated)
-!>
-!> @author  
-!>
+!
+!> @author  Vladimir Makhnev
+!
  subroutine comp_pvp_int1_prim(cp, id, c, znuc, pvpblk)
 !dir$ attributes inline :: comp_pvp_int1_prim
 
@@ -1973,10 +1973,6 @@ END SUBROUTINE
     real(real64),    intent(in)    :: c(3), znuc
     real(real64), contiguous, intent(inout) :: pvpblk(:)
 !dir$ assume_aligned pvpblk : 64
-
-    ! --- рабочие массивы ---
-    ! xyzin нужна с запасом +1 по обоим индексам угловых моментов
-    ! и +1 по числу корней
     real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, max_nroots+1)
     real(real64) :: dxyz (0:2*max_ang+3, 0:max_ang+2, 3, max_nroots+1)
 !dir$ assume_aligned xyzin : 64
@@ -1992,26 +1988,18 @@ END SUBROUTINE
                iang => cp%iang, jang => cp%jang, &
                inao => cp%inao, jnao => cp%jnao  )
 
-    ! --- нужно на 1 корень больше чем для обычного кулоновского ---
     nroots_pvp = cp%nroots + 1
 
-    ! --- аргумент квадратуры: ζ|P-C|² (тот же что в comp_coulomb_int1_prim) ---
     xx = pp%aa * sum((pp%r - c)**2)
 
-    ! --- находим корни и строим расширенную таблицу xyzin ---
-    ! igrd=2: таблица строится до iang+2 по bra, jang+1 по ket
-    ! это даёт доступ к xyzin(j±1, i±1, :, k) для всех i=0..iang, j=0..jang
     ryscomp%nroots = nroots_pvp
     ryscomp%x      = xx
     call QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 2)
 
-    ! --- вычисляем производную таблицы: d²/d(bra) d(ket) для каждого направления ---
     call pvp_xyz_ij(xyzin, iang, jang, pp%ai, pp%aj, nroots_pvp, dxyz)
 
-    ! --- общий множитель (тот же что в comp_coulomb_int1_prim) ---
     dij = pp%expfac * TWOPI * pp%aa1
 
-    ! --- собираем интегралы по угловым компонентам оболочек ---
     ij   = 0
     jmax = jnao
     do i = 1, inao
@@ -2026,18 +2014,14 @@ END SUBROUTINE
             ij = ij + 1
 
             ! (pVp) = p_x V p_x  +  p_y V p_y  +  p_z V p_z
-            !
-            ! p_x V p_x: производная по x с обеих сторон, y и z — обычные
-            ! p_y V p_y: производная по y с обеих сторон, x и z — обычные
-            ! p_z V p_z: производная по z с обеих сторон, x и y — обычные
             dum = sum(  dxyz (mx, nx, 1, 1:nroots_pvp)   &  ! d²/dx_bra dx_ket
-                      * xyzin(my, ny, 2, 1:nroots_pvp)   &  ! y: обычный
-                      * xyzin(mz, nz, 3, 1:nroots_pvp) ) &  ! z: обычный
-                + sum(  xyzin(mx, nx, 1, 1:nroots_pvp)   &  ! x: обычный
+                      * xyzin(my, ny, 2, 1:nroots_pvp)   &  ! y: 
+                      * xyzin(mz, nz, 3, 1:nroots_pvp) ) &  ! z:
+                + sum(  xyzin(mx, nx, 1, 1:nroots_pvp)   &  ! x: 
                       * dxyz (my, ny, 2, 1:nroots_pvp)   &  ! d²/dy_bra dy_ket
-                      * xyzin(mz, nz, 3, 1:nroots_pvp) ) &  ! z: обычный
-                + sum(  xyzin(mx, nx, 1, 1:nroots_pvp)   &  ! x: обычный
-                      * xyzin(my, ny, 2, 1:nroots_pvp)   &  ! y: обычный
+                      * xyzin(mz, nz, 3, 1:nroots_pvp) ) &  ! z:
+                + sum(  xyzin(mx, nx, 1, 1:nroots_pvp)   &  ! x:
+                      * xyzin(my, ny, 2, 1:nroots_pvp)   &  ! y:
                       * dxyz (mz, nz, 3, 1:nroots_pvp) )    ! d²/dz_bra dz_ket
 
             pvpblk(ij) = pvpblk(ij) + dij * dum
@@ -2061,7 +2045,7 @@ END SUBROUTINE
 !> @param[in]  nroots  number of Rys roots
 !> @param[out] di      bra-side derivative table (dims: (Lj,Li,XYZ,NRoots))
 !> @param[out] dj      ket-side derivative table (dims: (Lj,Li,XYZ,NRoots))
-!>
+!
 !> @author  Vladimir Makhnev
 !> @date    March 2026
 
@@ -2108,7 +2092,7 @@ END SUBROUTINE
 !> @param[in]     c       nuclear coordinates
 !> @param[in]     znuc    effective nuclear charge Z_eff
 !> @param[inout]  socblk  accumulated SOC block (nfunc,3): Lx, Ly, Lz
-!>
+!
 !> @author  Vladimir Makhnev
 !> @date    March 2026
 
@@ -2185,22 +2169,10 @@ END SUBROUTINE
 
         end do
     end do
-    if (iang==2 .and. jang==2 .and. ij==1) then
-     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,1,1):', di(0,0,1,1), di(1,0,1,1), di(2,0,1,1)
-     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,2,1):', di(0,0,2,1), di(1,0,2,1), di(2,0,2,1)
-     write(*,'(a,6f12.6)') 'DEBUG di(0:2,0,3,1):', di(0,0,3,1), di(1,0,3,1), di(2,0,3,1)
-     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,1,1):', dj(0,0,1,1), dj(1,0,1,1), dj(2,0,1,1)
-     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,2,1):', dj(0,0,2,1), dj(1,0,2,1), dj(2,0,2,1)
-     write(*,'(a,6f12.6)') 'DEBUG dj(0:2,0,3,1):', dj(0,0,3,1), dj(1,0,3,1), dj(2,0,3,1)
-    end if
 
     end associate
 
  end subroutine comp_soc_int1_prim
-
-
-
-
 
 ! 2e part starts here. 
 
@@ -2244,7 +2216,6 @@ END SUBROUTINE
     INTEGER,          INTENT(IN)    :: idij, idkl
     REAL(real64), CONTIGUOUS, INTENT(OUT) :: gfull(0:, 0:, 0:, 0:, :, :)
 !dir$ assume_aligned gfull : 64
-
     ! --- local constants ---
     REAL(real64), PARAMETER :: PI252 = 34.986836655250_real64   ! 2*pi^(5/2)
 
