@@ -51,7 +51,7 @@ ENV OMP_NUM_THREADS=4
 # the regular CI workflow; running all examples during image build is slow and
 # currently includes reference-sensitive cases that are unsuitable as a Docker
 # packaging gate.
-RUN openqp --run_tests other
+RUN openqp --run_tests /opt/openqp/examples/other/h2o_rhf_6-31g_hf.inp
 
 # Set entrypoint if required
 ENTRYPOINT ["bash"]
