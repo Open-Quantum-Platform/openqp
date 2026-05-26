@@ -18,28 +18,13 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
 - **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
+- Optional external [DFTB+](https://dftbplus.org/) backend for ground-state energy, gradient, and geometry optimization workflows
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
 - Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
 - Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
   
-### DFTB+ External Backend
-
-This branch includes an optional external DFTB+ backend for ground-state workflows. It shells out to a user-provided `dftb+` executable and Slater-Koster parameter directory configured in the `[dftb]` input section.
-
-| Capability | Status | Scope |
-| --- | --- | --- |
-| Energy | Supported | Parses DFTB+ `results.tag` or `detailed.out`. |
-| Gradient | Supported | Parses DFTB+ forces and returns OpenQP gradients. |
-| Geometry optimization | Supported | Ground-state `runtype=optimize`, `lib=scipy`, `istate=0`, using DFTB+ energy/gradient callbacks. |
-| TD-DFTB excited states | Unsupported | DFTB+ excited-state outputs are not parsed or mapped into OpenQP TD data. |
-| Nonadiabatic couplings | Unsupported | OpenQP NAC workflows require TDHF/MRSF state data unavailable from this bridge. |
-| Spin-flip DFTB | Unsupported | OpenQP spin-flip response is native TDHF/MRSF only. |
-| Hessian/frequencies | Unsupported | No DFTB+ Hessian parser or numerical-Hessian callback is wired. |
-| Molecular dynamics | Unsupported | No OpenQP DFTB+ MD workflow is wired in this branch. |
-| Native OpenQP DFTB Hamiltonian | Unsupported | This backend is external DFTB+ only. |
-
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
