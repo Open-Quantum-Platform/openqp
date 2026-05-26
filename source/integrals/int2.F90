@@ -358,6 +358,7 @@ contains
     class(int2_compute_data_t), intent(inout) :: int2_consumer
 
     integer :: i, j, k, l, ij_pair, npairs
+    integer, allocatable :: pair_i(:), pair_j(:)
     integer :: lmax
     integer :: nint
     real(kind=dp) :: test
@@ -382,6 +383,8 @@ contains
 
     nshell = this%basis%nshell
     npairs = nshell*(nshell+1)/2
+    allocate(pair_i(npairs), pair_j(npairs))
+    call int2_build_shell_pair_map(nshell, pair_i, pair_j)
 
 
     ! preparations for screening
@@ -465,7 +468,8 @@ contains
 ! synchronization point inside the shell-pair loop.
 !$omp do schedule(dynamic,1)
     do ij_pair = 1, npairs
-        call int2_decode_shell_pair(ij_pair, nshell, i, j)
+        i = pair_i(ij_pair)
+        j = pair_j(ij_pair)
         if (this%pe%size>1) then
           if (mod(ij_pair, this%pe%size) /= this%pe%rank) cycle
         end if
@@ -535,6 +539,7 @@ contains
 
     deallocate(eri_data)
 !$omp end parallel
+    deallocate(pair_i, pair_j)
     call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()
 
@@ -542,24 +547,21 @@ contains
 
   contains
 
-    subroutine int2_decode_shell_pair(ij_pair, nshell, i, j)
+    subroutine int2_build_shell_pair_map(nshell, shell_pair_i, shell_pair_j)
       implicit none
-      integer, intent(in) :: ij_pair, nshell
-      integer, intent(out) :: i, j
-      integer :: remaining
+      integer, intent(in) :: nshell
+      integer, intent(out) :: shell_pair_i(:), shell_pair_j(:)
+      integer :: i, j, ij_pair
 
-      remaining = ij_pair
+      ij_pair = 0
       do i = nshell, 1, -1
-        if (remaining <= i) then
-          j = remaining
-          return
-        end if
-        remaining = remaining - i
+        do j = 1, i
+          ij_pair = ij_pair + 1
+          shell_pair_i(ij_pair) = i
+          shell_pair_j(ij_pair) = j
+        end do
       end do
-
-      i = 0
-      j = 0
-    end subroutine int2_decode_shell_pair
+    end subroutine int2_build_shell_pair_map
 
   end subroutine int2_twoei
 
