@@ -947,17 +947,17 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             "HF/DFT NEB currently supports only the ground state.",
             value=istate,
             expected="0",
-            action="Set [optimize] istate=0 or wait for TDHF/MRSF NEB support.",
+            action="Set [optimize] istate=0, or use method=tdhf/[tdhf] type=mrsf for excited-state NEB.",
         )
 
-    if method == "tdhf":
+    if method not in {"hf", "tdhf"}:
         report.add(
             "ERROR",
             "input.method",
-            "TDHF/MRSF NEB is not wired in the first NEB scope.",
+            "NEB currently supports HF/DFT and TDHF/MRSF state-specific surfaces.",
             value=method,
-            expected="hf for the first NEB implementation scope",
-            action="Use method=hf with optimize.istate=0 for the initial geomeTRIC NEB scaffold.",
+            expected="hf or tdhf",
+            action="Use method=hf with istate=0 or method=tdhf with a valid target state.",
         )
 
     if not product:
