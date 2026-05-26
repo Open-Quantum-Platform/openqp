@@ -509,6 +509,8 @@ class Gradient(Calculator):
         return grads
 
     def tddft_grad(self):
+        if self.td == 'umrsf':
+            raise NotImplementedError('UMRSF-TDDFT gradients are not implemented; run UMRSF with runtype=energy only.')
         if self.td not in ['rpa', 'tda', 'sf', 'mrsf']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 

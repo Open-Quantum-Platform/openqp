@@ -256,7 +256,7 @@ class OQPData:
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf')
-    _td_types = ('rpa', 'tda', 'sf', 'mrsf')
+    _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
     _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
@@ -688,8 +688,9 @@ class OQPData:
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
-        if td_type.lower() == 'tda':
-            self._data.tddft.tda = True
+        td_type = td_type.lower()
+        self._data.tddft.tda = td_type == 'tda'
+        self._data.tddft.umrsf = td_type == 'umrsf'
 
     def set_tdhf_nstate(self, nstate):
         """Set number of states in tdhf calculation"""

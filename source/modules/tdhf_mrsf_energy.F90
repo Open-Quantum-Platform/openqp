@@ -12,6 +12,7 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
+    inf%tddft%umrsf = .false.
     call tdhf_mrsf_energy(inf)
   end subroutine tdhf_mrsf_energy_C
 
@@ -20,9 +21,12 @@ contains
     use types, only: information
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
+    logical :: previous_umrsf
     inf => oqp_handle_get_info(c_handle)
-    inf%tddft%umrsf= .true.
+    previous_umrsf = inf%tddft%umrsf
+    inf%tddft%umrsf = .true.
     call tdhf_mrsf_energy(inf)
+    inf%tddft%umrsf = previous_umrsf
   end subroutine tdhf_umrsf_energy_C
 
   subroutine tdhf_mrsf_energy(infos)
@@ -76,6 +80,7 @@ contains
     real(kind=dp), allocatable :: bvec_mo(:,:), for_trnsf_b_vec(:,:)
     real(kind=dp), allocatable, dimension(:,:) :: fa, fb
     real(kind=dp), allocatable, dimension(:) :: rnorm
+    real(kind=dp), allocatable, dimension(:) :: mo_energy_work_a, mo_energy_work_b
     real(kind=dp), allocatable, dimension(:,:,:,:) :: trden
     integer, allocatable, dimension(:,:) :: trans
     real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
@@ -88,13 +93,14 @@ contains
     integer :: nbf, nbf2, xvec_dim
     integer :: mxvec, ist, jst, iend, nvec, novec
     integer :: iter, nv, iv, ivec
-    integer :: diag_index
+    integer :: diag_index, i
     integer :: mxiter
     logical :: tamm_dancoff
     integer :: imax
     integer :: ierr
     logical :: converged
     real(kind=dp) :: mxerr, cnvtol, scale_exch
+    real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
     logical :: roref = .false.
     logical :: uhfref= .false.
@@ -262,6 +268,9 @@ contains
     allocate(trans(xvec_dim,2), &
              source=0, stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
+
+    mo_energy_work_a = mo_energy_a
+    mo_energy_work_b = mo_energy_b
   ! MO rotations (Jacobi) 
     if (umrsf) then
       call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -380,13 +389,20 @@ contains
       call unpack_matrix(scr,fb)
     end if
 
+    if (umrsf) then
+      do i = 1, nbf
+        mo_energy_work_a(i) = fa(i,i)
+        mo_energy_work_b(i) = fb(i,i)
+      end do
+    end if
+
 
   ! Construct TD trial vector
     if (mrst==1 .or. mrst==3) then
      if (.not. umrsf) then
-      call mrinivec(infos, mo_energy_a, mo_energy_a, bvec_mo, xm, nvec)
+      call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
      else
-      call mrinivec(infos, mo_energy_a, mo_energy_b, bvec_mo, xm, nvec)
+      call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
      endif
 
     else if (mrst==5) then
@@ -482,13 +498,24 @@ contains
 
         ! Spin pair coupling
         if (umrsf) then
-        
-          if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
-             fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
-          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
-             fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
-          if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-             fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+          if (abs(infos%tddft%hfscale) > epsilon(1.0_dp)) then
+            if (infos%tddft%spc_coco /= infos%tddft%hfscale) then
+              spc_scale_coco = infos%tddft%spc_coco / infos%tddft%hfscale
+              fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * spc_scale_coco
+            end if
+            if (infos%tddft%spc_ovov /= infos%tddft%hfscale) then
+              spc_scale_ovov = infos%tddft%spc_ovov / infos%tddft%hfscale
+              fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * spc_scale_ovov
+            end if
+            if (infos%tddft%spc_coov /= infos%tddft%hfscale) then
+              spc_scale_coov = infos%tddft%spc_coov / infos%tddft%hfscale
+              fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * spc_scale_coov
+            end if
+          else if (infos%tddft%spc_coco /= 0.0_dp .or. &
+                   infos%tddft%spc_ovov /= 0.0_dp .or. &
+                   infos%tddft%spc_coov /= 0.0_dp) then
+            call show_message('UMRSF spin-pair coupling overrides require nonzero HFscale.', with_abort)
+          end if
         else
           if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
              fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
@@ -615,11 +642,15 @@ contains
 
     select case (mrst)
       case(1)
-        do ist = 1, nstates
-          do jst = ist, nstates
-            call get_mrsf_transition_density(infos,trden(:,:,ist,jst), bvec_mo, ist, jst)
+        if (umrsf) then
+          trden = 0.0_dp
+        else
+          do ist = 1, nstates
+            do jst = ist, nstates
+              call get_mrsf_transition_density(infos,trden(:,:,ist,jst), bvec_mo, ist, jst)
+            end do
           end do
-        end do
+        end if
 
 ! U-version (working)
         if (umrsf) then
@@ -636,11 +667,15 @@ contains
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
       case(3)
-        do ist = 1, nstates
-          do jst = ist, nstates
-            call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
+        if (umrsf) then
+          trden = 0.0_dp
+        else
+          do ist = 1, nstates
+            do jst = ist, nstates
+              call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
+            end do
           end do
-        end do
+        end if
         if (umrsf) then
           do ist = 1, nstates
             call umrsfssqu(squared_S(ist),mo_a,mo_b, smat, wrk1,scr3,nbf,nbf2, &

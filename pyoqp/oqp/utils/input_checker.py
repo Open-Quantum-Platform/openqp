@@ -621,6 +621,18 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             action="Disable td_prop unless you have a confirmed downstream implementation.",
         )
 
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if method == "tdhf" and td_type == "umrsf" and runtype == "grad":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT gradients are not implemented.",
+            value=td_type,
+            expected="rpa, tda, sf, or mrsf for excited-state gradients",
+            action="Use runtype=energy for UMRSF, or switch to a supported TDHF gradient type.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
     if runtype != "grad":
         return
 
@@ -841,6 +853,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Set istate=0 or switch to method=tdhf.",
         )
 
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if method == "tdhf" and td_type == "umrsf" and runtype in {"optimize", "mep", "ts", "meci", "mecp"}:
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT optimizer gradients and crossing searches are not implemented.",
+            value=f"{td_type}/{runtype}",
+            expected="rpa, tda, sf, or mrsf for gradient-driven TDHF runtypes",
+            action="Use UMRSF only with runtype=energy until UMRSF gradients/Z-vectors are implemented.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
     if method == "tdhf" and runtype in {"optimize", "mep", "ts"} and istate == 0:
         report.add(
             "ERROR",
@@ -936,9 +960,20 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
 
 def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     istate = _get(config, "optimize", "istate", 0)
     product = _get(config, "neb", "product", "")
     nimage = _get(config, "neb", "nimage", 5)
+
+    if method == "tdhf" and td_type == "umrsf":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT NEB gradients are not implemented.",
+            value=td_type,
+            expected="mrsf for excited-state NEB",
+            action="Use UMRSF only with runtype=energy until UMRSF gradients/Z-vectors are implemented.",
+        )
 
     if method == "hf" and istate != 0:
         report.add(

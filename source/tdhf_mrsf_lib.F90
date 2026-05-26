@@ -270,14 +270,17 @@ subroutine int2_umrsf_data_t_update(this, buf)
         f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
         f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
 
-        f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j) ! 
-        f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k) ! 
-        f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l) ! 
-        f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i) ! 
-        f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j) ! 
-        f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l) ! 
-        f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k) ! 
-        f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i) ! 
+        ! Mixed alpha/beta spin-pair channels use the same exchange
+        ! permutation pattern as MRSF channels 5:6, with only the column
+        ! range renumbered.  This preserves the ROHF/MRSF reduction limit.
+        f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,j,l) ! (ij|lk)
+        f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,l,j) ! (kl|ji)
+        f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,j,k) ! (ij|kl)
+        f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,k,j) ! (lk|ji)
+        f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,i,l) ! (ji|lk)
+        f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,l,i) ! (kl|ij)
+        f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,i,k) ! (ji|kl)
+        f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,k,i) ! (lk|ij)
 
         f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
         f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
@@ -2715,7 +2718,7 @@ end subroutine umrsfmntoia
 
      ! Input/output parameters
      type(information), intent(in) :: infos
-     real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
+     real(kind=dp), intent(inout), dimension(:,:) :: mo_a, mo_b
      real(kind=dp), intent(in),    dimension(:)   :: mo_energy_a, mo_energy_b
      real(kind=dp), intent(in),    dimension(:,:) :: smat_full
      integer,       intent(in)                    :: nocca, isegm
