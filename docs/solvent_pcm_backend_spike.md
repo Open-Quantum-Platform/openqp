@@ -34,13 +34,13 @@ epsilon=78.3553
 radii=uff
 ```
 
-The input checker rejects backend/model mismatches even while `enabled=false`, so reserved inputs cannot imply unsupported ddX-vs-PCMSolver combinations.
+The input checker rejects backend/model mismatches even while `enabled=false`, so reserved inputs cannot imply unsupported ddX-vs-PCMSolver combinations. It also rejects non-`reference_scf` PCM modes and UHF references for now: the first scientific target is strictly RHF/ROHF reference-SCF PCM, with MRSF using a PCM-solvated high-spin ROHF reference.
 
 Planned modes:
 
-- `reference_scf`: self-consistent PCM on RHF/ROHF reference; first target.
-- `post_state_correction`: perturbative MRSF state-density polarization correction; later and off by default.
-- `reference_scf_plus_post_state`: combined mode; later, after double-counting is defined and validated.
+- `reference_scf`: self-consistent PCM on RHF/ROHF reference; first target and the only currently accepted mode.
+- `post_state_correction`: perturbative MRSF state-density polarization correction; later and rejected until implemented/validated.
+- `reference_scf_plus_post_state`: combined mode; later and rejected until double-counting is defined and validated.
 
 ## First implementation scope
 
