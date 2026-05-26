@@ -209,6 +209,10 @@ OQP_CONFIG_SCHEMA = {
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
     },
+    'neb': {
+        'product': {'type': str, 'default': ''},
+        'nimage': {'type': int, 'default': '5'},
+    },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
         'state': {'type': int, 'default': '0'},
