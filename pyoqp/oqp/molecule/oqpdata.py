@@ -56,6 +56,14 @@ OQP_CONFIG_SCHEMA = {
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
     },
+    'dftb': {
+        'executable': {'type': str, 'default': 'dftb+'},
+        'sk_path': {'type': str, 'default': ''},
+        'scc': {'type': bool, 'default': 'True'},
+        'max_scc_iterations': {'type': int, 'default': '100'},
+        'timeout': {'type': int, 'default': '300'},
+        'keep_workdir': {'type': bool, 'default': 'False'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
