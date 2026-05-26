@@ -56,6 +56,14 @@ OQP_CONFIG_SCHEMA = {
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
     },
+    'dftb': {
+        'executable': {'type': str, 'default': 'dftb+'},
+        'sk_path': {'type': str, 'default': ''},
+        'scc': {'type': bool, 'default': 'True'},
+        'max_scc_iterations': {'type': int, 'default': '100'},
+        'timeout': {'type': int, 'default': '300'},
+        'keep_workdir': {'type': bool, 'default': 'False'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -167,7 +175,7 @@ OQP_CONFIG_SCHEMA = {
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'scipy'},
+        'lib': {'type': str, 'default': 'geometric'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},
@@ -196,6 +204,18 @@ OQP_CONFIG_SCHEMA = {
         'icoord': {'type': int, 'default': '3'},
         'iopt': {'type': int, 'default': '3'},
         'ims': {'type': int, 'default': '0'},
+    },
+    'geometric': {
+        'coordsys': {'type': str, 'default': 'tric'},
+        'trust': {'type': float, 'default': '0.1'},
+        'tmax': {'type': float, 'default': '0.3'},
+        'convergence_set': {'type': str, 'default': 'GAU'},
+        'prefix': {'type': str, 'default': 'geometric'},
+        'hessian': {'type': str, 'default': 'never'},
+        'irc_direction': {'type': str, 'default': 'forward'},
+        'constraints_file': {'type': str, 'default': ''},
+        'enforce': {'type': float, 'default': '0.0'},
+        'conmethod': {'type': int, 'default': '0'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},

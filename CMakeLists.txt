@@ -178,6 +178,17 @@ if(APPLE)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 endif()
 
+if(${LINALG_LIB} STREQUAL none)
+    message(FATAL_ERROR "LINALG_LIB=none is not supported because OpenQP builds and links OpenTrustRegion, which requires BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
+endif()
+
+# Resolve BLAS/LAPACK before configuring external projects. OpenTrustRegion
+# needs the same BLAS integer-size decision as OpenQP; early resolution also
+# lets a failed system BLAS search fall back to the bundled NetLib target before
+# the external project graph is generated. Linking to oqp happens when
+# findLinearAlgebra() is called again after the oqp target exists.
+findLinearAlgebra()
+
 add_subdirectory(external)
 
 add_definitions(-DOQP)

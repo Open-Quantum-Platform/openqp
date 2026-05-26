@@ -103,6 +103,86 @@ ExternalProject_Add(libecpint
 		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+  if(LINALG_LIB_INT64)
+    set(BLA_LIB_SUFFIX "64")
+  else()
+    set(BLA_LIB_SUFFIX "")
+  endif()
+  if(BUILD_SHARED_LIBS)
+    set(la_fortran_flags "${CMAKE_Fortran_FLAGS} -fpic")
+  else()
+    set(la_fortran_flags ${CMAKE_Fortran_FLAGS})
+  endif()
+  set(LAPACK_PREFIX ${CMAKE_BINARY_DIR}/external/lapack CACHE INTERNAL "LAPACK_PREFIX")
+  set(LIBLAPACK ${LAPACK_PREFIX}/src/lapack-build/lib/liblapack${BLA_LIB_SUFFIX}.a CACHE INTERNAL "LIBLAPACK")
+
+  set(LIBBLAS   ${LAPACK_PREFIX}/src/lapack-build/lib/libblas${BLA_LIB_SUFFIX}.a CACHE INTERNAL "LIBBLAS")
+  message(STATUS "BLAS_SUFFIX = ${BLA_LIB_SUFFIX}")
+
+
+  ExternalProject_Add(LAPACK
+        PREFIX ${CMAKE_SOURCE_DIR}/external/lapack
+        URL https://github.com/Reference-LAPACK/lapack/archive/refs/tags/v3.10.0.tar.gz
+        URL_HASH SHA256=328c1bea493a32cac5257d84157dc686cc3ab0b004e2bea22044e0a59f6f8a19
+        BINARY_DIR ${CMAKE_BINARY_DIR}/external/lapack/src/lapack-build
+        STAMP_DIR  ${CMAKE_BINARY_DIR}/external/lapack/src/lapack-stamp
+        BUILD_BYPRODUCTS ${LAPACK_PREFIX}/src/lapack-build/lib/liblapack${BLA_LIB_SUFFIX}.a
+                         ${LAPACK_PREFIX}/src/lapack-build/lib/libblas${BLA_LIB_SUFFIX}.a
+        UPDATE_COMMAND ""
+        PATCH_COMMAND /usr/bin/perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
+        INSTALL_COMMAND ""
+        CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
+                   -DBUILD_SINGLE=OFF
+                   -DBUILD_DOUBLE=ON
+                   -DBUILD_COMPLEX=OFF
+                   -DBUILD_COMPLEX16=OFF
+                   -DUSE_OPTIMIZED_BLAS=OFF
+                   -DUSE_OPTIMIZED_LAPACK=OFF
+                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   -DCMAKE_Fortran_FLAGS=${la_fortran_flags}
+                   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                   -DCMAKE_TRY_COMPILE_PLATFORM_VARIABLES=CMAKE_POLICY_VERSION_MINIMUM
+                   -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+        )
+endif()
+set(otr_integer_flags "")
+if(LINALG_LIB_INT64)
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
+        set(otr_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        set(otr_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        set(otr_integer_flags "-i8")
+    endif()
+endif()
+set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
+if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
+    set(otr_fortran_flags "${otr_fortran_flags} -fallow-argument-mismatch")
+endif()
+set(OTR_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/external/install/opentrustregion
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
+        -DINTEGER_SIZE=${BLA_SIZEOF_INTEGER}
+        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_TESTS=OFF
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+        -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
+        -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+)
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    list(APPEND OTR_CMAKE_ARGS
+        -DBLAS_LIBRARIES=${LIBBLAS}
+        -DLAPACK_LIBRARIES=${LIBLAPACK}
+    )
+elseif(DEFINED BLA_VENDOR)
+    list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+endif()
+
 ExternalProject_Add(libopentrustregion
     PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
     URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v2.0.0.tar.gz
@@ -110,16 +190,14 @@ ExternalProject_Add(libopentrustregion
     UPDATE_COMMAND ""
     PATCH_COMMAND
     UPDATE_COMMAND ""
-    CMAKE_ARGS
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/external/install/opentrustregion
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_TESTS=OFF
+    CMAKE_ARGS ${OTR_CMAKE_ARGS}
     BINARY_DIR ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}
     #    INSTALL_DIR ${CMAKE_BINARY_DIR}/external/install/opentrustregion
     #    STEP_TARGETS build install
 )
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+  add_dependencies(libopentrustregion LAPACK)
+endif()
 
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)
@@ -161,47 +239,6 @@ if(ENABLE_Formatter)
                    )
 endif()
 
-if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  if(LINALG_LIB_INT64)
-    set(BLA_LIB_SUFFIX "64")
-  else()
-    set(BLA_LIB_SUFFIX "")
-  endif()
-  if(BUILD_SHARED_LIBS)
-    set(la_fortran_flags "${CMAKE_Fortran_FLAGS} -fpic")
-  else()
-    set(la_fortran_flags ${CMAKE_Fortran_FLAGS})
-  endif()
-  set(LAPACK_PREFIX ${CMAKE_BINARY_DIR}/external/lapack CACHE INTERNAL "LAPACK_PREFIX")
-  set(LIBLAPACK ${LAPACK_PREFIX}/src/lapack-build/lib/liblapack${BLA_LIB_SUFFIX}.a CACHE INTERNAL "LIBLAPACK")
 
-  set(LIBBLAS   ${LAPACK_PREFIX}/src/lapack-build/lib/libblas${BLA_LIB_SUFFIX}.a CACHE INTERNAL "LIBBLAS")
-  message(STATUS "BLAS_SUFFIX = ${BLA_LIB_SUFFIX}")
-
-
-  ExternalProject_Add(LAPACK
-        PREFIX ${CMAKE_SOURCE_DIR}/external/lapack
-        URL https://github.com/Reference-LAPACK/lapack/archive/refs/tags/v3.10.0.tar.gz
-        URL_HASH SHA256=328c1bea493a32cac5257d84157dc686cc3ab0b004e2bea22044e0a59f6f8a19
-        BINARY_DIR ${CMAKE_BINARY_DIR}/external/lapack/src/lapack-build
-        STAMP_DIR  ${CMAKE_BINARY_DIR}/external/lapack/src/lapack-stamp
-        BUILD_BYPRODUCTS ${LAPACK_PREFIX}/src/lapack-build/lib/liblapack${BLA_LIB_SUFFIX}.a
-                         ${LAPACK_PREFIX}/src/lapack-build/lib/libblas${BLA_LIB_SUFFIX}.a
-        UPDATE_COMMAND ""
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
-                   -DBUILD_SINGLE=OFF
-                   -DBUILD_DOUBLE=ON
-                   -DBUILD_COMPLEX=OFF
-                   -DBUILD_COMPLEX16=OFF
-                   -DUSE_OPTIMIZED_BLAS=OFF
-                   -DUSE_OPTIMIZED_LAPACK=OFF
-                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   -DCMAKE_Fortran_FLAGS=${la_fortran_flags}
-                   -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
-        )
-endif()
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)

@@ -2,6 +2,7 @@
 
 import oqp
 import oqp.library
+from oqp.library.dftbplus import optimize_openqp_molecule, run_openqp_molecule
 from oqp.library.single_point import (
     SinglePoint, Gradient, Hessian, LastStep,
     BasisOverlap, NACME, NAC
@@ -9,9 +10,20 @@ from oqp.library.single_point import (
 
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt, MEP
 from oqp.library.libdlfind import DLFindMin, DLFindTS, DLFindMECI
+from oqp.library.libgeometric import (
+    GeometricIRCOpt,
+    GeometricMECIOpt,
+    GeometricMECPOpt,
+    GeometricOpt,
+    GeometricTSOpt,
+)
 
 
 def compute_energy(mol):
+    if mol.config['input']['method'] == 'dftb':
+        run_openqp_molecule(mol, gradient=False)
+        return
+
     # compute energy
     SinglePoint(mol).energy()
 
@@ -39,6 +51,10 @@ def compute_scf_prop(mol):
 
 
 def compute_grad(mol):
+    if mol.config['input']['method'] == 'dftb':
+        run_openqp_molecule(mol, gradient=True)
+        return
+
     # compute energy
     SinglePoint(mol).energy()
 
@@ -99,6 +115,10 @@ def compute_thermo(mol):
 
 
 def compute_geom(mol):
+    if mol.config['input']['method'] == 'dftb':
+        optimize_openqp_molecule(mol)
+        return
+
     # initialize optimizer
     optimizer = get_optimizer(mol)
 
@@ -178,6 +198,7 @@ def get_optimizer(mol):
             'mecp': MECPOpt,
             'mep': MEP,
             'ts': None,
+            'irc': None,
             'neb': None,
         },
         'dlfind': {
@@ -186,6 +207,16 @@ def get_optimizer(mol):
             'mecp': None,
             'mep': None,
             'ts': DLFindTS,
+            'irc': None,
+            'neb': None,
+        },
+        'geometric': {
+            'optimize': GeometricOpt,
+            'meci': GeometricMECIOpt,
+            'mecp': GeometricMECPOpt,
+            'mep': None,
+            'ts': GeometricTSOpt,
+            'irc': GeometricIRCOpt,
             'neb': None,
         },
     }
