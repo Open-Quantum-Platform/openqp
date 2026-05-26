@@ -211,15 +211,25 @@ class GeometricNEBOpt(StateSpecificOpt):
             for image_index in range(self.nimage)
         ]
 
+    def _resolve_product_xyz_path(self):
+        product = self.neb_config.get("product", "")
+        if os.path.isabs(product):
+            return product
+
+        candidates = [product]
+        input_file = getattr(self.mol, "input_file", "")
+        if input_file:
+            candidates.append(os.path.join(os.path.dirname(input_file), product))
+
+        for candidate in candidates:
+            if os.path.exists(os.path.abspath(candidate)):
+                return os.path.abspath(candidate)
+        return os.path.abspath(candidates[-1])
+
     def _read_product_xyz(self):
         from oqp.library.neb_utils import _read_xyz
 
-        product = self.neb_config.get("product", "")
-        if not os.path.isabs(product):
-            input_file = getattr(self.mol, "input_file", "")
-            if input_file:
-                product = os.path.join(os.path.dirname(input_file), product)
-        return _read_xyz(product)
+        return _read_xyz(self._resolve_product_xyz_path())
 
     def _build_chain_molecule(self):
         from geometric.molecule import Elements, Molecule

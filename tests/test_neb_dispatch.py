@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import tempfile
 import types
@@ -58,6 +59,30 @@ class TestNEBDispatchScaffold(unittest.TestCase):
             ["image_000", "image_001", "image_002", "image_003"],
         )
         self.assertTrue(all(str(Path(tmpdir) / "neb") in path for path in image_dirs))
+
+    def test_geometric_neb_resolves_repo_relative_product_paths_without_doubling_input_dir(self):
+        libgeometric = load_module(
+            "libgeometric_neb_product_path_under_test",
+            "pyoqp/oqp/library/libgeometric.py",
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            product = root / "examples" / "OPT" / "product.xyz"
+            product.parent.mkdir(parents=True)
+            product.write_text("2\nproduct\nH 0 0 0\nH 0 0 1\n")
+            fake = FakeMol(root / "examples" / "OPT")
+            fake.input_file = str(root / "examples" / "OPT" / "neb.inp")
+            fake.config["neb"]["product"] = "examples/OPT/product.xyz"
+            optimizer = libgeometric.GeometricNEBOpt(fake)
+
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                resolved = optimizer._resolve_product_xyz_path()
+            finally:
+                os.chdir(cwd)
+
+        self.assertEqual(Path(resolved).resolve(), product.resolve())
 
     def test_dispatch_maps_geometric_neb_to_scaffold(self):
         runfunc_text = (ROOT / "pyoqp/oqp/library/runfunc.py").read_text()
