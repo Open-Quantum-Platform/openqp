@@ -14,6 +14,7 @@ from oqp.library.libgeometric import (
     GeometricIRCOpt,
     GeometricMECIOpt,
     GeometricMECPOpt,
+    GeometricNEBOpt,
     GeometricOpt,
     GeometricTSOpt,
 )
@@ -217,7 +218,7 @@ def get_optimizer(mol):
             'mep': None,
             'ts': GeometricTSOpt,
             'irc': GeometricIRCOpt,
-            'neb': None,
+            'neb': GeometricNEBOpt,
         },
     }
 
