@@ -229,6 +229,35 @@ epsilon=78.3553
         self.assertIn("scf.type", errors)
         self.assertIn("PCM first scope supports RHF/ROHF", errors["scf.type"])
 
+    def test_checker_rejects_non_numeric_pcm_dielectric_without_crashing(self):
+        input_checker = load_module(
+            "input_checker_pcm_epsilon_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "energy",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": False,
+                "backend": "ddx",
+                "mode": "reference_scf",
+                "model": "ddpcm",
+                "epsilon": "water",
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("pcm.epsilon", errors)
+        self.assertIn("must be numeric", errors["pcm.epsilon"])
+
 
 if __name__ == "__main__":
     unittest.main()

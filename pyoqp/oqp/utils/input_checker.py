@@ -475,14 +475,25 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["pcm.backend"],
         )
 
-    if float(epsilon) <= 1.0:
+    try:
+        epsilon_value = float(epsilon)
+    except (TypeError, ValueError):
         report.add(
             "ERROR",
             "pcm.epsilon",
-            "PCM dielectric constant must be greater than 1.",
+            "PCM dielectric constant must be numeric and greater than 1.",
             value=epsilon,
             action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
         )
+    else:
+        if epsilon_value <= 1.0:
+            report.add(
+                "ERROR",
+                "pcm.epsilon",
+                "PCM dielectric constant must be greater than 1.",
+                value=epsilon,
+                action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+            )
 
     if enabled:
         report.add(
