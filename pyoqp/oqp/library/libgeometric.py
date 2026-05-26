@@ -178,3 +178,27 @@ class GeometricIRCOpt(_GeometricRunner, StateSpecificOpt):
 
     def _optimizer_keywords(self):
         return {"irc": True, "irc_direction": self.irc_direction}
+
+
+class GeometricNEBOpt:
+    """Dependency-light scaffold for geomeTRIC NEB path calculations."""
+
+    def __init__(self, mol):
+        self.mol = mol
+        self.neb_config = mol.config.get("neb", {})
+        self.nimage = int(self.neb_config.get("nimage", 5))
+
+    def plan_image_directories(self):
+        """Return isolated per-image working directories for a NEB path."""
+        log_path = getattr(self.mol, "log_path", os.getcwd())
+        neb_root = os.path.join(log_path, "neb")
+        return [
+            os.path.join(neb_root, f"image_{image_index:03d}")
+            for image_index in range(self.nimage)
+        ]
+
+    def optimize(self):
+        raise NotImplementedError(
+            "geomeTRIC NEB runner wiring is not implemented yet; "
+            "the current scaffold only validates input and plans isolated image directories."
+        )
