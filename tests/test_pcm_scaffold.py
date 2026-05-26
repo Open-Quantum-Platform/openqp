@@ -229,6 +229,51 @@ epsilon=78.3553
         self.assertIn("scf.type", errors)
         self.assertIn("PCM first scope supports RHF/ROHF", errors["scf.type"])
 
+    def test_parser_preserves_malformed_pcm_dielectric_for_checker_diagnostic(self):
+        oqpdata = load_module(
+            "oqpdata_pcm_bad_epsilon_schema_under_test",
+            "pyoqp/oqp/molecule/oqpdata.py",
+        )
+        parser_mod = load_module(
+            "input_parser_pcm_bad_epsilon_under_test",
+            "pyoqp/oqp/utils/input_parser.py",
+        )
+        input_checker = load_module(
+            "input_checker_pcm_bad_epsilon_parser_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+
+        parser = parser_mod.OQPConfigParser(schema=oqpdata.OQP_CONFIG_SCHEMA)
+        parser.read_string(
+            """
+[input]
+system=
+ O 0.000000 0.000000 0.000000
+ H 0.000000 0.757000 0.587000
+ H 0.000000 -0.757000 0.587000
+basis=6-31g*
+method=hf
+runtype=energy
+
+[scf]
+type=rhf
+multiplicity=1
+
+[pcm]
+enabled=false
+backend=ddx
+mode=reference_scf
+model=ddpcm
+epsilon=water
+"""
+        )
+
+        config = parser.validate()
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("pcm.epsilon", errors)
+        self.assertIn("must be numeric", errors["pcm.epsilon"])
+
     def test_checker_rejects_non_numeric_pcm_dielectric_without_crashing(self):
         input_checker = load_module(
             "input_checker_pcm_epsilon_under_test",

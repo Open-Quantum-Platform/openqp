@@ -57,6 +57,12 @@ class OQPConfigParser(configparser.ConfigParser):
                     if converter == bool:
                         config[section][option] = self.getboolean(section, option)
                     else:
-                        config[section][option] = converter(value)
+                        try:
+                            config[section][option] = converter(value)
+                        except (TypeError, ValueError):
+                            if section == 'pcm' and option == 'epsilon':
+                                config[section][option] = value
+                            else:
+                                raise
 
         return config
