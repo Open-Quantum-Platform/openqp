@@ -12,9 +12,9 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "irc", "prop", "data",
+    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data",
 }
-NOT_AVAILABLE_RUNTYPES = {"soc", "neb", "md"}
+NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 DFTB_SUPPORTED_RUNTYPES = {"energy", "grad", "optimize"}
 DFTB_UNSUPPORTED_REASONS = {
@@ -52,7 +52,7 @@ DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, prop, or data. soc and neb are recognized but not implemented yet.",
+    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
     "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, or method=dftb for the optional external DFTB+ backend.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -751,8 +751,11 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use grad=1,2,... for excited-state gradients.",
             )
 
-    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc"}:
+    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
+
+    if runtype == "neb":
+        _check_neb(config, report)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
@@ -910,14 +913,78 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
         )
 
-    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc"}:
+    if runtype == "neb" and lib != "geometric":
         report.add(
             "ERROR",
             "optimize.lib",
-            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, and IRC.",
+            "NEB is currently wired only through geomeTRIC.",
+            value=lib,
+            expected="geometric",
+            action="Set [optimize] lib=geometric for runtype=neb.",
+        )
+
+    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, IRC, and NEB.",
             value=f"{lib}/{runtype}",
-            expected="optimize, meci, mecp, ts, or irc",
-            action="Use [input] runtype=optimize/meci/mecp/ts/irc or choose scipy/dlfind for this runtype.",
+            expected="optimize, meci, mecp, ts, irc, or neb",
+            action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy/dlfind for this runtype.",
+        )
+
+
+def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    istate = _get(config, "optimize", "istate", 0)
+    product = _get(config, "neb", "product", "")
+    nimage = _get(config, "neb", "nimage", 5)
+
+    if method == "hf" and istate != 0:
+        report.add(
+            "ERROR",
+            "optimize.istate",
+            "HF/DFT NEB currently supports only the ground state.",
+            value=istate,
+            expected="0",
+            action="Set [optimize] istate=0, or use method=tdhf/[tdhf] type=mrsf for excited-state NEB.",
+        )
+
+    if method not in {"hf", "tdhf"}:
+        report.add(
+            "ERROR",
+            "input.method",
+            "NEB currently supports HF/DFT and TDHF/MRSF state-specific surfaces.",
+            value=method,
+            expected="hf or tdhf",
+            action="Use method=hf with istate=0 or method=tdhf with a valid target state.",
+        )
+
+    if not product:
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint is missing.",
+            expected="XYZ filename",
+            action="Set [neb] product to a product-endpoint XYZ file.",
+        )
+    elif not os.path.exists(os.path.abspath(str(product))):
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint file does not exist.",
+            value=product,
+            action="Fix the product path or place the XYZ file in the working directory.",
+        )
+
+    if nimage < 3:
+        report.add(
+            "ERROR",
+            "neb.nimage",
+            "NEB requires at least reactant, one intermediate, and product images.",
+            value=nimage,
+            expected=">= 3",
+            action="Set [neb] nimage=3 or larger.",
         )
 
 
