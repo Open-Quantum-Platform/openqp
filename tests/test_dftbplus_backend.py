@@ -209,6 +209,20 @@ Path('results.tag').write_text('total_energy:real:0:\\n-1.25\\nforces:real:2:2,3
             self.assertEqual(matrix[capability]["status"], "unsupported")
             self.assertIn("reason", matrix[capability])
 
+    def test_dftb_optimize_example_has_reference_metadata(self):
+        example = ROOT / "examples" / "DFTB" / "H2O_DFTBPLUS_OPTIMIZE.inp"
+        reference = ROOT / "examples" / "DFTB" / "H2O_DFTBPLUS_OPTIMIZE.json"
+        self.assertTrue(example.exists(), "DFTB+ optimization example input is missing")
+        self.assertTrue(reference.exists(), "DFTB+ optimization example reference metadata is missing")
+        text = example.read_text()
+        self.assertIn("method=dftb", text)
+        self.assertIn("runtype=optimize", text)
+        data = __import__("json").loads(reference.read_text())
+        self.assertEqual(data["input"]["method"], "dftb")
+        self.assertEqual(data["input"]["runtype"], "optimize")
+        self.assertEqual(data["optimize"]["istate"], 0)
+        self.assertEqual(data["validation"]["evidence"], "live_dftbplus_geometry_optimization")
+
     def test_dftb_optimizer_uses_external_gradient_runner(self):
         class Data:
             def __getitem__(self, key):
