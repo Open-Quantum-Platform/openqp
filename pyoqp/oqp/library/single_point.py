@@ -334,22 +334,27 @@ class SinglePoint(Calculator):
             if i not in ixcore_array:
                 tmp[i - 1] = -100000  # shift the MO energy down
 
-    def energy(self, do_init_scf=True):
+    def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
         if self.method not in ['hf', 'tdhf']:
             raise ValueError(f'Unknown method type {self.method}')
 
-        # compute reference
-        ref_energy = self.reference(do_init_scf=do_init_scf)
+        target_converger = self.mol.config['scf']['converger_type']
+        try:
+            # compute reference
+            ref_energy = self.reference(do_init_scf=do_init_scf)
 
-        # ixcore
-        self.ixcore_shift()
+            # ixcore
+            self.ixcore_shift()
 
-        # compute excitations
-        if self.method == 'tdhf':
-            energies = self.excitation(ref_energy)
-        else:
-            energies = ref_energy
+            # compute excitations
+            if self.method == 'tdhf':
+                energies = self.excitation(ref_energy)
+            else:
+                energies = ref_energy
+        finally:
+            if restore_scf_converger:
+                self.mol.data.set_scf_converger_type(target_converger)
 
         return energies
 

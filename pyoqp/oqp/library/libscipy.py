@@ -50,7 +50,7 @@ class Optimizer:
             self.optimizer = mol.config['optimize']['lib']
 
         # check optimizer
-        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'dlfind']:
+        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'dlfind', 'geometric']:
             raise ValueError(f'Unknown optimizer {self.optimizer}')
 
         self.metrics = {
@@ -773,19 +773,28 @@ class StateSpecificOpt(Optimizer):
         # update coordinates
         self.mol.update_system(coordinates)
 
-        # compute energy
-        energies = self.sp.energy(do_init_scf=do_init_scf)
+        target_converger = self.mol.config['scf']['converger_type']
+        try:
+            # compute energy. If SCF falls back to alternative_scf (e.g. TRAH),
+            # keep that recovered reference through the matching excited-state
+            # gradient/Z-vector evaluation for this geometry only.
+            energies = self.sp.energy(do_init_scf=do_init_scf, restore_scf_converger=False)
 
-        # compute gradient
-        self.grad.grads = [self.istate]
-        grads = self.grad.gradient()
-        self.mol.energies = energies
-        self.mol.grads = grads
+            # compute gradient
+            self.grad.grads = [self.istate]
+            grads = self.grad.gradient()
+            self.mol.energies = energies
+            self.mol.grads = grads
 
-        # compute dftd4
-        energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
-        self.mol.energies = energies
-        self.mol.grads = grads
+            # compute dftd4
+            energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
+            self.mol.energies = energies
+            self.mol.grads = grads
+        finally:
+            # The fallback converger is only for the current geometry-cycle
+            # recovery. The next geometry cycle must start from the original
+            # user-requested SCF optimizer.
+            self.mol.data.set_scf_converger_type(target_converger)
 
         # flatten data
         energy = energies[self.istate]

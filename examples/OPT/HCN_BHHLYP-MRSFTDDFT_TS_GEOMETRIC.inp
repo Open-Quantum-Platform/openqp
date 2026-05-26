@@ -1,0 +1,37 @@
+[input]
+system=
+   C   0.0000000000   0.0000000000   0.0000000000
+   N   0.0000000000   0.0000000000   1.1700000000
+   H  -1.1000000000   0.0000000000   0.0000000000
+charge=0
+functional=bhhlyp
+basis=3-21g
+runtype=ts
+method=tdhf
+
+[scf]
+type=rohf
+multiplicity=3
+maxit=50
+
+[tdhf]
+type=mrsf
+nstate=2
+
+[optimize]
+lib=geometric
+istate=1
+maxit=2
+energy_shift=1
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
+
+[geometric]
+coordsys=dlc
+trust=0.05
+tmax=0.1
+hessian=never
+convergence_set=GAU
+prefix=hcn_mrsf_tddft_ts_geometric
