@@ -86,6 +86,24 @@ forces              :real:2:3,2
             result = self.dftbplus.parse_results_tag(path)
         self.assertEqual(result.gradient, [[-0.10, -0.20, -0.30], [-0.40, -0.50, -0.60]])
 
+    def test_parse_results_tag_handles_dftbplus_25_atom_rows_with_three_by_natom_header(self):
+        text = """forcerelated_energy :real:0:
+ -0.322901932153493E+001
+forces              :real:2:3,5
+ -0.281716001228555E-004  0.228605129057557E-004 -0.433182769758821E-005
+ -0.309353428824180E-002 -0.447332183011689E-002 -0.277612913177767E-002
+ -0.380784156724684E-002  0.453605469443867E-002  0.141517983323262E-002
+  0.435557226314714E-002  0.208865299707197E-002 -0.374753545117715E-002
+  0.257397519246436E-002 -0.217424637429951E-002  0.511281657741980E-002
+"""
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "results.tag"
+            path.write_text(text)
+            result = self.dftbplus.parse_results_tag(path)
+        self.assertEqual(len(result.gradient), 5)
+        self.assertAlmostEqual(result.gradient[1][2], 0.00277612913177767)
+        self.assertAlmostEqual(result.gradient[3][2], 0.00374753545117715)
+
 
 class DFTBPlusSchemaTests(unittest.TestCase):
     def setUp(self):
@@ -200,6 +218,50 @@ Path('results.tag').write_text('total_energy:real:0:\\n-1.25\\nforces:real:2:2,3
             self.assertTrue((kept_dir / "dftb_in.hsd").exists())
             self.assertTrue((kept_dir / "results.tag").exists())
 
+    def test_run_openqp_molecule_refuses_missing_requested_gradient(self):
+        case = self
+
+        class EnergyOnlyRunner:
+            def __init__(self, config):
+                self.config = config
+
+            def run(self, atoms, coords, *, gradient=False):
+                return case.dftbplus.DFTBPlusResult(energy=-1.0, gradient=None)
+
+        class DataPayload:
+            class Energy:
+                energy = 0.0
+
+            mol_energy = Energy()
+            grad = bytearray(6 * 8)
+
+        class Data:
+            _data = DataPayload()
+
+        class Mol:
+            config = {"dftb": {}}
+            data = Data()
+
+            def __init__(self):
+                self.energies = []
+                self.grads = []
+
+            def get_atoms(self):
+                return [1, 1]
+
+            def get_system(self):
+                return [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+
+        original = self.dftbplus.DFTBPlusRunner
+        try:
+            self.dftbplus.DFTBPlusRunner = EnergyOnlyRunner
+            mol = Mol()
+            with self.assertRaisesRegex(self.dftbplus.DFTBPlusError, "gradient was requested"):
+                self.dftbplus.run_openqp_molecule(mol, gradient=True)
+            self.assertEqual(mol.grads, [])
+        finally:
+            self.dftbplus.DFTBPlusRunner = original
+
     def test_capability_matrix_documents_supported_and_unsupported_features(self):
         matrix = self.dftbplus.CAPABILITY_MATRIX
         self.assertEqual(matrix["energy"]["status"], "supported")
@@ -222,6 +284,41 @@ Path('results.tag').write_text('total_energy:real:0:\\n-1.25\\nforces:real:2:2,3
         self.assertEqual(data["input"]["runtype"], "optimize")
         self.assertEqual(data["optimize"]["istate"], 0)
         self.assertEqual(data["validation"]["evidence"], "live_dftbplus_geometry_optimization")
+
+    def test_dftb_optimizer_fails_fast_when_dftbplus_is_missing(self):
+        class Data:
+            def __getitem__(self, key):
+                if key == "natom":
+                    return 2
+                raise KeyError(key)
+
+        class Mol:
+            config = {
+                "input": {"method": "dftb", "runtype": "optimize"},
+                "dftb": {"executable": "/definitely/missing/dftb+", "sk_path": "/tmp/sk"},
+                "optimize": {"optimizer": "bfgs", "maxit": 1, "istate": 0},
+            }
+            data = Data()
+
+            def __init__(self):
+                self.coords = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+                self.energies = []
+                self.grads = []
+
+            def get_atoms(self):
+                return [1, 1]
+
+            def get_system(self):
+                return self.coords
+
+            def update_system(self, coords):  # pragma: no cover - should not be reached
+                self.coords = list(coords)
+
+        mol = Mol()
+        with self.assertRaisesRegex(self.dftbplus.DFTBPlusError, "DFTB\\+ executable not found"):
+            self.dftbplus.optimize_openqp_molecule(mol)
+        self.assertEqual(mol.energies, [])
+        self.assertEqual(mol.grads, [])
 
     def test_dftb_optimizer_uses_external_gradient_runner(self):
         class Data:

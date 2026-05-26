@@ -134,10 +134,13 @@ def parse_results_tag(path: str | os.PathLike[str]) -> DFTBPlusResult:
             for dim in shape:
                 count *= dim
         values: list[float] = []
+        value_rows: list[list[float]] = []
         while index < len(lines) and len(values) < count:
             next_line = lines[index].strip()
             if next_line:
-                values.extend(float(token) for token in next_line.split())
+                row = [float(token) for token in next_line.split()]
+                value_rows.append(row)
+                values.extend(row)
             index += 1
         if name in {"total_energy", "mermin_energy", "extrapolated0_energy", "forcerelated_energy"} and values:
             if energy is None or name == "total_energy":
@@ -148,6 +151,11 @@ def parse_results_tag(path: str | os.PathLike[str]) -> DFTBPlusResult:
             if shape[1] == 3:
                 natom = shape[0]
                 gradient = [[-values[3 * i + j] for j in range(3)] for i in range(natom)]
+            elif len(value_rows) == shape[1] and all(len(row) == 3 for row in value_rows):
+                # DFTB+ 25.1 may label forces as :3,natom while still writing
+                # one Cartesian force row per atom.  Prefer the physical row
+                # layout when it is unambiguous.
+                gradient = [[-component for component in row] for row in value_rows]
             else:
                 natom = shape[1]
                 gradient = [[-values[component * natom + atom] for component in range(3)] for atom in range(natom)]
@@ -333,7 +341,9 @@ def run_openqp_molecule(mol, *, gradient: bool = False) -> DFTBPlusResult:
         mol.data._data.mol_energy.energy = result.energy
         if hasattr(mol, "energies"):
             mol.energies = [result.energy]
-    if gradient and result.gradient is not None:
+    if gradient:
+        if result.gradient is None:
+            raise DFTBPlusError("DFTB+ gradient was requested, but no gradient was parsed")
         flat = [component for row in result.gradient for component in row]
         try:
             import numpy as np
@@ -401,9 +411,11 @@ def optimize_openqp_molecule(mol, *, runner_factory=DFTBPlusRunner) -> DFTBPlusR
     max_step_target = float(opt_config.get("max_step", 1.8e-3) or 1.8e-3)
     atoms = mol.get_atoms()
     runner = runner_factory(config)
+    if hasattr(runner, "_check_prerequisites"):
+        runner._check_prerequisites()
     previous_energy = None
     previous_coords = _reshape_coords(mol.get_system())
-    latest = DFTBPlusResult()
+    latest: DFTBPlusResult | None = None
 
     def evaluate(coords):
         nonlocal latest, previous_energy, previous_coords
@@ -457,4 +469,6 @@ def optimize_openqp_molecule(mol, *, runner_factory=DFTBPlusRunner) -> DFTBPlusR
         except StopIteration:
             pass
 
+    if latest is None:
+        raise DFTBPlusError("DFTB+ geometry optimization did not evaluate any real energy/gradient")
     return latest
