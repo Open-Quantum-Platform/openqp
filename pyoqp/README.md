@@ -130,7 +130,7 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     export=False
 
 [optimize]
-    lib=scipy
+    lib=geometric
     optimizer=bfgs
     step_size=0.1
     step_tol=1e-2
@@ -405,9 +405,9 @@ optimize section handle the geometry optimization
 
 - lib // choose the optimization library
 
-      scipy       use scipy.optimize library (default)
+      scipy       use scipy.optimize library
       dlfind      use DL-FIND library
-      geometric   use geomeTRIC. Supports runtype=optimize, meci, mecp, ts, and irc
+      geometric   use geomeTRIC (default). Supports runtype=optimize, meci, mecp, ts, and irc
 
 - optimizer // choose the scipy optimizer
 

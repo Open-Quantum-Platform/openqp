@@ -167,7 +167,7 @@ OQP_CONFIG_SCHEMA = {
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'scipy'},
+        'lib': {'type': str, 'default': 'geometric'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},

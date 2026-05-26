@@ -48,10 +48,10 @@ ENV OPENQP_ROOT=/opt/openqp
 ENV OMP_NUM_THREADS=4
 
 # Run a lightweight install smoke test.  The full example suite is covered by
-# the regular CI workflow; running all examples during image build is slow and
-# currently includes reference-sensitive cases that are unsuitable as a Docker
-# packaging gate.
-RUN openqp --run_tests other
+# the regular CI workflow; Docker image builds should only check that the
+# installed launcher can execute a bundled input, not gate on reference-sensitive
+# example comparisons.
+RUN openqp /opt/openqp/examples/other/h2o_rhf_6-31g_hf.inp
 
 # Set entrypoint if required
 ENTRYPOINT ["bash"]
