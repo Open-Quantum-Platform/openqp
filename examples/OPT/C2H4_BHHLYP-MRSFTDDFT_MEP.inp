@@ -22,6 +22,7 @@ type=mrsf
 nstate=5
 
 [optimize]
+lib=scipy
 optimizer=bfgs
 maxit=100
 mep_maxit=2

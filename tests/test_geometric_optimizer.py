@@ -292,7 +292,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIsInstance(optimizer, GeometricTSOpt)
         self.assertIs(optimizer.mol, mol)
 
-    def test_full_input_checker_rejects_default_scipy_for_irc(self):
+    def test_full_input_checker_accepts_default_geometric_for_irc(self):
         input_checker = load_module(
             "input_checker_full_irc_under_test",
             "pyoqp/oqp/utils/input_checker.py",
@@ -313,8 +313,12 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         report = input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertFalse(report.ok)
-        self.assertIn("optimize.lib", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_optimize_lib_default_is_geometric(self):
+        text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+
+        self.assertIn("'lib': {'type': str, 'default': 'geometric'}", text)
 
     def test_geometric_ts_uses_initial_hessian_by_default(self):
         text = (ROOT / "pyoqp/oqp/library/libgeometric.py").read_text()
