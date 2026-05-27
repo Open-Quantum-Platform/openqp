@@ -95,6 +95,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "same packed length"):
             solvent.reference_scf_total_density([[1.0, 0.25], [0.75]])
+        with self.assertRaisesRegex(ValueError, "one or two density blocks"):
+            solvent.reference_scf_total_density([[1.0], [0.5], [0.25]])
         with self.assertRaisesRegex(ValueError, "at least one density block"):
             solvent.reference_scf_total_density([])
 

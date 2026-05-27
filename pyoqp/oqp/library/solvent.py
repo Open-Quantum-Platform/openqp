@@ -18,6 +18,8 @@ def reference_scf_total_density(density_blocks):
     blocks = [_as_float_list(block, name="density_block") for block in density_blocks]
     if not blocks:
         raise ValueError("reference_scf_total_density requires at least one density block")
+    if len(blocks) > 2:
+        raise ValueError("reference_scf_total_density accepts one or two density blocks")
     packed_length = len(blocks[0])
     if any(len(block) != packed_length for block in blocks):
         raise ValueError("all density blocks must have the same packed length")
