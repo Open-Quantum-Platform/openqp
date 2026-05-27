@@ -1577,8 +1577,6 @@ end subroutine compute_soc2e_ao
 
     dtol = dtol*dtol
 
-    call gdat%init(basis%mxam, dtol, dabcut, iok)
-
     allocate(den_phys(basis%nbf, basis%nbf))
 
     do jao = 1, basis%nbf
@@ -1587,6 +1585,14 @@ end subroutine compute_soc2e_ao
       end do
     end do
 
+!$omp parallel &
+!$omp   firstprivate(gdat) &
+!$omp   private(i, j, k, l, ij, kl, gmax, iok, mpi_ij) &
+!$omp   reduction(+:wao)
+
+    call gdat%init(basis%mxam, dtol, dabcut, iok)
+
+!$omp barrier
     if (infos%mpiinfo%usempi) mpi_ij = 0
 
     do i = 1, basis%nshell
@@ -1598,6 +1604,7 @@ end subroutine compute_soc2e_ao
           if (mod(mpi_ij, pe%size) /= pe%rank) cycle
         end if
 
+!$omp do schedule(dynamic)
         do k = 1, basis%nshell
           do l = 1, k
             kl = k*(k-1)/2+l
@@ -1609,9 +1616,13 @@ end subroutine compute_soc2e_ao
             call soc2e_rys_compute(gdat, ppairs, gmax, den_phys, wao)
           end do
         end do
+!$omp end do
+
       end do
     end do
     call gdat%clean()
+!$omp end parallel
+
     call pe%allreduce(wao, size(wao))
     do jao = 1, basis%nbf
       do iao = 1, basis%nbf

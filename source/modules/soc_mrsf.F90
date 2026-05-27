@@ -56,6 +56,7 @@ contains
     use messages, only: show_message, with_abort
     use grd2_rys, only: soc2e_driver
     use mathlib, only: orthogonal_transform
+    use parallel, only: par_env_t
    use physical_constants, only: alpha  => FINE_STRUCTURE, &
                                  ha2wn  => HA_TO_WAVENUM,  &
                                  ha2ev  => EV2HTREE
@@ -90,25 +91,27 @@ contains
 
     logical :: do_2e_soc
     logical :: debug_soc_prints
+    type(par_env_t) :: pe
 
     integer :: nstate_soc
     real(kind=dp), pointer :: eval_out(:)
     real(kind=dp), pointer :: evec_re_out(:,:), evec_im_out(:,:)
     real(kind=dp), pointer :: hsoc_re_out(:,:), hsoc_im_out(:,:)
 
-    ! Temporary switch for the two-electron SOC mean-field correction.
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     debug_soc_prints = (infos%control%verbose > 1)
 
-    open(unit=iw, file=infos%log_filename, position="append")
-
     do_2e_soc = (infos%control%soc_2e /= 0)
-    
-    if (do_2e_soc) then
+
+    if (pe%rank == 0) then
+      open(unit=iw, file=infos%log_filename, position="append")
+      if (do_2e_soc) then
         call print_module_info('SOC_MRSF (1e+2e)', 'Spin-Orbit Coupling: MRSF Energies')
-    else
+      else
         call print_module_info('SOC_MRSF (1e)', 'Spin-Orbit Coupling: MRSF Energies')
-    endif
+      end if
+    end if
 
 !    write(iw, *) 'Do we 2e?', infos%control%soc_2e
     e_ref = infos%mol_energy%energy
@@ -164,7 +167,7 @@ contains
       if (ok /= 0) call show_message('soc_mrsf: cannot allocate 2e AO L matrices', WITH_ABORT)
       wao = 0.0_dp
 
-      if (debug_soc_prints) then
+      if (pe%rank == 0 .and. debug_soc_prints) then
         do i = 1, infos%basis%nshell
           write(iw,'(a,3i4)') 'shell ao_offset am:', i, &
             infos%basis%ao_offset(i), infos%basis%am(i)
@@ -174,7 +177,7 @@ contains
 
       call soc2e_driver(infos, infos%basis, den_rohf, wao)
 
-      if (debug_soc_prints) then
+      if (pe%rank == 0 .and. debug_soc_prints) then
         write(iw,'(/,a)') ' LX in AO (our wao)'
         do i = 1, nbf
           write(iw,'(*(f12.6))') (wao(1,i,j), j=1,i)
@@ -231,51 +234,53 @@ contains
     deallocate(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo)
 
     ! --- Step 5: Print SOC coupling constants, separated into 1e and 2e parts ---
-    write(iw,'(/,11x,89("-"))')
-    write(iw,'(41x,a)') 'Absolute = sqrt(Re(1e+2e)**2+Im(1e+2e)**2)'
-    write(iw,'(11x,89("-"))')
-    write(iw,'(2x,a,4x,a,9x,a,6x,a,6x,a,6x,a,6x,a)') &
-      'State_i', 'State_j', 'Re(1e)', 'Im(1e)', 'Re(2e)', 'Im(2e)', 'Absolute'
+    if (pe%rank == 0) then
+      write(iw,'(/,11x,89("-"))')
+      write(iw,'(41x,a)') 'Absolute = sqrt(Re(1e+2e)**2+Im(1e+2e)**2)'
+      write(iw,'(11x,89("-"))')
+      write(iw,'(2x,a,4x,a,9x,a,6x,a,6x,a,6x,a,6x,a)') &
+        'State_i', 'State_j', 'Re(1e)', 'Im(1e)', 'Re(2e)', 'Im(2e)', 'Absolute'
 
-    ! S-T block
-    do ist = 1, ns
-      do jst = 1, nt
-        do ims = 1, 3  ! Ms = -1, 0, +1
-          idx = ns + (jst-1)*3 + ims
+      ! S-T block
+      do ist = 1, ns
+        do jst = 1, nt
+          do ims = 1, 3  ! Ms = -1, 0, +1
+            idx = ns + (jst-1)*3 + ims
 
-          re1e   = real (h1soc(ist, idx)) * dfac
-          im1e   = aimag(h1soc(ist, idx)) * dfac
-          re2e   = real (h2soc(ist, idx)) * dfac
-          im2e   = aimag(h2soc(ist, idx)) * dfac
-          abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
-
-          write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-            'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
-        end do
-      end do
-    end do
-
-    ! T-T block
-    do ist = 1, nt
-      do jst = 1, nt
-        do ims_i = 1, 3
-          do ims_j = 1, 3
-            i = ns + (ist-1)*3 + ims_i
-            j = ns + (jst-1)*3 + ims_j
-
-            re1e   = real (h1soc(i, j)) * dfac
-            im1e   = aimag(h1soc(i, j)) * dfac
-            re2e   = real (h2soc(i, j)) * dfac
-            im2e   = aimag(h2soc(i, j)) * dfac
+            re1e   = real (h1soc(ist, idx)) * dfac
+            im1e   = aimag(h1soc(ist, idx)) * dfac
+            re2e   = real (h2soc(ist, idx)) * dfac
+            im2e   = aimag(h2soc(ist, idx)) * dfac
             abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
 
-            write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-              'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), &
-              re1e, im1e, re2e, im2e, abs12e
+            write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
+              'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
           end do
         end do
       end do
-    end do
+
+      ! T-T block
+      do ist = 1, nt
+        do jst = 1, nt
+          do ims_i = 1, 3
+            do ims_j = 1, 3
+              i = ns + (ist-1)*3 + ims_i
+              j = ns + (jst-1)*3 + ims_j
+
+              re1e   = real (h1soc(i, j)) * dfac
+              im1e   = aimag(h1soc(i, j)) * dfac
+              re2e   = real (h2soc(i, j)) * dfac
+              im2e   = aimag(h2soc(i, j)) * dfac
+              abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
+
+              write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
+                'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), &
+                re1e, im1e, re2e, im2e, abs12e
+            end do
+          end do
+        end do
+      end do
+    end if
 
     ! --- Step 6: Diagonalize H_SOC + excitation energies, print eigenvalues ---
     allocate(eval(ns + 3*nt), stat=ok)
@@ -283,45 +288,45 @@ contains
     allocate(evec(ns + 3*nt, ns + 3*nt), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate eigenvector array', WITH_ABORT)
     call diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
-    call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
-    call print_soc_decomposition(iw, eval, evec, ns, nt) 
 
-    call infos%dat%reserve_data(OQP_soc_eval, TA_TYPE_REAL64, &
-        nstate_soc, (/nstate_soc/), comment=OQP_soc_eval_comment)
-    call infos%dat%reserve_data(OQP_soc_evec_re, TA_TYPE_REAL64, &
-        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_re_comment)
-    call infos%dat%reserve_data(OQP_soc_evec_im, TA_TYPE_REAL64, &
-        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_im_comment)
-    call infos%dat%reserve_data(OQP_soc_hsoc_re, TA_TYPE_REAL64, &
-        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_re_comment)
-    call infos%dat%reserve_data(OQP_soc_hsoc_im, TA_TYPE_REAL64, &
-        nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_im_comment)
-    
-    call tagarray_get_data(infos%dat, OQP_soc_eval,    eval_out)
-    call tagarray_get_data(infos%dat, OQP_soc_evec_re, evec_re_out)
-    call tagarray_get_data(infos%dat, OQP_soc_evec_im, evec_im_out)
-    call tagarray_get_data(infos%dat, OQP_soc_hsoc_re, hsoc_re_out)
-    call tagarray_get_data(infos%dat, OQP_soc_hsoc_im, hsoc_im_out)
-    
-    eval_out     = eval
-    evec_re_out  = real(evec,  kind=dp)
-    evec_im_out  = aimag(evec)
-    hsoc_re_out  = real(hsoc,  kind=dp)
-    hsoc_im_out  = aimag(hsoc)
-    
-    
-    
-    
+    if (pe%rank == 0) then
+      call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
+      call print_soc_decomposition(iw, eval, evec, ns, nt)
+
+      call infos%dat%reserve_data(OQP_soc_eval, TA_TYPE_REAL64, &
+          nstate_soc, (/nstate_soc/), comment=OQP_soc_eval_comment)
+      call infos%dat%reserve_data(OQP_soc_evec_re, TA_TYPE_REAL64, &
+          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_re_comment)
+      call infos%dat%reserve_data(OQP_soc_evec_im, TA_TYPE_REAL64, &
+          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_im_comment)
+      call infos%dat%reserve_data(OQP_soc_hsoc_re, TA_TYPE_REAL64, &
+          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_re_comment)
+      call infos%dat%reserve_data(OQP_soc_hsoc_im, TA_TYPE_REAL64, &
+          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_im_comment)
+
+      call tagarray_get_data(infos%dat, OQP_soc_eval,    eval_out)
+      call tagarray_get_data(infos%dat, OQP_soc_evec_re, evec_re_out)
+      call tagarray_get_data(infos%dat, OQP_soc_evec_im, evec_im_out)
+      call tagarray_get_data(infos%dat, OQP_soc_hsoc_re, hsoc_re_out)
+      call tagarray_get_data(infos%dat, OQP_soc_hsoc_im, hsoc_im_out)
+
+      eval_out    = eval
+      evec_re_out = real(evec, kind=dp)
+      evec_im_out = aimag(evec)
+      hsoc_re_out = real(hsoc, kind=dp)
+      hsoc_im_out = aimag(hsoc)
+
+      write(iw,'(/,a)') 'SOC_MRSF done'
+      call flush(iw)
+      close(iw)
+    end if
+
     deallocate(eval, evec)
-        deallocate(lx_12e_mo, ly_12e_mo, lz_12e_mo)
-
+    deallocate(lx_12e_mo, ly_12e_mo, lz_12e_mo)
     deallocate(hsoc)
     if (do_2e_soc) then
-        deallocate(lx_2e_mo, ly_2e_mo, lz_2e_mo)
-    endif
-    write(iw,'(/,a)') 'SOC_MRSF done'
-    call flush(iw)
-    close(iw)
+      deallocate(lx_2e_mo, ly_2e_mo, lz_2e_mo)
+    end if
 
   end subroutine soc_mrsf
 
@@ -347,6 +352,7 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
   use constants,         only: tol_int
   use precision,         only: dp
   use types,             only: information
+  use parallel,          only: par_env_t
 
   implicit none
 
@@ -360,8 +366,9 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
   integer, parameter :: blocksize = 28*28
   real(kind=dp) :: socblk(blocksize, 3)
 
-  integer  :: ii, jj, ig, iat, iz, nat, nbf
+  integer  :: ii, jj, ig, iat, iz, nat, nbf, mpi_ii
   real(kind=dp) :: ze, tol
+  type(par_env_t) :: pe
 
   basis => infos%basis
   basis%atoms => infos%atoms
@@ -373,10 +380,25 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
   ly_ao = 0.0_dp
   lz_ao = 0.0_dp
 
+  call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+!$omp parallel &
+!$omp   private(shi, shj, cntp, socblk, ii, jj, ig, iat, iz, ze, mpi_ii) &
+!$omp   reduction(+:lx_ao, ly_ao, lz_ao)
+
   call cntp%alloc(basis)
 
+!$omp barrier
+  if (infos%mpiinfo%usempi) mpi_ii = 0
+
   do ii = basis%nshell, 1, -1
+    if (infos%mpiinfo%usempi) then
+      mpi_ii = mpi_ii + 1
+      if (mod(mpi_ii, pe%size) /= pe%rank) cycle
+    end if
     call shi%fetch_by_id(basis, ii)
+
+!$omp do schedule(dynamic)
     do jj = 1, ii
       call shj%fetch_by_id(basis, jj)
       call cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
@@ -399,7 +421,14 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
       call update_triang_matrix(shi, shj, socblk(:,3), lz_ao)
 
     end do
+!$omp end do
+
   end do
+!$omp end parallel
+
+  call pe%allreduce(lx_ao, size(lx_ao))
+  call pe%allreduce(ly_ao, size(ly_ao))
+  call pe%allreduce(lz_ao, size(lz_ao))
 
   call bas_norm_matrix(lx_ao, basis%bfnrm, nbf)
   call bas_norm_matrix(ly_ao, basis%bfnrm, nbf)

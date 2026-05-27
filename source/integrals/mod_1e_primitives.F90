@@ -2513,12 +2513,12 @@ END SUBROUTINE
     call QGaussRys2e(ryscomp, cpij, idij, cpkl, idkl, gfull)
 
 
-    if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
-      write(6,'(a,3e20.12)') 'OQP gfull 00/10/01:', &
-      gfull(0,0,0,0,3,1), &   ! ZINT(1,1) = F00
-      gfull(0,1,0,0,1,1), &   ! XINT(2,1) = XC00
-      gfull(0,0,0,1,1,1)      ! XINT(1,2) = XCP00
-    endif
+!    if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
+!      write(6,'(a,3e20.12)') 'OQP gfull 00/10/01:', &
+!      gfull(0,0,0,0,3,1), &   ! ZINT(1,1) = F00
+!      gfull(0,1,0,0,1,1), &   ! XINT(2,1) = XC00
+!      gfull(0,0,0,1,1,1)      ! XINT(1,2) = XCP00
+!    endif
     ! Contraction prefactor for electron 1 primitive pair
     ! GAMESS: FACI*CONJ(J) are absorbed here; CONK*PNRM(K)*CONL*PNRM(L) go in (k,l) loop
     ! In OQP: pp%expfac already contains exp(-ai*aj/aa * |A-B|^2) * (pi/aa)^1.5
@@ -2590,12 +2590,12 @@ END SUBROUTINE
                     ! GAMESS: YINTI(NYY,MY) = NI*YINT(NI-1,MY) - 2*AI*YINT(NI+1,MY)
                     call soc_xyz_ij(xyzin, iang, jang, ppij%ai, ppij%aj, nroots_2e, di, dj)
 
-if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
-  write(6,'(a,4i3,6e16.8)') 'OQP di/dj i/j/k/l=', i,j,k,l, &
-    di(nyj,nyi,2,1), dj(nyj,nyi,2,1), &
-    di(nzj,nzi,3,1), dj(nzj,nzi,3,1), &
-    di(nxj,nxi,1,1), dj(nxj,nxi,1,1)
-endif
+!if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
+!  write(6,'(a,4i3,6e16.8)') 'OQP di/dj i/j/k/l=', i,j,k,l, &
+!    di(nyj,nyi,2,1), dj(nyj,nyi,2,1), &
+!    di(nzj,nzi,3,1), dj(nzj,nzi,3,1), &
+!    di(nxj,nxi,1,1), dj(nxj,nxi,1,1)
+!endif
 
                     ! --- Lx, Ly, Lz (GAMESS: SOL(1), SOL(2), SOL(3)) ---
                     ! SOL(1) = (YINTI(NYY,MY)*ZINTJ(NZZ,MZ) - YINTJ(NYY,MY)*ZINTI(NZZ,MZ))
@@ -2629,9 +2629,9 @@ endif
                                  *    dj(nxj, nxi, 1, 1:nroots_2e) )
 
 
-                    if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
-                      write(6,'(a,4i3,3e20.12)') 'OQP lx/ly/lz i/j/k/l=', i,j,k,l, lx,ly,lz
-                    endif
+!                    if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
+!                      write(6,'(a,4i3,3e20.12)') 'OQP lx/ly/lz i/j/k/l=', i,j,k,l, lx,ly,lz
+!                    endif
                 end do  ! l
             end do  ! k
 !if (idij==1 .and. idkl==1 .and. i==2 .and. j==1) then
