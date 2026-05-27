@@ -503,7 +503,7 @@ class Molecule:
             'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
-            'inertia': self.modes.tolist(),
+            'inertia': self.inertia.tolist(),
         }
 
         with open(jsonfile, 'w') as outdata:
