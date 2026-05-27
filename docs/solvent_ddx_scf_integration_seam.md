@@ -96,7 +96,7 @@ This is the natural first path for converting ddX apparent charges/cavity-point 
 ## Proposed first runtime implementation
 
 1. Add a Fortran/C bridge wrapper around the C ddX adapter for the quantities needed in SCF.
-2. At the start of a PCM-enabled `calc_jk_xc` call, form `D_total` from packed density blocks.
+2. At the start of a PCM-enabled `calc_jk_xc` call, form `D_total` from packed density blocks. The branch now has the dependency-light Python guard/helper `reference_scf_total_density()` for the intended convention: one RHF density block is used as-is, while ROHF/UHF-style alpha/beta packed blocks are summed elementwise before building ddX `phi_cav`.
 3. Use `int1:electrostatic_potential_unweighted` to compute electronic potential on ddX/cavity sites.
 4. Add the nuclear potential at those sites to form total `phi_cav`.
 5. Use ddX to solve the reaction field and retrieve the point representation needed for OpenQP.

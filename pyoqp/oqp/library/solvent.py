@@ -7,6 +7,23 @@ def _as_float_list(values, *, name: str):
     return [float(value) for value in values]
 
 
+def reference_scf_total_density(density_blocks):
+    """Return the packed total AO density for reference-SCF PCM prototypes.
+
+    OpenQP's first PCM target uses the RHF/ROHF reference density to build the
+    ddX cavity potential.  RHF-style inputs have one packed density block, while
+    ROHF/UHF-style storage has separate alpha/beta blocks that must be summed
+    before evaluating the scalar electrostatic solvent response.
+    """
+    blocks = [_as_float_list(block, name="density_block") for block in density_blocks]
+    if not blocks:
+        raise ValueError("reference_scf_total_density requires at least one density block")
+    packed_length = len(blocks[0])
+    if any(len(block) != packed_length for block in blocks):
+        raise ValueError("all density blocks must have the same packed length")
+    return [sum(block[index] for block in blocks) for index in range(packed_length)]
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

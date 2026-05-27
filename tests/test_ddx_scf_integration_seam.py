@@ -78,6 +78,26 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["z"], [0.2, 1.2])
         self.assertEqual(inputs["chg"], [-0.1, 0.2])
 
+    def test_reference_scf_total_density_sums_spin_blocks_for_ddx_phi_cav(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_total_density", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        self.assertEqual(solvent.reference_scf_total_density([[1.0, 0.25, -0.5]]), [1.0, 0.25, -0.5])
+        self.assertEqual(
+            solvent.reference_scf_total_density([[1.0, 0.25, -0.5], [0.75, -0.25, 0.5]]),
+            [1.75, 0.0, 0.0],
+        )
+        with self.assertRaisesRegex(ValueError, "same packed length"):
+            solvent.reference_scf_total_density([[1.0, 0.25], [0.75]])
+        with self.assertRaisesRegex(ValueError, "at least one density block"):
+            solvent.reference_scf_total_density([])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
