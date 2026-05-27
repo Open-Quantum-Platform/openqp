@@ -243,6 +243,10 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
 
         self.assertEqual(1, summary["target_group_count"])
         self.assertEqual(1, summary["target_bad_group_count"])
+        self.assertEqual(1, len(summary["target_bad_groups"]))
+        self.assertEqual("ch2o", summary["target_bad_groups"][0]["molecule"])
+        self.assertEqual(4, summary["target_bad_groups"][0]["root"])
+        self.assertNotIn("h2o", {group["molecule"] for group in summary["target_bad_groups"]})
         self.assertTrue(summary["groups"][0]["target_case"])
         self.assertFalse(summary["groups"][1]["target_case"])
 

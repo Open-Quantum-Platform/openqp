@@ -239,6 +239,7 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
         "component_group_count": len(summaries),
         "target_group_count": len(target_groups),
         "target_bad_group_count": len(target_bad_groups),
+        "target_bad_groups": target_bad_groups,
         "groups": summaries,
     }
 
