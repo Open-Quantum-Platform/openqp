@@ -172,6 +172,64 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertFalse(summary["groups"][1]["possible_state_character_change"])
         self.assertEqual("localized_z_component_z_vector_or_operator_mapping", summary["groups"][1]["mechanism_hint"])
 
+    def test_component_summary_preserves_bad_component_details_for_next_diagnostic(self):
+        module = load_module()
+        rows = [
+            {
+                "method": "mrsf",
+                "molecule": "hcn",
+                "root": 6,
+                "physical_state": "S5",
+                "component": "a0_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": 0.100,
+                "fd_ha_per_bohr": 0.020,
+                "diff_ha_per_bohr": 0.080,
+                "abs_diff_ha_per_bohr": 0.080,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "present",
+                "bad_component": True,
+                "target_case": True,
+            },
+            {
+                "method": "mrsf",
+                "molecule": "hcn",
+                "root": 6,
+                "physical_state": "S5",
+                "component": "a1_x",
+                "axis": "x",
+                "analytic_ha_per_bohr": 0.010,
+                "fd_ha_per_bohr": 0.0104,
+                "diff_ha_per_bohr": -0.0004,
+                "abs_diff_ha_per_bohr": 0.0004,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "present",
+                "bad_component": False,
+                "target_case": True,
+            },
+        ]
+
+        summary = module.summarize_component_rows(rows, threshold=1.0e-3)
+
+        self.assertEqual(
+            [
+                {
+                    "component": "a0_z",
+                    "axis": "z",
+                    "abs_diff_ha_per_bohr": 0.080,
+                    "analytic_ha_per_bohr": 0.100,
+                    "fd_ha_per_bohr": 0.020,
+                    "s2_evidence": "present",
+                }
+            ],
+            summary["groups"][0]["bad_components"],
+        )
+        self.assertEqual(summary["groups"][0]["bad_components"], summary["target_bad_groups"][0]["bad_components"])
+
     def test_component_summary_marks_empty_or_all_zero_s2_maps_as_unknown_evidence(self):
         module = load_module()
         rows = [

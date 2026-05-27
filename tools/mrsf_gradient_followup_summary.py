@@ -204,7 +204,19 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
     for (method, molecule, root), items in grouped.items():
         worst = max(items, key=lambda item: item["abs_diff_ha_per_bohr"])
         bad_items = [item for item in items if item["abs_diff_ha_per_bohr"] > threshold]
+        bad_items.sort(key=lambda item: (-item["abs_diff_ha_per_bohr"], item["component"]))
         axes = sorted({item["axis"] for item in bad_items})
+        bad_components = [
+            {
+                "component": item["component"],
+                "axis": item["axis"],
+                "abs_diff_ha_per_bohr": item["abs_diff_ha_per_bohr"],
+                "analytic_ha_per_bohr": item["analytic_ha_per_bohr"],
+                "fd_ha_per_bohr": item["fd_ha_per_bohr"],
+                "s2_evidence": item["s2_evidence"],
+            }
+            for item in bad_items
+        ]
         summary = {
             "method": method,
             "molecule": molecule,
@@ -215,6 +227,7 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
             "worst_axis": worst["axis"],
             "bad_component_count": len(bad_items),
             "bad_axes": axes,
+            "bad_components": bad_components,
             "s2_max_delta": max(item["s2_max_delta"] for item in items),
             "s2_evidence": "present" if any(item.get("s2_evidence") == "present" for item in items) else "unknown",
             "possible_state_character_change": max(item["s2_max_delta"] for item in items) > 0.5,
