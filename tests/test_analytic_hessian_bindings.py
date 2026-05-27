@@ -17,6 +17,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
             "hf_hessian",
             "tdhf_hessian",
             "tdhf_sf_hessian",
+            "tdhf_mrsf_hessian",
         ]:
             self.assertIn(f"void {symbol}(struct oqp_handle_t *inf);", header)
 
@@ -70,6 +71,14 @@ class TestAnalyticHessianBindings(unittest.TestCase):
                 "subroutine tdhf_sf_hessian_C",
                 "subroutine tdhf_sf_hessian",
                 "Analytic SF-TDDFT Hessian kernel scaffold reached",
+            ],
+            "tdhf_mrsf_hessian.F90": [
+                "module tdhf_mrsf_hessian_mod",
+                'bind(C, name="tdhf_mrsf_hessian")',
+                "subroutine tdhf_mrsf_hessian_C",
+                "subroutine tdhf_mrsf_hessian",
+                "Analytic MRSF-TDDFT Hessian kernel scaffold reached",
+                "MRSF gradient/Z-vector finite-difference baseline",
             ],
         }
 
