@@ -38,6 +38,13 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("Native HF/DFT analytic Hessian kernels are not available", source)
         self.assertIn("native_hess(self.mol)", source)
 
+    def test_public_sf_dispatch_is_separate_from_private_mrsf_path(self):
+        source = read("pyoqp/oqp/library/single_point.py")
+
+        self.assertIn("def analytical_sf_hess", source)
+        self.assertIn("td_type == 'sf'", source)
+        self.assertIn("return self.analytical_sf_hess()", source)
+
     def test_hf_hessian_fortran_scaffold_exports_c_abi_without_claiming_support(self):
         source = read("source/modules/hf_hessian.F90")
 

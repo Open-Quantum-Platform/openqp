@@ -636,7 +636,9 @@ class Hessian(Calculator):
             return self.analytical_ground_state_hess()
         if method == 'tdhf' and td_type in {'tda', 'rpa'}:
             return self.analytical_tddft_hess()
-        if method == 'tdhf' and td_type in {'sf', 'mrsf', 'umrsf'}:
+        if method == 'tdhf' and td_type == 'sf':
+            return self.analytical_sf_hess()
+        if method == 'tdhf' and td_type in {'mrsf', 'umrsf'}:
             return self.analytical_mrsf_hess()
         raise NotImplementedError(
             f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
@@ -661,6 +663,11 @@ class Hessian(Calculator):
         td_type = self.mol.config['tdhf']['type']
         raise NotImplementedError(
             f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
+        )
+
+    def analytical_sf_hess(self):
+        raise NotImplementedError(
+            'SF-TDDFT analytic Hessian is not implemented yet; no numerical fallback will be used.'
         )
 
     def analytical_mrsf_hess(self):

@@ -198,6 +198,23 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         self.assertEqual(result.shape, (6, 6))
         self.assertAlmostEqual(result[0, 1], 3.5)
 
+    def test_sf_analytical_hessian_routes_separately_from_mrsf_private_path(self):
+        class Mol:
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "analytical", "state": 1, "read": False, "restart": False, "temperature": [298.15], "clean": True},
+                "input": {"method": "tdhf"},
+                "scf": {"multiplicity": 3},
+                "tdhf": {"type": "sf", "multiplicity": 1},
+            }
+
+        hessian = self.single_point.Hessian(Mol())
+        hessian.analytical_sf_hess = lambda: ("sf-route", ["stubbed"])
+
+        self.assertEqual(hessian.analytical_hess(), ("sf-route", ["stubbed"]))
+
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
