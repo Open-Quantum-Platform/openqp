@@ -567,6 +567,16 @@ class Hessian(Calculator):
         else:
             self.hess_func = self.numerical_hess
 
+        # Native Hessian ABI placeholders (oqp.hf_hessian, oqp.tdhf_hessian,
+        # oqp.tdhf_sf_hessian). These entries are intentionally not used as a
+        # numerical fallback while kernels/storage are still being implemented.
+        self.native_hess_func = {
+            'hf': getattr(oqp, 'hf_hessian', None),
+            'rpa': getattr(oqp, 'tdhf_hessian', None),
+            'tda': getattr(oqp, 'tdhf_hessian', None),
+            'sf': getattr(oqp, 'tdhf_sf_hessian', None),
+        }
+
         method = mol.config['input']['method']
         scf_mult = mol.config['scf']['multiplicity']
         td_mult = mol.config['tdhf']['multiplicity']
@@ -619,7 +629,46 @@ class Hessian(Calculator):
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
 
     def analytical_hess(self):
-        exit('analytical hessian is not available yet, choose numerical')
+        method = self.mol.config['input']['method']
+        td_type = self.mol.config['tdhf']['type']
+
+        if method == 'hf':
+            return self.analytical_ground_state_hess()
+        if method == 'tdhf' and td_type in {'tda', 'rpa'}:
+            return self.analytical_tddft_hess()
+        if method == 'tdhf' and td_type in {'sf', 'mrsf', 'umrsf'}:
+            return self.analytical_mrsf_hess()
+        raise NotImplementedError(
+            f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
+        )
+
+    def analytical_ground_state_hess(self):
+        native_hess = self.native_hess_func.get('hf')
+        if native_hess is None:
+            raise NotImplementedError(
+                'Native HF/DFT analytic Hessian kernels are not available in this build; no numerical fallback will be used.'
+            )
+
+        native_hess(self.mol)
+        hessian = np.asarray(self.mol.get_hess(), dtype=float)
+        if hessian.size == 0:
+            raise NotImplementedError(
+                'Native HF/DFT analytic Hessian kernel did not return a Hessian; no numerical fallback will be used.'
+            )
+        return hessian, ['computed']
+
+    def analytical_tddft_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        raise NotImplementedError(
+            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
+        )
+
+    def analytical_mrsf_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        label = 'MRSF-TDDFT' if td_type == 'mrsf' else td_type.upper()
+        raise NotImplementedError(
+            f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
+        )
 
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'

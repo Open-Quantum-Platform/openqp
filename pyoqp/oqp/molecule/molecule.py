@@ -3,6 +3,7 @@ import os
 import copy
 import json
 import platform
+import warnings
 import numpy as np
 import oqp
 from oqp.utils.input_parser import OQPConfigParser
@@ -47,6 +48,7 @@ class Molecule:
         self.soc = []  # Npairs, 1,
         self.freqs = np.zeros(0)  # 3Natom-6
         self.hessian = np.zeros(0)  # 3Natom, 3Natom
+        self.hessian_metadata = {}
         self.modes = np.zeros(0)  # 3Natom-6, 3Natom
         self.inertia = np.zeros(0)  # 3
 
@@ -232,7 +234,42 @@ class Molecule:
         Get hessian results
         """
 
-        return []
+        return copy.deepcopy(self.hessian)
+
+    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8):
+        """
+        Store a final Cartesian Hessian in OpenQP frequency conventions.
+
+        Native analytic Hessian kernels should hand one square ``(3N, 3N)``
+        matrix to this helper. The helper records the pre-symmetrization
+        asymmetry for diagnostics and stores the symmetrized matrix used by
+        normal-mode analysis; it does not compute a numerical fallback.
+        """
+
+        hessian = np.asarray(raw_hessian, dtype=float)
+        if hessian.ndim != 2 or hessian.shape[0] != hessian.shape[1]:
+            raise ValueError(f"Expected square Hessian matrix, got shape={hessian.shape}")
+
+        natom = self.data['natom']
+        expected = 3 * natom
+        if hessian.shape != (expected, expected):
+            raise ValueError(
+                f"Expected Hessian shape ({expected}, {expected}) for {natom} atoms, got {hessian.shape}"
+            )
+
+        max_asymmetry = float(np.max(np.abs(hessian - hessian.T))) if hessian.size else 0.0
+        if max_asymmetry > asymmetry_tol:
+            warnings.warn(
+                f"Analytic Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
+                RuntimeWarning,
+            )
+
+        self.hessian = 0.5 * (hessian + hessian.T)
+        self.hessian_metadata = {
+            'max_asymmetry': max_asymmetry,
+            'symmetrized': bool(max_asymmetry > 0.0),
+        }
+        return self.hessian
 
     def get_data(self):
         """
@@ -463,6 +500,7 @@ class Molecule:
             'mass': self.get_mass().tolist(),
             'energy': self.energies[state],
             'hessian': self.hessian.tolist(),
+            'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
             'inertia': self.modes.tolist(),

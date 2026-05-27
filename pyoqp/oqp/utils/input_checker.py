@@ -1083,6 +1083,37 @@ def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
             )
 
 
+def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
+    """Return analytic-Hessian capability status and a precise reason.
+
+    This checker is intentionally conservative: enabling a dispatch scaffold must
+    not imply broad scientific support. Unsupported analytic Hessians fail at
+    input-check time instead of silently falling back to numerical Hessians.
+    """
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    state = _get(config, "hess", "state", 0)
+
+    if method == "hf":
+        if state != 0:
+            return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
+        if scf_type not in {"rhf", "uhf", "rohf"}:
+            return "unsupported_scf_type", f"HF/DFT analytic Hessian does not support scf.type={scf_type}."
+        return "supported", "HF/DFT ground-state analytic Hessian dispatch is enabled."
+
+    if method == "tdhf":
+        if td_type in {"sf", "mrsf", "umrsf"}:
+            label = "MRSF-TDDFT" if td_type == "mrsf" else td_type.upper()
+            return "unsupported_tdhf_type", f"{label} analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+        if td_type in {"tda", "rpa"}:
+            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
+
+    return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
+
+
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
@@ -1093,14 +1124,16 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
     if hess_type == "analytical":
-        report.add(
-            "ERROR",
-            "hess.type",
-            "Analytical Hessian is not implemented; the runtime exits for this case.",
-            value=hess_type,
-            expected="numerical",
-            action="Set [hess] type=numerical.",
-        )
+        capability, reason = analytic_hessian_capability(config)
+        if capability != "supported":
+            report.add(
+                "ERROR",
+                "hess.type",
+                reason,
+                value=hess_type,
+                expected="supported analytical Hessian capability",
+                action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
+            )
 
     if method == "hf" and state > 0:
         report.add(

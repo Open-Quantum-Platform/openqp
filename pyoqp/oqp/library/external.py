@@ -302,3 +302,40 @@ def guess_from_pyscf_initial_density(mol, guess_type):
 
     return
 
+
+def _flatten_pyscf_hessian(raw_hessian):
+    """Convert PySCF's (nat, nat, 3, 3) Hessian to OpenQP (3N, 3N)."""
+
+    hess4 = np.asarray(raw_hessian, dtype=float)
+    if hess4.ndim != 4 or hess4.shape[2:] != (3, 3) or hess4.shape[0] != hess4.shape[1]:
+        raise ValueError(f"Expected PySCF Hessian shape (nat, nat, 3, 3), got {hess4.shape}")
+    flat = hess4.transpose(0, 2, 1, 3).reshape(hess4.shape[0] * 3, hess4.shape[1] * 3)
+    return 0.5 * (flat + flat.T)
+
+
+def analytic_hessian_from_pyscf(mol, mf_factory=None):
+    """Return a conservative PySCF-backed analytic Hessian for HF/DFT only.
+
+    This is a dispatch scaffold, not TDDFT/SF/MRSF support. Unsupported
+    response-theory methods raise NotImplementedError explicitly so callers do
+    not silently fall back to numerical Hessians.
+    """
+
+    method = mol.config.get("input", {}).get("method", "hf").lower()
+    td_type = mol.config.get("tdhf", {}).get("type", "rpa").lower()
+    if method == "tdhf":
+        if td_type == "mrsf":
+            raise NotImplementedError("MRSF-TDDFT analytic Hessian is not implemented")
+        if td_type in {"sf", "umrsf"}:
+            raise NotImplementedError(f"{td_type.upper()} analytic Hessian is not implemented")
+        raise NotImplementedError(f"TDHF/TDDFT analytic Hessian is not implemented for tdhf.type={td_type}")
+    if method != "hf":
+        raise NotImplementedError(f"Analytic Hessian is not implemented for method={method}")
+
+    if mf_factory is None:
+        raise NotImplementedError("Native OpenQP analytic Hessian backend is not implemented yet")
+    mf = mf_factory(mol)
+    mf.kernel()
+    hessian = _flatten_pyscf_hessian(mf.Hessian().kernel())
+    return hessian, ["computed"]
+

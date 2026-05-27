@@ -203,14 +203,17 @@ void proj_dm_newbas(struct oqp_handle_t *inf);
 
 void hf_energy(struct oqp_handle_t *inf);
 void hf_gradient(struct oqp_handle_t *inf);
+void hf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_energy(struct oqp_handle_t *inf);
 void tdhf_z_vector(struct oqp_handle_t *inf);
 void tdhf_gradient(struct oqp_handle_t *inf);
+void tdhf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_sf_energy(struct oqp_handle_t *inf);
 void tdhf_sf_z_vector(struct oqp_handle_t *inf);
 void tdhf_sf_gradient(struct oqp_handle_t *inf);
+void tdhf_sf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_energy(struct oqp_handle_t *inf);
