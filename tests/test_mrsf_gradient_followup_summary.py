@@ -156,9 +156,9 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
                     "abs_diff_ha_per_bohr": "0.07927826",
                     "trah_count": "0",
                     "failed_any": "False",
-                    "s2_grad": "{5: 0.0}",
-                    "s2_plus": "{5: 0.0}",
-                    "s2_minus": "{5: 0.0}",
+                    "s2_grad": "{5: 0.01}",
+                    "s2_plus": "{5: 0.01}",
+                    "s2_minus": "{5: 0.01}",
                 }
             )
 
@@ -171,6 +171,34 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertEqual("h2s", summary["groups"][1]["molecule"])
         self.assertFalse(summary["groups"][1]["possible_state_character_change"])
         self.assertEqual("localized_z_component_z_vector_or_operator_mapping", summary["groups"][1]["mechanism_hint"])
+
+    def test_component_summary_marks_empty_or_all_zero_s2_maps_as_unknown_evidence(self):
+        module = load_module()
+        rows = [
+            {
+                "method": "mrsf",
+                "molecule": "ch2o",
+                "root": 4,
+                "physical_state": "S3",
+                "component": "a1_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": -0.25282498,
+                "fd_ha_per_bohr": -0.27404,
+                "diff_ha_per_bohr": 0.02121502,
+                "abs_diff_ha_per_bohr": 0.02121502,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "unknown",
+                "bad_component": True,
+            }
+        ]
+
+        summary = module.summarize_component_rows(rows, threshold=1.0e-3)
+
+        self.assertEqual("unknown", summary["groups"][0]["s2_evidence"])
+        self.assertFalse(summary["groups"][0]["possible_state_character_change"])
+        self.assertIn("state-character evidence missing", summary["groups"][0]["mechanism_hint"])
 
 
 if __name__ == "__main__":

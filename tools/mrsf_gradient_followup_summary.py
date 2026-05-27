@@ -142,6 +142,16 @@ def _s2_max_delta(*maps: dict[int, float]) -> float:
     return max_delta
 
 
+def _s2_evidence(*maps: dict[int, float]) -> str:
+    populated = [mapping for mapping in maps if mapping]
+    if not populated:
+        return "unknown"
+    values = [abs(value) for mapping in populated for value in mapping.values()]
+    if values and max(values) == 0.0:
+        return "unknown"
+    return "present"
+
+
 def normalize_component_row(row: dict[str, str], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
     root = _to_int(row.get("root"))
     s2_grad = _parse_s2_map(row.get("s2_grad"))
@@ -162,6 +172,7 @@ def normalize_component_row(row: dict[str, str], threshold: float = DEFAULT_THRE
         "trah_count": _to_int(row.get("trah_count")),
         "failed_any": _to_bool(row.get("failed_any")),
         "s2_max_delta": _s2_max_delta(s2_grad, s2_plus, s2_minus),
+        "s2_evidence": _s2_evidence(s2_grad, s2_plus, s2_minus),
         "bad_component": abs_diff > threshold,
     }
 
@@ -176,6 +187,8 @@ def _component_mechanism_hint(group: dict[str, Any]) -> str:
         return "not-clean: inspect SCF/TRAH before gradient algebra"
     if group["possible_state_character_change"]:
         return "root_tracking_or_state_character_change"
+    if group["s2_evidence"] == "unknown":
+        return "state-character evidence missing; rerun/parse root-continuity metadata before algebra edits"
     if group["bad_component_count"] == 1 and group["worst_axis"] == "z":
         return "localized_z_component_z_vector_or_operator_mapping"
     return "compare_spc_toggles_xc_density_handoff_and_z_vector_mapping"
@@ -202,6 +215,7 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
             "bad_component_count": len(bad_items),
             "bad_axes": axes,
             "s2_max_delta": max(item["s2_max_delta"] for item in items),
+            "s2_evidence": "present" if any(item.get("s2_evidence") == "present" for item in items) else "unknown",
             "possible_state_character_change": max(item["s2_max_delta"] for item in items) > 0.5,
             "trah_or_failed": any(item["trah_count"] > 0 or item["failed_any"] for item in items),
         }
