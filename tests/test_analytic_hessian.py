@@ -114,6 +114,7 @@ class AnalyticHessianExternalRuntimeTests(unittest.TestCase):
         self.assertIn("## HF analytic Hessian", text)
         self.assertIn("## DFT analytic Hessian", text)
         self.assertIn("## TDDFT analytic Hessian", text)
+        self.assertIn("## MRSF-TDDFT analytic Hessian", text)
         self.assertIn("no silent numerical fallback", text.lower())
 
 

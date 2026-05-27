@@ -1,6 +1,6 @@
 # OpenQP Analytic Hessian Design Note
 
-This note defines the staged analytic-Hessian contract for HF/DFT, conventional TDDFT, and SF-TDDFT in OpenQP. It is a design and acceptance document, not a support claim for the unimplemented scientific kernels.
+This note defines the staged analytic-Hessian contract for HF/DFT, conventional TDDFT, SF-TDDFT, and MRSF-TDDFT in OpenQP. It is a design and acceptance document, not a support claim for the unimplemented scientific kernels.
 
 ## Units and data contract
 
@@ -31,6 +31,14 @@ DFT validation mirrors HF validation with small molecules and stable functionals
 Conventional TDDFT/TDA/RPA Hessians are state-specific excited-state Hessians. They must route through `[input] method=tdhf`, `[tdhf] type=tda` or `rpa`, and `[hess] state=N`, where state 0 remains the reference/ground state and excited states use positive indices.
 
 The implementation should mirror the TDDFT gradient/Z-vector flow: response amplitudes, relaxed density/intermediate construction, response-vector derivative terms, XC response-kernel terms for DFT, and state-specific Hessian accumulation. TDA should be validated before full RPA so X/Y coupling terms cannot be accidentally skipped.
+
+## MRSF-TDDFT analytic Hessian
+
+MRSF-TDDFT Hessians must be treated as a later, separately validated tier rather than as a consequence of the HF/DFT or conventional TDDFT scaffolds. The response-root convention is OpenQP/MRSF-specific: root 0 is the high-spin ROHF reference, root 1 maps to physical S0, root 2 maps to physical S1, and so on. Hessian tests, diagnostics, and output must preserve that mapping and must report `<S^2>` for the tracked target root.
+
+The MRSF implementation must start from a validated MRSF gradient/Z-vector baseline. Before enabling a native MRSF Hessian kernel, finite-difference checks must show stable analytic gradients for multiple molecules and roots, with no-fix controls for known SPC/Z-vector density terms. The Hessian accumulation should reuse the established spin-adapted density channels and MRSF Z-vector intermediates exactly; it must not reinterpret ROHF-MRSF as a general UHF path or substitute `mo_a`/`mo_b` changes without separate UMRSF validation.
+
+Initial MRSF Hessian support remains explicitly disabled until those gradient and root-tracking checks are clean. A source-level scaffold may expose ABI and dispatch guardrails, but runtime `[hess] type=analytical` for `tdhf.type=mrsf` must fail explicitly rather than returning zeros or falling back to numerical displacements.
 
 ## Unsupported first-release cases
 
