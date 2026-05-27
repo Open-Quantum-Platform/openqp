@@ -34,6 +34,8 @@ def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisiona
     q_values = _as_float_list(q_cav, name="q_cav")
     xyz_values = _as_float_list(cavity_xyz, name="cavity_xyz")
     expected_xyz = 3 * len(q_values)
+    if not q_values:
+        raise ValueError("q_cav must contain at least one cavity value")
     if len(xyz_values) != expected_xyz:
         raise ValueError(
             "cavity_xyz must contain 3 * len(q_cav) values "

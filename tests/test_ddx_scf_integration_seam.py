@@ -41,6 +41,13 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 allow_provisional=True,
             )
 
+        with self.assertRaisesRegex(ValueError, "q_cav must contain at least one"):
+            solvent.provisional_ddx_reaction_field_inputs(
+                [],
+                [],
+                allow_provisional=True,
+            )
+
         inputs = solvent.provisional_ddx_reaction_field_inputs(
             [0.2, -0.4],
             [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
