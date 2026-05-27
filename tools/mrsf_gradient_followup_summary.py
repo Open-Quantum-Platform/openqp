@@ -8,6 +8,7 @@ existing validation artifacts before launching any new quantum chemistry jobs.
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import json
 from pathlib import Path
@@ -103,6 +104,127 @@ def normalize_row(row: dict[str, str], threshold: float = DEFAULT_THRESHOLD) -> 
 def load_compact_csv(path: Path, threshold: float = DEFAULT_THRESHOLD) -> list[dict[str, Any]]:
     with path.open(newline="") as handle:
         return [normalize_row(row, threshold) for row in csv.DictReader(handle)]
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def _parse_s2_map(value: Any) -> dict[int, float]:
+    if value in (None, ""):
+        return {}
+    try:
+        parsed = ast.literal_eval(str(value))
+    except (SyntaxError, ValueError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    result: dict[int, float] = {}
+    for key, item in parsed.items():
+        try:
+            result[int(key)] = float(item)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _s2_max_delta(*maps: dict[int, float]) -> float:
+    if not maps:
+        return 0.0
+    keys = set().union(*(mapping.keys() for mapping in maps))
+    max_delta = 0.0
+    for key in keys:
+        values = [mapping[key] for mapping in maps if key in mapping]
+        if values:
+            max_delta = max(max_delta, max(values) - min(values))
+    return max_delta
+
+
+def normalize_component_row(row: dict[str, str], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
+    root = _to_int(row.get("root"))
+    s2_grad = _parse_s2_map(row.get("s2_grad"))
+    s2_plus = _parse_s2_map(row.get("s2_plus"))
+    s2_minus = _parse_s2_map(row.get("s2_minus"))
+    abs_diff = _to_float(row.get("abs_diff_ha_per_bohr"))
+    return {
+        "method": row.get("method", ""),
+        "molecule": str(row.get("molecule", "")).lower(),
+        "root": root,
+        "physical_state": physical_state_for_mrsf_root(root, row.get("physical_state") or None),
+        "component": row.get("component", ""),
+        "axis": str(row.get("component", ""))[-1:] or "?",
+        "analytic_ha_per_bohr": _to_float(row.get("analytic_ha_per_bohr")),
+        "fd_ha_per_bohr": _to_float(row.get("fd_ha_per_bohr")),
+        "diff_ha_per_bohr": _to_float(row.get("diff_ha_per_bohr")),
+        "abs_diff_ha_per_bohr": abs_diff,
+        "trah_count": _to_int(row.get("trah_count")),
+        "failed_any": _to_bool(row.get("failed_any")),
+        "s2_max_delta": _s2_max_delta(s2_grad, s2_plus, s2_minus),
+        "bad_component": abs_diff > threshold,
+    }
+
+
+def load_components_csv(path: Path, threshold: float = DEFAULT_THRESHOLD) -> list[dict[str, Any]]:
+    with path.open(newline="") as handle:
+        return [normalize_component_row(row, threshold) for row in csv.DictReader(handle)]
+
+
+def _component_mechanism_hint(group: dict[str, Any]) -> str:
+    if group["trah_or_failed"]:
+        return "not-clean: inspect SCF/TRAH before gradient algebra"
+    if group["possible_state_character_change"]:
+        return "root_tracking_or_state_character_change"
+    if group["bad_component_count"] == 1 and group["worst_axis"] == "z":
+        return "localized_z_component_z_vector_or_operator_mapping"
+    return "compare_spc_toggles_xc_density_handoff_and_z_vector_mapping"
+
+
+def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
+    grouped: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault((row["method"], row["molecule"], row["root"]), []).append(row)
+
+    summaries: list[dict[str, Any]] = []
+    for (method, molecule, root), items in grouped.items():
+        worst = max(items, key=lambda item: item["abs_diff_ha_per_bohr"])
+        bad_items = [item for item in items if item["abs_diff_ha_per_bohr"] > threshold]
+        axes = sorted({item["axis"] for item in bad_items})
+        summary = {
+            "method": method,
+            "molecule": molecule,
+            "root": root,
+            "physical_state": worst["physical_state"],
+            "max_abs_diff_ha_per_bohr": worst["abs_diff_ha_per_bohr"],
+            "worst_component": worst["component"],
+            "worst_axis": worst["axis"],
+            "bad_component_count": len(bad_items),
+            "bad_axes": axes,
+            "s2_max_delta": max(item["s2_max_delta"] for item in items),
+            "possible_state_character_change": max(item["s2_max_delta"] for item in items) > 0.5,
+            "trah_or_failed": any(item["trah_count"] > 0 or item["failed_any"] for item in items),
+        }
+        summary["mechanism_hint"] = _component_mechanism_hint(summary)
+        summaries.append(summary)
+
+    summaries.sort(
+        key=lambda item: (
+            not item["possible_state_character_change"],
+            -item["max_abs_diff_ha_per_bohr"],
+            item["molecule"],
+            item["root"],
+        )
+    )
+    return {
+        "threshold_ha_per_bohr": threshold,
+        "component_group_count": len(summaries),
+        "groups": summaries,
+    }
+
+
+def summarize_components_csv(path: Path | str, threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
+    return summarize_component_rows(load_components_csv(Path(path), threshold), threshold)
 
 
 def summarize_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
