@@ -1104,9 +1104,12 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         return "supported", "HF/DFT ground-state analytic Hessian dispatch is enabled."
 
     if method == "tdhf":
-        if td_type in {"sf", "mrsf", "umrsf"}:
-            label = "MRSF-TDDFT" if td_type == "mrsf" else td_type.upper()
-            return "unsupported_tdhf_type", f"{label} analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+        if td_type == "mrsf":
+            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+        if td_type == "umrsf":
+            return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
+        if td_type == "sf":
+            return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if td_type in {"tda", "rpa"}:
             return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."

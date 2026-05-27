@@ -274,6 +274,21 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
 
+    def test_sf_analytical_hessian_has_sf_specific_rejection_message(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "sf", "nstate": 3, "multiplicity": 3},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1, "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
+        text = report.to_text()
+
+        self.assertFalse(report.ok)
+        self.assertIn("SF-TDDFT analytic Hessian is not implemented", text)
+        self.assertNotIn("MRSF gradient/Z-vector", text)
+
     def test_hf_analytic_hessian_example_documents_keyword(self):
         example = ROOT / "examples/HESS/H2O_RHF-DFT_ANA_HESS.inp"
         text = example.read_text()
