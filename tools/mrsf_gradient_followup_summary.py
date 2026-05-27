@@ -174,6 +174,7 @@ def normalize_component_row(row: dict[str, str], threshold: float = DEFAULT_THRE
         "s2_max_delta": _s2_max_delta(s2_grad, s2_plus, s2_minus),
         "s2_evidence": _s2_evidence(s2_grad, s2_plus, s2_minus),
         "bad_component": abs_diff > threshold,
+        "target_case": (str(row.get("molecule", "")).lower(), root) in TARGET_CASES,
     }
 
 
@@ -218,6 +219,7 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
             "s2_evidence": "present" if any(item.get("s2_evidence") == "present" for item in items) else "unknown",
             "possible_state_character_change": max(item["s2_max_delta"] for item in items) > 0.5,
             "trah_or_failed": any(item["trah_count"] > 0 or item["failed_any"] for item in items),
+            "target_case": any(item.get("target_case", (molecule, root) in TARGET_CASES) for item in items),
         }
         summary["mechanism_hint"] = _component_mechanism_hint(summary)
         summaries.append(summary)
@@ -230,9 +232,13 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
             item["root"],
         )
     )
+    target_groups = [item for item in summaries if item["target_case"]]
+    target_bad_groups = [item for item in target_groups if item["bad_component_count"] > 0 or item["trah_or_failed"]]
     return {
         "threshold_ha_per_bohr": threshold,
         "component_group_count": len(summaries),
+        "target_group_count": len(target_groups),
+        "target_bad_group_count": len(target_bad_groups),
         "groups": summaries,
     }
 

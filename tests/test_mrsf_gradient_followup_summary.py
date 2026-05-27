@@ -200,6 +200,52 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertFalse(summary["groups"][0]["possible_state_character_change"])
         self.assertIn("state-character evidence missing", summary["groups"][0]["mechanism_hint"])
 
+    def test_component_summary_counts_target_remaining_highroot_groups(self):
+        module = load_module()
+        rows = [
+            {
+                "method": "mrsf",
+                "molecule": "ch2o",
+                "root": 4,
+                "physical_state": "S3",
+                "component": "a1_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": -0.25282498,
+                "fd_ha_per_bohr": -0.27404,
+                "diff_ha_per_bohr": 0.02121502,
+                "abs_diff_ha_per_bohr": 0.02121502,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "unknown",
+                "bad_component": True,
+            },
+            {
+                "method": "mrsf",
+                "molecule": "h2o",
+                "root": 2,
+                "physical_state": "S1",
+                "component": "a0_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": -0.1452205,
+                "fd_ha_per_bohr": -0.145275,
+                "diff_ha_per_bohr": 0.0000545,
+                "abs_diff_ha_per_bohr": 0.0000545,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "present",
+                "bad_component": False,
+            },
+        ]
+
+        summary = module.summarize_component_rows(rows, threshold=1.0e-3)
+
+        self.assertEqual(1, summary["target_group_count"])
+        self.assertEqual(1, summary["target_bad_group_count"])
+        self.assertTrue(summary["groups"][0]["target_case"])
+        self.assertFalse(summary["groups"][1]["target_case"])
+
     def test_cli_components_mode_writes_component_group_summary(self):
         module = load_module()
         tmp = tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False)
