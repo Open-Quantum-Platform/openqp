@@ -576,6 +576,7 @@ class Molecule:
 
         energy = data['energy']
         hessian = data['hessian']
+        self.hessian_metadata = data.get('hessian_metadata', {})
         freqs = data['freqs']
         modes = data['modes']
         inertia = data['inertia']

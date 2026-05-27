@@ -96,6 +96,11 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("'inertia': self.inertia.tolist()", source)
         self.assertNotIn("'inertia': self.modes.tolist()", source)
 
+    def test_read_hessian_json_restores_hessian_metadata(self):
+        source = read("pyoqp/oqp/molecule/molecule.py")
+
+        self.assertIn("self.hessian_metadata = data.get('hessian_metadata', {})", source)
+
 
 if __name__ == "__main__":
     unittest.main()
