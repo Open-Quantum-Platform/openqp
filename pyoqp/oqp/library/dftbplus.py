@@ -78,6 +78,41 @@ class DFTBPlusResult:
     workdir: str | None = None
 
 
+@dataclass
+class DFTBPlusAvailability:
+    available: bool
+    executable: str
+    sk_path: str
+    reason: str = ""
+
+    def skip_message(self) -> str:
+        if self.available:
+            return "DFTB+ executable and parameter directory are available; live DFTB+ smoke tests may run."
+        return f"skip live DFTB+ smoke tests: {self.reason}"
+
+
+def dftbplus_availability(config: dict | None = None) -> DFTBPlusAvailability:
+    """Probe optional DFTB+ executable/parameter availability without running DFTB+."""
+
+    dftb = _dftb_config(config or {})
+    executable = str(dftb.get("executable", "dftb+") or "dftb+")
+    sk_path = str(dftb.get("sk_path", "") or "")
+    if os.path.sep in executable:
+        exe_ok = Path(executable).exists() and os.access(executable, os.X_OK)
+        resolved_executable = executable
+    else:
+        resolved = shutil.which(executable)
+        exe_ok = resolved is not None
+        resolved_executable = resolved or executable
+    if not exe_ok:
+        return DFTBPlusAvailability(False, resolved_executable, sk_path, f"DFTB+ executable not found or not executable: {executable}")
+    if not sk_path:
+        return DFTBPlusAvailability(False, resolved_executable, sk_path, "DFTB+ parameter directory is not configured; set [dftb] sk_path")
+    if not Path(sk_path).is_dir():
+        return DFTBPlusAvailability(False, resolved_executable, sk_path, f"DFTB+ parameter directory not found: {sk_path}")
+    return DFTBPlusAvailability(True, resolved_executable, sk_path)
+
+
 def _read_text(path: str | os.PathLike[str]) -> str:
     return Path(path).read_text(encoding="utf-8")
 

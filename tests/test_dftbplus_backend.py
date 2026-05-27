@@ -196,6 +196,30 @@ class DFTBPlusWriterRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(self.dftbplus.DFTBPlusError, "DFTB\\+ parameter directory not found"):
             runner.run([1, 1], [0.0, 0.0, 0.0, 0.0, 0.0, 1.4], gradient=False)
 
+    def test_availability_probe_reports_clear_skip_reason_without_running(self):
+        availability = self.dftbplus.dftbplus_availability(
+            {"dftb": {"executable": "/definitely/missing/dftb+", "sk_path": "/definitely/missing/sk"}}
+        )
+        self.assertFalse(availability.available)
+        self.assertIn("DFTB+ executable not found", availability.reason)
+        self.assertIn("skip live DFTB+ smoke tests", availability.skip_message())
+
+    def test_availability_probe_prefers_parameter_reason_after_executable_is_found(self):
+        availability = self.dftbplus.dftbplus_availability(
+            {"dftb": {"executable": sys.executable, "sk_path": "/definitely/missing/sk"}}
+        )
+        self.assertFalse(availability.available)
+        self.assertIn("DFTB+ parameter directory not found", availability.reason)
+
+    def test_live_dftbplus_smoke_is_skipped_when_optional_dependency_is_absent(self):
+        availability = self.dftbplus.dftbplus_availability({"dftb": {"sk_path": "/opt/dftb/3ob-3-1"}})
+        if not availability.available:
+            self.skipTest(availability.skip_message())
+        runner = self.dftbplus.DFTBPlusRunner({"dftb": {"sk_path": "/opt/dftb/3ob-3-1"}})
+        result = runner.run([8, 1, 1], [0.0, 0.0, 0.0, 0.0, 1.43, 1.1, 0.0, -1.43, 1.1], gradient=True)
+        self.assertIsNotNone(result.energy)
+        self.assertEqual(len(result.gradient), 3)
+
     def test_runner_keep_workdir_preserves_generated_inputs_and_parses_outputs(self):
         fake_code = """#!/usr/bin/env python3
 from pathlib import Path

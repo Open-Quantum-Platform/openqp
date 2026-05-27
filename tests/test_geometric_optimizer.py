@@ -56,6 +56,11 @@ def install_runfunc_stubs():
     libdlfind.DLFindMECI = type("DLFindMECI", (), {})
     sys.modules["oqp.library.libdlfind"] = libdlfind
 
+    dftbplus = types.ModuleType("oqp.library.dftbplus")
+    setattr(dftbplus, "optimize_openqp_molecule", lambda mol: None)
+    setattr(dftbplus, "run_openqp_molecule", lambda mol, gradient=False: None)
+    sys.modules["oqp.library.dftbplus"] = dftbplus
+
     libgeometric = types.ModuleType("oqp.library.libgeometric")
 
     class GeometricOpt:
