@@ -200,6 +200,57 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertFalse(summary["groups"][0]["possible_state_character_change"])
         self.assertIn("state-character evidence missing", summary["groups"][0]["mechanism_hint"])
 
+    def test_cli_components_mode_writes_component_group_summary(self):
+        module = load_module()
+        tmp = tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False)
+        output = tempfile.NamedTemporaryFile("r", suffix=".json", delete=False)
+        output.close()
+        fieldnames = [
+            "molecule",
+            "method",
+            "root",
+            "physical_state",
+            "component",
+            "analytic_ha_per_bohr",
+            "fd_ha_per_bohr",
+            "diff_ha_per_bohr",
+            "abs_diff_ha_per_bohr",
+            "trah_count",
+            "failed_any",
+            "s2_grad",
+            "s2_plus",
+            "s2_minus",
+        ]
+        with tmp:
+            writer = csv.DictWriter(tmp, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "molecule": "hcn",
+                    "method": "mrsf",
+                    "root": "6",
+                    "physical_state": "",
+                    "component": "a0_z",
+                    "analytic_ha_per_bohr": "0.100",
+                    "fd_ha_per_bohr": "0.020",
+                    "diff_ha_per_bohr": "0.080",
+                    "abs_diff_ha_per_bohr": "0.080",
+                    "trah_count": "0",
+                    "failed_any": "False",
+                    "s2_grad": "{6: 0.02}",
+                    "s2_plus": "{6: 0.02}",
+                    "s2_minus": "{6: 0.02}",
+                }
+            )
+
+        status = module.main(["--components", tmp.name, "--output", output.name])
+
+        self.assertEqual(0, status)
+        written = output.name and Path(output.name).read_text()
+        self.assertIn('"component_group_count": 1', written)
+        self.assertIn('"physical_state": "S5"', written)
+        self.assertIn("localized_z_component", written)
+
 
 if __name__ == "__main__":
     unittest.main()
