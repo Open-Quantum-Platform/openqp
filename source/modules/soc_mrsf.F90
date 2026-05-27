@@ -962,6 +962,8 @@ end subroutine compute_soc_matrix
 !> @param[out] evec                SOC eigenvectors (complex, column = adiabat)
 subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eval, evec)
   use precision, only: dp
+  use mathlib_types, only: blas_int
+  use messages, only: show_message, WITH_ABORT
   use physical_constants, only: ha2wn => HA_TO_WAVENUM, &
                                  FINE_STRUCTURE
   implicit none
@@ -974,26 +976,19 @@ subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eva
   real(kind=dp),    intent(out) :: eval(ns+3*nt)
   complex(kind=dp), intent(out) :: evec(ns+3*nt, ns+3*nt)
 
-  ! All integers are default kind (= 64-bit with -fdefault-integer-8)
-  ! to match OQP's ILP64 MKL linkage. NEVER use integer(4) for LAPACK args.
-  integer :: nstate, ist, i, j, ioff, lwork
+  integer :: nstate, ist, i, j, ioff
+  integer(blas_int) :: nstate_, lwork_, info
   real(kind=dp) :: e0
   complex(kind=dp), allocatable :: work(:)
+  complex(kind=dp) :: work_query(1)
   real(kind=dp),    allocatable :: rwork(:)
 
   real(kind=dp), parameter :: dfac = FINE_STRUCTURE**2 / 2.0_dp * ha2wn
 
-  ! Explicit 4-byte integers required by LP64 LAPACK zheev interface
-  integer(4) :: info4, nstate4, lwork4
-
   nstate  = ns + 3*nt
-  nstate4 = int(nstate, 4)
+  nstate_ = int(nstate, blas_int)
 
-  ! Fixed lwork: safe minimum for small matrices, avoids workspace query overhead
-  lwork  = max(1, 100*nstate)
-  lwork4 = int(lwork, 4)
-
-  allocate(rwork(3*nstate), work(lwork))
+  allocate(rwork(3*nstate))
 
   ! --- 1. Scale off-diagonal SOC elements to cm-1, fill diagonal with excitation energies ---
   do j = 1, nstate
@@ -1016,10 +1011,15 @@ subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eva
   end do
 
   ! --- 2. Diagonalize via LAPACK zheev ---
-  call zheev('V', 'U', nstate4, evec, nstate4, eval, work, lwork4, rwork, info4)
+  ! Workspace query
+  call zheev('V', 'U', nstate_, evec, nstate_, eval, work_query, -1_blas_int, rwork, info)
+  lwork_ = int(real(work_query(1)), blas_int)
+  allocate(work(lwork_))
 
-  if (iand(int(info4, 8), int(z'FFFFFFFF', 8)) /= 0) then
-    write(*,'(/,a,i0)') '  !!! zheev failed in diag_soc, info=', info4
+  call zheev('V', 'U', nstate_, evec, nstate_, eval, work, lwork_, rwork, info)
+
+  if (info /= 0) then
+    call show_message('(A,I0)', 'ZHEEV failed in diag_soc, info=', int(info), WITH_ABORT)
   end if
 
   deallocate(rwork, work)

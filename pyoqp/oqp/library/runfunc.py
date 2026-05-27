@@ -158,13 +158,6 @@ def compute_properties(mol):
     else:
         pass
 
-    # compute soc
-#    soc_type = mol.config['properties']['soc']
-#    if soc_type:
-#        pass
-#    else:
-#        pass
-
 def compute_data(mol):
     # compute reference energy
     SinglePoint(mol).energy()
@@ -182,12 +175,6 @@ def compute_data(mol):
     else:
         pass
 
-    # compute soc
-#    soc_type = mol.config['properties']['soc']
-#    if soc_type:
-#        pass
-#    else:
-#        pass
 
 
 def get_optimizer(mol):

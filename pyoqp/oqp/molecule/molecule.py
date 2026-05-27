@@ -227,10 +227,12 @@ class Molecule:
 
     def get_soc(self):
         """
-        Get spin-orbit coupling in cm-1
+        Get spin-orbit coupling eigenvalues in cm-1
         """
-
-        return []
+        try:
+            return np.array(self.data['OQP::soc_eval']).tolist()
+        except AttributeError:
+            return []
 
     def get_hess(self):
         """

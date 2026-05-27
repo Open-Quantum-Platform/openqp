@@ -36,7 +36,7 @@ DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, prop, or data. soc and neb are recognized but not implemented yet.",
+    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, soc, prop, or data. neb is recognized but not yet implemented.",
     "input.method": "Use method=hf for HF/DFT and method=tdhf for TDHF/TDDFT/SF/MRSF runs.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
