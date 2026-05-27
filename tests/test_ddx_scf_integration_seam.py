@@ -8,6 +8,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DDXSCFIntegrationSeamTests(unittest.TestCase):
+    def test_provisional_ddx_q_cav_to_external_charges_is_opt_in(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "provisional"):
+            solvent.provisional_ddx_external_charges([0.2, -0.4])
+
+        charges = solvent.provisional_ddx_external_charges([0.2, -0.4], allow_provisional=True)
+        self.assertEqual(charges, [-0.1, 0.2])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
