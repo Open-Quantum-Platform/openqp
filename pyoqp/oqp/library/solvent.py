@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 
+def _as_float_list(values, *, name: str):
+    return [float(value) for value in values]
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
@@ -16,4 +20,29 @@ def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
             "ddX q_cav sign/scale is provisional; pass allow_provisional=True "
             "only in guarded validation/prototype code"
         )
-    return [-0.5 * float(value) for value in q_cav]
+    return [-0.5 * value for value in _as_float_list(q_cav, name="q_cav")]
+
+
+def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisional: bool = False):
+    """Validate candidate ddX cavity data for the future AO reaction-field seam.
+
+    ``cavity_xyz`` is the flat ``(3, ncav)`` coordinate buffer copied from ddX,
+    and ``q_cav`` is the projected cavity quantity whose sign/scale remains
+    provisional.  This helper prepares only guarded prototype inputs; it does
+    not enable runtime PCM coupling.
+    """
+    q_values = _as_float_list(q_cav, name="q_cav")
+    xyz_values = _as_float_list(cavity_xyz, name="cavity_xyz")
+    expected_xyz = 3 * len(q_values)
+    if len(xyz_values) != expected_xyz:
+        raise ValueError(
+            "cavity_xyz must contain 3 * len(q_cav) values "
+            f"({expected_xyz} expected, got {len(xyz_values)})"
+        )
+    return {
+        "ncav": len(q_values),
+        "cavity_xyz": xyz_values,
+        "charges": provisional_ddx_external_charges(
+            q_values, allow_provisional=allow_provisional
+        ),
+    }

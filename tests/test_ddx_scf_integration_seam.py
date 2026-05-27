@@ -24,6 +24,32 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         charges = solvent.provisional_ddx_external_charges([0.2, -0.4], allow_provisional=True)
         self.assertEqual(charges, [-0.1, 0.2])
 
+    def test_provisional_ddx_reaction_field_inputs_validate_cavity_shape(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_shapes", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "3 \* len\(q_cav\)"):
+            solvent.provisional_ddx_reaction_field_inputs(
+                [0.2, -0.4],
+                [0.0, 0.0, 0.0, 1.0, 0.0],
+                allow_provisional=True,
+            )
+
+        inputs = solvent.provisional_ddx_reaction_field_inputs(
+            [0.2, -0.4],
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            allow_provisional=True,
+        )
+        self.assertEqual(inputs["charges"], [-0.1, 0.2])
+        self.assertEqual(inputs["cavity_xyz"], [0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+        self.assertEqual(inputs["ncav"], 2)
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
