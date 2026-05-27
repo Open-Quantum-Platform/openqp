@@ -21,6 +21,8 @@ def reference_scf_total_density(density_blocks):
     if len(blocks) > 2:
         raise ValueError("reference_scf_total_density accepts one or two density blocks")
     packed_length = len(blocks[0])
+    if packed_length == 0:
+        raise ValueError("packed density blocks must not be empty")
     if any(len(block) != packed_length for block in blocks):
         raise ValueError("all density blocks must have the same packed length")
     return [sum(block[index] for block in blocks) for index in range(packed_length)]

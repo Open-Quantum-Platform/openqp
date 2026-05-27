@@ -99,6 +99,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             solvent.reference_scf_total_density([[1.0], [0.5], [0.25]])
         with self.assertRaisesRegex(ValueError, "at least one density block"):
             solvent.reference_scf_total_density([])
+        with self.assertRaisesRegex(ValueError, "packed density blocks must not be empty"):
+            solvent.reference_scf_total_density([[]])
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
