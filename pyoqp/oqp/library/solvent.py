@@ -41,10 +41,13 @@ def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisiona
             "cavity_xyz must contain 3 * len(q_cav) values "
             f"({expected_xyz} expected, got {len(xyz_values)})"
         )
+    charges = provisional_ddx_external_charges(q_values, allow_provisional=allow_provisional)
     return {
         "ncav": len(q_values),
         "cavity_xyz": xyz_values,
-        "charges": provisional_ddx_external_charges(
-            q_values, allow_provisional=allow_provisional
-        ),
+        "charges": charges,
+        "x": xyz_values[0::3],
+        "y": xyz_values[1::3],
+        "z": xyz_values[2::3],
+        "chg": charges,
     }

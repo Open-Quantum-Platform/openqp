@@ -57,6 +57,27 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["cavity_xyz"], [0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
         self.assertEqual(inputs["ncav"], 2)
 
+    def test_provisional_ddx_reaction_field_inputs_split_external_charge_arrays(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_external_arrays", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        inputs = solvent.provisional_ddx_reaction_field_inputs(
+            [0.2, -0.4],
+            [0.0, 0.1, 0.2, 1.0, 1.1, 1.2],
+            allow_provisional=True,
+        )
+
+        self.assertEqual(inputs["x"], [0.0, 1.0])
+        self.assertEqual(inputs["y"], [0.1, 1.1])
+        self.assertEqual(inputs["z"], [0.2, 1.2])
+        self.assertEqual(inputs["chg"], [-0.1, 0.2])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
