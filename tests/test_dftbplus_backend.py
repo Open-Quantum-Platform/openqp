@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import types
 import unittest
@@ -210,6 +211,44 @@ class DFTBPlusWriterRunnerTests(unittest.TestCase):
         )
         self.assertFalse(availability.available)
         self.assertIn("DFTB+ parameter directory not found", availability.reason)
+
+    def test_availability_probe_uses_openqp_dftbplus_sk_path_environment_fallback(self):
+        with TemporaryDirectory() as tmp:
+            old_value = os.environ.get("OPENQP_DFTBPLUS_SK_PATH")
+            os.environ["OPENQP_DFTBPLUS_SK_PATH"] = tmp
+            try:
+                availability = self.dftbplus.dftbplus_availability({"dftb": {"executable": sys.executable}})
+            finally:
+                if old_value is None:
+                    os.environ.pop("OPENQP_DFTBPLUS_SK_PATH", None)
+                else:
+                    os.environ["OPENQP_DFTBPLUS_SK_PATH"] = old_value
+        self.assertTrue(availability.available, availability.reason)
+        self.assertEqual(availability.sk_path, tmp)
+
+    def test_runner_uses_openqp_dftbplus_sk_path_environment_fallback(self):
+        fake_code = """#!/usr/bin/env python3
+from pathlib import Path
+Path('results.tag').write_text('total_energy:real:0:\\n-0.5\\n')
+"""
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_dftb = tmp_path / "fake-dftbplus.py"
+            fake_dftb.write_text(fake_code)
+            fake_dftb.chmod(0o755)
+            sk_path = tmp_path / "sk"
+            sk_path.mkdir()
+            old_value = os.environ.get("OPENQP_DFTBPLUS_SK_PATH")
+            os.environ["OPENQP_DFTBPLUS_SK_PATH"] = str(sk_path)
+            try:
+                runner = self.dftbplus.DFTBPlusRunner({"dftb": {"executable": str(fake_dftb)}})
+                result = runner.run([1, 1], [0.0, 0.0, 0.0, 0.0, 0.0, 1.4], gradient=False)
+            finally:
+                if old_value is None:
+                    os.environ.pop("OPENQP_DFTBPLUS_SK_PATH", None)
+                else:
+                    os.environ["OPENQP_DFTBPLUS_SK_PATH"] = old_value
+        self.assertAlmostEqual(result.energy, -0.5)
 
     def test_live_dftbplus_smoke_is_skipped_when_optional_dependency_is_absent(self):
         availability = self.dftbplus.dftbplus_availability({"dftb": {"sk_path": "/opt/dftb/3ob-3-1"}})

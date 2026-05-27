@@ -27,7 +27,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
   
 ### DFTB+ External Backend
 
-This branch includes an optional external DFTB+ backend for ground-state workflows. It shells out to a user-provided `dftb+` executable and Slater-Koster parameter directory configured in the `[dftb]` input section.
+This branch includes an optional external DFTB+ backend for ground-state workflows. It shells out to a user-provided `dftb+` executable and Slater-Koster parameter directory configured in the `[dftb]` input section; local smoke tests may also set `OPENQP_DFTBPLUS_SK_PATH` as a fallback for the parameter directory.
 
 | Capability | Status | Scope |
 | --- | --- | --- |

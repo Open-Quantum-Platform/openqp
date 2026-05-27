@@ -96,7 +96,7 @@ def dftbplus_availability(config: dict | None = None) -> DFTBPlusAvailability:
 
     dftb = _dftb_config(config or {})
     executable = str(dftb.get("executable", "dftb+") or "dftb+")
-    sk_path = str(dftb.get("sk_path", "") or "")
+    sk_path = _configured_sk_path(dftb)
     if os.path.sep in executable:
         exe_ok = Path(executable).exists() and os.access(executable, os.X_OK)
         resolved_executable = executable
@@ -245,6 +245,15 @@ def _dftb_config(config: dict) -> dict:
     return config.get("dftb", {}) if config else {}
 
 
+def _configured_sk_path(dftb: dict) -> str:
+    """Return [dftb] sk_path with optional environment fallback for local smoke tests."""
+
+    configured = str(dftb.get("sk_path", "") or "").strip()
+    if configured:
+        return configured
+    return str(os.environ.get("OPENQP_DFTBPLUS_SK_PATH", "") or "").strip()
+
+
 def write_dftbplus_input(
     workdir: str | os.PathLike[str],
     atoms: Sequence[int],
@@ -314,7 +323,7 @@ class DFTBPlusRunner:
         self.config = config or {}
         dftb = _dftb_config(self.config)
         self.executable = str(dftb.get("executable", "dftb+") or "dftb+")
-        self.sk_path = str(dftb.get("sk_path", "") or "")
+        self.sk_path = _configured_sk_path(dftb)
         self.keep_workdir = bool(dftb.get("keep_workdir", False))
         self.timeout = int(dftb.get("timeout", 300) or 300)
 
