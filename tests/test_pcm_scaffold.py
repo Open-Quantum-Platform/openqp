@@ -21,6 +21,25 @@ def load_module(module_name, relative_path):
 
 
 def install_minimal_oqp_stubs():
+    numpy_stub = sys.modules.setdefault("numpy", types.ModuleType("numpy"))
+    for name in (
+        "void",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float32",
+        "float64",
+        "complex64",
+        "complex128",
+    ):
+        setattr(numpy_stub, name, type(name, (), {}))
+    setattr(numpy_stub, "dtype", lambda value: value)
+
     oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
     setattr(oqp, "ffi", object())
     setattr(oqp, "lib", object())
@@ -302,6 +321,16 @@ epsilon=water
         errors = {item.path: item.message for item in report.errors}
         self.assertIn("pcm.epsilon", errors)
         self.assertIn("must be numeric", errors["pcm.epsilon"])
+
+    def test_validation_matrix_documents_energy_only_mrsf_reference_target(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        self.assertTrue(matrix_path.exists(), "PCM validation matrix document is required")
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("MRSF-TDDFT with PCM-solvated ROHF reference", text)
+        self.assertIn("runtype=energy", text)
+        self.assertIn("PySCF", text)
+        self.assertIn("analytic PCM gradients", text)
+        self.assertIn("ddX q_cav sign/scale is provisional", text)
 
 
 if __name__ == "__main__":
