@@ -50,6 +50,8 @@ Reviewed reference-PCM reaction potentials may only enter the first prototype th
 
 `reference_scf_pcm_calc_fock_call_site_bridge()` is the dependency-light staging helper for the future SCF caller. A molecule with no reviewed runtime payload remains an explicit disabled/no-payload request even when old SCF buffers are present. A reviewed payload may forward only `pcm_reaction_potential_in` through the non-incremental path, with compact `nbf` and packed AO length metadata preserved so the native caller can enforce `size(pcm_reaction_potential_in) == nbf * (nbf + 1) / 2` before any reaction field reaches the Fock builder.
 
+The native `calc_fock(..., pcm_reaction_potential_in=...)` guard must independently validate the same shape before `calc_jk_xc`: `size(pcm_reaction_potential_in)` must match `nbf_tri`, and malformed prototype callers must fail with `reference PCM reaction potential length must match packed AO dimension` rather than forwarding a wrong-length AO reaction field into the Fock build.
+
 ## Runtime payload shape contract
 
 `reference_scf_pcm_runtime_payload()` must produce the packed AO shape metadata (`nbf`, `packed_ao_length`, `expected_packed_ao_length`, and `packed_ao_shape_formula`) together with the reviewed `OQP::pcm_reaction_potential`. The consumer `reference_scf_pcm_reaction_potential_from_payload()` must not trust stale metadata: the consumer must recompute and validate the triangular packed AO length before exposing `pcm_reaction_potential_in` to any `calc_fock` bridge. This keeps every no-runtime handoff boundary aligned on the same `nbf * (nbf + 1) / 2` contract before native SCF wiring.

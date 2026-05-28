@@ -377,6 +377,14 @@ epsilon=water
         self.assertIn("backend_validation_status", text)
         self.assertIn("must not be stripped", text)
 
+    def test_validation_matrix_documents_native_calc_fock_shape_guard(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("native `calc_fock(..., pcm_reaction_potential_in=...)`", text)
+        self.assertIn("nbf_tri", text)
+        self.assertIn("reference PCM reaction potential length must match packed AO dimension", text)
+        self.assertIn("before `calc_jk_xc`", text)
+
 
 if __name__ == "__main__":
     unittest.main()
