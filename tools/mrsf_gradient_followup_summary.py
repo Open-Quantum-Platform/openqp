@@ -774,15 +774,39 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
     trah_detected = _detect_trah_in_logs(log_paths)
     components = [str(item) for item in plan.get("components_to_validate", [])]
     control_dir = root_dir / "validation_controls" if plan.get("root_dir") else Path("validation_controls")
-    control_artifact_plan = [
-        {
-            "component": component,
-            "fd_component_csv": str(control_dir / f"fd_rerun_{component}_components.csv"),
-            "fd_summary_json": str(control_dir / f"fd_rerun_{component}_summary.json"),
-            "no_fix_control_json": str(control_dir / f"no_fix_{component}_control.json"),
-        }
-        for component in components
-    ]
+    control_artifact_plan = []
+    fd_artifact_exists: list[bool] = []
+    no_fix_artifact_exists: list[bool] = []
+    for component in components:
+        fd_component_csv = control_dir / f"fd_rerun_{component}_components.csv"
+        fd_summary_json = control_dir / f"fd_rerun_{component}_summary.json"
+        no_fix_control_json = control_dir / f"no_fix_{component}_control.json"
+        fd_component_csv_exists = fd_component_csv.exists()
+        fd_summary_json_exists = fd_summary_json.exists()
+        no_fix_control_json_exists = no_fix_control_json.exists()
+        fd_artifact_exists.extend([fd_component_csv_exists, fd_summary_json_exists])
+        no_fix_artifact_exists.append(no_fix_control_json_exists)
+        control_artifact_plan.append(
+            {
+                "component": component,
+                "fd_component_csv": str(fd_component_csv),
+                "fd_component_csv_exists": fd_component_csv_exists,
+                "fd_summary_json": str(fd_summary_json),
+                "fd_summary_json_exists": fd_summary_json_exists,
+                "no_fix_control_json": str(no_fix_control_json),
+                "no_fix_control_json_exists": no_fix_control_json_exists,
+            }
+        )
+
+    def _status_from_exists(exists: list[bool]) -> str:
+        if not exists or not any(exists):
+            return "missing"
+        if all(exists):
+            return "present"
+        return "partial"
+
+    fd_status = _status_from_exists(fd_artifact_exists)
+    no_fix_status = _status_from_exists(no_fix_artifact_exists)
     return {
         "selected_case": {
             "molecule": plan.get("molecule"),
@@ -804,12 +828,12 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
             {
                 "control": "finite_difference_rerun_for_selected_components",
                 "components": components,
-                "status": "missing",
+                "status": fd_status,
                 "reason": "static evidence is not a fresh FD validation of a source hypothesis",
             },
             {
                 "control": "no_fix_or_pre_change_control_same_case",
-                "status": "missing",
+                "status": no_fix_status,
                 "reason": "needed to separate source-hypothesis effects from existing post-PR #153 residuals",
             },
             {
