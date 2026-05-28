@@ -219,6 +219,25 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
 
         self.assertNotEqual(err.exception.code, 0)
 
+    def test_cli_noncontext_summary_records_matrix_sources_without_full_matrices(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            analytic = tmp / "analytic.txt"
+            reference = tmp / "reference.txt"
+            output = tmp / "summary.json"
+            analytic.write_text("1.0 0.0\n0.0 1.0\n")
+            reference.write_text("1.0 0.0\n0.0 1.0\n")
+
+            status = validator.main([str(analytic), str(reference), "--output", str(output)])
+
+            payload = json.loads(output.read_text())
+        self.assertEqual(status, 0)
+        self.assertEqual(payload["matrix_sources"]["analytic"], str(analytic))
+        self.assertEqual(payload["matrix_sources"]["reference"], str(reference))
+        self.assertNotIn("analytic_matrix", payload)
+        self.assertNotIn("reference_matrix", payload)
+
     def test_cli_writes_contextual_validation_summary_when_metadata_is_supplied(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as tmpdir:

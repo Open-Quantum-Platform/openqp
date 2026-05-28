@@ -279,6 +279,10 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
     else:
         summary = compare_hessians(analytic, reference, top_n=args.top)
+    summary["matrix_sources"] = {
+        "analytic": str(args.analytic),
+        "reference": str(args.reference),
+    }
     payload = summary_to_json(summary)
     if args.output:
         args.output.write_text(payload + "\n")
