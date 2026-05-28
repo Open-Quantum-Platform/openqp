@@ -143,6 +143,12 @@ def reference_scf_pcm_energy_terms(density_blocks, reaction_potential):
         "density_reaction_dot": density_reaction_dot,
         "candidate_polarization_energy": 0.5 * density_reaction_dot,
         "energy_convention": "0.5 * dot(reference_density_packed, reaction_potential)",
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
+        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
     }
 
 

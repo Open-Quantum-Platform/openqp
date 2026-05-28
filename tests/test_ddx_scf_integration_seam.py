@@ -256,6 +256,28 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertAlmostEqual(terms["candidate_polarization_energy"], 0.125)
         self.assertEqual(terms["energy_convention"], "0.5 * dot(reference_density_packed, reaction_potential)")
 
+    def test_reference_scf_pcm_energy_terms_preserve_energy_only_scope_metadata(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_energy_scope", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        terms = solvent.reference_scf_pcm_energy_terms(
+            [[1.0, 0.5, 0.25]],
+            [0.1, 0.2, 0.2],
+        )
+
+        self.assertEqual(terms["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(terms["reference_target"], "RHF/ROHF reference density")
+        self.assertEqual(terms["response_solvent_coupling"], "not enabled")
+        self.assertEqual(terms["gradient_support"], "not enabled")
+        self.assertFalse(terms["runtime_pcm_enabled"])
+        self.assertEqual(terms["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
+
     def test_reference_scf_reaction_fock_updates_replicate_reaction_potential_per_fock(self):
         import importlib.util
 
