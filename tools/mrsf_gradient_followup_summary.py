@@ -595,6 +595,13 @@ def _xc_call_has_explicit_xa_xb_handoff(source_text: str) -> bool:
     return bool(re.search(r"\bxa\s*=", call_text)) and bool(re.search(r"\bxb\s*=", call_text))
 
 
+def _find_line_numbers(source_text: str, pattern: str, flags: int = 0) -> list[int]:
+    """Return one-based source line numbers matching a diagnostic regex."""
+
+    compiled = re.compile(pattern, flags)
+    return [idx for idx, line in enumerate(source_text.splitlines(), start=1) if compiled.search(line)]
+
+
 def summarize_source_diagnostic_evidence(
     source_plan: dict[str, Any],
     source_root: Path | str = Path("."),
@@ -621,6 +628,21 @@ def summarize_source_diagnostic_evidence(
             re.search(r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", z_vector_text, flags=re.IGNORECASE)
         ),
     }
+    source_signal_locations = {
+        "ovov_gradient_sign_post_pr153_plus_lines": _find_line_numbers(
+            gradient_text, r"df1\s*=\s*df1\s*\+\s*sgnk\s*\*\s*qfspcp2\s*\*\s*db2", flags=re.IGNORECASE
+        ),
+        "ovov_gradient_sign_pre_pr153_minus_lines": _find_line_numbers(
+            gradient_text, r"df1\s*=\s*df1\s*-\s*sgnk\s*\*\s*qfspcp2\s*\*\s*db2", flags=re.IGNORECASE
+        ),
+        "gradient_xc_call_lines": _find_line_numbers(gradient_text, r"call\s+utddft_xc_gradient", flags=re.IGNORECASE),
+        "z_vector_channel7_td_abxc_overwrite_lines": _find_line_numbers(
+            z_vector_text, r"fmrst1\s*\(\s*1\s*,\s*7\s*,\s*:\s*,\s*:\s*\)\s*=\s*td_abxc", flags=re.IGNORECASE
+        ),
+        "z_vector_mrsfcbc_rohf_same_mo_lines": _find_line_numbers(
+            z_vector_text, r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", flags=re.IGNORECASE
+        ),
+    }
     static_hypotheses: list[str] = []
     if source_signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"]:
         static_hypotheses.append(
@@ -639,6 +661,7 @@ def summarize_source_diagnostic_evidence(
         "evidence_scope": "static_source_diagnostic_only",
         "scope_guard": "no production algebra edit; static source signals only",
         "source_signals": source_signals,
+        "source_signal_locations": source_signal_locations,
         "static_hypotheses_to_test": static_hypotheses,
         "validation_required_before_fix_claim": [
             "finite-difference validation on the selected stable target residual",

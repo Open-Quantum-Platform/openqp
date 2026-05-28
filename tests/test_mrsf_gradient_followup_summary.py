@@ -813,6 +813,11 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertTrue(signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"])
         self.assertTrue(signals["z_vector_mrsfcbc_uses_rohf_same_mo"])
         self.assertFalse(signals["gradient_xc_call_has_explicit_xa_xb_handoff"])
+        locations = evidence["source_signal_locations"]
+        self.assertEqual([5], locations["ovov_gradient_sign_post_pr153_plus_lines"])
+        self.assertEqual([2], locations["gradient_xc_call_lines"])
+        self.assertEqual([2], locations["z_vector_mrsfcbc_rohf_same_mo_lines"])
+        self.assertEqual([3], locations["z_vector_channel7_td_abxc_overwrite_lines"])
         self.assertIn("no production algebra edit", evidence["scope_guard"])
         self.assertIn("finite-difference", " ".join(evidence["validation_required_before_fix_claim"]))
 
