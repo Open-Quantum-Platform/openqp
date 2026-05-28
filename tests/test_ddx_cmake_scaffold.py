@@ -129,6 +129,14 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("PCM runtime payload must be a mapping", text)
         self.assertIn("before applying the allowlist", text)
 
+    def test_ddx_seam_doc_records_final_calc_fock_call_site_bridge(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("reference_scf_pcm_calc_fock_call_site_bridge()", text)
+        self.assertIn("forward_pcm_reaction_potential", text)
+        self.assertIn("disabled/no-payload", text)
+        self.assertIn("pcm_reaction_potential_in", text)
+        self.assertIn("non-incremental path", text)
+
 
 if __name__ == "__main__":
     unittest.main()
