@@ -1234,6 +1234,59 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("current_baseline_control_recorded", component["no_fix_control_status"])
         self.assertIn("not a production fix claim", results["scope_guard"])
 
+    def test_source_hypothesis_diagnostic_records_ranked_hypotheses_without_source_edit(self):
+        module = load_module()
+        source_evidence = {
+            "selected_candidate": {
+                "molecule": "h2s",
+                "method": "mrsf",
+                "root": 5,
+                "physical_state": "S4",
+            },
+            "diagnostic_family": "localized_z_component",
+            "source_signals": {
+                "z_vector_channel7_overwrites_mrsfcbc_with_td_abxc": True,
+                "gradient_xc_call_has_explicit_xa_xb_handoff": False,
+                "ovov_gradient_sign_uses_post_pr153_plus": True,
+            },
+            "source_signal_locations": {
+                "z_vector_channel7_td_abxc_overwrite_lines": [842],
+                "gradient_xc_call_lines": [156],
+            },
+            "source_signal_snippets": {
+                "z_vector_channel7_td_abxc_overwrite": [{"line": 842, "text": "fmrst1(1,7,:,:) = td_abxc"}],
+                "gradient_xc_call": [{"line": 156, "text": "call utddft_xc_gradient(...)"}],
+            },
+        }
+        validation_results = {
+            "selected": "h2s root 5 / physical S4",
+            "ready_for_source_hypothesis_diagnostic": True,
+            "controls_complete": True,
+            "trah_detected": False,
+            "ready_for_production_fix_claim": False,
+            "components": [
+                {
+                    "component": "a0_z",
+                    "max_abs_diff_ha_per_bohr": 0.07927826,
+                    "reproduces_prior_residual": True,
+                    "root_continuity_no_trah_status": "present",
+                }
+            ],
+        }
+
+        diagnostic = module.summarize_source_hypothesis_diagnostic(source_evidence, validation_results)
+
+        self.assertEqual("source_hypothesis_diagnostic_only", diagnostic["diagnostic_scope"])
+        self.assertEqual("h2s root 5 / physical S4", diagnostic["selected"])
+        self.assertTrue(diagnostic["controls_complete"])
+        self.assertFalse(diagnostic["production_gradient_algebra_edited"])
+        self.assertFalse(diagnostic["ready_for_production_fix_claim"])
+        self.assertEqual("a0_z", diagnostic["residual_components"][0]["component"])
+        self.assertEqual("channel7_density_provenance", diagnostic["ranked_source_hypotheses"][0]["hypothesis_id"])
+        self.assertIn("fmrst1(1,7", diagnostic["ranked_source_hypotheses"][0]["source_snippets"][0]["text"])
+        self.assertEqual("source_hypothesis_validation_required", diagnostic["next_action"])
+        self.assertIn("no production algebra edit", diagnostic["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

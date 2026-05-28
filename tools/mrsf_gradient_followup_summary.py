@@ -1083,6 +1083,93 @@ def _load_json_if_present(path: Path | str | None) -> dict[str, Any]:
     return json.loads(candidate.read_text())
 
 
+def summarize_source_hypothesis_diagnostic(
+    source_evidence: dict[str, Any],
+    validation_results: dict[str, Any],
+) -> dict[str, Any]:
+    """Rank source hypotheses after controls reproduce a stable residual.
+
+    This is still diagnostic-only: it combines static source anchors with the
+    completed FD/no-fix controls, but it does not edit source algebra or claim a
+    production fix.  The output is a compact handoff for the next RED diagnostic.
+    """
+
+    signals = dict(source_evidence.get("source_signals") or {})
+    snippets = dict(source_evidence.get("source_signal_snippets") or {})
+    locations = dict(source_evidence.get("source_signal_locations") or {})
+    controls_complete = bool(validation_results.get("controls_complete"))
+    ready_for_source_hypothesis = bool(validation_results.get("ready_for_source_hypothesis_diagnostic"))
+    trah_detected = bool(validation_results.get("trah_detected"))
+    residual_components = [
+        {
+            "component": component.get("component"),
+            "max_abs_diff_ha_per_bohr": component.get("max_abs_diff_ha_per_bohr"),
+            "reproduces_prior_residual": component.get("reproduces_prior_residual"),
+            "root_continuity_no_trah_status": component.get("root_continuity_no_trah_status"),
+        }
+        for component in validation_results.get("components", [])
+    ]
+
+    ranked_hypotheses: list[dict[str, Any]] = []
+    if signals.get("z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"):
+        ranked_hypotheses.append(
+            {
+                "hypothesis_id": "channel7_density_provenance",
+                "rank": len(ranked_hypotheses) + 1,
+                "evidence_level": "static_source_anchor_plus_reproduced_fd_residual",
+                "source_locations": locations.get("z_vector_channel7_td_abxc_overwrite_lines", []),
+                "source_snippets": snippets.get("z_vector_channel7_td_abxc_overwrite", []),
+                "required_next_test": "RED source-level diagnostic that preserves mrsfcbc channel-7 provenance before any live FD source trial",
+            }
+        )
+    if not signals.get("gradient_xc_call_has_explicit_xa_xb_handoff"):
+        ranked_hypotheses.append(
+            {
+                "hypothesis_id": "mrsf_xc_density_handoff",
+                "rank": len(ranked_hypotheses) + 1,
+                "evidence_level": "static_source_anchor_plus_reproduced_fd_residual",
+                "source_locations": locations.get("gradient_xc_call_lines", []),
+                "source_snippets": snippets.get("gradient_xc_call", []),
+                "required_next_test": "RED source diagnostic for MRSF-specific spin-density handoff; do not pass td_abxc directly as xa/xb",
+            }
+        )
+    if signals.get("ovov_gradient_sign_uses_post_pr153_plus"):
+        ranked_hypotheses.append(
+            {
+                "hypothesis_id": "ovov_sign_baseline_control",
+                "rank": len(ranked_hypotheses) + 1,
+                "evidence_level": "merged_baseline_source_anchor",
+                "source_locations": locations.get("ovov_gradient_sign_post_pr153_plus_lines", []),
+                "source_snippets": snippets.get("ovov_gradient_sign_post_pr153_plus", []),
+                "required_next_test": "treat OV-OV sign as baseline control, not a new fix hypothesis",
+            }
+        )
+
+    selected = validation_results.get("selected")
+    if not selected:
+        candidate = source_evidence.get("selected_candidate") or {}
+        selected = f"{candidate.get('molecule')} root {candidate.get('root')} / physical {candidate.get('physical_state')}"
+
+    return {
+        "diagnostic_scope": "source_hypothesis_diagnostic_only",
+        "selected": selected,
+        "diagnostic_family": source_evidence.get("diagnostic_family"),
+        "controls_complete": controls_complete,
+        "ready_for_source_hypothesis_diagnostic": ready_for_source_hypothesis,
+        "trah_detected": trah_detected,
+        "production_gradient_algebra_edited": False,
+        "ready_for_production_fix_claim": False,
+        "residual_components": residual_components,
+        "ranked_source_hypotheses": ranked_hypotheses,
+        "next_action": (
+            "source_hypothesis_validation_required"
+            if controls_complete and ready_for_source_hypothesis and not trah_detected
+            else "complete_clean_validation_controls_before_source_hypothesis"
+        ),
+        "scope_guard": "diagnostic-only handoff; no production algebra edit and no fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1329,6 +1416,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Summarize completed validation-control artifacts without claiming a production fix",
     )
+    parser.add_argument(
+        "--source-hypothesis-diagnostic",
+        action="store_true",
+        help="Rank source hypotheses from static source evidence plus completed validation controls without editing algebra",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1381,6 +1473,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--validation-control-results accepts exactly one source-validation manifest JSON")
         validation_manifest = json.loads(args.csv_path[0].read_text())
         summary = summarize_validation_control_results(validation_manifest)
+    elif args.source_hypothesis_diagnostic:
+        if len(args.csv_path) != 2:
+            parser.error("--source-hypothesis-diagnostic accepts source evidence JSON and validation-control results JSON")
+        source_evidence = json.loads(args.csv_path[0].read_text())
+        validation_results = json.loads(args.csv_path[1].read_text())
+        summary = summarize_source_hypothesis_diagnostic(source_evidence, validation_results)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
