@@ -262,6 +262,10 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
         raise ValueError("PCM runtime payload gradient_support must be not enabled")
     if payload.get("pcm_runtime_payload_version") != 1:
         raise ValueError("PCM runtime payload version must be 1")
+    if "density_blocks" in payload:
+        raise ValueError("PCM runtime payload must not include raw density_blocks")
+    if "state_density" in payload:
+        raise ValueError("PCM runtime payload must not include state_density")
     if "OQP::pcm_reaction_potential" not in payload:
         raise ValueError("PCM runtime payload missing OQP::pcm_reaction_potential")
     if "OQP::pcm_epcm" not in payload:

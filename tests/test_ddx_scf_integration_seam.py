@@ -446,6 +446,25 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "nbf"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 3})
 
+    def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_payload_leakage", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.25, 0.75]],
+            [0.1, 0.2, 0.3],
+        )
+        with self.assertRaisesRegex(ValueError, "density_blocks"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "density_blocks": [[1.0]]})
+        with self.assertRaisesRegex(ValueError, "state_density"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "state_density": [1.0]})
+
     def test_reference_scf_pcm_calc_fock_handoff_exposes_only_guarded_keyword_argument(self):
         import importlib.util
 
