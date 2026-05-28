@@ -1603,6 +1603,126 @@ def summarize_mrsf_xc_density_trial_outcome(
     }
 
 
+def _selected_and_component_from_split_inspection(split_inspection: dict[str, Any]) -> tuple[str | None, str | None]:
+    context = dict(split_inspection.get("prior_trial_context") or {})
+    case_text = str(context.get("case") or split_inspection.get("selected") or "")
+    selected = split_inspection.get("selected")
+    if not selected:
+        match = re.search(r"([A-Za-z0-9_+-]+)\s+root\s+(\d+)\s*/\s*physical\s+([A-Za-z0-9_+-]+)", case_text)
+        if match:
+            selected = f"{match.group(1).lower()} root {match.group(2)} / physical {match.group(3)}"
+    component = split_inspection.get("component")
+    if not component:
+        match = re.search(r"component\s+([A-Za-z0-9_+-]+)", case_text)
+        if match:
+            component = match.group(1)
+    return selected, component
+
+
+def summarize_mrsf_ball_open_open_split_diagnostic(
+    split_inspection: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Expose a source/unit-level alpha-beta construction for MRSF ball OO terms.
+
+    This diagnostic intentionally stops before production algebra or finite-
+    difference validation.  It records the symbolic candidate pieces and the
+    norm/identity checks that a future source-unit trace must satisfy before the
+    candidate is allowed to feed the XC xa/xb handoff.
+    """
+
+    selected, component = _selected_and_component_from_split_inspection(split_inspection)
+    interpretation = dict(split_inspection.get("interpretation") or {})
+    source_snapshot = _source_snapshot(source_root)
+    missing_pieces = list(interpretation.get("current_candidate_missing_pieces", []))
+    needs_split = bool(interpretation.get("needs_principled_alpha_beta_split"))
+
+    candidate_components = {
+        "current_pair_sum_alpha": {
+            "formula": "umrsfcbc(1) + umrsfcbc(3) + umrsfcbc(5) + umrsfcbc(7)",
+            "role": "existing paired-channel xa candidate; excludes o21v/co12/ball",
+        },
+        "current_pair_sum_beta": {
+            "formula": "umrsfcbc(2) + umrsfcbc(4) + umrsfcbc(6) + umrsfcbc(8)",
+            "role": "existing paired-channel xb candidate; excludes o21v/co12/ball",
+        },
+        "oo_left_alpha_cross_spin": {
+            "singlet_formula": (
+                "va(:,lr2)*bvec(lr2,lr1)*vb(:,lr1)^T + "
+                "va(:,lr1)*bvec(lr1,lr2)*vb(:,lr2)^T + "
+                "va(:,lr1)*bvec(lr1,lr1)*vb(:,lr1)^T/sqrt(2)"
+            ),
+            "triplet_formula": "va(:,lr1)*bvec(lr1,lr1)*vb(:,lr1)^T/sqrt(2)",
+            "role": "left-index alpha / right-index beta cross-spin OO candidate; diagnostic only",
+        },
+        "oo_right_beta_cross_spin_transpose": {
+            "singlet_formula": "-va(:,lr2)*bvec(lr1,lr1)*vb(:,lr2)^T/sqrt(2)",
+            "triplet_formula": "va(:,lr2)*bvec(lr1,lr1)*vb(:,lr2)^T/sqrt(2)",
+            "role": "remaining OO term needed so the diagnostic pieces reconstruct the original ball OO correction",
+        },
+    }
+    identity_checks = {
+        "ball_oo_singlet_identity": (
+            "oo_left_alpha_cross_spin + oo_right_beta_cross_spin_transpose equals the singlet "
+            "umrsfcbc ball OO correction on lines adding bvec(lr2,lr1), bvec(lr1,lr2), and bvec(lr1,lr1)/sqrt(2)"
+        ),
+        "ball_oo_triplet_identity": (
+            "oo_left_alpha_cross_spin + oo_right_beta_cross_spin_transpose equals the triplet "
+            "umrsfcbc ball OO correction with plus-signed lr1/lr2 diagonal terms"
+        ),
+        "existing_candidate_incomplete_identity": (
+            "current_pair_sum_alpha/current_pair_sum_beta plus neither o21v/co12 nor ball channel 11; "
+            "this diagnostic must not be interpreted as an XC fix"
+        ),
+    }
+    norm_comparison_plan = [
+        {
+            "identity": "left_alpha_plus_right_beta_transpose_reconstructs_ball_oo",
+            "expected_norm": "||oo_left_alpha_cross_spin + oo_right_beta_cross_spin_transpose - ball_oo||_F == 0 within source-unit tolerance",
+            "required_before_fd_validation": True,
+        },
+        {
+            "identity": "current_pair_sum_excludes_ball_oo",
+            "expected_norm": "||ball_oo||_F and ||current_pair_sum_alpha/beta||_F recorded separately; do not hide missing OO magnitude",
+            "required_before_fd_validation": True,
+        },
+        {
+            "identity": "no_direct_xc_handoff_change",
+            "expected_norm": "utddft_xc_gradient xa/xb inputs unchanged during this source-unit diagnostic",
+            "required_before_fd_validation": True,
+        },
+    ]
+    return {
+        "diagnostic_scope": "mrsf_ball_open_open_split_source_unit_diagnostic",
+        "source_unit_level_only": True,
+        "selected": selected,
+        "component": component,
+        "one_variable_under_test": "ball_open_open_alpha_beta_split",
+        "requires_principled_split": needs_split,
+        "current_candidate_missing_pieces": missing_pieces,
+        "candidate_components": candidate_components,
+        "identity_checks": identity_checks,
+        "norm_comparison_plan": norm_comparison_plan,
+        "source_snapshot": source_snapshot,
+        "forbidden_assumptions": [
+            "blind_half_split_ball",
+            "duplicate_full_ball_into_xa_and_xb",
+            "assign_full_ball_to_alpha_only",
+            "assign_full_ball_to_beta_only",
+            "bundle_o21v_co12_ball_and_xc_handoff_in_one_trial",
+            "run_fd_validation_before_source_unit_identities_pass",
+        ],
+        "quantum_jobs_launched": False,
+        "source_files_modified_by_diagnostic": False,
+        "production_gradient_algebra_edited": False,
+        "xc_handoff_changed": False,
+        "ready_for_fd_validation": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": "instrument_source_unit_norm_trace_before_fd_validation",
+        "scope_guard": "source/unit-level only; exposes candidate OO/ball alpha-beta identities and norm checks without production gradient algebra or XC handoff changes",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1879,6 +1999,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Summarize the completed MRSF XC-density source trial without claiming a production fix",
     )
+    parser.add_argument(
+        "--mrsf-ball-open-open-split-diagnostic",
+        action="store_true",
+        help="Expose source/unit-level ball/open-open alpha-beta candidate identities before FD validation",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1969,6 +2094,11 @@ def main(argv: list[str] | None = None) -> int:
         instrumentation_plan = json.loads(args.csv_path[0].read_text())
         trial_results = json.loads(args.csv_path[1].read_text())
         summary = summarize_mrsf_xc_density_trial_outcome(instrumentation_plan, trial_results)
+    elif args.mrsf_ball_open_open_split_diagnostic:
+        if len(args.csv_path) != 1:
+            parser.error("--mrsf-ball-open-open-split-diagnostic accepts exactly one ball/open-open split inspection JSON")
+        split_inspection = json.loads(args.csv_path[0].read_text())
+        summary = summarize_mrsf_ball_open_open_split_diagnostic(split_inspection, source_root=args.source_root)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

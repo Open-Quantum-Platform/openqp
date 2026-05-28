@@ -1574,6 +1574,46 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertFalse(outcome["ready_for_production_fix_claim"])
         self.assertIn("diagnostic-only", outcome["scope_guard"])
 
+    def test_ball_open_open_split_diagnostic_exposes_source_level_candidates_only(self):
+        module = load_module()
+        split_inspection = {
+            "diagnostic_id": "mrsf_xc_density_ball_open_open_split_inspection_20260528",
+            "scope": "static_source_inspection_only",
+            "prior_trial_context": {
+                "case": "h2s root 5 / physical S4, component a0_z, bhhlyp/6-31g*",
+                "effect": "abs error 0.0792782647 -> 0.0777604510 Ha/Bohr; residual remains large",
+            },
+            "interpretation": {
+                "needs_principled_alpha_beta_split": True,
+                "current_candidate_missing_pieces": [
+                    "umrsfcbc channel 11 ball, including open-open spin-dependent corrections",
+                    "umrsfcbc mixed channels 9/10 (o21v/co12) from the XC xa/xb handoff",
+                ],
+            },
+        }
+
+        diagnostic = module.summarize_mrsf_ball_open_open_split_diagnostic(split_inspection)
+
+        self.assertEqual("mrsf_ball_open_open_split_source_unit_diagnostic", diagnostic["diagnostic_scope"])
+        self.assertEqual("h2s root 5 / physical S4", diagnostic["selected"])
+        self.assertEqual("a0_z", diagnostic["component"])
+        self.assertEqual("ball_open_open_alpha_beta_split", diagnostic["one_variable_under_test"])
+        self.assertFalse(diagnostic["quantum_jobs_launched"])
+        self.assertFalse(diagnostic["production_gradient_algebra_edited"])
+        self.assertFalse(diagnostic["xc_handoff_changed"])
+        self.assertFalse(diagnostic["ready_for_production_fix_claim"])
+        self.assertTrue(diagnostic["source_unit_level_only"])
+        self.assertIn("ball_oo_singlet_identity", diagnostic["identity_checks"])
+        self.assertIn("ball_oo_triplet_identity", diagnostic["identity_checks"])
+        self.assertIn("current_pair_sum_alpha", diagnostic["candidate_components"])
+        self.assertIn("current_pair_sum_beta", diagnostic["candidate_components"])
+        self.assertIn("oo_left_alpha_cross_spin", diagnostic["candidate_components"])
+        self.assertIn("oo_right_beta_cross_spin_transpose", diagnostic["candidate_components"])
+        self.assertEqual("left_alpha_plus_right_beta_transpose_reconstructs_ball_oo", diagnostic["norm_comparison_plan"][0]["identity"])
+        self.assertIn("blind_half_split_ball", diagnostic["forbidden_assumptions"])
+        self.assertEqual("instrument_source_unit_norm_trace_before_fd_validation", diagnostic["next_action"])
+        self.assertIn("source/unit-level only", diagnostic["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
