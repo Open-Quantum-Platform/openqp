@@ -239,6 +239,56 @@ def reference_scf_pcm_runtime_payload(density_blocks, reaction_potential):
     }
 
 
+def reference_scf_pcm_reaction_potential_from_payload(payload):
+    """Extract a reviewed packed reference-PCM reaction potential for calc_fock.
+
+    This is the dependency-light consumer-side gate for a future prototype call
+    to ``calc_fock(..., pcm_reaction_potential_in=...)``.  It accepts only the
+    reviewed disabled-runtime/reference-SCF payload emitted by
+    ``reference_scf_pcm_runtime_payload()``; it does not enable ``[pcm]`` runtime
+    coupling and it rejects state-specific or malformed payloads before a packed
+    AO reaction potential can reach the SCF Fock builder.
+    """
+    if payload.get("pcm_scope") != "reference_scf_energy_only":
+        raise ValueError("PCM runtime payload must have pcm_scope=reference_scf_energy_only")
+    if payload.get("runtime_pcm_enabled") is not False:
+        raise ValueError("PCM runtime payload runtime_pcm_enabled must be False")
+    if payload.get("response_solvent_coupling") != "not enabled":
+        raise ValueError("PCM runtime payload response_solvent_coupling must be not enabled")
+    if payload.get("gradient_support") != "not enabled":
+        raise ValueError("PCM runtime payload gradient_support must be not enabled")
+    if payload.get("pcm_runtime_payload_version") != 1:
+        raise ValueError("PCM runtime payload version must be 1")
+    if "OQP::pcm_reaction_potential" not in payload:
+        raise ValueError("PCM runtime payload missing OQP::pcm_reaction_potential")
+    if "OQP::pcm_epcm" not in payload:
+        raise ValueError("PCM runtime payload missing OQP::pcm_epcm")
+
+    potential = _as_float_list(payload["OQP::pcm_reaction_potential"], name="OQP::pcm_reaction_potential")
+    if not potential:
+        raise ValueError("OQP::pcm_reaction_potential must not be empty")
+    _packed_nbf(len(potential))
+    epcm = float(payload["OQP::pcm_epcm"])
+    if not isfinite(epcm):
+        raise ValueError("OQP::pcm_epcm must be finite")
+
+    return {
+        "reaction_potential": potential,
+        "candidate_polarization_energy": epcm,
+        "pcm_runtime_payload_version": 1,
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
+        "backend_validation_status": payload.get(
+            "backend_validation_status",
+            "pending PySCF/ddX/reference cross-check",
+        ),
+        "handoff_target": "calc_fock pcm_reaction_potential_in",
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
