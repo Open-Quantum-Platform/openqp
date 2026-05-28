@@ -152,6 +152,9 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertAlmostEqual(summary["failed_metric_details"][0]["observed"], 0.01)
         self.assertAlmostEqual(summary["failed_metric_details"][0]["tolerance"], 0.003)
         self.assertAlmostEqual(summary["failed_metric_details"][0]["excess"], 0.007)
+        self.assertEqual(summary["failed_metric_details"][0]["worst_component"]["row"], 0)
+        self.assertEqual(summary["failed_metric_details"][0]["worst_component"]["col"], 1)
+        self.assertAlmostEqual(summary["failed_metric_details"][0]["worst_component"]["abs_diff"], 0.01)
 
     def test_build_validation_summary_rejects_invalid_context_scalars(self):
         validator = load_validator()

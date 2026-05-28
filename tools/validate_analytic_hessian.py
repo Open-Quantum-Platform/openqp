@@ -160,19 +160,21 @@ def build_validation_summary(
 
     failed_metrics = []
     failed_metric_details = []
+    worst_component = summary["largest_components"][0] if summary["largest_components"] else None
     for metric in ("max_abs_diff", "rms_diff"):
         observed = float(summary[metric])
         tolerance = tolerances[metric]
         if observed > tolerance:
             failed_metrics.append(metric)
-            failed_metric_details.append(
-                {
-                    "metric": metric,
-                    "observed": observed,
-                    "tolerance": tolerance,
-                    "excess": observed - tolerance,
-                }
-            )
+            detail = {
+                "metric": metric,
+                "observed": observed,
+                "tolerance": tolerance,
+                "excess": observed - tolerance,
+            }
+            if worst_component is not None:
+                detail["worst_component"] = worst_component
+            failed_metric_details.append(detail)
 
     return {
         "method": method,
