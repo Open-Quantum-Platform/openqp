@@ -87,6 +87,12 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("consumer must recompute and validate", text)
         self.assertIn("before exposing `pcm_reaction_potential_in`", text)
 
+    def test_validation_matrix_records_backend_validation_status_payload_gate(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        self.assertIn("backend_validation_status", text)
+        self.assertIn("pending PySCF/ddX/reference cross-check", text)
+        self.assertIn("required before exposing `pcm_reaction_potential_in`", text)
+
 
 if __name__ == "__main__":
     unittest.main()

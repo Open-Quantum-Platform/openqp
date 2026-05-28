@@ -54,6 +54,8 @@ Reviewed reference-PCM reaction potentials may only enter the first prototype th
 
 `reference_scf_pcm_runtime_payload()` must produce the packed AO shape metadata (`packed_ao_length`, `expected_packed_ao_length`, and `packed_ao_shape_formula`) together with the reviewed `OQP::pcm_reaction_potential`. The consumer `reference_scf_pcm_reaction_potential_from_payload()` must not trust stale metadata: the consumer must recompute and validate the triangular packed AO length before exposing `pcm_reaction_potential_in` to any `calc_fock` bridge. This keeps every no-runtime handoff boundary aligned on the same `nbf * (nbf + 1) / 2` contract before native SCF wiring.
 
+The same producer/consumer boundary must also preserve backend-validation provenance while runtime PCM remains disabled. The payload field `backend_validation_status` is required before exposing `pcm_reaction_potential_in`, and its only accepted scaffold value is `pending PySCF/ddX/reference cross-check`; hand-written or stale payloads that omit this status must fail before the reviewed reaction potential can reach any SCF Fock handoff.
+
 ## Reporting rules
 
 For validation reports, include:
