@@ -112,6 +112,14 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("boolean numeric", text)
         self.assertIn("backend_validation_status", text)
 
+    def test_validation_matrix_records_molecule_payload_nonmapping_guard(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        self.assertIn("Molecule.set_pcm_runtime_payload()", text)
+        self.assertIn("Molecule-level setter", text)
+        self.assertIn("restored/prototype payloads", text)
+        self.assertIn("PCM runtime payload must be a mapping", text)
+        self.assertIn("before applying the allowlist", text)
+
 
 if __name__ == "__main__":
     unittest.main()

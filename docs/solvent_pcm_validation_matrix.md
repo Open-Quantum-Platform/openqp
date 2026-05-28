@@ -64,7 +64,7 @@ The reviewed consumer boundary must also reject non-mapping payload objects befo
 
 ## Molecule JSON round-trip contract
 
-`Molecule.set_pcm_runtime_payload()` stores reviewed PCM runtime payload fields outside native Fortran tag arrays and uses an explicit allowlist for JSON round-trip persistence. The allowlist must preserve `OQP::pcm_reaction_potential`, `OQP::pcm_epcm`, `nbf`, `packed_ao_length`, `expected_packed_ao_length`, `packed_ao_shape_formula`, `pcm_runtime_payload_version`, first-scope labels, and `backend_validation_status`; these fields must not be stripped during save/load because the reviewed payload consumer requires them before exposing `pcm_reaction_potential_in`.
+`Molecule.set_pcm_runtime_payload()` stores reviewed PCM runtime payload fields outside native Fortran tag arrays and uses an explicit allowlist for JSON round-trip persistence. The Molecule-level setter must reject non-mapping restored/prototype payloads with `PCM runtime payload must be a mapping` before applying the allowlist, so malformed JSON/restored data cannot be silently iterated or stripped before the reviewed payload consumer sees it. The allowlist must preserve `OQP::pcm_reaction_potential`, `OQP::pcm_epcm`, `nbf`, `packed_ao_length`, `expected_packed_ao_length`, `packed_ao_shape_formula`, `pcm_runtime_payload_version`, first-scope labels, and `backend_validation_status`; these fields must not be stripped during save/load because the reviewed payload consumer requires them before exposing `pcm_reaction_potential_in`.
 
 ## Reporting rules
 
