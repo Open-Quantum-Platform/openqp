@@ -520,7 +520,7 @@ contains
     use mathlib, only: pack_matrix, unpack_matrix
 
     use tdhf_mrsf_lib, only: &
-      mrinivec, mrsfcbc, mrsfxvec, mrsfsp, mrsfrowcal, &
+      mrinivec, mrsfcbc, umrsfcbc, mrsfxvec, mrsfsp, mrsfrowcal, &
       mrsfqrorhs, mrsfqropcal, mrsfqrowcal
     use oqp_linalg
     use printing, only: print_module_info
@@ -545,7 +545,7 @@ contains
     real(kind=dp), pointer :: wmo(:,:)
     real(kind=dp), allocatable :: bvec_mo_d(:,:)
     real(kind=dp), allocatable, target :: &
-      fmrst1(:,:,:,:)
+      fmrst1(:,:,:,:), umrsf_xc_den(:,:,:)
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
 
     integer :: nocca, nvira, noccb, nvirb
@@ -634,6 +634,7 @@ contains
       allocate(&
     ! for Z-vector
         fmrst1(1,7,nbf,nbf), &
+        umrsf_xc_den(11,nbf,nbf), &
         bvec_mo_d(xvec_dim,1), &
         hxa(nbf,nocca), &
         hxb(nbf,nbf), &
@@ -686,7 +687,7 @@ contains
     call infos%dat%remove_records(tags_alloc)
 
     call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf_tri, comment=OQP_WAO_comment)
-    call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*7, (/7, nbf, nbf /), comment=OQP_td_mrsf_density)
+    call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*9, (/9, nbf, nbf /), comment=OQP_td_mrsf_density)
     call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf_tri*2, (/ nbf_tri, 2 /), comment=OQP_td_p)
     call infos%dat%reserve_data(OQP_td_abxc, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_td_abxc)
 
@@ -844,6 +845,17 @@ contains
       ! OQP_td_abxc for the separate MRSF XC-density handoff diagnostic.
 
       td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
+
+      ! MRSF-specific spin-resolved XC-density candidate for the optional
+      ! xa/xb seam in utddft_xc_gradient.  Keep legacy channels 1:7 unchanged
+      ! for the SPC/two-electron gradient path; channels 8 and 9 are an
+      ! isolated alpha/beta diagnostic candidate assembled from umrsfcbc's
+      ! paired spin channels, not from the rejected td_abxc duplication.
+      call umrsfcbc(infos, mo_a, mo_a, wrk1, umrsf_xc_den)
+      td_mrsf_den(8,:,:) = umrsf_xc_den(1,:,:) + umrsf_xc_den(3,:,:) + &
+                           umrsf_xc_den(5,:,:) + umrsf_xc_den(7,:,:)
+      td_mrsf_den(9,:,:) = umrsf_xc_den(2,:,:) + umrsf_xc_den(4,:,:) + &
+                           umrsf_xc_den(6,:,:) + umrsf_xc_den(8,:,:)
 
     ! Initialize ERI calculations
       call int2_driver%run(int2_data_st, &

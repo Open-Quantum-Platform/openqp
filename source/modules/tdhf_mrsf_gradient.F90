@@ -126,7 +126,7 @@ contains
     allocate(v(nbf,nbf,2), source=0.0d0)
     allocate(d(nbf,nbf,2), source=0.0d0)
     allocate(p(nbf,nbf,2), source=0.0d0)
-    allocate(spc(7,nbf,nbf), source=0.0d0)
+    allocate(spc(9,nbf,nbf), source=0.0d0)
 
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
@@ -146,7 +146,8 @@ contains
 
     v(:,:,1) = td_abxc
     if (mrst==1 .or. mrst==3) then
-      spc(1:7,:,:) = td_mrsf_density
+      spc(1:7,:,:) = td_mrsf_density(1:7,:,:)
+      spc(8:9,:,:) = td_mrsf_density(8:9,:,:)
     end if
 
 !   Compute xc gradient
@@ -160,6 +161,8 @@ contains
            db=d(:,:,2), &
            pa=p(:,:,1:1), &
            pb=p(:,:,2:2), &
+           xa=spc(:,:,8:8), &
+           xb=spc(:,:,9:9), &
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
