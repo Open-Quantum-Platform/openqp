@@ -58,6 +58,8 @@ Those shape fields are required, not optional defaults. A payload with missing `
 
 The same producer/consumer boundary must also preserve backend-validation provenance while runtime PCM remains disabled. The payload field `backend_validation_status` is required before exposing `pcm_reaction_potential_in`, and its only accepted scaffold value is `pending PySCF/ddX/reference cross-check`; hand-written or stale payloads that omit this status must fail before the reviewed reaction potential can reach any SCF Fock handoff.
 
+The reviewed consumer boundary must also reject non-mapping payload objects before field-level checks. `None`, list, tuple, or other non-mapping values must fail with the domain-specific diagnostic `PCM runtime payload must be a mapping` before exposing `pcm_reaction_potential_in`, so malformed caller state cannot fall through to misleading missing-field or shape errors.
+
 ## Molecule JSON round-trip contract
 
 `Molecule.set_pcm_runtime_payload()` stores reviewed PCM runtime payload fields outside native Fortran tag arrays and uses an explicit allowlist for JSON round-trip persistence. The allowlist must preserve `OQP::pcm_reaction_potential`, `OQP::pcm_epcm`, `nbf`, `packed_ao_length`, `expected_packed_ao_length`, `packed_ao_shape_formula`, `pcm_runtime_payload_version`, first-scope labels, and `backend_validation_status`; these fields must not be stripped during save/load because the reviewed payload consumer requires them before exposing `pcm_reaction_potential_in`.

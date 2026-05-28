@@ -360,6 +360,14 @@ epsilon=water
         self.assertIn("missing `packed_ao_shape_formula`", text)
         self.assertIn("boolean numeric", text)
 
+    def test_validation_matrix_documents_non_mapping_payload_guard(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("non-mapping", text)
+        self.assertIn("PCM runtime payload must be a mapping", text)
+        self.assertIn("before field-level checks", text)
+        self.assertIn("before exposing `pcm_reaction_potential_in`", text)
+
     def test_validation_matrix_documents_molecule_payload_roundtrip_allowlist(self):
         matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
         text = matrix_path.read_text(encoding="utf-8")
