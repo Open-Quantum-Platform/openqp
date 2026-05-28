@@ -1094,6 +1094,15 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn("confirm current branch/source hash", scripts["manual_review_checklist"])
         self.assertIn("confirm no-fix/pre-change control source ref", scripts["manual_review_checklist"])
         self.assertIn("confirm root-continuity/no-TRAH evidence", scripts["manual_review_checklist"])
+        self.assertEqual(
+            {
+                "manual_review_required": True,
+                "approved_to_launch": False,
+                "reviewed_by": None,
+                "review_note": "review-only plan; no validation-control jobs may be launched from this artifact",
+            },
+            scripts["manual_review_status"],
+        )
         self.assertEqual(1, scripts["component_count"])
         component = scripts["components"][0]
         self.assertEqual("a0_z", component["component"])

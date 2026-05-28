@@ -1039,6 +1039,12 @@ def summarize_validation_control_scripts(
             "confirm exactly three low-thread OpenQP commands per selected component",
             "confirm no production algebra edit is bundled with validation controls",
         ],
+        "manual_review_status": {
+            "manual_review_required": True,
+            "approved_to_launch": False,
+            "reviewed_by": None,
+            "review_note": "review-only plan; no validation-control jobs may be launched from this artifact",
+        },
         "selected_case": validation_control_inputs.get("selected_case", {}),
         "component_count": len(components),
         "components": components,
