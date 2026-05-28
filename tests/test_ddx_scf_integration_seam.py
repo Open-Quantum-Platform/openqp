@@ -445,6 +445,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             solvent.reference_scf_pcm_reaction_potential_from_payload(missing_potential)
         with self.assertRaisesRegex(ValueError, "nbf"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 3})
+        with self.assertRaisesRegex(ValueError, "nbf must be an integer"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 2.5})
 
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util

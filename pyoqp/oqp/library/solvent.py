@@ -275,8 +275,12 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     if not potential:
         raise ValueError("OQP::pcm_reaction_potential must not be empty")
     nbf = _packed_nbf(len(potential))
-    if "nbf" in payload and int(payload["nbf"]) != nbf:
-        raise ValueError("PCM runtime payload nbf must match OQP::pcm_reaction_potential packed length")
+    if "nbf" in payload:
+        payload_nbf = payload["nbf"]
+        if isinstance(payload_nbf, bool) or not isinstance(payload_nbf, int):
+            raise ValueError("PCM runtime payload nbf must be an integer")
+        if payload_nbf != nbf:
+            raise ValueError("PCM runtime payload nbf must match OQP::pcm_reaction_potential packed length")
     epcm = float(payload["OQP::pcm_epcm"])
     if not isfinite(epcm):
         raise ValueError("OQP::pcm_epcm must be finite")
