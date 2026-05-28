@@ -1481,6 +1481,53 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn("OQP_td_mrsf_density", diagnostic["source_observations"]["mrsf_density_tags_seen"])
         self.assertTrue(diagnostic["source_snapshot"]["all_source_files_present"])
 
+    def test_xc_density_instrumentation_plan_is_review_only_and_requires_real_candidate(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = Path(tmpdir)
+            gradient = source_root / "source/modules/tdhf_mrsf_gradient.F90"
+            z_vector = source_root / "source/modules/tdhf_mrsf_z_vector.F90"
+            gradient.parent.mkdir(parents=True, exist_ok=True)
+            z_vector.parent.mkdir(parents=True, exist_ok=True)
+            gradient.write_text(
+                "call tagarray_get_data(infos%dat, OQP_td_abxc, td_abxc)\n"
+                "call tagarray_get_data(infos%dat, OQP_td_p, td_p)\n"
+                "call tagarray_get_data(infos%dat, OQP_td_mrsf_density, td_mrsf_density)\n"
+                "call utddft_xc_gradient(basis=basis, da=d(:,:,1), db=d(:,:,2), pa=p(:,:,1:1), pb=p(:,:,2:2), infos=infos)\n"
+            )
+            z_vector.write_text("call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*7)\n")
+            diagnostic = {
+                "diagnostic_scope": "mrsf_xc_density_handoff_diagnostic_only",
+                "selected": "h2s root 5 / physical S4",
+                "diagnostic_run_status": "static_source_trace_completed",
+                "one_variable_under_test": "mrsf_xc_density_handoff",
+                "residual_components_to_recheck": ["a0_z"],
+                "source_observations": {
+                    "gradient_xc_call_has_explicit_xa_xb_handoff": False,
+                    "gradient_xc_call_lines": [4],
+                    "mrsf_density_tags_seen": ["OQP_td_abxc", "OQP_td_p", "OQP_td_mrsf_density"],
+                },
+                "source_trial_outcome_status": "negative_no_change",
+                "channel7_density_provenance_deferred": True,
+            }
+
+            plan = module.summarize_mrsf_xc_density_instrumentation_plan(diagnostic, source_root=source_root)
+
+        self.assertEqual("mrsf_xc_density_instrumentation_plan_only", plan["instrumentation_scope"])
+        self.assertEqual("h2s root 5 / physical S4", plan["selected"])
+        self.assertEqual("mrsf_xc_density_handoff", plan["one_variable_under_test"])
+        self.assertTrue(plan["ready_for_manual_instrumentation_review"])
+        self.assertFalse(plan["source_files_modified_by_planner"])
+        self.assertFalse(plan["jobs_launched"])
+        self.assertFalse(plan["production_gradient_algebra_edited"])
+        self.assertFalse(plan["ready_for_production_fix_claim"])
+        self.assertEqual(["a0_z"], plan["residual_components_to_recheck"])
+        self.assertIn("manual_review_before_source_instrumentation", plan["manual_review_status"]["blockers"])
+        self.assertIn("direct_td_abxc_as_xa_xb", plan["forbidden_bundled_changes"])
+        self.assertEqual("review_mrsf_spin_resolved_xc_density_candidate_before_source_trial", plan["next_action"])
+        self.assertEqual("missing_real_spin_resolved_mrsf_xc_density_candidate", plan["candidate_density_requirements"]["current_blocker"])
+        self.assertTrue(plan["source_snapshot"]["all_source_files_present"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1466,6 +1466,84 @@ def summarize_mrsf_xc_density_handoff_diagnostic(
     }
 
 
+def summarize_mrsf_xc_density_instrumentation_plan(
+    xc_density_diagnostic: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Plan the next MRSF XC-density instrumentation step without source edits.
+
+    The preceding static diagnostic showed that a direct ``td_abxc`` handoff is
+    unsafe and that the real missing input is a spin-resolved MRSF XC-density
+    candidate.  This helper packages a review-only instrumentation handoff: no
+    Fortran is edited, no OpenQP jobs are launched, and the future source trial
+    remains blocked on manual review of the candidate density definition.
+    """
+
+    observations = dict(xc_density_diagnostic.get("source_observations") or {})
+    source_snapshot = _source_snapshot(source_root)
+    ready = (
+        xc_density_diagnostic.get("diagnostic_run_status") == "static_source_trace_completed"
+        and xc_density_diagnostic.get("one_variable_under_test") == "mrsf_xc_density_handoff"
+        and not bool(observations.get("gradient_xc_call_has_explicit_xa_xb_handoff"))
+        and bool(xc_density_diagnostic.get("channel7_density_provenance_deferred"))
+        and source_snapshot["all_source_files_present"]
+    )
+    blockers = ["manual_review_before_source_instrumentation"]
+    if not ready:
+        blockers.append("static_xc_density_handoff_diagnostic_not_ready")
+    candidate_requirements = {
+        "current_blocker": "missing_real_spin_resolved_mrsf_xc_density_candidate",
+        "must_preserve": [
+            "existing pa/pb transition-density inputs to utddft_xc_gradient",
+            "channel-7 negative trial result as a deferred hypothesis, not a bundled source edit",
+            "single selected residual component before any multi-case source trial",
+        ],
+        "must_define_before_source_trial": [
+            "spin-resolved alpha candidate density for the MRSF XC-gradient optional xa seam",
+            "spin-resolved beta candidate density for the MRSF XC-gradient optional xb seam",
+            "source-level guard proving td_abxc is not passed directly as xa/xb",
+        ],
+        "validation_after_review": [
+            "rerun the same H2S root 5 a0_z gradient/plus/minus controls",
+            "compare against the recorded no-fix/pre-change control",
+            "confirm root-continuity/no-TRAH remains clean",
+        ],
+    }
+    return {
+        "instrumentation_scope": "mrsf_xc_density_instrumentation_plan_only",
+        "selected": xc_density_diagnostic.get("selected"),
+        "one_variable_under_test": "mrsf_xc_density_handoff",
+        "ready_for_manual_instrumentation_review": ready,
+        "manual_review_status": {
+            "manual_review_required": True,
+            "approved_to_edit_source": False,
+            "reviewed_by": None,
+            "next_gate": "manual_review_before_source_instrumentation",
+            "blockers": blockers,
+        },
+        "source_snapshot": source_snapshot,
+        "candidate_density_requirements": candidate_requirements,
+        "source_observations": observations,
+        "residual_components_to_recheck": list(xc_density_diagnostic.get("residual_components_to_recheck", [])),
+        "forbidden_bundled_changes": [
+            "direct_td_abxc_as_xa_xb",
+            "channel7_density_provenance_retry",
+            "new_spc_scaling_changes",
+            "multi-component or multi-molecule source edits",
+        ],
+        "source_files_modified_by_planner": False,
+        "jobs_launched": False,
+        "production_gradient_algebra_edited": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "review_mrsf_spin_resolved_xc_density_candidate_before_source_trial"
+            if ready
+            else "resolve_xc_density_instrumentation_plan_blockers"
+        ),
+        "scope_guard": "review-only MRSF XC-density instrumentation plan; no source edit, no OpenQP jobs, no production fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
