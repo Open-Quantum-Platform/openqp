@@ -264,6 +264,10 @@ class Molecule:
         allowed_keys = [
             'OQP::pcm_reaction_potential',
             'OQP::pcm_epcm',
+            'nbf',
+            'packed_ao_length',
+            'expected_packed_ao_length',
+            'packed_ao_shape_formula',
             'pcm_runtime_payload_version',
             'pcm_scope',
             'reference_target',
