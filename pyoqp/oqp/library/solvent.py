@@ -269,13 +269,14 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     potential = _as_float_list(payload["OQP::pcm_reaction_potential"], name="OQP::pcm_reaction_potential")
     if not potential:
         raise ValueError("OQP::pcm_reaction_potential must not be empty")
-    _packed_nbf(len(potential))
+    nbf = _packed_nbf(len(potential))
     epcm = float(payload["OQP::pcm_epcm"])
     if not isfinite(epcm):
         raise ValueError("OQP::pcm_epcm must be finite")
 
     return {
         "reaction_potential": potential,
+        "nbf": nbf,
         "candidate_polarization_energy": epcm,
         "pcm_runtime_payload_version": 1,
         "pcm_scope": "reference_scf_energy_only",
@@ -305,6 +306,7 @@ def reference_scf_pcm_calc_fock_handoff(payload):
         "calc_fock_kwargs": {
             "pcm_reaction_potential_in": list(reviewed["reaction_potential"]),
         },
+        "nbf": reviewed["nbf"],
         "candidate_polarization_energy": reviewed["candidate_polarization_energy"],
         "pcm_runtime_payload_version": reviewed["pcm_runtime_payload_version"],
         "pcm_scope": reviewed["pcm_scope"],
