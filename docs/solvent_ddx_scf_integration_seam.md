@@ -166,6 +166,17 @@ The branch now includes two ddX adapter smoke paths:
 
 The explicit path is still a smoke/proof-of-seam, not production OpenQP SCF coupling. It verifies that OpenQP can drive the lower-level ddPCM setup/forward/adjoint API that will be needed after `psi` and `phi_cav` come from AO density and nuclear potentials.
 
+### Reviewed payload and calc_fock handoff chain
+
+The branch also has a dependency-light Python handoff chain for carrying a reviewed reference-SCF reaction field toward the SCF Fock builder without enabling runtime PCM:
+
+1. `reference_scf_pcm_runtime_payload(density_blocks, reaction_potential)` validates the RHF/ROHF reference density and packed AO reaction potential, then stores only `OQP::pcm_reaction_potential`, matched `OQP::pcm_epcm`, `nbf`, payload version, and first-scope metadata.
+2. `reference_scf_pcm_reaction_potential_from_payload(payload)` is the consumer gate. It accepts only `pcm_scope="reference_scf_energy_only"`, `reference_target="RHF/ROHF reference density"`, `runtime_pcm_enabled=False`, no response-solvent coupling, no gradients, and finite packed values with matching `nbf`.
+3. `reference_scf_pcm_calc_fock_handoff(payload)` exposes only `calc_fock_kwargs={"pcm_reaction_potential_in": ...}` plus compact metadata for a future opt-in prototype `calc_fock(..., pcm_reaction_potential_in=...)` call.
+4. `reference_scf_pcm_calc_fock_handoff_from_molecule(mol)` is the molecule-level no-runtime gate: an empty/restored payload returns empty `calc_fock_kwargs`, while a present payload must pass the reviewed consumer before any packed reaction potential is exposed.
+
+This is intentionally not a production solvent switch: runtime PCM remains disabled, with no state-specific or nonequilibrium MRSF solvent response, no MRSF-kernel solvent response, no analytic PCM gradients, and no solution-phase optimization claim.
+
 ## Consequence for the next implementation step
 
 Before adding a production SCF hook, the remaining ddX/OpenQP mapping question is now narrower:

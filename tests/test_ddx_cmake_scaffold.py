@@ -63,6 +63,14 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("unweighted total solute electrostatic potential", text)
         self.assertIn("cavity-projected `state%q`", text)
 
+    def test_mapping_doc_records_reviewed_payload_handoff_chain(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("reference_scf_pcm_runtime_payload", text)
+        self.assertIn("reference_scf_pcm_calc_fock_handoff_from_molecule", text)
+        self.assertIn("pcm_reaction_potential_in", text)
+        self.assertIn("runtime PCM remains disabled", text)
+        self.assertIn("no state-specific or nonequilibrium MRSF solvent response", text)
+
 
 if __name__ == "__main__":
     unittest.main()
