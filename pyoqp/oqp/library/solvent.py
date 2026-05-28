@@ -385,6 +385,8 @@ def reference_scf_pcm_calc_fock_handoff_from_molecule(mol):
     packed reaction potential can be forwarded.
     """
     payload = mol.get_pcm_runtime_payload()
+    if not isinstance(payload, Mapping):
+        raise ValueError("PCM runtime payload must be a mapping")
     if not payload:
         return {
             "calc_fock_kwargs": {},

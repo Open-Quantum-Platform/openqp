@@ -607,6 +607,23 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 types.SimpleNamespace(get_pcm_runtime_payload=lambda: {**payload, "runtime_pcm_enabled": True})
             )
 
+    def test_reference_scf_pcm_calc_fock_handoff_from_molecule_rejects_non_mapping_payload(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_molecule_calc_fock_nonmapping", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        for malformed_payload in (None, [], ()):
+            with self.assertRaisesRegex(ValueError, "PCM runtime payload must be a mapping"):
+                solvent.reference_scf_pcm_calc_fock_handoff_from_molecule(
+                    types.SimpleNamespace(get_pcm_runtime_payload=lambda value=malformed_payload: value)
+                )
+
     def test_reference_scf_pcm_calc_fock_request_blocks_incremental_fock(self):
         import importlib.util
         import types
