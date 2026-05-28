@@ -323,9 +323,11 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertAlmostEqual(updates["candidate_polarization_energy"], 0.125)
         self.assertEqual(updates["application_scope"], "add reaction_potential to each reference SCF Fock block")
         self.assertEqual(updates["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(updates["reference_target"], "RHF/ROHF reference density")
         self.assertEqual(updates["response_solvent_coupling"], "not enabled")
         self.assertEqual(updates["gradient_support"], "not enabled")
         self.assertFalse(updates["runtime_pcm_enabled"])
+        self.assertEqual(updates["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
 
     def test_reference_scf_pcm_energy_handoff_packages_phi_fock_and_energy_terms(self):
         import importlib.util
