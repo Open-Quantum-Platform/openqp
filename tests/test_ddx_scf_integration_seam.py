@@ -794,6 +794,11 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(bridge["packed_ao_length"], 3)
         self.assertEqual(bridge["expected_packed_ao_length"], 3)
         self.assertEqual(bridge["packed_ao_shape_formula"], "nbf * (nbf + 1) / 2")
+        self.assertTrue(bridge["call_site_shape_validated"])
+        self.assertEqual(
+            len(bridge["calc_fock_kwargs"]["pcm_reaction_potential_in"]),
+            bridge["expected_packed_ao_length"],
+        )
         self.assertFalse(bridge["runtime_pcm_enabled"])
         self.assertEqual(bridge["pcm_scope"], "reference_scf_energy_only")
         self.assertEqual(bridge["response_solvent_coupling"], "not enabled")

@@ -490,6 +490,13 @@ def reference_scf_pcm_calc_fock_call_site_bridge(mol, *, dens_old=None, f_old=No
     request = reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=dens_old, f_old=f_old)
     request["call_site_bridge"] = "reference_scf_calc_fock"
     request["forward_pcm_reaction_potential"] = bool(request["calc_fock_kwargs"])
+    if request["forward_pcm_reaction_potential"]:
+        forwarded = request["calc_fock_kwargs"].get("pcm_reaction_potential_in")
+        if len(forwarded) != request["expected_packed_ao_length"]:
+            raise ValueError("call-site pcm_reaction_potential_in length must match expected packed AO length")
+        request["call_site_shape_validated"] = True
+    else:
+        request["call_site_shape_validated"] = False
     return request
 
 
