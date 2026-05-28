@@ -224,5 +224,10 @@ def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisiona
         "provisional_sign_scale": True,
         "sign_scale_convention": "chg = -0.5 * q_cav",
         "validation_status": "requires PySCF/ddX/reference cross-check before runtime use",
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
         "runtime_pcm_enabled": False,
+        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
     }

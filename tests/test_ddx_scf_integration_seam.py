@@ -99,6 +99,28 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["validation_status"], "requires PySCF/ddX/reference cross-check before runtime use")
         self.assertFalse(inputs["runtime_pcm_enabled"])
 
+    def test_provisional_ddx_reaction_field_inputs_preserve_first_scope_metadata(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_provisional_first_scope", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        inputs = solvent.provisional_ddx_reaction_field_inputs(
+            [0.2],
+            [0.0, 0.1, 0.2],
+            allow_provisional=True,
+        )
+
+        self.assertEqual(inputs["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(inputs["reference_target"], "RHF/ROHF reference density")
+        self.assertEqual(inputs["response_solvent_coupling"], "not enabled")
+        self.assertEqual(inputs["gradient_support"], "not enabled")
+        self.assertEqual(inputs["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
+
     def test_solvent_helpers_reject_nonfinite_numeric_inputs(self):
         import importlib.util
 
