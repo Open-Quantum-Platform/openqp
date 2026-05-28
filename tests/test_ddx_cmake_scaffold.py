@@ -93,6 +93,17 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("pending PySCF/ddX/reference cross-check", text)
         self.assertIn("required before exposing `pcm_reaction_potential_in`", text)
 
+    def test_mapping_doc_records_payload_consumer_required_fields_and_nonmapping_guard(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("PCM runtime payload must be a mapping", text)
+        self.assertIn("required, not optional defaults", text)
+        self.assertIn("nbf", text)
+        self.assertIn("packed_ao_length", text)
+        self.assertIn("expected_packed_ao_length", text)
+        self.assertIn("packed_ao_shape_formula", text)
+        self.assertIn("boolean numeric", text)
+        self.assertIn("backend_validation_status", text)
+
 
 if __name__ == "__main__":
     unittest.main()
