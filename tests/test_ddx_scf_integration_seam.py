@@ -816,6 +816,23 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("size(pcm_reaction_potential_in) /= nbf_tri", guard)
         self.assertIn("reference PCM reaction potential length must match packed AO dimension", guard)
 
+    def test_provisional_ddx_reaction_field_inputs_requires_literal_boolean_opt_in(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_provisional_opt_in", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "allow_provisional must be the boolean True"):
+            solvent.provisional_ddx_external_charges([0.2], allow_provisional="yes")
+        with self.assertRaisesRegex(ValueError, "allow_provisional must be the boolean True"):
+            solvent.provisional_ddx_reaction_field_inputs([0.2], [0.0, 0.0, 0.0], allow_provisional=1)
+
+        self.assertEqual(solvent.provisional_ddx_external_charges([0.2], allow_provisional=True), [-0.1])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)

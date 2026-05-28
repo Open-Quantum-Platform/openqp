@@ -491,6 +491,14 @@ def reference_scf_pcm_calc_fock_call_site_bridge(mol, *, dens_old=None, f_old=No
     return request
 
 
+def _require_provisional_opt_in(allow_provisional: bool):
+    if allow_provisional is not True:
+        raise ValueError(
+            "allow_provisional must be the boolean True; ddX q_cav sign/scale is provisional "
+            "and may only be used in guarded validation/prototype code"
+        )
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
@@ -499,11 +507,7 @@ def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     sign/scale is still provisional, so callers must opt in explicitly until
     it is cross-checked against PySCF/ddX/reference-package data.
     """
-    if not allow_provisional:
-        raise ValueError(
-            "ddX q_cav sign/scale is provisional; pass allow_provisional=True "
-            "only in guarded validation/prototype code"
-        )
+    _require_provisional_opt_in(allow_provisional)
     return [-0.5 * value for value in _as_float_list(q_cav, name="q_cav")]
 
 
