@@ -684,6 +684,55 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertTrue(disabled["scf_state_dens_old_present"])
         self.assertTrue(disabled["scf_state_f_old_present"])
 
+    def test_reference_scf_pcm_calc_fock_call_site_bridge_forwards_only_reviewed_nonincremental_payload(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_calc_fock_bridge", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25]],
+            [0.1, 0.2, 0.3],
+        )
+        bridge = solvent.reference_scf_pcm_calc_fock_call_site_bridge(
+            types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload),
+            dens_old=None,
+            f_old=None,
+        )
+        self.assertTrue(bridge["forward_pcm_reaction_potential"])
+        self.assertEqual(bridge["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
+        self.assertEqual(bridge["call_site_bridge"], "reference_scf_calc_fock")
+        self.assertEqual(bridge["call_mode"], "non_incremental_only")
+        self.assertFalse(bridge["runtime_pcm_enabled"])
+        self.assertEqual(bridge["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(bridge["response_solvent_coupling"], "not enabled")
+        self.assertEqual(bridge["gradient_support"], "not enabled")
+
+        disabled = solvent.reference_scf_pcm_calc_fock_call_site_bridge(
+            types.SimpleNamespace(get_pcm_runtime_payload=lambda: {}),
+            dens_old=[0.0],
+            f_old=[0.0],
+        )
+        self.assertFalse(disabled["forward_pcm_reaction_potential"])
+        self.assertEqual(disabled["calc_fock_kwargs"], {})
+        self.assertEqual(disabled["call_mode"], "disabled_no_payload")
+        self.assertTrue(disabled["scf_state_incremental_fock"])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "reference PCM incremental Fock is not validated.*incremental_trigger_fields=dens_old",
+        ):
+            solvent.reference_scf_pcm_calc_fock_call_site_bridge(
+                types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload),
+                dens_old=[0.0],
+                f_old=None,
+            )
+
     def test_calc_fock_pcm_incremental_guard_checks_both_old_density_and_fock_state(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         body = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]

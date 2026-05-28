@@ -435,6 +435,21 @@ def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_
     return request
 
 
+def reference_scf_pcm_calc_fock_call_site_bridge(mol, *, dens_old=None, f_old=None):
+    """Return the guarded SCF call-site payload for ``calc_fock``.
+
+    This dependency-light bridge is the final staging helper before a future SCF
+    caller forwards ``pcm_reaction_potential_in``.  It forwards a reviewed
+    reference-PCM payload only when the request is non-incremental; a no-payload
+    molecule remains an explicit disabled/no-op bridge even if old SCF buffers
+    are present.
+    """
+    request = reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=dens_old, f_old=f_old)
+    request["call_site_bridge"] = "reference_scf_calc_fock"
+    request["forward_pcm_reaction_potential"] = bool(request["calc_fock_kwargs"])
+    return request
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
