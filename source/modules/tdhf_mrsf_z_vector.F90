@@ -839,7 +839,9 @@ contains
       call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
       call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
 
-      fmrst1(1,7,:,:) = td_abxc
+      ! channel-7 provenance trial: preserve the mrsfcbc channel-7 density
+      ! instead of overwriting it with td_abxc.  td_abxc remains available via
+      ! OQP_td_abxc for the separate MRSF XC-density handoff diagnostic.
 
       td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
 
