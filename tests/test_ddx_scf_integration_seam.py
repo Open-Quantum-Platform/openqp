@@ -321,6 +321,16 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("f(:,ii) = f(:,ii) + reaction_potential", helper)
         self.assertNotIn("pcm%enabled", helper.lower())
 
+    def test_calc_fock_has_guarded_reference_pcm_reaction_potential_argument(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        calc_fock = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]
+        self.assertIn("pcm_reaction_potential_in", calc_fock)
+        normalized = " ".join(calc_fock.split())
+        self.assertIn("real(dp), intent(in), optional", normalized)
+        self.assertIn("if (present(pcm_reaction_potential_in)) then", calc_fock)
+        self.assertIn("pcm_reaction_potential=pcm_reaction_potential_in", calc_fock)
+        self.assertNotIn("pcm%enabled", calc_fock.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

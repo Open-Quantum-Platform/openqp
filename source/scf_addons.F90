@@ -1465,9 +1465,14 @@ contains
   !> @param[inout,opt] dens_old Previous packed density(ies) for incremental build.
   !> @param[inout,opt] f_old    Previous packed Fock(ces) for incremental build.
   !> @param[inout,opt] nschwz   (Output) count of Schwarz-screened quartets.
+  !> @param[in,opt]    pcm_reaction_potential_in Validated packed AO
+  !>                   reference-PCM reaction-field matrix. Prototype opt-in
+  !>                   only; runtime PCM input remains disabled until backend
+  !>                   validation lands.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old, &
+                       pcm_reaction_potential_in)
     use precision,       only : dp
     use oqp_tagarray_driver
     use types,           only : information
@@ -1489,6 +1494,7 @@ contains
     real(dp), intent(inout), optional        :: dens_in(:,:)
     real(dp), intent(inout), optional        :: dens_old(:,:)
     real(dp), intent(inout), optional        :: f_old(:,:)
+    real(dp), intent(in),    optional        :: pcm_reaction_potential_in(:)
     integer,  intent(inout), optional        :: nschwz
 
     ! locals
@@ -1532,11 +1538,23 @@ contains
 
     fock_ao = 0.0_dp
     if (present(dens_old)) then
-      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
+      if (present(pcm_reaction_potential_in)) then
+        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old, &
+                      pcm_reaction_potential=pcm_reaction_potential_in)
+      else
+        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
+      end if
     else
-      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz)
+      if (present(pcm_reaction_potential_in)) then
+        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, &
+                      pcm_reaction_potential=pcm_reaction_potential_in)
+      else
+        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                      fock_ao, E, molgrid, mo_a, mo_b, nschwz)
+      end if
     end if
 
     E%psinrm    = 0.0_dp
