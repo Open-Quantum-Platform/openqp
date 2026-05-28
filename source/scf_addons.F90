@@ -1429,6 +1429,9 @@ contains
     do ii = 1, nfocks
       E%ehf1 = E%ehf1 + traceprod_sym_packed(d(:,ii), hcore, nbf)
       E%ehf = E%ehf + traceprod_sym_packed(d(:,ii), f(:,ii), nbf)
+      if (present(pcm_reaction_potential)) then
+        E%epcm = E%epcm + 0.5_dp * traceprod_sym_packed(d(:,ii), pcm_reaction_potential, nbf)
+      end if
     end do
 
     E%ehf = 0.5_dp * (E%ehf + E%ehf1)

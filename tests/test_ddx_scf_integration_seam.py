@@ -470,6 +470,13 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         calc_jk_xc = text.split("subroutine calc_jk_xc", 1)[1].split("end subroutine calc_jk_xc", 1)[0]
         self.assertIn("E%epcm = 0.0_dp", calc_jk_xc)
 
+    def test_calc_jk_xc_records_opt_in_pcm_energy_without_double_counting_total(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        calc_jk_xc = text.split("subroutine calc_jk_xc", 1)[1].split("end subroutine calc_jk_xc", 1)[0]
+        self.assertIn("E%epcm = E%epcm + 0.5_dp * traceprod_sym_packed(d(:,ii), pcm_reaction_potential, nbf)", calc_jk_xc)
+        self.assertIn("E%etot = E%ehf + E%nenergy", calc_jk_xc)
+        self.assertNotIn("E%etot = E%ehf + E%nenergy + E%epcm", calc_jk_xc)
+
 
 if __name__ == "__main__":
     unittest.main()
