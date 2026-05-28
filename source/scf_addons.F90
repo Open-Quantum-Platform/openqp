@@ -1546,15 +1546,12 @@ contains
     E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     fock_ao = 0.0_dp
+    if (present(pcm_reaction_potential_in) .and. present(dens_old)) then
+      error stop 'calc_fock: reference PCM incremental Fock is not validated'
+    end if
     if (present(dens_old)) then
-      if (present(pcm_reaction_potential_in)) then
-        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old, &
-                      pcm_reaction_potential=pcm_reaction_potential_in)
-      else
-        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
-      end if
+      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
     else
       if (present(pcm_reaction_potential_in)) then
         call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &

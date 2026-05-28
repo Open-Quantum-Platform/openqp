@@ -607,6 +607,15 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("pcm_reaction_potential=pcm_reaction_potential_in", calc_fock)
         self.assertNotIn("pcm%enabled", calc_fock.lower())
 
+    def test_calc_fock_rejects_reference_pcm_incremental_fock_shortcut(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        calc_fock = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]
+        self.assertIn("reference PCM incremental Fock is not validated", calc_fock)
+        self.assertIn("present(pcm_reaction_potential_in)", calc_fock)
+        self.assertIn("present(dens_old)", calc_fock)
+        incremental_branch = calc_fock.split("if (present(dens_old)) then", 1)[1].split("else", 1)[0]
+        self.assertNotIn("pcm_reaction_potential=pcm_reaction_potential_in", incremental_branch)
+
     def test_scf_energy_type_has_dedicated_pcm_bookkeeping_field(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         energy_type = text.split("type :: scf_energy_t", 1)[1].split("end type scf_energy_t", 1)[0]
