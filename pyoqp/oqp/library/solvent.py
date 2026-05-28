@@ -113,6 +113,10 @@ def reference_scf_pcm_coupling_contract(density_blocks, cavity_xyz, reaction_pot
         "y": phi_cav["y"],
         "z": phi_cav["z"],
         "reaction_potential": reaction["reaction_potential"],
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
     }
 
 

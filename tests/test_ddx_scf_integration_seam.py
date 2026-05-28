@@ -203,7 +203,12 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(contract["x"], [0.0, 1.0])
         self.assertEqual(contract["y"], [0.1, 1.1])
         self.assertEqual(contract["z"], [0.2, 1.2])
+        self.assertEqual(contract["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(contract["reference_target"], "RHF/ROHF reference density")
+        self.assertEqual(contract["response_solvent_coupling"], "not enabled")
+        self.assertEqual(contract["gradient_support"], "not enabled")
         self.assertNotIn("density_blocks", contract)
+        self.assertNotIn("state_density", contract)
 
     def test_reference_scf_pcm_energy_terms_use_validated_packed_density_and_potential(self):
         import importlib.util
