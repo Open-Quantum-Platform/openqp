@@ -12,6 +12,7 @@ import ast
 import csv
 import json
 import re
+import shlex
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -938,6 +939,65 @@ def summarize_validation_control_inputs(validation_manifest: dict[str, Any]) -> 
     }
 
 
+def _openqp_command(input_path: Path, output_log: str) -> str:
+    """Return a quoted low-thread OpenQP command for a planned control run."""
+
+    return (
+        f"cd {shlex.quote(str(input_path.parent))} && "
+        "OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4 "
+        f"openqp --nompi {shlex.quote(input_path.name)} > {shlex.quote(output_log)} 2>&1"
+    )
+
+
+def summarize_validation_control_scripts(validation_control_inputs: dict[str, Any]) -> dict[str, Any]:
+    """Plan exact validation-control shell commands without writing or running them."""
+
+    components = []
+    for item in validation_control_inputs.get("components", []):
+        component = str(item.get("component") or "")
+        if not component:
+            continue
+        inputs = item.get("existing_input_files", {})
+        missing = [
+            label.removesuffix("_exists")
+            for label, exists in inputs.items()
+            if label.endswith("_exists") and not exists
+        ]
+        gradient_input = Path(str(inputs.get("gradient_input") or ""))
+        plus_input = Path(str(inputs.get("plus_input") or ""))
+        minus_input = Path(str(inputs.get("minus_input") or ""))
+        script_path = gradient_input.parents[1] / "validation_controls" / f"run_{component}_controls.sh"
+        commands = []
+        if not missing:
+            commands = [
+                _openqp_command(gradient_input, f"grad_{component}_control.log"),
+                _openqp_command(plus_input, f"e_{component}_plus_control.log"),
+                _openqp_command(minus_input, f"e_{component}_minus_control.log"),
+            ]
+        components.append(
+            {
+                "component": component,
+                "axis": item.get("axis"),
+                "script_path": str(script_path),
+                "commands": commands,
+                "command_count": len(commands),
+                "missing_existing_inputs": sorted(set(missing)),
+                "planned_outputs": item.get("planned_outputs", {}),
+            }
+        )
+    missing_components = [item for item in components if item["missing_existing_inputs"]]
+    return {
+        "control_scope": "validation_control_scripts_plan_only",
+        "jobs_launched": False,
+        "scripts_written": False,
+        "selected_case": validation_control_inputs.get("selected_case", {}),
+        "component_count": len(components),
+        "components": components,
+        "next_action": "blocked_missing_existing_inputs" if missing_components else "manual_review_before_launch",
+        "scope_guard": "no shell scripts written and no OpenQP jobs launched; commands are a review-only launch plan",
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -1089,6 +1149,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Package exact existing inputs and planned outputs for no-run validation-control generation",
     )
+    parser.add_argument(
+        "--validation-control-scripts",
+        action="store_true",
+        help="Plan low-thread validation-control commands without writing scripts or launching OpenQP jobs",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1131,6 +1196,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--validation-control-inputs accepts exactly one source-validation manifest JSON")
         validation_manifest = json.loads(args.csv_path[0].read_text())
         summary = summarize_validation_control_inputs(validation_manifest)
+    elif args.validation_control_scripts:
+        if len(args.csv_path) != 1:
+            parser.error("--validation-control-scripts accepts exactly one validation-control inputs JSON")
+        validation_control_inputs = json.loads(args.csv_path[0].read_text())
+        summary = summarize_validation_control_scripts(validation_control_inputs)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

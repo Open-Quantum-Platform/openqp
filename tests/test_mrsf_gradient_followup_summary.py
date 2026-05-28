@@ -1037,6 +1037,56 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn('"control_scope": "validation_control_inputs_only"', written)
         self.assertIn('"jobs_launched": false', written)
 
+    def test_validation_control_scripts_plan_commands_without_launching_jobs(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "h2s" / "mrsf" / "root_5"
+            grad_dir = root_dir / "grad"
+            plus_dir = root_dir / "e_a0_z_plus"
+            minus_dir = root_dir / "e_a0_z_minus"
+            grad_dir.mkdir(parents=True)
+            plus_dir.mkdir(parents=True)
+            minus_dir.mkdir(parents=True)
+            controls = {
+                "selected_case": {"molecule": "h2s", "method": "mrsf", "root": 5, "physical_state": "S4"},
+                "components": [
+                    {
+                        "component": "a0_z",
+                        "axis": "z",
+                        "existing_input_files": {
+                            "gradient_input": str(grad_dir / "grad.inp"),
+                            "gradient_input_exists": True,
+                            "plus_input": str(plus_dir / "e_a0_z_plus.inp"),
+                            "plus_input_exists": True,
+                            "minus_input": str(minus_dir / "e_a0_z_minus.inp"),
+                            "minus_input_exists": True,
+                        },
+                        "planned_outputs": {
+                            "fd_component_csv": str(root_dir / "validation_controls" / "fd_rerun_a0_z_components.csv"),
+                            "fd_summary_json": str(root_dir / "validation_controls" / "fd_rerun_a0_z_summary.json"),
+                            "no_fix_control_json": str(root_dir / "validation_controls" / "no_fix_a0_z_control.json"),
+                        },
+                    }
+                ],
+            }
+
+            scripts = module.summarize_validation_control_scripts(controls)
+
+        self.assertEqual("validation_control_scripts_plan_only", scripts["control_scope"])
+        self.assertFalse(scripts["jobs_launched"])
+        self.assertFalse(scripts["scripts_written"])
+        self.assertEqual("manual_review_before_launch", scripts["next_action"])
+        self.assertEqual(1, scripts["component_count"])
+        component = scripts["components"][0]
+        self.assertEqual("a0_z", component["component"])
+        self.assertTrue(component["script_path"].endswith("validation_controls/run_a0_z_controls.sh"))
+        self.assertEqual(3, component["command_count"])
+        self.assertIn("OMP_NUM_THREADS=4", component["commands"][0])
+        self.assertIn("openqp --nompi grad.inp", component["commands"][0])
+        self.assertIn("openqp --nompi e_a0_z_plus.inp", component["commands"][1])
+        self.assertIn("openqp --nompi e_a0_z_minus.inp", component["commands"][2])
+        self.assertIn("no shell scripts written", scripts["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
