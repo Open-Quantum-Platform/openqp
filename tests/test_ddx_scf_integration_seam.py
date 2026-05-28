@@ -621,6 +621,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         )
         self.assertEqual(request["call_mode"], "non_incremental_only")
         self.assertEqual(request["scf_state_incremental_fock"], False)
+        self.assertFalse(request["scf_state_dens_old_present"])
+        self.assertFalse(request["scf_state_f_old_present"])
         self.assertEqual(request["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
 
         with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
@@ -636,6 +638,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(disabled["call_mode"], "disabled_no_payload")
         self.assertFalse(disabled["payload_present"])
         self.assertTrue(disabled["scf_state_incremental_fock"])
+        self.assertTrue(disabled["scf_state_dens_old_present"])
+        self.assertTrue(disabled["scf_state_f_old_present"])
 
     def test_calc_fock_pcm_incremental_guard_checks_both_old_density_and_fock_state(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")

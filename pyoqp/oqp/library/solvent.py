@@ -389,9 +389,13 @@ def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_
     guard.  Presence of either buffer means the incremental-Fock shortcut is in
     play and reviewed reference-PCM payloads must fail fast.
     """
-    incremental_fock = dens_old is not None or f_old is not None
+    dens_old_present = dens_old is not None
+    f_old_present = f_old is not None
+    incremental_fock = dens_old_present or f_old_present
     request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=incremental_fock)
     request["scf_state_incremental_fock"] = incremental_fock
+    request["scf_state_dens_old_present"] = dens_old_present
+    request["scf_state_f_old_present"] = f_old_present
     request["scf_state_guard"] = "dens_old/f_old presence blocks reviewed reference PCM payloads"
     return request
 
