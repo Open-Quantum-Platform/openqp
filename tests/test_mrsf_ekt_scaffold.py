@@ -43,6 +43,20 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("ekt_metric = density_mo", source)
         self.assertIn("ekt_operator = fock_mo - lagrangian_mo", source)
 
+    def test_fortran_module_uses_relaxed_target_state_density_and_lagrangian(self):
+        source = read("source/modules/tdhf_mrsf_ekt.F90")
+
+        self.assertIn("use tdhf_mrsf_z_vector_mod, only: tdhf_mrsf_z_vector", source)
+        self.assertIn("call tdhf_mrsf_z_vector(infos)", source)
+        self.assertIn("OQP_td_p", source)
+        self.assertIn("OQP_WAO", source)
+        self.assertIn("density_alpha_mo", source)
+        self.assertIn("density_beta_mo", source)
+        self.assertIn("density_mo = density_alpha_mo + density_beta_mo", source)
+        self.assertIn("lagrangian_mo", source)
+        self.assertNotIn("Fock/Lagrangian proxy", source)
+        self.assertNotIn("call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, lag_pack)", source)
+
     def test_examples_cover_mrsf_ekt_ip_and_ea(self):
         cases = {
             "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp.inp": "type=mrsf_ekt_ip",
