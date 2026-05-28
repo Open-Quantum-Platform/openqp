@@ -596,6 +596,45 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 incremental_fock="unknown",
             )
 
+    def test_reference_scf_pcm_calc_fock_request_from_scf_state_blocks_old_buffers(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_calc_fock_request_state", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25]],
+            [0.1, 0.2, 0.3],
+        )
+        mol = types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload)
+        request = solvent.reference_scf_pcm_calc_fock_request_from_scf_state(
+            mol,
+            dens_old=None,
+            f_old=None,
+        )
+        self.assertEqual(request["call_mode"], "non_incremental_only")
+        self.assertEqual(request["scf_state_incremental_fock"], False)
+        self.assertEqual(request["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
+
+        with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
+            solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=[0.0], f_old=None)
+        with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
+            solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=None, f_old=[0.0])
+
+        disabled = solvent.reference_scf_pcm_calc_fock_request_from_scf_state(
+            types.SimpleNamespace(get_pcm_runtime_payload=lambda: {}),
+            dens_old=[0.0],
+            f_old=[0.0],
+        )
+        self.assertEqual(disabled["call_mode"], "disabled_no_payload")
+        self.assertFalse(disabled["payload_present"])
+        self.assertTrue(disabled["scf_state_incremental_fock"])
+
     def test_calc_fock_pcm_incremental_guard_checks_both_old_density_and_fock_state(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         body = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]

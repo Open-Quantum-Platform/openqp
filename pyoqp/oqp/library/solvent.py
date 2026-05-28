@@ -377,6 +377,21 @@ def reference_scf_pcm_calc_fock_request(mol, *, incremental_fock: bool = False):
     return handoff
 
 
+def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_old=None):
+    """Derive the PCM ``calc_fock`` request from current SCF buffer state.
+
+    A future SCF caller can use this dependency-light shim to map OpenQP's
+    old-density/old-Fock buffers onto the existing non-incremental-only request
+    guard.  Presence of either buffer means the incremental-Fock shortcut is in
+    play and reviewed reference-PCM payloads must fail fast.
+    """
+    incremental_fock = dens_old is not None or f_old is not None
+    request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=incremental_fock)
+    request["scf_state_incremental_fock"] = incremental_fock
+    request["scf_state_guard"] = "dens_old/f_old presence blocks reviewed reference PCM payloads"
+    return request
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
