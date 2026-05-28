@@ -483,6 +483,12 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         missing_backend_status.pop("backend_validation_status")
         with self.assertRaisesRegex(ValueError, "backend_validation_status"):
             solvent.reference_scf_pcm_reaction_potential_from_payload(missing_backend_status)
+        with self.assertRaisesRegex(ValueError, "OQP::pcm_reaction_potential values must be numeric"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload(
+                {**payload, "OQP::pcm_reaction_potential": [True, 0.2, 0.3]}
+            )
+        with self.assertRaisesRegex(ValueError, "OQP::pcm_epcm must be numeric"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "OQP::pcm_epcm": False})
 
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util

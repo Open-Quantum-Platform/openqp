@@ -6,6 +6,8 @@ from math import isfinite, isqrt
 
 
 def _as_float_list(values, *, name: str):
+    if any(isinstance(value, bool) for value in values):
+        raise ValueError(f"{name} values must be numeric, not boolean")
     floats = [float(value) for value in values]
     if any(not isfinite(value) for value in floats):
         raise ValueError(f"{name} values must be finite")
@@ -312,7 +314,10 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
             raise ValueError("PCM runtime payload expected_packed_ao_length must match nbf * (nbf + 1) / 2")
     if payload.get("packed_ao_shape_formula", "nbf * (nbf + 1) / 2") != "nbf * (nbf + 1) / 2":
         raise ValueError("PCM runtime payload packed_ao_shape_formula must be nbf * (nbf + 1) / 2")
-    epcm = float(payload["OQP::pcm_epcm"])
+    epcm_value = payload["OQP::pcm_epcm"]
+    if isinstance(epcm_value, bool):
+        raise ValueError("OQP::pcm_epcm must be numeric, not boolean")
+    epcm = float(epcm_value)
     if not isfinite(epcm):
         raise ValueError("OQP::pcm_epcm must be finite")
 
