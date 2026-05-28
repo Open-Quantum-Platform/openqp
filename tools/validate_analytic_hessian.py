@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--top", type=int, default=10, help="Largest components to report")
     parser.add_argument("--output", type=Path, help="Optional JSON summary output path")
     parser.add_argument("--method", help="Method label for contextual validation summaries")
-    parser.add_argument("--td-type", default="none", help="TDHF type label, or 'none' for ground state")
+    parser.add_argument("--td-type", help="TDHF type label, or 'none' for ground state")
     parser.add_argument("--state", type=int, help="State/root index used for the comparison")
     parser.add_argument("--molecule", help="Molecule/system label")
     parser.add_argument("--basis", help="Basis-set label")
@@ -208,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     reference = _load_matrix(args.reference)
     contextual_fields = [
         args.method,
+        args.td_type,
         args.state,
         args.molecule,
         args.basis,
@@ -220,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
             name
             for name, value in [
                 ("--method", args.method),
+                ("--td-type", args.td_type),
                 ("--state", args.state),
                 ("--molecule", args.molecule),
                 ("--basis", args.basis),

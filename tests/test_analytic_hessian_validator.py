@@ -117,6 +117,39 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertFalse(summary["passed"])
         self.assertIn("max_abs_diff", summary["failed_metrics"])
 
+    def test_cli_requires_td_type_when_any_validation_metadata_is_supplied(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            analytic = tmp / "analytic.txt"
+            reference = tmp / "reference.txt"
+            analytic.write_text("1.0 0.0\n0.0 1.0\n")
+            reference.write_text("1.0 0.0\n0.0 1.0\n")
+
+            with self.assertRaises(SystemExit) as err:
+                validator.main(
+                    [
+                        str(analytic),
+                        str(reference),
+                        "--method",
+                        "hf",
+                        "--state",
+                        "0",
+                        "--molecule",
+                        "h2",
+                        "--basis",
+                        "sto-3g",
+                        "--displacement",
+                        "0.005",
+                        "--max-tolerance",
+                        "0.003",
+                        "--rms-tolerance",
+                        "0.002",
+                    ]
+                )
+
+        self.assertNotEqual(err.exception.code, 0)
+
     def test_cli_writes_contextual_validation_summary_when_metadata_is_supplied(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as tmpdir:
