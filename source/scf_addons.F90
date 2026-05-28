@@ -1323,6 +1323,9 @@ contains
     if (size(f,1) /= size(reaction_potential)) then
       error stop 'add_reference_pcm_reaction_field: packed AO reaction field size mismatch'
     end if
+    if (nfocks < 1) then
+      error stop 'add_reference_pcm_reaction_field: nfocks must be positive for reference PCM'
+    end if
     if (size(f,2) < nfocks) then
       error stop 'add_reference_pcm_reaction_field: insufficient Fock blocks for reference PCM'
     end if

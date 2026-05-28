@@ -316,6 +316,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             "end subroutine add_reference_pcm_reaction_field", 1
         )[0]
         self.assertIn("size(f,1) /= size(reaction_potential)", helper)
+        self.assertIn("nfocks < 1", helper)
         self.assertIn("size(f,2) < nfocks", helper)
         self.assertIn("do ii = 1, nfocks", helper)
         self.assertIn("f(:,ii) = f(:,ii) + reaction_potential", helper)
