@@ -900,6 +900,15 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
                     "diagnostic_family": "localized_z_component",
                     "root_dir": str(root_dir),
                     "components_to_validate": ["a0_z"],
+                    "bad_components_to_validate": [
+                        {
+                            "component": "a0_z",
+                            "axis": "z",
+                            "abs_diff_ha_per_bohr": 0.07927826,
+                            "analytic_ha_per_bohr": -0.14875174,
+                            "fd_ha_per_bohr": -0.22803,
+                        }
+                    ],
                 }
             }
 
@@ -907,6 +916,18 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
 
         self.assertEqual("h2s", manifest["selected_case"]["molecule"])
         self.assertEqual(["a0_z"], manifest["components_to_validate"])
+        self.assertEqual(
+            [
+                {
+                    "component": "a0_z",
+                    "axis": "z",
+                    "abs_diff_ha_per_bohr": 0.07927826,
+                    "analytic_ha_per_bohr": -0.14875174,
+                    "fd_ha_per_bohr": -0.22803,
+                }
+            ],
+            manifest["bad_components_to_validate"],
+        )
         self.assertTrue(manifest["existing_evidence"]["root_dir_exists"])
         self.assertEqual(2, manifest["existing_evidence"]["log_count"])
         self.assertFalse(manifest["existing_evidence"]["trah_detected"])

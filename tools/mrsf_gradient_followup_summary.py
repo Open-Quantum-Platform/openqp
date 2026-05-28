@@ -624,6 +624,24 @@ def _line_snippets(source_text: str, lines: Iterable[int], limit: int = 3) -> li
     return snippets
 
 
+def _bad_components_for_validation(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    candidate = plan.get("selected_candidate") or {}
+    result = []
+    for item in candidate.get("bad_components") or []:
+        if not item.get("component"):
+            continue
+        result.append(
+            {
+                "component": str(item.get("component")),
+                "axis": str(item.get("axis", "")),
+                "abs_diff_ha_per_bohr": item.get("abs_diff_ha_per_bohr"),
+                "analytic_ha_per_bohr": item.get("analytic_ha_per_bohr"),
+                "fd_ha_per_bohr": item.get("fd_ha_per_bohr"),
+            }
+        )
+    return result
+
+
 def _next_validation_plan(source_plan: dict[str, Any]) -> dict[str, Any]:
     candidate = source_plan.get("selected_candidate") or {}
     bad_components = candidate.get("bad_components") or []
@@ -636,6 +654,7 @@ def _next_validation_plan(source_plan: dict[str, Any]) -> dict[str, Any]:
         "diagnostic_family": source_plan.get("diagnostic_family"),
         "root_dir": candidate.get("root_dir"),
         "components_to_validate": component_names,
+        "bad_components_to_validate": _bad_components_for_validation(source_plan),
         "requires_no_fix_control": True,
         "requires_finite_difference_rerun": True,
         "requires_root_continuity_evidence": True,
@@ -773,6 +792,7 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
     log_paths = sorted(root_dir.glob("grad/*.log")) + sorted(root_dir.glob("e_*/*.log")) if root_dir_exists else []
     trah_detected = _detect_trah_in_logs(log_paths)
     components = [str(item) for item in plan.get("components_to_validate", [])]
+    bad_components_to_validate = list(plan.get("bad_components_to_validate") or [])
     control_dir = root_dir / "validation_controls" if plan.get("root_dir") else Path("validation_controls")
     control_artifact_plan = []
     fd_artifact_exists: list[bool] = []
@@ -842,6 +862,7 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
             "root_dir": str(root_dir) if plan.get("root_dir") else None,
         },
         "components_to_validate": components,
+        "bad_components_to_validate": bad_components_to_validate,
         "existing_evidence": {
             "root_dir_exists": root_dir_exists,
             "log_count": len(log_paths),
