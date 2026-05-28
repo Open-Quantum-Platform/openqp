@@ -461,6 +461,15 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "expected_packed_ao_length": 4})
         with self.assertRaisesRegex(ValueError, "packed_ao_shape_formula"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "packed_ao_shape_formula": "n*n"})
+        for required_shape_key in (
+            "packed_ao_length",
+            "expected_packed_ao_length",
+            "packed_ao_shape_formula",
+        ):
+            missing_shape_payload = dict(payload)
+            missing_shape_payload.pop(required_shape_key)
+            with self.assertRaisesRegex(ValueError, required_shape_key):
+                solvent.reference_scf_pcm_reaction_potential_from_payload(missing_shape_payload)
 
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util

@@ -281,6 +281,13 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
         raise ValueError("OQP::pcm_reaction_potential must not be empty")
     nbf = _packed_nbf(len(potential))
     expected_packed_ao_length = nbf * (nbf + 1) // 2
+    for required_shape_key in (
+        "packed_ao_length",
+        "expected_packed_ao_length",
+        "packed_ao_shape_formula",
+    ):
+        if required_shape_key not in payload:
+            raise ValueError(f"PCM runtime payload missing {required_shape_key}")
     if "nbf" in payload:
         payload_nbf = payload["nbf"]
         if isinstance(payload_nbf, bool) or not isinstance(payload_nbf, int):
