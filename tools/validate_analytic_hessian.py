@@ -36,7 +36,13 @@ def _as_float_matrix(name: str, value: Any) -> Matrix:
                 raise ValueError(f"{name} must be a nonempty 2-D matrix")
         elif len(row) != width:
             raise ValueError(f"{name} rows must all have the same length")
-        matrix.append([float(item) for item in row])
+        converted_row = []
+        for col_index, item in enumerate(row):
+            number = float(item)
+            if not math.isfinite(number):
+                raise ValueError(f"{name}[{len(matrix)}][{col_index}] must be finite")
+            converted_row.append(number)
+        matrix.append(converted_row)
     return matrix
 
 

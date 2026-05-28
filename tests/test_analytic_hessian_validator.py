@@ -48,6 +48,15 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "same shape"):
             validator.compare_hessians([[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0, 0.0]])
 
+    def test_compare_hessians_rejects_nan_or_infinite_components(self):
+        validator = load_validator()
+
+        with self.assertRaisesRegex(ValueError, r"analytic\[0\]\[1\] must be finite"):
+            validator.compare_hessians([[0.0, float("nan")], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]])
+
+        with self.assertRaisesRegex(ValueError, r"reference\[1\]\[0\] must be finite"):
+            validator.compare_hessians([[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [float("inf"), 0.0]])
+
     def test_summary_json_is_stable_and_does_not_include_full_matrices(self):
         validator = load_validator()
         summary = validator.compare_hessians([[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]], top_n=1)
