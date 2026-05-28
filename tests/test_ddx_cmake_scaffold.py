@@ -137,6 +137,15 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("pcm_reaction_potential_in", text)
         self.assertIn("non-incremental path", text)
 
+    def test_ddx_seam_doc_records_molecule_payload_roundtrip_allowlist(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("Molecule.set_pcm_runtime_payload()", text)
+        self.assertIn("JSON round-trip persistence", text)
+        self.assertIn("explicit allowlist", text)
+        self.assertIn("backend_validation_status", text)
+        self.assertIn("must not be stripped", text)
+        self.assertIn("before exposing `pcm_reaction_potential_in`", text)
+
     def test_ddx_seam_doc_records_call_site_shape_audit_metadata(self):
         text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
         bridge_section = text.split("reference_scf_pcm_calc_fock_call_site_bridge()", 1)[1].split(
