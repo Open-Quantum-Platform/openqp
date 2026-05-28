@@ -998,18 +998,33 @@ def summarize_validation_control_scripts(
         minus_input = Path(str(inputs.get("minus_input") or ""))
         script_path = gradient_input.parents[1] / "validation_controls" / f"run_{component}_controls.sh"
         commands = []
+        command_manifest = []
         if not missing:
-            commands = [
-                _openqp_command(gradient_input, f"grad_{component}_control.log"),
-                _openqp_command(plus_input, f"e_{component}_plus_control.log"),
-                _openqp_command(minus_input, f"e_{component}_minus_control.log"),
+            planned_commands = [
+                ("gradient", gradient_input, f"grad_{component}_control.log"),
+                ("plus_displacement", plus_input, f"e_{component}_plus_control.log"),
+                ("minus_displacement", minus_input, f"e_{component}_minus_control.log"),
             ]
+            for role, input_path, output_log in planned_commands:
+                command = _openqp_command(input_path, output_log)
+                commands.append(command)
+                command_manifest.append(
+                    {
+                        "role": role,
+                        "input": str(input_path),
+                        "workdir": str(input_path.parent),
+                        "log": output_log,
+                        "thread_count": 4,
+                        "command": command,
+                    }
+                )
         components.append(
             {
                 "component": component,
                 "axis": item.get("axis"),
                 "script_path": str(script_path),
                 "commands": commands,
+                "command_manifest": command_manifest,
                 "command_count": len(commands),
                 "execution_guard": {
                     "launch_allowed": False,

@@ -1120,6 +1120,35 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn("openqp --nompi grad.inp", component["commands"][0])
         self.assertIn("openqp --nompi e_a0_z_plus.inp", component["commands"][1])
         self.assertIn("openqp --nompi e_a0_z_minus.inp", component["commands"][2])
+        self.assertEqual(
+            [
+                {
+                    "role": "gradient",
+                    "input": str(grad_dir / "grad.inp"),
+                    "workdir": str(grad_dir),
+                    "log": "grad_a0_z_control.log",
+                    "thread_count": 4,
+                    "command": component["commands"][0],
+                },
+                {
+                    "role": "plus_displacement",
+                    "input": str(plus_dir / "e_a0_z_plus.inp"),
+                    "workdir": str(plus_dir),
+                    "log": "e_a0_z_plus_control.log",
+                    "thread_count": 4,
+                    "command": component["commands"][1],
+                },
+                {
+                    "role": "minus_displacement",
+                    "input": str(minus_dir / "e_a0_z_minus.inp"),
+                    "workdir": str(minus_dir),
+                    "log": "e_a0_z_minus_control.log",
+                    "thread_count": 4,
+                    "command": component["commands"][2],
+                },
+            ],
+            component["command_manifest"],
+        )
         snapshot = scripts["source_snapshot"]
         self.assertEqual("source_file_hashes_for_manual_review", snapshot["snapshot_scope"])
         self.assertTrue(snapshot["source_files"][0]["exists"])
