@@ -385,6 +385,19 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertNotIn("density_blocks", payload)
         self.assertNotIn("state_density", payload)
 
+    def test_molecule_round_trips_pcm_runtime_payload_outside_fortran_tags(self):
+        text = (ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py").read_text(encoding="utf-8")
+        self.assertIn("self.pcm_runtime_payload = {}", text)
+        self.assertIn("def set_pcm_runtime_payload", text)
+        self.assertIn("def get_pcm_runtime_payload", text)
+        self.assertIn("def _restore_pcm_runtime_payload", text)
+        self.assertIn("OQP::pcm_reaction_potential", text)
+        self.assertIn("OQP::pcm_epcm", text)
+        self.assertIn("pcm_runtime_payload_version", text)
+        self.assertIn("data.update(self.get_pcm_runtime_payload())", text)
+        self.assertIn("self._restore_pcm_runtime_payload(data)", text)
+        self.assertNotIn("'OQP::pcm_reaction_potential',\n            'OQP::DM_A'", text)
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
