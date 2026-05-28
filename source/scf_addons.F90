@@ -1546,7 +1546,7 @@ contains
     E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     fock_ao = 0.0_dp
-    if (present(pcm_reaction_potential_in) .and. present(dens_old)) then
+    if (present(pcm_reaction_potential_in) .and. (present(dens_old) .or. present(f_old))) then
       error stop 'calc_fock: reference PCM incremental Fock is not validated'
     end if
     if (present(dens_old)) then
