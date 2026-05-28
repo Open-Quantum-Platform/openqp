@@ -1614,6 +1614,52 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("instrument_source_unit_norm_trace_before_fd_validation", diagnostic["next_action"])
         self.assertIn("source/unit-level only", diagnostic["scope_guard"])
 
+    def test_ball_open_open_norm_trace_verifies_singlet_and_triplet_identities_without_fd(self):
+        module = load_module()
+        diagnostic = {
+            "diagnostic_scope": "mrsf_ball_open_open_split_source_unit_diagnostic",
+            "selected": "h2s root 5 / physical S4",
+            "component": "a0_z",
+            "one_variable_under_test": "ball_open_open_alpha_beta_split",
+            "candidate_components": {
+                "current_pair_sum_alpha": {},
+                "current_pair_sum_beta": {},
+                "oo_left_alpha_cross_spin": {},
+                "oo_right_beta_cross_spin_transpose": {},
+            },
+        }
+        samples = {
+            "current_pair_sum_alpha": [[1.0, 2.0], [3.0, 4.0]],
+            "current_pair_sum_beta": [[0.5, -1.0], [1.5, 2.5]],
+            "singlet": {
+                "ball_oo": [[2.0, -1.0], [0.5, 3.0]],
+                "oo_left_alpha_cross_spin": [[1.25, -0.5], [0.25, 2.0]],
+                "oo_right_beta_cross_spin_transpose": [[0.75, -0.5], [0.25, 1.0]],
+            },
+            "triplet": {
+                "ball_oo": [[-0.25, 1.0], [2.0, -3.0]],
+                "oo_left_alpha_cross_spin": [[-0.5, 0.25], [1.5, -1.0]],
+                "oo_right_beta_cross_spin_transpose": [[0.25, 0.75], [0.5, -2.0]],
+            },
+        }
+
+        trace = module.summarize_mrsf_ball_open_open_norm_trace(diagnostic, samples)
+
+        self.assertEqual("mrsf_ball_open_open_source_unit_norm_trace", trace["trace_scope"])
+        self.assertEqual("h2s root 5 / physical S4", trace["selected"])
+        self.assertEqual("a0_z", trace["component"])
+        self.assertTrue(trace["source_unit_identities_passed"])
+        self.assertFalse(trace["quantum_jobs_launched"])
+        self.assertFalse(trace["production_gradient_algebra_edited"])
+        self.assertFalse(trace["xc_handoff_changed"])
+        self.assertFalse(trace["ready_for_production_fix_claim"])
+        self.assertAlmostEqual(0.0, trace["identity_norms"]["singlet"]["reconstruction_residual_frobenius"])
+        self.assertAlmostEqual(0.0, trace["identity_norms"]["triplet"]["reconstruction_residual_frobenius"])
+        self.assertGreater(trace["candidate_norms"]["current_pair_sum_alpha_frobenius"], 0.0)
+        self.assertGreater(trace["candidate_norms"]["singlet_ball_oo_frobenius"], 0.0)
+        self.assertEqual("source_unit_identities_passed_ready_for_review_not_fd", trace["next_action"])
+        self.assertIn("no FD validation", trace["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

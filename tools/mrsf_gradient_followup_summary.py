@@ -1723,6 +1723,169 @@ def summarize_mrsf_ball_open_open_split_diagnostic(
     }
 
 
+def _as_matrix(value: Any) -> list[list[float]]:
+    if not isinstance(value, list) or not value or not all(isinstance(row, list) for row in value):
+        raise ValueError("matrix samples must be non-empty nested lists")
+    width = len(value[0])
+    if width == 0 or any(len(row) != width for row in value):
+        raise ValueError("matrix samples must be rectangular")
+    return [[float(item) for item in row] for row in value]
+
+
+def _matrix_add(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
+    if len(left) != len(right) or len(left[0]) != len(right[0]):
+        raise ValueError("matrix shape mismatch")
+    return [[left[i][j] + right[i][j] for j in range(len(left[0]))] for i in range(len(left))]
+
+
+def _matrix_sub(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
+    if len(left) != len(right) or len(left[0]) != len(right[0]):
+        raise ValueError("matrix shape mismatch")
+    return [[left[i][j] - right[i][j] for j in range(len(left[0]))] for i in range(len(left))]
+
+
+def _frobenius_norm(matrix: list[list[float]]) -> float:
+    return sum(item * item for row in matrix for item in row) ** 0.5
+
+
+def _oo_identity_norms(samples: dict[str, Any], state: str) -> dict[str, float]:
+    state_samples = dict(samples.get(state) or {})
+    ball_oo = _as_matrix(state_samples.get("ball_oo"))
+    left = _as_matrix(state_samples.get("oo_left_alpha_cross_spin"))
+    right = _as_matrix(state_samples.get("oo_right_beta_cross_spin_transpose"))
+    reconstructed = _matrix_add(left, right)
+    residual = _matrix_sub(reconstructed, ball_oo)
+    return {
+        "ball_oo_frobenius": _frobenius_norm(ball_oo),
+        "oo_left_alpha_cross_spin_frobenius": _frobenius_norm(left),
+        "oo_right_beta_cross_spin_transpose_frobenius": _frobenius_norm(right),
+        "reconstructed_ball_oo_frobenius": _frobenius_norm(reconstructed),
+        "reconstruction_residual_frobenius": _frobenius_norm(residual),
+    }
+
+
+def _source_unit_norm_trace_plan(split_diagnostic: dict[str, Any]) -> dict[str, Any]:
+    selected = str(split_diagnostic.get("selected") or "")
+    component = str(split_diagnostic.get("component") or "")
+    source_snapshot = dict(split_diagnostic.get("source_snapshot") or {})
+    required_norm_traces = []
+    for item in split_diagnostic.get("norm_comparison_plan") or []:
+        identity = str(item.get("identity") or "")
+        if not identity:
+            continue
+        required_norm_traces.append(
+            {
+                "identity": identity,
+                "trace_label": f"OQP_MRSF_BALL_OO_NORM {identity}",
+                "required_before_fd_validation": bool(item.get("required_before_fd_validation")),
+                "pass_condition": "frobenius_norm <= 1.0e-10 for reconstruction identities; component norms recorded without changing production algebra",
+            }
+        )
+    if not required_norm_traces:
+        required_norm_traces.append(
+            {
+                "identity": "left_alpha_plus_right_beta_transpose_reconstructs_ball_oo",
+                "trace_label": "OQP_MRSF_BALL_OO_NORM left_alpha_plus_right_beta_transpose_reconstructs_ball_oo",
+                "required_before_fd_validation": True,
+                "pass_condition": "frobenius_norm <= 1.0e-10 for reconstruction identities; component norms recorded without changing production algebra",
+            }
+        )
+    return {
+        "diagnostic_scope": "mrsf_ball_open_open_norm_trace_plan",
+        "source_unit_level_only": True,
+        "selected": selected,
+        "component": component,
+        "one_variable_under_test": str(
+            split_diagnostic.get("one_variable_under_test") or "ball_open_open_alpha_beta_split"
+        ),
+        "trace_label_prefix": "OQP_MRSF_BALL_OO_NORM",
+        "required_trace_fields": [
+            "identity",
+            "component",
+            "ball_oo_norm",
+            "left_alpha_cross_spin_norm",
+            "right_beta_cross_spin_transpose_norm",
+            "reconstruction_residual_norm",
+            "candidate_pair_sum_alpha_norm",
+            "candidate_pair_sum_beta_norm",
+        ],
+        "required_norm_traces": required_norm_traces,
+        "source_snapshot": source_snapshot,
+        "execution_status": "review_only_no_source_edit",
+        "jobs_launched": False,
+        "source_files_modified_by_planner": False,
+        "production_gradient_algebra_edited": False,
+        "xc_handoff_changed": False,
+        "ready_for_fd_validation": False,
+        "ready_for_production_fix_claim": False,
+        "launch_blockers": [
+            "manual_review_before_source_instrumentation",
+            "source_unit_trace_not_yet_implemented",
+            "finite_difference_jobs_not_started_by_this_planner",
+        ],
+        "next_action": "add_reviewed_source_unit_norm_trace_then_recheck_before_fd_validation",
+        "scope_guard": "source-unit norm trace plan only; no source edit, no quantum jobs, no XC handoff change, and no production fix claim",
+    }
+
+
+def summarize_mrsf_ball_open_open_norm_trace(
+    split_diagnostic: dict[str, Any],
+    samples: dict[str, Any] | None = None,
+    tolerance: float = 1.0e-10,
+) -> dict[str, Any]:
+    """Plan or evaluate a source-unit norm trace for the MRSF ball OO split.
+
+    With no samples, this returns the existing review-only trace plan.  With
+    synthetic or captured source-unit samples, it evaluates Frobenius norms for
+    the singlet/triplet OO identity without launching quantum jobs or modifying
+    production gradient/XC handoff algebra.
+    """
+
+    if samples is None:
+        return _source_unit_norm_trace_plan(split_diagnostic)
+
+    selected = str(split_diagnostic.get("selected") or "")
+    component = str(split_diagnostic.get("component") or "")
+    identity_norms = {
+        "singlet": _oo_identity_norms(samples, "singlet"),
+        "triplet": _oo_identity_norms(samples, "triplet"),
+    }
+    candidate_norms = {
+        "current_pair_sum_alpha_frobenius": _frobenius_norm(_as_matrix(samples.get("current_pair_sum_alpha"))),
+        "current_pair_sum_beta_frobenius": _frobenius_norm(_as_matrix(samples.get("current_pair_sum_beta"))),
+        "singlet_ball_oo_frobenius": identity_norms["singlet"]["ball_oo_frobenius"],
+        "triplet_ball_oo_frobenius": identity_norms["triplet"]["ball_oo_frobenius"],
+    }
+    identities_passed = all(
+        identity_norms[state]["reconstruction_residual_frobenius"] <= tolerance for state in ["singlet", "triplet"]
+    )
+    return {
+        "trace_scope": "mrsf_ball_open_open_source_unit_norm_trace",
+        "source_unit_level_only": True,
+        "selected": selected,
+        "component": component,
+        "one_variable_under_test": str(
+            split_diagnostic.get("one_variable_under_test") or "ball_open_open_alpha_beta_split"
+        ),
+        "tolerance": tolerance,
+        "identity_norms": identity_norms,
+        "candidate_norms": candidate_norms,
+        "source_unit_identities_passed": identities_passed,
+        "quantum_jobs_launched": False,
+        "source_files_modified_by_diagnostic": False,
+        "production_gradient_algebra_edited": False,
+        "xc_handoff_changed": False,
+        "ready_for_fd_validation": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "source_unit_identities_passed_ready_for_review_not_fd"
+            if identities_passed
+            else "fix_source_unit_identity_before_any_fd_validation"
+        ),
+        "scope_guard": "source-unit norm trace only; no FD validation, no quantum jobs, no production gradient algebra, and no XC handoff change",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -2004,6 +2167,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Expose source/unit-level ball/open-open alpha-beta candidate identities before FD validation",
     )
+    parser.add_argument(
+        "--mrsf-ball-open-open-norm-trace",
+        action="store_true",
+        help="Plan or evaluate source/unit-level ball/open-open norm traces; optional second JSON supplies matrix samples",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -2099,6 +2267,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--mrsf-ball-open-open-split-diagnostic accepts exactly one ball/open-open split inspection JSON")
         split_inspection = json.loads(args.csv_path[0].read_text())
         summary = summarize_mrsf_ball_open_open_split_diagnostic(split_inspection, source_root=args.source_root)
+    elif args.mrsf_ball_open_open_norm_trace:
+        if len(args.csv_path) not in {1, 2}:
+            parser.error("--mrsf-ball-open-open-norm-trace accepts diagnostic JSON plus optional matrix-samples JSON")
+        split_diagnostic = json.loads(args.csv_path[0].read_text())
+        samples = json.loads(args.csv_path[1].read_text()) if len(args.csv_path) == 2 else None
+        summary = summarize_mrsf_ball_open_open_norm_trace(split_diagnostic, samples)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
