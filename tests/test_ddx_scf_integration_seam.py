@@ -408,6 +408,16 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("self._restore_pcm_runtime_payload(data)", text)
         self.assertNotIn("'OQP::pcm_reaction_potential',\n            'OQP::DM_A'", text)
 
+    def test_molecule_pcm_runtime_payload_rejects_non_mapping_inputs(self):
+        text = (ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py").read_text(encoding="utf-8")
+        setter = text.split("def set_pcm_runtime_payload", 1)[1].split("def get_pcm_runtime_payload", 1)[0]
+        self.assertIn("isinstance(payload, dict)", setter)
+        self.assertIn("PCM runtime payload must be a mapping", setter)
+        self.assertLess(
+            setter.index("PCM runtime payload must be a mapping"),
+            setter.index("allowed_keys"),
+        )
+
     def test_reference_scf_pcm_reaction_potential_from_payload_requires_reviewed_scope(self):
         import importlib.util
 

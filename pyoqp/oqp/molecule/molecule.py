@@ -261,6 +261,9 @@ class Molecule:
         from ``self.tag`` so JSON round trips do not try to read/write unknown
         C/Fortran tagarray entries.
         """
+        if not isinstance(payload, dict):
+            raise ValueError("PCM runtime payload must be a mapping")
+
         allowed_keys = [
             'OQP::pcm_reaction_potential',
             'OQP::pcm_epcm',
