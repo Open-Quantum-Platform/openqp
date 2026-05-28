@@ -669,12 +669,16 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
     def test_calc_fock_pcm_incremental_guard_checks_both_old_density_and_fock_state(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         body = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]
-        guard = body.split("if (present(dens_old)) then", 1)[0]
+        guard = body.split("call calc_jk_xc", 1)[0]
         self.assertIn("present(pcm_reaction_potential_in)", guard)
         self.assertIn("present(dens_old)", guard)
         self.assertIn("present(f_old)", guard)
         self.assertIn("reference PCM incremental Fock is not validated", guard)
         self.assertIn("dens_old/f_old old-buffer state", guard)
+        self.assertIn("dens_old_present=true", guard)
+        self.assertIn("f_old_present=true", guard)
+        self.assertIn("dens_old_present=false", guard)
+        self.assertIn("f_old_present=false", guard)
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")

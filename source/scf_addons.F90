@@ -1546,8 +1546,14 @@ contains
     E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     fock_ao = 0.0_dp
-    if (present(pcm_reaction_potential_in) .and. (present(dens_old) .or. present(f_old))) then
-      error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state'
+    if (present(pcm_reaction_potential_in)) then
+      if (present(dens_old) .and. present(f_old)) then
+        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=true f_old_present=true'
+      else if (present(dens_old)) then
+        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=true f_old_present=false'
+      else if (present(f_old)) then
+        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=false f_old_present=true'
+      end if
     end if
     if (present(dens_old)) then
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
