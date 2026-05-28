@@ -749,6 +749,68 @@ def summarize_source_diagnostic_evidence(
     }
 
 
+def _detect_trah_in_logs(log_paths: Iterable[Path]) -> bool:
+    for log_path in log_paths:
+        text = log_path.read_text(errors="replace")
+        if "SCF did not converge. Restarting SCF with the TRAH method." in text:
+            return True
+        if "TRAH / Trust-Region Augmented Hessian Settings" in text:
+            return True
+    return False
+
+
+def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dict[str, Any]:
+    """Create a conservative manifest for the next validation controls.
+
+    The manifest records what evidence already exists for the selected stable
+    residual and what controls remain missing before any source/algebra fix can
+    be claimed.  It does not launch calculations or infer a mechanism.
+    """
+
+    plan = source_evidence.get("next_validation_plan") or {}
+    root_dir = Path(str(plan.get("root_dir") or ""))
+    root_dir_exists = bool(plan.get("root_dir")) and root_dir.exists()
+    log_paths = sorted(root_dir.glob("grad/*.log")) + sorted(root_dir.glob("e_*/*.log")) if root_dir_exists else []
+    trah_detected = _detect_trah_in_logs(log_paths)
+    components = [str(item) for item in plan.get("components_to_validate", [])]
+    return {
+        "selected_case": {
+            "molecule": plan.get("molecule"),
+            "method": plan.get("method"),
+            "root": plan.get("root"),
+            "physical_state": plan.get("physical_state"),
+            "diagnostic_family": plan.get("diagnostic_family"),
+            "root_dir": str(root_dir) if plan.get("root_dir") else None,
+        },
+        "components_to_validate": components,
+        "existing_evidence": {
+            "root_dir_exists": root_dir_exists,
+            "log_count": len(log_paths),
+            "trah_detected": trah_detected,
+            "log_paths": [str(path) for path in log_paths],
+        },
+        "required_controls": [
+            {
+                "control": "finite_difference_rerun_for_selected_components",
+                "components": components,
+                "status": "missing",
+                "reason": "static evidence is not a fresh FD validation of a source hypothesis",
+            },
+            {
+                "control": "no_fix_or_pre_change_control_same_case",
+                "status": "missing",
+                "reason": "needed to separate source-hypothesis effects from existing post-PR #153 residuals",
+            },
+            {
+                "control": "root_continuity_no_trah_evidence",
+                "status": "present" if root_dir_exists and log_paths and not trah_detected else "missing",
+                "reason": "existing logs are acceptable only when parseable and TRAH-free",
+            },
+        ],
+        "scope_guard": "diagnostic manifest only; no production algebra edit or fix claim",
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -890,6 +952,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Record static source signals for a planned stable source diagnostic without editing algebra",
     )
+    parser.add_argument(
+        "--source-validation-manifest",
+        action="store_true",
+        help="Record existing evidence and missing controls before any source-fix claim",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -922,6 +989,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--source-diagnostic-evidence accepts exactly one source-diagnostic plan JSON")
         source_plan = json.loads(args.csv_path[0].read_text())
         summary = summarize_source_diagnostic_evidence(source_plan, source_root=args.source_root)
+    elif args.source_validation_manifest:
+        if len(args.csv_path) != 1:
+            parser.error("--source-validation-manifest accepts exactly one source-diagnostic evidence JSON")
+        source_evidence = json.loads(args.csv_path[0].read_text())
+        summary = summarize_source_validation_manifest(source_evidence)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

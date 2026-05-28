@@ -879,6 +879,38 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn('"evidence_scope": "static_source_diagnostic_only"', written)
         self.assertIn('"z_vector_channel7_overwrites_mrsfcbc_with_td_abxc": true', written)
 
+    def test_source_validation_manifest_records_existing_evidence_and_missing_controls(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "h2s" / "mrsf" / "root_5"
+            (root_dir / "grad").mkdir(parents=True)
+            (root_dir / "e_a0_z_plus").mkdir(parents=True)
+            (root_dir / "e_a0_z_minus").mkdir(parents=True)
+            (root_dir / "grad" / "grad.log").write_text("no TRAH here\n")
+            (root_dir / "e_a0_z_plus" / "plus.log").write_text("no TRAH here\n")
+            evidence = {
+                "next_validation_plan": {
+                    "molecule": "h2s",
+                    "method": "mrsf",
+                    "root": 5,
+                    "physical_state": "S4",
+                    "diagnostic_family": "localized_z_component",
+                    "root_dir": str(root_dir),
+                    "components_to_validate": ["a0_z"],
+                }
+            }
+
+            manifest = module.summarize_source_validation_manifest(evidence)
+
+        self.assertEqual("h2s", manifest["selected_case"]["molecule"])
+        self.assertEqual(["a0_z"], manifest["components_to_validate"])
+        self.assertTrue(manifest["existing_evidence"]["root_dir_exists"])
+        self.assertEqual(2, manifest["existing_evidence"]["log_count"])
+        self.assertFalse(manifest["existing_evidence"]["trah_detected"])
+        self.assertIn("finite_difference_rerun", manifest["required_controls"][0]["control"])
+        self.assertEqual("missing", manifest["required_controls"][0]["status"])
+        self.assertIn("diagnostic manifest only", manifest["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
