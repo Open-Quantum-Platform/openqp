@@ -456,6 +456,10 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "OQP::pcm_reaction_potential"):
             solvent.reference_scf_pcm_reaction_potential_from_payload(missing_potential)
+        missing_nbf_payload = dict(payload)
+        missing_nbf_payload.pop("nbf")
+        with self.assertRaisesRegex(ValueError, "nbf"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload(missing_nbf_payload)
         with self.assertRaisesRegex(ValueError, "nbf"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 3})
         with self.assertRaisesRegex(ValueError, "nbf must be an integer"):
