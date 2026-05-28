@@ -64,8 +64,10 @@ def reference_scf_phi_cav_inputs(density_blocks, cavity_xyz):
 
     This prepares the dependency-light contract for the future
     ``electrostatic_potential_unweighted`` call that supplies ddX ``phi_cav``
-    from the RHF/ROHF reference density.  It does not enable runtime PCM or
-    define solvent energy bookkeeping.
+    from the RHF/ROHF reference density.  It returns the summed reference
+    density as ``density_packed`` so future callers cannot accidentally pass raw
+    spin-density blocks into the scalar MEP path.  It does not enable runtime
+    PCM or define solvent energy bookkeeping.
     """
     total_density = reference_scf_total_density(density_blocks)
     nbf = _packed_nbf(len(total_density))
@@ -78,6 +80,7 @@ def reference_scf_phi_cav_inputs(density_blocks, cavity_xyz):
         "nbf": nbf,
         "ncav": len(xyz_values) // 3,
         "total_density": total_density,
+        "density_packed": total_density,
         "cavity_xyz": xyz_values,
         "x": xyz_values[0::3],
         "y": xyz_values[1::3],

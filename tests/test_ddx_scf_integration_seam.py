@@ -148,6 +148,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["nbf"], 2)
         self.assertEqual(inputs["ncav"], 2)
         self.assertEqual(inputs["total_density"], [1.75, 0.0, 0.25])
+        self.assertEqual(inputs["density_packed"], [1.75, 0.0, 0.25])
+        self.assertNotIn("density_blocks", inputs)
         self.assertEqual(inputs["x"], [0.0, 1.0])
         self.assertEqual(inputs["y"], [0.1, 1.1])
         self.assertEqual(inputs["z"], [0.2, 1.2])
