@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from math import isqrt
+
 
 def _as_float_list(values, *, name: str):
     return [float(value) for value in values]
+
+
+def _packed_nbf(packed_length: int) -> int:
+    discriminant = 1 + 8 * packed_length
+    root = isqrt(discriminant)
+    if root * root != discriminant or (root - 1) % 2 != 0:
+        raise ValueError("reaction-field data must use triangular packed AO length")
+    return (root - 1) // 2
 
 
 def reference_scf_total_density(density_blocks):
@@ -26,6 +36,27 @@ def reference_scf_total_density(density_blocks):
     if any(len(block) != packed_length for block in blocks):
         raise ValueError("all density blocks must have the same packed length")
     return [sum(block[index] for block in blocks) for index in range(packed_length)]
+
+
+def reference_scf_reaction_field_contract(density_blocks, reaction_potential):
+    """Validate the first-scope packed AO reaction-field matrix contract.
+
+    This is a dependency-light guard for the future `calc_jk_xc` hook: the
+    reaction-field AO matrix must already be a packed triangular matrix matching
+    the RHF/ROHF reference density length.  The helper deliberately does not
+    enable runtime PCM or define final polarization-energy bookkeeping.
+    """
+    total_density = reference_scf_total_density(density_blocks)
+    potential = _as_float_list(reaction_potential, name="reaction_potential")
+    if len(potential) != len(total_density):
+        raise ValueError("reaction_potential must have the same packed length as the reference density")
+    nbf = _packed_nbf(len(potential))
+    return {
+        "nbf": nbf,
+        "nfocks": len(density_blocks),
+        "total_density": total_density,
+        "reaction_potential": potential,
+    }
 
 
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):

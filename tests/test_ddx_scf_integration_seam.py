@@ -102,6 +102,30 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "packed density blocks must not be empty"):
             solvent.reference_scf_total_density([[]])
 
+    def test_reference_scf_reaction_field_contract_validates_packed_matrix(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_rf_contract", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "same packed length"):
+            solvent.reference_scf_reaction_field_contract([[1.0, 0.5, 0.25]], [0.1, 0.2])
+        with self.assertRaisesRegex(ValueError, "triangular packed AO"):
+            solvent.reference_scf_reaction_field_contract([[1.0, 0.5]], [0.1, 0.2])
+
+        contract = solvent.reference_scf_reaction_field_contract(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+        self.assertEqual(contract["nbf"], 2)
+        self.assertEqual(contract["nfocks"], 2)
+        self.assertEqual(contract["total_density"], [1.75, 0.0, 0.25])
+        self.assertEqual(contract["reaction_potential"], [0.1, 0.2, 0.3])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
