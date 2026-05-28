@@ -1,5 +1,6 @@
 import csv
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -569,6 +570,52 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertIn('"target_bad_group_count": 2', written)
         self.assertIn(str(first), written)
         self.assertIn(str(second), written)
+
+    def test_root_continuity_targets_resolve_existing_dirs_and_record_missing_cases(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / "mrsf_s6_ovov_fix"
+            source_csv = base / "components.csv"
+            source_csv.parent.mkdir(parents=True, exist_ok=True)
+            source_csv.write_text("placeholder\n")
+            root_dir = base / "nh3" / "mrsf" / "root_4"
+            log_path = root_dir / "grad" / "grad.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                """
+  Spin-adapted spin-flip excitations
+ State #   1  Energy =   -7.315353 eV
+               <S^2> =    0.0000
+ State #   4  Energy =    2.734056 eV
+               <S^2> =    0.0000
+     Summary table
+ State      Energy       Excitation   Excitation(eV)  <S^2>         Transition dipole moment, a.u.        Oscillator
+   1    -56.5040345278    -7.315353     0.000000      0.000     0.0000     0.0000     0.0000     0.0000      0.0000
+   0    -56.2352002518     0.000000     7.315353        (ROHF/UHF Reference state)
+   4    -56.1347255488     2.734056    10.049409      0.000    -0.5851     0.0000     0.0000     0.5851      0.0843
+"""
+            )
+            component_summary = Path(tmpdir) / "component_summary.json"
+            component_summary.write_text(
+                json.dumps(
+                    {
+                        "target_bad_groups": [
+                            {"molecule": "nh3", "method": "mrsf", "root": 4, "source_csv": str(source_csv)},
+                            {"molecule": "h2s", "method": "mrsf", "root": 5, "source_csv": str(source_csv)},
+                        ]
+                    }
+                )
+            )
+
+            summary = module.summarize_root_continuity_targets(component_summary)
+
+        self.assertEqual(2, summary["case_count"])
+        self.assertEqual(1, summary["parsed_case_count"])
+        self.assertEqual(1, summary["missing_case_count"])
+        self.assertEqual("nh3", summary["cases"][0]["molecule"])
+        self.assertEqual("present", summary["cases"][0]["s2_evidence"])
+        self.assertEqual("h2s", summary["missing_cases"][0]["molecule"])
+        self.assertIn("h2s/mrsf/root_5", summary["missing_cases"][0]["expected_root_dir"])
 
 
 if __name__ == "__main__":

@@ -437,6 +437,55 @@ def summarize_root_continuity_dir(path: Path | str, root: int, near_degenerate_t
     }
 
 
+def _root_dir_for_component_group(group: dict[str, Any]) -> Path:
+    return Path(group["source_csv"]).parent / str(group["molecule"]) / str(group["method"]) / f"root_{int(group['root'])}"
+
+
+def summarize_root_continuity_targets(
+    component_summary_path: Path | str,
+    near_degenerate_threshold_ev: float = 1.0e-3,
+) -> dict[str, Any]:
+    """Summarize root-continuity evidence for target bad groups in a component summary."""
+
+    component_summary = json.loads(Path(component_summary_path).read_text())
+    target_groups = component_summary.get("target_bad_groups", [])
+    seen: set[tuple[str, str, str, int]] = set()
+    cases: list[dict[str, Any]] = []
+    missing_cases: list[dict[str, Any]] = []
+    for group in target_groups:
+        root = int(group["root"])
+        molecule = str(group["molecule"])
+        method = str(group["method"])
+        source_csv = str(group["source_csv"])
+        key = (source_csv, molecule, method, root)
+        if key in seen:
+            continue
+        seen.add(key)
+        root_dir = _root_dir_for_component_group(group)
+        case_meta = {
+            "molecule": molecule,
+            "method": method,
+            "root": root,
+            "physical_state": physical_state_for_mrsf_root(root),
+            "source_csv": source_csv,
+            "expected_root_dir": str(root_dir),
+        }
+        if not root_dir.exists():
+            missing_cases.append(case_meta)
+            continue
+        case_summary = summarize_root_continuity_dir(root_dir, root, near_degenerate_threshold_ev)
+        case_summary.update(case_meta)
+        cases.append(case_summary)
+    return {
+        "source_component_summary": str(component_summary_path),
+        "case_count": len(seen),
+        "parsed_case_count": len(cases),
+        "missing_case_count": len(missing_cases),
+        "cases": cases,
+        "missing_cases": missing_cases,
+    }
+
+
 def summarize_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
     all_rows = list(rows)
     failures = [
@@ -478,6 +527,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("csv_path", type=Path, nargs="+")
     parser.add_argument("--components", action="store_true", help="Summarize per-component FD diagnostics CSV")
     parser.add_argument("--root-continuity", action="store_true", help="Summarize MRSF root-continuity evidence from a root run directory")
+    parser.add_argument(
+        "--root-continuity-targets",
+        action="store_true",
+        help="Resolve target_bad_groups from a component summary and summarize each existing root run directory",
+    )
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
@@ -489,6 +543,10 @@ def main(argv: list[str] | None = None) -> int:
         if len(args.csv_path) != 1:
             parser.error("--root-continuity accepts exactly one root directory")
         summary = summarize_root_continuity_dir(args.csv_path[0], args.root)
+    elif args.root_continuity_targets:
+        if len(args.csv_path) != 1:
+            parser.error("--root-continuity-targets accepts exactly one component summary JSON")
+        summary = summarize_root_continuity_targets(args.csv_path[0])
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
