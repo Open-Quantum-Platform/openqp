@@ -140,6 +140,52 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertAlmostEqual(summary["failed_metric_details"][0]["tolerance"], 0.003)
         self.assertAlmostEqual(summary["failed_metric_details"][0]["excess"], 0.007)
 
+    def test_build_validation_summary_rejects_invalid_context_scalars(self):
+        validator = load_validator()
+        matrix = [[1.0, 0.0], [0.0, 1.0]]
+
+        with self.assertRaisesRegex(ValueError, "displacement must be finite and positive"):
+            validator.build_validation_summary(
+                matrix,
+                matrix,
+                method="hf",
+                td_type="none",
+                state=0,
+                molecule="h2",
+                basis="sto-3g",
+                displacement=0.0,
+                max_tolerance=0.003,
+                rms_tolerance=0.002,
+            )
+
+        with self.assertRaisesRegex(ValueError, "max_tolerance must be finite and positive"):
+            validator.build_validation_summary(
+                matrix,
+                matrix,
+                method="hf",
+                td_type="none",
+                state=0,
+                molecule="h2",
+                basis="sto-3g",
+                displacement=0.005,
+                max_tolerance=float("nan"),
+                rms_tolerance=0.002,
+            )
+
+        with self.assertRaisesRegex(ValueError, "rms_tolerance must be finite and positive"):
+            validator.build_validation_summary(
+                matrix,
+                matrix,
+                method="hf",
+                td_type="none",
+                state=0,
+                molecule="h2",
+                basis="sto-3g",
+                displacement=0.005,
+                max_tolerance=0.003,
+                rms_tolerance=-0.002,
+            )
+
     def test_cli_requires_td_type_when_any_validation_metadata_is_supplied(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -253,6 +299,41 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertFalse(payload["passed"])
         self.assertEqual(payload["failed_metrics"], ["max_abs_diff"])
+
+    def test_cli_reports_invalid_context_scalar_as_usage_error(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            analytic = tmp / "analytic.txt"
+            reference = tmp / "reference.txt"
+            analytic.write_text("1.0 0.0\n0.0 1.0\n")
+            reference.write_text("1.0 0.0\n0.0 1.0\n")
+
+            with self.assertRaises(SystemExit) as err:
+                validator.main(
+                    [
+                        str(analytic),
+                        str(reference),
+                        "--method",
+                        "hf",
+                        "--td-type",
+                        "none",
+                        "--state",
+                        "0",
+                        "--molecule",
+                        "h2",
+                        "--basis",
+                        "sto-3g",
+                        "--displacement",
+                        "-0.005",
+                        "--max-tolerance",
+                        "0.003",
+                        "--rms-tolerance",
+                        "0.002",
+                    ]
+                )
+
+        self.assertNotEqual(err.exception.code, 0)
 
 
 if __name__ == "__main__":

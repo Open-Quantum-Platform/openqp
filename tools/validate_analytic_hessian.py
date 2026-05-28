@@ -117,6 +117,13 @@ def compare_hessians(analytic: Any, reference: Any, top_n: int = 10) -> dict[str
     }
 
 
+def _positive_finite_context_scalar(name: str, value: float) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0.0:
+        raise ValueError(f"{name} must be finite and positive")
+    return number
+
+
 def build_validation_summary(
     analytic: Any,
     reference: Any,
@@ -140,10 +147,14 @@ def build_validation_summary(
     """
 
     summary = compare_hessians(analytic, reference, top_n=top_n)
+    displacement_value = _positive_finite_context_scalar("displacement", displacement)
+    max_tolerance_value = _positive_finite_context_scalar("max_tolerance", max_tolerance)
+    rms_tolerance_value = _positive_finite_context_scalar("rms_tolerance", rms_tolerance)
     tolerances = {
-        "max_abs_diff": float(max_tolerance),
-        "rms_diff": float(rms_tolerance),
+        "max_abs_diff": max_tolerance_value,
+        "rms_diff": rms_tolerance_value,
     }
+
     failed_metrics = []
     failed_metric_details = []
     for metric in ("max_abs_diff", "rms_diff"):
@@ -166,7 +177,7 @@ def build_validation_summary(
         "state": int(state),
         "molecule": molecule,
         "basis": basis,
-        "displacement": float(displacement),
+        "displacement": displacement_value,
         "tolerances": tolerances,
         "passed": not failed_metrics,
         "failed_metrics": failed_metrics,
@@ -250,19 +261,22 @@ def main(argv: list[str] | None = None) -> int:
         ]
         if missing:
             parser.error("contextual validation summaries require " + ", ".join(missing))
-        summary = build_validation_summary(
-            analytic,
-            reference,
-            method=args.method,
-            td_type=args.td_type,
-            state=args.state,
-            molecule=args.molecule,
-            basis=args.basis,
-            displacement=args.displacement,
-            max_tolerance=args.max_tolerance,
-            rms_tolerance=args.rms_tolerance,
-            top_n=args.top,
-        )
+        try:
+            summary = build_validation_summary(
+                analytic,
+                reference,
+                method=args.method,
+                td_type=args.td_type,
+                state=args.state,
+                molecule=args.molecule,
+                basis=args.basis,
+                displacement=args.displacement,
+                max_tolerance=args.max_tolerance,
+                rms_tolerance=args.rms_tolerance,
+                top_n=args.top,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
     else:
         summary = compare_hessians(analytic, reference, top_n=args.top)
     payload = summary_to_json(summary)
