@@ -1547,7 +1547,7 @@ contains
 
     fock_ao = 0.0_dp
     if (present(pcm_reaction_potential_in) .and. (present(dens_old) .or. present(f_old))) then
-      error stop 'calc_fock: reference PCM incremental Fock is not validated'
+      error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state'
     end if
     if (present(dens_old)) then
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &

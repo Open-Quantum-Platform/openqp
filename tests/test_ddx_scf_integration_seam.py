@@ -674,6 +674,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("present(dens_old)", guard)
         self.assertIn("present(f_old)", guard)
         self.assertIn("reference PCM incremental Fock is not validated", guard)
+        self.assertIn("dens_old/f_old old-buffer state", guard)
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
