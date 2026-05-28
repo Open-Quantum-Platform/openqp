@@ -77,6 +77,16 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("runtime PCM remains disabled", text)
         self.assertIn("no state-specific or nonequilibrium MRSF solvent response", text)
 
+    def test_validation_matrix_records_payload_shape_metadata_contract(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        self.assertIn("reference_scf_pcm_runtime_payload()", text)
+        self.assertIn("reference_scf_pcm_reaction_potential_from_payload()", text)
+        self.assertIn("packed_ao_length", text)
+        self.assertIn("expected_packed_ao_length", text)
+        self.assertIn("packed_ao_shape_formula", text)
+        self.assertIn("consumer must recompute and validate", text)
+        self.assertIn("before exposing `pcm_reaction_potential_in`", text)
+
 
 if __name__ == "__main__":
     unittest.main()
