@@ -297,6 +297,17 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("f(:,ii) =  f(:,ii) + hcore", text)
         self.assertIn("E%ehf1 = E%ehf1 + traceprod_sym_packed", text)
 
+    def test_calc_jk_xc_has_opt_in_reference_pcm_reaction_field_handoff(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        self.assertIn("call add_reference_pcm_reaction_field(f, pcm_reaction_potential, nfocks)", text)
+        helper_pos = text.index("call add_reference_pcm_reaction_field(f, pcm_reaction_potential, nfocks)")
+        energy_pos = text.index("E%ehf1 = E%ehf1 + traceprod_sym_packed")
+        self.assertLess(helper_pos, energy_pos)
+        self.assertIn("pcm_reaction_potential", text)
+        self.assertIn("real(dp),          intent(in),   optional :: pcm_reaction_potential(:)", text)
+        self.assertIn("if (present(pcm_reaction_potential)) then", text)
+        self.assertNotIn("pcm%enabled", text[text.index("subroutine calc_jk_xc") : text.index("end subroutine calc_jk_xc")].lower())
+
     def test_reference_pcm_reaction_field_helper_replicates_per_fock_block(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         self.assertIn("public :: add_reference_pcm_reaction_field", text)

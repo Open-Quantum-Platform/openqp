@@ -1353,12 +1353,15 @@ contains
   !> @param[inout]  nschwz   (Output) number of Schwarz-screened quartets (from ERI driver).
   !> @param[inout,opt] f_old Previously accumulated packed Fock(ces) for incremental build.
   !> @param[inout,opt] d_old Previous packed density(ies) for incremental build.
+  !> @param[in,opt]    pcm_reaction_potential Validated packed AO reference-PCM
+  !>                   reaction-field matrix. Prototype opt-in only; runtime PCM
+  !>                   input remains disabled until backend validation lands.
   !> @note For DFT hybrids, exchange scaling is taken from infos%dft%HFscale.
   !> @throws error stop if DFT is requested but molgrid/mo_a are not provided.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
-                               molgrid, mo_a, mo_b, nschwz, f_old, d_old)
+                               molgrid, mo_a, mo_b, nschwz, f_old, d_old, pcm_reaction_potential)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
@@ -1376,6 +1379,7 @@ contains
     real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
     real(dp), intent(inout), optional        :: d_old(:,:), f_old(:,:)
+    real(dp),          intent(in),   optional :: pcm_reaction_potential(:)
     integer,  intent(inout)    :: nschwz
     integer, intent(in) :: nfocks
 
@@ -1406,6 +1410,9 @@ contains
     do ii = 1, nfocks
       f(:,ii) =  f(:,ii) + hcore
     end do
+    if (present(pcm_reaction_potential)) then
+      call add_reference_pcm_reaction_field(f, pcm_reaction_potential, nfocks)
+    end if
     !----------------------------------------------------------------------------
     ! Compute HF Energy Components
     !----------------------------------------------------------------------------
