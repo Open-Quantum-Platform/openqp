@@ -257,6 +257,10 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(updates["fock_updates"], [[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]])
         self.assertAlmostEqual(updates["candidate_polarization_energy"], 0.125)
         self.assertEqual(updates["application_scope"], "add reaction_potential to each reference SCF Fock block")
+        self.assertEqual(updates["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(updates["response_solvent_coupling"], "not enabled")
+        self.assertEqual(updates["gradient_support"], "not enabled")
+        self.assertFalse(updates["runtime_pcm_enabled"])
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")

@@ -165,6 +165,10 @@ def reference_scf_reaction_fock_updates(density_blocks, reaction_potential):
         "density_reaction_dot": terms["density_reaction_dot"],
         "candidate_polarization_energy": terms["candidate_polarization_energy"],
         "application_scope": "add reaction_potential to each reference SCF Fock block",
+        "pcm_scope": "reference_scf_energy_only",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
     }
 
 
