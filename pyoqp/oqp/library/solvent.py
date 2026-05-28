@@ -91,6 +91,31 @@ def reference_scf_phi_cav_inputs(density_blocks, cavity_xyz):
     }
 
 
+def reference_scf_pcm_coupling_contract(density_blocks, cavity_xyz, reaction_potential):
+    """Package the first-scope reference-SCF PCM coupling handoff.
+
+    The future SCF hook needs two validated dependency-light inputs from the
+    same RHF/ROHF reference density: ``phi_cav`` inputs for ddX and a packed AO
+    reaction-field matrix for ``calc_jk_xc``.  This helper keeps those contracts
+    synchronized without enabling runtime PCM, state-specific response solvent,
+    gradients, or final polarization-energy bookkeeping.
+    """
+    phi_cav = reference_scf_phi_cav_inputs(density_blocks, cavity_xyz)
+    reaction = reference_scf_reaction_field_contract(density_blocks, reaction_potential)
+    return {
+        "nbf": phi_cav["nbf"],
+        "nfocks": reaction["nfocks"],
+        "ncav": phi_cav["ncav"],
+        "total_density": phi_cav["total_density"],
+        "density_packed": phi_cav["density_packed"],
+        "cavity_xyz": phi_cav["cavity_xyz"],
+        "x": phi_cav["x"],
+        "y": phi_cav["y"],
+        "z": phi_cav["z"],
+        "reaction_potential": reaction["reaction_potential"],
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

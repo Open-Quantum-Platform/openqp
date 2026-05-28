@@ -155,7 +155,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         solvent = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(solvent)
 
-        with self.assertRaisesRegex(ValueError, "3 \* ncav"):
+        with self.assertRaisesRegex(ValueError, "3 \\* ncav"):
             solvent.reference_scf_phi_cav_inputs([[1.0, 0.5, 0.25]], [0.0, 0.1])
         with self.assertRaisesRegex(ValueError, "at least one cavity point"):
             solvent.reference_scf_phi_cav_inputs([[1.0, 0.5, 0.25]], [])
@@ -172,6 +172,38 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["x"], [0.0, 1.0])
         self.assertEqual(inputs["y"], [0.1, 1.1])
         self.assertEqual(inputs["z"], [0.2, 1.2])
+
+    def test_reference_scf_pcm_coupling_contract_combines_phi_and_reaction_inputs(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_pcm_contract", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "same packed length"):
+            solvent.reference_scf_pcm_coupling_contract(
+                [[1.0, 0.5, 0.25]],
+                [0.0, 0.1, 0.2],
+                [0.1, 0.2],
+            )
+
+        contract = solvent.reference_scf_pcm_coupling_contract(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.0, 0.1, 0.2, 1.0, 1.1, 1.2],
+            [0.1, 0.2, 0.3],
+        )
+        self.assertEqual(contract["nbf"], 2)
+        self.assertEqual(contract["nfocks"], 2)
+        self.assertEqual(contract["ncav"], 2)
+        self.assertEqual(contract["density_packed"], [1.75, 0.0, 0.25])
+        self.assertEqual(contract["reaction_potential"], [0.1, 0.2, 0.3])
+        self.assertEqual(contract["x"], [0.0, 1.0])
+        self.assertEqual(contract["y"], [0.1, 1.1])
+        self.assertEqual(contract["z"], [0.2, 1.2])
+        self.assertNotIn("density_blocks", contract)
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
