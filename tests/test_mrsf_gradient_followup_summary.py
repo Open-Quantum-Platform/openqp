@@ -1108,6 +1108,14 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("a0_z", component["component"])
         self.assertTrue(component["script_path"].endswith("validation_controls/run_a0_z_controls.sh"))
         self.assertEqual(3, component["command_count"])
+        self.assertEqual(
+            {
+                "launch_allowed": False,
+                "jobs_launched": False,
+                "execution_status": "not_started_review_only",
+            },
+            component["execution_guard"],
+        )
         self.assertIn("OMP_NUM_THREADS=4", component["commands"][0])
         self.assertIn("openqp --nompi grad.inp", component["commands"][0])
         self.assertIn("openqp --nompi e_a0_z_plus.inp", component["commands"][1])

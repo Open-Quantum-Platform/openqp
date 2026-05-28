@@ -1011,6 +1011,11 @@ def summarize_validation_control_scripts(
                 "script_path": str(script_path),
                 "commands": commands,
                 "command_count": len(commands),
+                "execution_guard": {
+                    "launch_allowed": False,
+                    "jobs_launched": False,
+                    "execution_status": "not_started_review_only",
+                },
                 "missing_existing_inputs": sorted(set(missing)),
                 "planned_outputs": item.get("planned_outputs", {}),
             }
