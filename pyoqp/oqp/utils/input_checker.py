@@ -12,9 +12,9 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "irc", "prop", "data", "soc",
+    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data", "soc",
 }
-NOT_AVAILABLE_RUNTYPES = {"neb"}
+NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 
 METHODS = {"hf", "tdhf"}
@@ -36,7 +36,7 @@ DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, soc, prop, or data. neb is recognized but not yet implemented.",
+    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
     "input.method": "Use method=hf for HF/DFT and method=tdhf for TDHF/TDDFT/SF/MRSF runs.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
