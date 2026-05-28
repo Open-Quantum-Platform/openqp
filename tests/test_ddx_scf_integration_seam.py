@@ -426,8 +426,13 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "pcm_scope": "state_specific"})
         with self.assertRaisesRegex(ValueError, "runtime_pcm_enabled must be False"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "runtime_pcm_enabled": True})
+        with self.assertRaisesRegex(ValueError, "RHF/ROHF reference density"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload(
+                {**payload, "reference_target": "MRSF state density"}
+            )
         missing_potential = {
             "pcm_scope": "reference_scf_energy_only",
+            "reference_target": "RHF/ROHF reference density",
             "runtime_pcm_enabled": False,
             "response_solvent_coupling": "not enabled",
             "gradient_support": "not enabled",

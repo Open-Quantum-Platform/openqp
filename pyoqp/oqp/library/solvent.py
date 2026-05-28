@@ -251,6 +251,8 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     """
     if payload.get("pcm_scope") != "reference_scf_energy_only":
         raise ValueError("PCM runtime payload must have pcm_scope=reference_scf_energy_only")
+    if payload.get("reference_target") != "RHF/ROHF reference density":
+        raise ValueError("PCM runtime payload reference_target must be RHF/ROHF reference density")
     if payload.get("runtime_pcm_enabled") is not False:
         raise ValueError("PCM runtime payload runtime_pcm_enabled must be False")
     if payload.get("response_solvent_coupling") != "not enabled":
