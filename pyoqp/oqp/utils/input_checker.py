@@ -16,8 +16,24 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
+DFTB_SUPPORTED_RUNTYPES = {"energy", "grad", "optimize"}
+DFTB_UNSUPPORTED_REASONS = {
+    "hess": "DFTB+ Hessian/frequency support is out of scope because this bridge has no Hessian parser or numerical-Hessian callback wired to the external backend.",
+    "nac": "DFTB+ NAC support is out of scope because OpenQP NAC workflows require TDHF/MRSF state data that this external backend does not provide.",
+    "nacme": "DFTB+ NACME support is out of scope because the overlap workflow requires OpenQP TDHF/MRSF state data.",
+    "bp": "DFTB+ branching-plane support is out of scope because it depends on unsupported NAC data.",
+    "meci": "DFTB+ conical-intersection optimization is out of scope because excited-state and NAC data are not mapped from DFTB+.",
+    "mecp": "DFTB+ MECP optimization is out of scope for this external-backend PR.",
+    "mep": "DFTB+ MEP optimization is out of scope because only single-state local minimization is wired.",
+    "ts": "DFTB+ transition-state optimization is out of scope because the external backend exposes only energy and gradient callbacks.",
+    "prop": "TD-DFTB and DFTB+ excited-state properties are out of scope because this bridge does not parse or populate OpenQP TD data.",
+    "data": "DFTB+ data workflows are out of scope because the external backend does not produce OpenQP wavefunction/restart tensors.",
+    "md": "DFTB+ molecular dynamics is out of scope because OpenQP has no DFTB+ MD workflow in this branch.",
+    "soc": "DFTB+ spin-orbit coupling is not implemented in this branch.",
+    "neb": "DFTB+ NEB is not implemented in this branch.",
+}
 
-METHODS = {"hf", "tdhf"}
+METHODS = {"hf", "tdhf", "dftb"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
 GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
@@ -44,7 +60,7 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
-    "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts. geometric supports state-specific optimize, meci, mecp, and ts.",
+    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, and IRC. scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
     "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
@@ -251,6 +267,9 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_basis(config: dict[str, Any], report: CheckReport) -> None:
+    if _as_lower(_get(config, "input", "method", "hf")) == "dftb":
+        return
+
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
@@ -710,6 +729,9 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         )
         return
 
+    if method == "dftb" and runtype not in DFTB_SUPPORTED_RUNTYPES:
+        return
+
     if runtype == "grad":
         if method == "hf":
             if _max_state(_as_list(_get(config, "properties", "grad", []))) > 0:
@@ -720,7 +742,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                     value=_get(config, "properties", "grad", []),
                     action="Use grad=0 or switch to method=tdhf.",
                 )
-        elif 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
+        elif method == "tdhf" and 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
             report.add(
                 "ERROR",
                 "properties.grad",
@@ -729,8 +751,11 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use grad=1,2,... for excited-state gradients.",
             )
 
-    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc"}:
+    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
+
+    if runtype == "neb":
+        _check_neb(config, report)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
@@ -748,13 +773,44 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
-    lib = _as_lower(_get(config, "optimize", "lib", "scipy"))
+    lib = _as_lower(_get(config, "optimize", "lib", "geometric"))
     optimizer = _as_lower(_get(config, "optimize", "optimizer", "bfgs"))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+
+    if method == "dftb":
+        if runtype == "optimize":
+            if lib != "scipy":
+                report.add(
+                    "ERROR",
+                    "optimize.lib",
+                    "DFTB+ geometry optimization is currently wired only through scipy.optimize.",
+                    value=lib,
+                    expected="scipy",
+                    action="Set [optimize] lib=scipy.",
+                )
+            if istate != 0:
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "DFTB+ geometry optimization supports only the ground state.",
+                    value=istate,
+                    expected="0",
+                    action="Set [optimize] istate=0.",
+                )
+            if optimizer not in SCIPY_OPTIMIZERS:
+                report.add(
+                    "ERROR",
+                    "optimize.optimizer",
+                    "Unknown SciPy optimizer.",
+                    value=optimizer,
+                    expected=", ".join(sorted(SCIPY_OPTIMIZERS)),
+                    action="Use a supported SciPy optimizer.",
+                )
+        return
 
     if lib not in OPT_LIBS:
         report.add(
@@ -860,14 +916,78 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
         )
 
-    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc"}:
+    if runtype == "neb" and lib != "geometric":
         report.add(
             "ERROR",
             "optimize.lib",
-            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, and IRC.",
+            "NEB is currently wired only through geomeTRIC.",
+            value=lib,
+            expected="geometric",
+            action="Set [optimize] lib=geometric for runtype=neb.",
+        )
+
+    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, IRC, and NEB.",
             value=f"{lib}/{runtype}",
-            expected="optimize, meci, mecp, ts, or irc",
-            action="Use [input] runtype=optimize/meci/mecp/ts/irc or choose scipy/dlfind for this runtype.",
+            expected="optimize, meci, mecp, ts, irc, or neb",
+            action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy/dlfind for this runtype.",
+        )
+
+
+def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    istate = _get(config, "optimize", "istate", 0)
+    product = _get(config, "neb", "product", "")
+    nimage = _get(config, "neb", "nimage", 5)
+
+    if method == "hf" and istate != 0:
+        report.add(
+            "ERROR",
+            "optimize.istate",
+            "HF/DFT NEB currently supports only the ground state.",
+            value=istate,
+            expected="0",
+            action="Set [optimize] istate=0, or use method=tdhf/[tdhf] type=mrsf for excited-state NEB.",
+        )
+
+    if method not in {"hf", "tdhf"}:
+        report.add(
+            "ERROR",
+            "input.method",
+            "NEB currently supports HF/DFT and TDHF/MRSF state-specific surfaces.",
+            value=method,
+            expected="hf or tdhf",
+            action="Use method=hf with istate=0 or method=tdhf with a valid target state.",
+        )
+
+    if not product:
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint is missing.",
+            expected="XYZ filename",
+            action="Set [neb] product to a product-endpoint XYZ file.",
+        )
+    elif not os.path.exists(os.path.abspath(str(product))):
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint file does not exist.",
+            value=product,
+            action="Fix the product path or place the XYZ file in the working directory.",
+        )
+
+    if nimage < 3:
+        report.add(
+            "ERROR",
+            "neb.nimage",
+            "NEB requires at least reactant, one intermediate, and product images.",
+            value=nimage,
+            expected=">= 3",
+            action="Set [neb] nimage=3 or larger.",
         )
 
 
@@ -1224,8 +1344,24 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf or tdhf.",
+            action="Choose hf, tdhf, or dftb.",
             wiki=WIKI_HELP["input.method"],
+        )
+
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if method == "dftb" and runtype not in DFTB_SUPPORTED_RUNTYPES:
+        reason = DFTB_UNSUPPORTED_REASONS.get(
+            runtype,
+            "Only energy, gradient, and ground-state geometry optimization are wired to the external DFTB+ backend.",
+        )
+        report.add(
+            "ERROR",
+            "input.runtype",
+            f"DFTB+ external backend does not support runtype={runtype}. {reason}",
+            value=runtype,
+            expected=", ".join(sorted(DFTB_SUPPORTED_RUNTYPES)),
+            action="Use method=dftb with runtype=energy, grad, or optimize, or switch to OpenQP native HF/TDHF workflows.",
+            wiki=WIKI_HELP["input.runtype"],
         )
 
     _check_system(config, report)

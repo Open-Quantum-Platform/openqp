@@ -18,12 +18,17 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
 - **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
+- Optional external [DFTB+](https://dftbplus.org/) backend for ground-state energy, gradient, and geometry optimization workflows
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
 - Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
 - Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
   
+### Backend Integrations
+
+Optional external-backend integrations let OpenQP call user-provided engines for targeted workflows; the current DFTB+ bridge covers ground-state energy, gradient, and geometry optimization when configured in the `[dftb]` input section.
+
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
@@ -159,4 +164,3 @@ If you use OpenQP in your research, please cite the following papers:
 ### Legal Notice
 
 See the separate LICENSE file.
-

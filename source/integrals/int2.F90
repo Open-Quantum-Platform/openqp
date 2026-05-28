@@ -357,7 +357,8 @@ contains
     class(int2_compute_t), target, intent(inout) :: this
     class(int2_compute_data_t), intent(inout) :: int2_consumer
 
-    integer :: i, j, k, l, ij
+    integer :: i, j, k, l, ij_pair, npairs
+    integer, allocatable :: pair_i(:), pair_j(:)
     integer :: lmax
     integer :: nint
     real(kind=dp) :: test
@@ -381,6 +382,9 @@ contains
     integer :: ok
 
     nshell = this%basis%nshell
+    npairs = nshell*(nshell+1)/2
+    allocate(pair_i(npairs), pair_j(npairs))
+    call int2_build_shell_pair_map(nshell, pair_i, pair_j)
 
 
     ! preparations for screening
@@ -408,7 +412,7 @@ contains
 
 !$omp parallel &
 !$omp   private( &
-!$omp   i, j, k, l, ij, jork, &
+!$omp   i, j, k, l, ij_pair, jork, &
 !$omp   tim0, tim1, tim2, tim3, tim4, ithread,   &
 !$omp   test, &
 !$omp   int2_storage, &
@@ -455,14 +459,19 @@ contains
     int2_storage%thread_id = ithread + 1
 
 !$omp barrier
-    if (this%pe%size>1) then
-      ij= 0
-    end if
-    do i = this%basis%nshell, 1, -1
-      do j = 1, i
+
+! Distribute shell pairs through one flat dynamic workshare per int2_twoei
+! parallel region.  The previous structure opened a fresh dynamic workshare
+! for every (i,j) shell pair and needed a barrier after every shell pair to
+! keep OpenMP runtimes from overlapping workshares with different k-loop
+! bounds.  A flat shell-pair workshare keeps scheduling granular without any
+! synchronization point inside the shell-pair loop.
+!$omp do schedule(dynamic,1)
+    do ij_pair = 1, npairs
+        i = pair_i(ij_pair)
+        j = pair_j(ij_pair)
         if (this%pe%size>1) then
-          ij = ij +1
-          if (mod(ij, this%pe%size) /= this%pe%rank) cycle
+          if (mod(ij_pair, this%pe%size) /= this%pe%rank) cycle
         end if
 
         if (this%schwarz) then
@@ -473,7 +482,6 @@ contains
           end if
         end if
 
-!$omp do schedule(dynamic,2)
         do k = 1, i
 
           jork = k
@@ -504,9 +512,8 @@ contains
 
           end do
         end do
-!$omp end do nowait
-      end do
     end do
+!$omp end do
 
     call int2_consumer%update(int2_storage)
 
@@ -532,10 +539,29 @@ contains
 
     deallocate(eri_data)
 !$omp end parallel
+    deallocate(pair_i, pair_j)
     call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()
 
     this%skipped = nschwz
+
+  contains
+
+    subroutine int2_build_shell_pair_map(nshell, shell_pair_i, shell_pair_j)
+      implicit none
+      integer, intent(in) :: nshell
+      integer, intent(out) :: shell_pair_i(:), shell_pair_j(:)
+      integer :: i, j, ij_pair
+
+      ij_pair = 0
+      do i = nshell, 1, -1
+        do j = 1, i
+          ij_pair = ij_pair + 1
+          shell_pair_i(ij_pair) = i
+          shell_pair_j(ij_pair) = j
+        end do
+      end do
+    end subroutine int2_build_shell_pair_map
 
   end subroutine int2_twoei
 

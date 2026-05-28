@@ -57,6 +57,14 @@ OQP_CONFIG_SCHEMA = {
         'd4': {'type': bool, 'default': 'False'},
         'soc_2e': {'type': int,  'default': '1'},    
     },
+    'dftb': {
+        'executable': {'type': str, 'default': 'dftb+'},
+        'sk_path': {'type': str, 'default': ''},
+        'scc': {'type': bool, 'default': 'True'},
+        'max_scc_iterations': {'type': int, 'default': '100'},
+        'timeout': {'type': int, 'default': '300'},
+        'keep_workdir': {'type': bool, 'default': 'False'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -160,7 +168,7 @@ OQP_CONFIG_SCHEMA = {
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'scipy'},
+        'lib': {'type': str, 'default': 'geometric'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},
@@ -201,6 +209,10 @@ OQP_CONFIG_SCHEMA = {
         'constraints_file': {'type': str, 'default': ''},
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
+    },
+    'neb': {
+        'product': {'type': str, 'default': ''},
+        'nimage': {'type': int, 'default': '5'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
