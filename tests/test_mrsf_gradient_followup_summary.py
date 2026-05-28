@@ -1528,6 +1528,52 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("missing_real_spin_resolved_mrsf_xc_density_candidate", plan["candidate_density_requirements"]["current_blocker"])
         self.assertTrue(plan["source_snapshot"]["all_source_files_present"])
 
+    def test_xc_density_trial_outcome_records_partial_but_unresolved_result(self):
+        module = load_module()
+        instrumentation_plan = {
+            "instrumentation_scope": "mrsf_xc_density_instrumentation_plan_only",
+            "selected": "h2s root 5 / physical S4",
+            "one_variable_under_test": "mrsf_xc_density_handoff",
+            "residual_components_to_recheck": ["a0_z"],
+            "candidate_density_requirements": {
+                "current_blocker": "missing_real_spin_resolved_mrsf_xc_density_candidate"
+            },
+        }
+        trial_results = {
+            "trial_id": "mrsf_xc_density_handoff_umrsf_spin_channels_h2s_root5_a0z_20260528",
+            "source_candidate": {
+                "description": "MRSF spin-resolved XC candidate from umrsfcbc paired spin channels",
+                "direct_td_abxc_as_xa_xb": False,
+            },
+            "run_summary": {
+                "case": {"molecule": "h2s", "root": 5, "physical_state": "S4", "component": "a0_z"},
+                "result": {
+                    "absolute_error_ha_per_bohr": 0.07776045100429418,
+                    "previous_no_fix_abs_error_ha_per_bohr": 0.0792782647,
+                    "delta_abs_error_vs_previous_ha_per_bohr": -0.001517813695705833,
+                    "moved_toward_fd_vs_previous_analytic": True,
+                    "residual_removed": False,
+                    "all_trah_detected": False,
+                },
+            },
+        }
+
+        outcome = module.summarize_mrsf_xc_density_trial_outcome(instrumentation_plan, trial_results)
+
+        self.assertEqual("mrsf_xc_density_trial_outcome_diagnostic_only", outcome["outcome_scope"])
+        self.assertEqual("h2s root 5 / physical S4", outcome["selected"])
+        self.assertEqual("mrsf_xc_density_handoff", outcome["completed_source_test"])
+        self.assertEqual("partial_positive_residual_still_large", outcome["completed_source_test_status"])
+        self.assertAlmostEqual(0.07776045100429418, outcome["abs_diff_ha_per_bohr"])
+        self.assertAlmostEqual(-0.001517813695705833, outcome["delta_vs_no_fix_abs_diff_ha_per_bohr"])
+        self.assertTrue(outcome["moved_toward_fd_control"])
+        self.assertFalse(outcome["residual_removed"])
+        self.assertFalse(outcome["trah_detected"])
+        self.assertIn("mrsf_xc_density_handoff", outcome["deferred_hypotheses"])
+        self.assertEqual("do_not_claim_fix_rank_next_source_hypothesis", outcome["next_action"])
+        self.assertFalse(outcome["ready_for_production_fix_claim"])
+        self.assertIn("diagnostic-only", outcome["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1544,6 +1544,65 @@ def summarize_mrsf_xc_density_instrumentation_plan(
     }
 
 
+def summarize_mrsf_xc_density_trial_outcome(
+    instrumentation_plan: dict[str, Any],
+    trial_results: dict[str, Any],
+) -> dict[str, Any]:
+    """Summarize the MRSF XC-density handoff trial without claiming a fix.
+
+    The first spin-resolved XC-density candidate moved the selected H2S root-5
+    a0_z analytic gradient slightly toward the finite-difference control, but it
+    left a large residual.  This helper records that conservative conclusion so
+    future runs do not mistake a small improvement for a production fix.
+    """
+
+    run_summary = dict(trial_results.get("run_summary") or {})
+    case = dict(run_summary.get("case") or {})
+    result = dict(run_summary.get("result") or {})
+    selected = instrumentation_plan.get("selected")
+    if not selected and case:
+        selected = f"{case.get('molecule')} root {case.get('root')} / physical {case.get('physical_state')}"
+
+    moved = bool(result.get("moved_toward_fd_vs_previous_analytic"))
+    removed = bool(result.get("residual_removed"))
+    trah_detected = bool(result.get("all_trah_detected"))
+    abs_diff = result.get("absolute_error_ha_per_bohr")
+    if trah_detected:
+        status = "not_clean_trah_detected"
+        next_action = "recheck_clean_no_trah_controls_before_source_hypothesis"
+    elif removed:
+        status = "positive_residual_removed"
+        next_action = "repeat_controls_before_any_production_fix_claim"
+    elif moved:
+        status = "partial_positive_residual_still_large"
+        next_action = "do_not_claim_fix_rank_next_source_hypothesis"
+    else:
+        status = "negative_no_improvement"
+        next_action = "defer_mrsf_xc_density_handoff_and_rank_next_source_hypothesis"
+
+    return {
+        "outcome_scope": "mrsf_xc_density_trial_outcome_diagnostic_only",
+        "selected": selected,
+        "trial_id": trial_results.get("trial_id"),
+        "completed_source_test": "mrsf_xc_density_handoff",
+        "completed_source_test_status": status,
+        "component": case.get("component"),
+        "abs_diff_ha_per_bohr": abs_diff,
+        "control_no_fix_abs_diff_ha_per_bohr": result.get("previous_no_fix_abs_error_ha_per_bohr"),
+        "delta_vs_no_fix_abs_diff_ha_per_bohr": result.get("delta_abs_error_vs_previous_ha_per_bohr"),
+        "moved_toward_fd_control": moved,
+        "residual_removed": removed,
+        "trah_detected": trah_detected,
+        "source_candidate": trial_results.get("source_candidate", {}),
+        "deferred_hypotheses": ["mrsf_xc_density_handoff"] if not removed else [],
+        "residual_components_to_recheck": list(instrumentation_plan.get("residual_components_to_recheck", [])),
+        "production_gradient_algebra_edited": bool(trial_results.get("production_gradient_algebra_edited")),
+        "ready_for_production_fix_claim": False,
+        "next_action": next_action,
+        "scope_guard": "diagnostic-only MRSF XC-density trial outcome; no production fix claim and no additional source edit",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1815,6 +1874,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run a diagnostic-only static source trace for the MRSF XC-density handoff after a negative channel-7 trial",
     )
+    parser.add_argument(
+        "--mrsf-xc-density-trial-outcome",
+        action="store_true",
+        help="Summarize the completed MRSF XC-density source trial without claiming a production fix",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1899,6 +1963,12 @@ def main(argv: list[str] | None = None) -> int:
             source_trial_outcome,
             source_root=args.source_root,
         )
+    elif args.mrsf_xc_density_trial_outcome:
+        if len(args.csv_path) != 2:
+            parser.error("--mrsf-xc-density-trial-outcome accepts instrumentation-plan JSON and trial-results JSON")
+        instrumentation_plan = json.loads(args.csv_path[0].read_text())
+        trial_results = json.loads(args.csv_path[1].read_text())
+        summary = summarize_mrsf_xc_density_trial_outcome(instrumentation_plan, trial_results)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
