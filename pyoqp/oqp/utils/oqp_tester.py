@@ -138,6 +138,21 @@ class OQPTester:
                 "Skipping optional DFTB+ backend test; install DFTB+ and configure "
                 "the [dftb] executable/sk_path settings for full test coverage."
             )
+
+        sk_path = self._read_simple_input_value(input_file, "dftb", "sk_path")
+        sk_path = os.path.expandvars(os.path.expanduser(sk_path))
+        if not sk_path:
+            return (
+                "DFTB+ parameter directory is not configured; set [dftb] sk_path. "
+                "Skipping optional DFTB+ backend test; configure the Slater-Koster "
+                "parameter directory for full test coverage."
+            )
+        if not os.path.isdir(sk_path):
+            return (
+                f"DFTB+ parameter directory not found: {sk_path}. "
+                "Skipping optional DFTB+ backend test; configure the [dftb] "
+                "sk_path setting for full test coverage."
+            )
         return ""
 
     def run_single_test(self, input_file: str) -> Dict[str, Any]:

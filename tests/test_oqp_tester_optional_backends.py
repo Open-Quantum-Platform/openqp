@@ -71,6 +71,41 @@ sk_path=/tmp/sk
         self.assertIn("DFTB+ executable not found", result["message"])
         self.assertIn("install DFTB+", result["message"])
 
+    def test_dftbplus_examples_are_skipped_when_parameter_directory_is_missing(self):
+        tester_mod = load_oqp_tester_with_stubs()
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_dftb = tmp_path / "dftb+"
+            fake_dftb.write_text("#!/bin/sh\nexit 0\n")
+            fake_dftb.chmod(0o755)
+            inp = tmp_path / "missing_sk.inp"
+            inp.write_text(
+                f"""
+[input]
+method=dftb
+runtype=energy
+system=
+ H 0 0 0
+ H 0 0 0.74
+
+[dftb]
+executable={fake_dftb}
+sk_path={tmp_path / "missing-3ob-3-1"}
+""".strip()
+            )
+            tester = tester_mod.OQPTester(
+                base_test_dir=str(tmp_path),
+                output_dir=str(tmp_path / "out"),
+                total_cpus=1,
+                omp_threads=1,
+                mpi_manager=MPIStub(),
+            )
+            result = tester.run_single_test(str(inp))
+
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertIn("DFTB+ parameter directory not found", result["message"])
+        self.assertIn("configure", result["message"])
+
     def test_report_counts_skipped_tests_without_failing_suite(self):
         tester_mod = load_oqp_tester_with_stubs()
         with TemporaryDirectory() as tmp:
