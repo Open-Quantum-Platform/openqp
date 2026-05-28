@@ -12,17 +12,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+Matrix = list[list[float]]
 
 
-def _as_float_matrix(name: str, value: Any) -> np.ndarray:
-    matrix = np.asarray(value, dtype=float)
-    if matrix.ndim != 2:
-        raise ValueError(f"{name} must be a 2-D matrix, got shape {matrix.shape}")
+def _as_float_matrix(name: str, value: Any) -> Matrix:
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError(f"{name} must be a nonempty 2-D matrix")
+
+    matrix: Matrix = []
+    width = None
+    for row in value:
+        if not isinstance(row, (list, tuple)):
+            raise ValueError(f"{name} must be a 2-D matrix")
+        if width is None:
+            width = len(row)
+            if width == 0:
+                raise ValueError(f"{name} must be a nonempty 2-D matrix")
+        elif len(row) != width:
+            raise ValueError(f"{name} rows must all have the same length")
+        matrix.append([float(item) for item in row])
     return matrix
+
+
+def _shape(matrix: Matrix) -> tuple[int, int]:
+    return len(matrix), len(matrix[0])
 
 
 def compare_hessians(analytic: Any, reference: Any, top_n: int = 10) -> dict[str, Any]:
@@ -39,41 +58,52 @@ def compare_hessians(analytic: Any, reference: Any, top_n: int = 10) -> dict[str
 
     analytic_matrix = _as_float_matrix("analytic", analytic)
     reference_matrix = _as_float_matrix("reference", reference)
-    if analytic_matrix.shape != reference_matrix.shape:
+    analytic_shape = _shape(analytic_matrix)
+    reference_shape = _shape(reference_matrix)
+    if analytic_shape != reference_shape:
         raise ValueError(
             "analytic and reference Hessians must have the same shape; "
-            f"got {analytic_matrix.shape} and {reference_matrix.shape}"
+            f"got {analytic_shape} and {reference_shape}"
         )
 
-    diff = analytic_matrix - reference_matrix
-    abs_diff = np.abs(diff)
-    max_abs_diff = float(np.max(abs_diff)) if diff.size else 0.0
-    rms_diff = float(np.sqrt(np.mean(diff * diff))) if diff.size else 0.0
+    nrow, ncol = analytic_shape
+    components = []
+    sum_sq = 0.0
+    max_abs_diff = 0.0
+    for row in range(nrow):
+        for col in range(ncol):
+            delta = analytic_matrix[row][col] - reference_matrix[row][col]
+            abs_delta = abs(delta)
+            sum_sq += delta * delta
+            max_abs_diff = max(max_abs_diff, abs_delta)
+            components.append((row, col, delta, abs_delta))
+    rms_diff = math.sqrt(sum_sq / len(components)) if components else 0.0
 
-    if analytic_matrix.shape[0] == analytic_matrix.shape[1] and analytic_matrix.size:
-        max_asymmetry = float(np.max(np.abs(analytic_matrix - analytic_matrix.T)))
+    if nrow == ncol and components:
+        max_asymmetry = max(
+            abs(analytic_matrix[row][col] - analytic_matrix[col][row])
+            for row in range(nrow)
+            for col in range(ncol)
+        )
     else:
         max_asymmetry = 0.0
 
-    ranked_indices = sorted(
-        np.ndindex(diff.shape),
-        key=lambda rc: (-float(abs_diff[rc]), int(rc[0]), int(rc[1])),
-    )
+    ranked_components = sorted(components, key=lambda item: (-item[3], item[0], item[1]))
     largest_components = []
-    for row, col in ranked_indices[: max(0, min(int(top_n), diff.size))]:
+    for row, col, delta, abs_delta in ranked_components[: max(0, min(int(top_n), len(components)))]:
         largest_components.append(
             {
                 "row": int(row),
                 "col": int(col),
-                "computed_value": float(analytic_matrix[row, col]),
-                "reference_value": float(reference_matrix[row, col]),
-                "diff": float(diff[row, col]),
-                "abs_diff": float(abs_diff[row, col]),
+                "computed_value": analytic_matrix[row][col],
+                "reference_value": reference_matrix[row][col],
+                "diff": delta,
+                "abs_diff": abs_delta,
             }
         )
 
     return {
-        "shape": [int(analytic_matrix.shape[0]), int(analytic_matrix.shape[1])],
+        "shape": [int(nrow), int(ncol)],
         "max_abs_diff": max_abs_diff,
         "rms_diff": rms_diff,
         "max_asymmetry": max_asymmetry,
@@ -134,10 +164,20 @@ def summary_to_json(summary: dict[str, Any]) -> str:
     return json.dumps(summary, indent=2, sort_keys=True)
 
 
-def _load_matrix(path: Path) -> np.ndarray:
+def _load_matrix(path: Path) -> Matrix:
     if path.suffix == ".npy":
-        return np.load(path)
-    return np.loadtxt(path)
+        try:
+            import numpy as np  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise SystemExit("reading .npy Hessian matrices requires NumPy") from exc
+        return _as_float_matrix(str(path), np.load(path))
+
+    rows = []
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if stripped:
+            rows.append([float(item) for item in stripped.split()])
+    return _as_float_matrix(str(path), rows)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,8 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import numpy as np
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -22,26 +20,22 @@ def load_validator():
 class AnalyticHessianValidatorTests(unittest.TestCase):
     def test_compare_hessians_reports_max_rms_symmetry_and_largest_components(self):
         validator = load_validator()
-        analytic = np.array(
-            [
-                [1.0, 2.0, 3.0],
-                [2.2, 5.0, 6.0],
-                [3.0, 6.0, 9.0],
-            ]
-        )
-        reference = np.array(
-            [
-                [1.0, 2.0, 2.5],
-                [2.0, 4.0, 6.0],
-                [2.5, 6.0, 8.0],
-            ]
-        )
+        analytic = [
+            [1.0, 2.0, 3.0],
+            [2.2, 5.0, 6.0],
+            [3.0, 6.0, 9.0],
+        ]
+        reference = [
+            [1.0, 2.0, 2.5],
+            [2.0, 4.0, 6.0],
+            [2.5, 6.0, 8.0],
+        ]
 
         summary = validator.compare_hessians(analytic, reference, top_n=2)
 
         self.assertEqual(summary["shape"], [3, 3])
         self.assertAlmostEqual(summary["max_abs_diff"], 1.0)
-        self.assertAlmostEqual(summary["rms_diff"], np.sqrt(2.54 / 9.0))
+        self.assertAlmostEqual(summary["rms_diff"], (2.54 / 9.0) ** 0.5)
         self.assertAlmostEqual(summary["max_asymmetry"], 0.2)
         self.assertEqual(len(summary["largest_components"]), 2)
         self.assertEqual(summary["largest_components"][0]["row"], 1)
@@ -52,11 +46,11 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         validator = load_validator()
 
         with self.assertRaisesRegex(ValueError, "same shape"):
-            validator.compare_hessians(np.zeros((2, 2)), np.zeros((3, 3)))
+            validator.compare_hessians([[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0, 0.0]])
 
     def test_summary_json_is_stable_and_does_not_include_full_matrices(self):
         validator = load_validator()
-        summary = validator.compare_hessians(np.eye(2), np.eye(2), top_n=1)
+        summary = validator.compare_hessians([[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]], top_n=1)
 
         payload = validator.summary_to_json(summary)
 
@@ -66,8 +60,8 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
 
     def test_build_validation_summary_includes_context_tolerances_and_pass_flag(self):
         validator = load_validator()
-        analytic = np.array([[1.0, 1.002], [1.001, 2.0]])
-        reference = np.array([[1.0, 1.0], [1.0, 2.0]])
+        analytic = [[1.0, 1.002], [1.001, 2.0]]
+        reference = [[1.0, 1.0], [1.0, 2.0]]
 
         summary = validator.build_validation_summary(
             analytic,
@@ -95,8 +89,8 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
 
     def test_build_validation_summary_fails_when_either_tolerance_is_exceeded(self):
         validator = load_validator()
-        analytic = np.array([[1.0, 1.01], [1.0, 2.0]])
-        reference = np.array([[1.0, 1.0], [1.0, 2.0]])
+        analytic = [[1.0, 1.01], [1.0, 2.0]]
+        reference = [[1.0, 1.0], [1.0, 2.0]]
 
         summary = validator.build_validation_summary(
             analytic,
