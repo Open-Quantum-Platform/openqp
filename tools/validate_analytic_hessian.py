@@ -128,6 +128,25 @@ def _positive_finite_context_scalar(name: str, value: float) -> float:
     return number
 
 
+def _format_float(value: float) -> str:
+    return f"{value:.12g}"
+
+
+def _failure_summary_lines(failed_metric_details: list[dict[str, Any]]) -> list[str]:
+    lines = []
+    for detail in failed_metric_details:
+        line = (
+            f"{detail['metric']} observed {_format_float(detail['observed'])} "
+            f"exceeds tolerance {_format_float(detail['tolerance'])} "
+            f"by {_format_float(detail['excess'])}"
+        )
+        worst_component = detail.get("worst_component")
+        if worst_component is not None:
+            line += f" at component [{worst_component['row']},{worst_component['col']}]"
+        lines.append(line)
+    return lines
+
+
 def build_validation_summary(
     analytic: Any,
     reference: Any,
@@ -195,6 +214,7 @@ def build_validation_summary(
         "passed": not failed_metrics,
         "failed_metrics": failed_metrics,
         "failed_metric_details": failed_metric_details,
+        "failure_summary": _failure_summary_lines(failed_metric_details),
         **summary,
         "report_type": "contextual_validation",
     }

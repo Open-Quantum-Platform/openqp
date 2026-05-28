@@ -186,6 +186,51 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertAlmostEqual(asymmetry_detail["tolerance"], 0.05)
         self.assertNotIn("worst_component", asymmetry_detail)
 
+    def test_failed_validation_summary_includes_compact_human_failure_summary(self):
+        validator = load_validator()
+        analytic = [[1.0, 1.01], [1.0, 2.0]]
+        reference = [[1.0, 1.0], [1.0, 2.0]]
+
+        summary = validator.build_validation_summary(
+            analytic,
+            reference,
+            method="tdhf",
+            td_type="rpa",
+            state=1,
+            molecule="h2o",
+            basis="sto-3g",
+            displacement=0.005,
+            max_tolerance=0.003,
+            rms_tolerance=0.02,
+        )
+
+        self.assertEqual(
+            summary["failure_summary"],
+            [
+                "max_abs_diff observed 0.01 exceeds tolerance 0.003 by 0.007 "
+                "at component [0,1]"
+            ],
+        )
+
+    def test_passed_validation_summary_includes_empty_failure_summary(self):
+        validator = load_validator()
+        matrix = [[1.0, 0.0], [0.0, 1.0]]
+
+        summary = validator.build_validation_summary(
+            matrix,
+            matrix,
+            method="hf",
+            td_type="none",
+            state=0,
+            molecule="h2",
+            basis="sto-3g",
+            displacement=0.005,
+            max_tolerance=0.003,
+            rms_tolerance=0.002,
+        )
+
+        self.assertEqual(summary["failure_summary"], [])
+
     def test_build_validation_summary_rejects_invalid_context_scalars(self):
         validator = load_validator()
         matrix = [[1.0, 0.0], [0.0, 1.0]]
