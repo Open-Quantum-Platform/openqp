@@ -349,6 +349,17 @@ epsilon=water
         self.assertIn("packed AO length", text)
         self.assertIn("size(pcm_reaction_potential_in) == nbf * (nbf + 1) / 2", text)
 
+    def test_validation_matrix_documents_required_payload_shape_metadata(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("nbf", text)
+        self.assertIn("required", text)
+        self.assertIn("missing `nbf`", text)
+        self.assertIn("missing `packed_ao_length`", text)
+        self.assertIn("missing `expected_packed_ao_length`", text)
+        self.assertIn("missing `packed_ao_shape_formula`", text)
+        self.assertIn("boolean numeric", text)
+
 
 if __name__ == "__main__":
     unittest.main()
