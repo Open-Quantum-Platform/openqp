@@ -1425,6 +1425,62 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("plan_mrsf_xc_density_handoff_diagnostic", outcome["next_action"])
         self.assertIn("diagnostic-only", outcome["scope_guard"])
 
+    def test_xc_density_handoff_diagnostic_plans_safe_static_run_after_negative_channel7(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = Path(tmpdir)
+            gradient = source_root / "source/modules/tdhf_mrsf_gradient.F90"
+            z_vector = source_root / "source/modules/tdhf_mrsf_z_vector.F90"
+            gradient.parent.mkdir(parents=True, exist_ok=True)
+            z_vector.parent.mkdir(parents=True, exist_ok=True)
+            gradient.write_text(
+                "call tagarray_get_data(infos%dat, OQP_td_abxc, td_abxc)\n"
+                "call tagarray_get_data(infos%dat, OQP_td_p, td_p)\n"
+                "call tagarray_get_data(infos%dat, OQP_td_mrsf_density, td_mrsf_density)\n"
+                "call utddft_xc_gradient(basis=basis, da=d(:,:,1), db=d(:,:,2), pa=p(:,:,1:1), pb=p(:,:,2:2), infos=infos)\n"
+            )
+            z_vector.write_text("call infos%dat%reserve_data(OQP_td_mrsf_density, TA_TYPE_REAL64, nbf*nbf*7)\n")
+            source_level_validation = {
+                "selected": "h2s root 5 / physical S4",
+                "secondary_next_source_test": "mrsf_xc_density_handoff",
+                "validation_points": [
+                    {
+                        "hypothesis_id": "mrsf_xc_density_handoff",
+                        "source_locations": [4],
+                        "source_snippets": [{"line": 4, "text": "call utddft_xc_gradient(... pa=p, pb=p ...)"}],
+                    }
+                ],
+                "residual_components": [{"component": "a0_z", "max_abs_diff_ha_per_bohr": 0.07927826468642385}],
+            }
+            source_trial_outcome = {
+                "completed_source_test": "channel7_density_provenance",
+                "completed_source_test_status": "negative_no_change",
+                "next_source_test": "mrsf_xc_density_handoff",
+                "deferred_hypotheses": ["channel7_density_provenance"],
+                "trah_detected": False,
+            }
+
+            diagnostic = module.summarize_mrsf_xc_density_handoff_diagnostic(
+                source_level_validation,
+                source_trial_outcome,
+                source_root=source_root,
+            )
+
+        self.assertEqual("mrsf_xc_density_handoff_diagnostic_only", diagnostic["diagnostic_scope"])
+        self.assertEqual("h2s root 5 / physical S4", diagnostic["selected"])
+        self.assertEqual("mrsf_xc_density_handoff", diagnostic["one_variable_under_test"])
+        self.assertEqual("static_source_trace_completed", diagnostic["diagnostic_run_status"])
+        self.assertTrue(diagnostic["channel7_density_provenance_deferred"])
+        self.assertFalse(diagnostic["quantum_jobs_launched"])
+        self.assertFalse(diagnostic["source_files_modified_by_diagnostic"])
+        self.assertFalse(diagnostic["production_gradient_algebra_edited"])
+        self.assertFalse(diagnostic["ready_for_production_fix_claim"])
+        self.assertIn("direct_td_abxc_as_xa_xb", diagnostic["forbidden_source_trials"])
+        self.assertEqual("instrument_mrsf_spin_resolved_xc_density_candidate", diagnostic["next_action"])
+        self.assertEqual(["a0_z"], diagnostic["residual_components_to_recheck"])
+        self.assertIn("OQP_td_mrsf_density", diagnostic["source_observations"]["mrsf_density_tags_seen"])
+        self.assertTrue(diagnostic["source_snapshot"]["all_source_files_present"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1372,6 +1372,100 @@ def summarize_source_trial_outcome(
     }
 
 
+def _source_text(source_root: Path | str, relative_path: str) -> str:
+    path = Path(source_root) / relative_path
+    return path.read_text() if path.exists() else ""
+
+
+def summarize_mrsf_xc_density_handoff_diagnostic(
+    source_level_validation: dict[str, Any],
+    source_trial_outcome: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Plan and run a safe static MRSF XC-density handoff diagnostic.
+
+    This is deliberately not a source trial and not a quantum rerun.  It records
+    the exact source seam after the negative channel-7 trial, identifies which
+    MRSF density tags are visible at the gradient driver, and preserves the
+    guardrail that a direct ``td_abxc`` -> ``xa/xb`` handoff is forbidden until a
+    real spin-resolved MRSF XC-density candidate is instrumented.
+    """
+
+    validation_points = _validation_points_by_id(source_level_validation)
+    xc_point = validation_points.get("mrsf_xc_density_handoff", {})
+    residual_components = [
+        str(component.get("component"))
+        for component in source_level_validation.get("residual_components", [])
+        if component.get("component")
+    ]
+    deferred = set(str(item) for item in source_trial_outcome.get("deferred_hypotheses", []))
+    channel7_deferred = (
+        source_trial_outcome.get("completed_source_test") == "channel7_density_provenance"
+        and source_trial_outcome.get("completed_source_test_status") == "negative_no_change"
+    ) or "channel7_density_provenance" in deferred
+
+    gradient_text = _source_text(source_root, "source/modules/tdhf_mrsf_gradient.F90")
+    z_vector_text = _source_text(source_root, "source/modules/tdhf_mrsf_z_vector.F90")
+    gradient_call_has_xa_xb = _xc_call_has_explicit_xa_xb_handoff(gradient_text)
+    tags_seen = []
+    for tag in ["OQP_td_abxc", "OQP_td_p", "OQP_td_mrsf_density"]:
+        if tag in gradient_text or tag in z_vector_text:
+            tags_seen.append(tag)
+
+    source_observations = {
+        "gradient_xc_call_has_explicit_xa_xb_handoff": gradient_call_has_xa_xb,
+        "mrsf_density_tags_seen": tags_seen,
+        "gradient_xc_call_lines": _find_line_numbers(gradient_text, r"call\s+utddft_xc_gradient", flags=re.IGNORECASE),
+        "mrsf_density_get_lines": _find_line_numbers(gradient_text, r"OQP_td_mrsf_density", flags=re.IGNORECASE),
+        "td_abxc_get_lines": _find_line_numbers(gradient_text, r"OQP_td_abxc", flags=re.IGNORECASE),
+        "td_p_get_lines": _find_line_numbers(gradient_text, r"OQP_td_p", flags=re.IGNORECASE),
+        "td_mrsf_density_reserve_lines": _find_line_numbers(z_vector_text, r"OQP_td_mrsf_density", flags=re.IGNORECASE),
+        "xc_call_snippets": _line_snippets(
+            gradient_text,
+            _find_line_numbers(gradient_text, r"call\s+utddft_xc_gradient", flags=re.IGNORECASE),
+        ),
+    }
+
+    ready = (
+        channel7_deferred
+        and source_trial_outcome.get("next_source_test") == "mrsf_xc_density_handoff"
+        and bool(xc_point)
+        and not bool(source_trial_outcome.get("trah_detected"))
+    )
+    return {
+        "diagnostic_scope": "mrsf_xc_density_handoff_diagnostic_only",
+        "selected": source_level_validation.get("selected") or source_trial_outcome.get("selected"),
+        "one_variable_under_test": "mrsf_xc_density_handoff",
+        "diagnostic_run_status": "static_source_trace_completed" if ready else "blocked_before_static_source_trace",
+        "channel7_density_provenance_deferred": channel7_deferred,
+        "source_trial_outcome_status": source_trial_outcome.get("completed_source_test_status"),
+        "source_locations": xc_point.get("source_locations", []),
+        "source_snippets": xc_point.get("source_snippets", []),
+        "source_observations": source_observations,
+        "source_snapshot": _source_snapshot(source_root),
+        "residual_components_to_recheck": residual_components,
+        "forbidden_source_trials": [
+            "direct_td_abxc_as_xa_xb",
+            "bundled_channel7_and_xc_handoff_changes",
+            "new_spc_scaling_changes",
+            "multi_molecule_source_edit_before_single_component_validation",
+        ],
+        "required_next_instrumentation": [
+            "define or expose a real MRSF spin-resolved XC-density candidate before passing xa/xb",
+            "keep pa/pb transition-density inputs unchanged while instrumenting the optional xa/xb seam",
+            "rerun the same H2S root 5 a0_z gradient/plus/minus controls only after the candidate is source-reviewed",
+        ],
+        "quantum_jobs_launched": False,
+        "source_files_modified_by_diagnostic": False,
+        "production_gradient_algebra_edited": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "instrument_mrsf_spin_resolved_xc_density_candidate" if ready else "resolve_channel7_outcome_or_xc_handoff_blockers"
+        ),
+        "scope_guard": "diagnostic-only static source trace; no source edit, no OpenQP jobs, no production fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1638,6 +1732,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Summarize a completed source-trial result and rank the next diagnostic without claiming a fix",
     )
+    parser.add_argument(
+        "--mrsf-xc-density-handoff-diagnostic",
+        action="store_true",
+        help="Run a diagnostic-only static source trace for the MRSF XC-density handoff after a negative channel-7 trial",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1712,6 +1811,16 @@ def main(argv: list[str] | None = None) -> int:
         source_level_validation = json.loads(args.csv_path[0].read_text())
         trial_results = json.loads(args.csv_path[1].read_text())
         summary = summarize_source_trial_outcome(source_level_validation, trial_results)
+    elif args.mrsf_xc_density_handoff_diagnostic:
+        if len(args.csv_path) != 2:
+            parser.error("--mrsf-xc-density-handoff-diagnostic accepts source-level validation JSON and source-trial outcome JSON")
+        source_level_validation = json.loads(args.csv_path[0].read_text())
+        source_trial_outcome = json.loads(args.csv_path[1].read_text())
+        summary = summarize_mrsf_xc_density_handoff_diagnostic(
+            source_level_validation,
+            source_trial_outcome,
+            source_root=args.source_root,
+        )
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
