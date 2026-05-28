@@ -425,6 +425,97 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertIn('"physical_state": "S5"', written)
         self.assertIn("localized_z_component", written)
 
+    def test_parse_mrsf_log_extracts_state_character_table(self):
+        module = load_module()
+        log_text = """
+  Spin-adapted spin-flip excitations
+ State #   1  Energy =   -7.315353 eV
+               <S^2> =    0.0000
+ State #   4  Energy =    2.734056 eV
+               <S^2> =    0.0000
+     Summary table
+ State      Energy       Excitation   Excitation(eV)  <S^2>         Transition dipole moment, a.u.        Oscillator
+   1    -56.5040345278    -7.315353     0.000000      0.000     0.0000     0.0000     0.0000     0.0000      0.0000
+   0    -56.2352002518     0.000000     7.315353        (ROHF/UHF Reference state)
+   4    -56.1347255488     2.734056    10.049409      0.000    -0.5851     0.0000     0.0000     0.5851      0.0843
+"""
+
+        states = module.parse_mrsf_log_state_table(log_text)
+
+        self.assertEqual("S3", states[4]["physical_state"])
+        self.assertAlmostEqual(2.734056, states[4]["raw_mrsf_root_value_ev"])
+        self.assertAlmostEqual(10.049409, states[4]["physical_excitation_energy_ev"])
+        self.assertAlmostEqual(0.0843, states[4]["oscillator_strength"])
+        self.assertEqual("ROHF/UHF Reference state", states[0]["state_type"])
+
+    def test_root_continuity_summary_detects_near_degenerate_target_root(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir)
+            for rel, root4_energy in {
+                "grad/grad.log": 2.734056,
+                "e_a0_y_plus/e_a0_y_plus.log": 2.734051,
+                "e_a0_y_minus/e_a0_y_minus.log": 2.734052,
+            }.items():
+                path = root_dir / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    f"""
+  Spin-adapted spin-flip excitations
+ State #   1  Energy =   -7.315353 eV
+               <S^2> =    0.0000
+ State #   3  Energy =    2.734050 eV
+               <S^2> =    0.0000
+ State #   4  Energy =    {root4_energy:.6f} eV
+               <S^2> =    0.0000
+     Summary table
+ State      Energy       Excitation   Excitation(eV)  <S^2>         Transition dipole moment, a.u.        Oscillator
+   1    -56.5040345278    -7.315353     0.000000      0.000     0.0000     0.0000     0.0000     0.0000      0.0000
+   0    -56.2352002518     0.000000     7.315353        (ROHF/UHF Reference state)
+   3    -56.1347257513     2.734050    10.049404      0.000    -0.0000    -0.5850    -0.0000     0.5850      0.0843
+   4    -56.1347255488     {root4_energy:.6f}    10.049409      0.000    -0.5851     0.0000     0.0000     0.5851      0.0843
+"""
+                )
+
+            summary = module.summarize_root_continuity_dir(root_dir, root=4)
+
+        self.assertEqual(4, summary["root"])
+        self.assertEqual("S3", summary["physical_state"])
+        self.assertEqual(3, summary["log_count"])
+        self.assertEqual("present", summary["s2_evidence"])
+        self.assertLess(summary["min_neighbor_gap_ev"], 1.0e-4)
+        self.assertTrue(summary["near_degenerate_target"])
+        self.assertIn("root-continuity", summary["evidence_hint"])
+
+    def test_cli_root_continuity_mode_writes_log_evidence_summary(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir)
+            log_path = root_dir / "grad" / "grad.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                """
+  Spin-adapted spin-flip excitations
+ State #   1  Energy =   -7.315353 eV
+               <S^2> =    0.0000
+ State #   4  Energy =    2.734056 eV
+               <S^2> =    0.0000
+     Summary table
+ State      Energy       Excitation   Excitation(eV)  <S^2>         Transition dipole moment, a.u.        Oscillator
+   1    -56.5040345278    -7.315353     0.000000      0.000     0.0000     0.0000     0.0000     0.0000      0.0000
+   0    -56.2352002518     0.000000     7.315353        (ROHF/UHF Reference state)
+   4    -56.1347255488     2.734056    10.049409      0.000    -0.5851     0.0000     0.0000     0.5851      0.0843
+"""
+            )
+            output = root_dir / "root_continuity.json"
+
+            status = module.main(["--root-continuity", "--root", "4", str(root_dir), "--output", str(output)])
+            written = output.read_text()
+
+        self.assertEqual(0, status)
+        self.assertIn('"physical_state": "S3"', written)
+        self.assertIn('"s2_evidence": "present"', written)
+
     def test_cli_components_mode_accepts_multiple_csvs_for_artifact_ranking(self):
         module = load_module()
         first = self.write_components_csv(

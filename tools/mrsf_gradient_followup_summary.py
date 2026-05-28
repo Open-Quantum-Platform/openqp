@@ -11,6 +11,7 @@ import argparse
 import ast
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -287,6 +288,155 @@ def summarize_components_csvs(paths: Iterable[Path | str], threshold: float = DE
     return summarize_component_datasets(datasets, threshold)
 
 
+_STATE_ENERGY_RE = re.compile(r"State #\s+(\d+)\s+Energy =\s+([-+0-9.Ee]+) eV")
+_S2_RE = re.compile(r"<S\^2> =\s+([-+0-9.Ee]+)")
+_SUMMARY_ROW_RE = re.compile(
+    r"^\s*(\d+)\s+([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s+"
+    r"([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s+"
+    r"([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s*$"
+)
+_REFERENCE_ROW_RE = re.compile(r"^\s*0\s+([-+0-9.Ee]+)\s+[-+0-9.Ee]+\s+[-+0-9.Ee]+\s+\(ROHF/UHF Reference state\)")
+
+
+def parse_mrsf_log_state_table(log_text: str) -> dict[int, dict[str, Any]]:
+    """Extract compact MRSF root state-character evidence from an OpenQP log.
+
+    Root 0 is the ROHF/UHF reference.  Root N maps to physical S(N-1).
+    """
+
+    states: dict[int, dict[str, Any]] = {}
+    pending_root: int | None = None
+    for line in log_text.splitlines():
+        match = _STATE_ENERGY_RE.search(line)
+        if match:
+            pending_root = int(match.group(1))
+            states.setdefault(pending_root, {})["root"] = pending_root
+            states[pending_root]["physical_state"] = physical_state_for_mrsf_root(pending_root)
+            states[pending_root]["raw_mrsf_root_value_ev"] = float(match.group(2))
+            continue
+        if pending_root is not None:
+            s2_match = _S2_RE.search(line)
+            if s2_match:
+                states.setdefault(pending_root, {})["s2"] = float(s2_match.group(1))
+                pending_root = None
+                continue
+
+        summary_match = _SUMMARY_ROW_RE.match(line)
+        if summary_match:
+            root = int(summary_match.group(1))
+            state = states.setdefault(root, {"root": root})
+            state.update(
+                {
+                    "physical_state": physical_state_for_mrsf_root(root),
+                    "total_energy_ha": float(summary_match.group(2)),
+                    "raw_mrsf_root_value_ev": float(summary_match.group(3)),
+                    "physical_excitation_energy_ev": float(summary_match.group(4)),
+                    "s2": float(summary_match.group(5)),
+                    "transition_dipole_x": float(summary_match.group(6)),
+                    "transition_dipole_y": float(summary_match.group(7)),
+                    "transition_dipole_z": float(summary_match.group(8)),
+                    "transition_dipole_abs": float(summary_match.group(9)),
+                    "oscillator_strength": float(summary_match.group(10)),
+                    "state_type": "response_root",
+                }
+            )
+            continue
+
+        reference_match = _REFERENCE_ROW_RE.match(line)
+        if reference_match:
+            states[0] = {
+                "root": 0,
+                "physical_state": None,
+                "total_energy_ha": float(reference_match.group(1)),
+                "state_type": "ROHF/UHF Reference state",
+            }
+    return states
+
+
+def _read_mrsf_log_state_table(path: Path) -> dict[int, dict[str, Any]]:
+    return parse_mrsf_log_state_table(path.read_text(errors="replace"))
+
+
+def _target_neighbor_gap(states: dict[int, dict[str, Any]], root: int) -> float | None:
+    target = states.get(root)
+    if not target or "raw_mrsf_root_value_ev" not in target:
+        return None
+    target_energy = target["raw_mrsf_root_value_ev"]
+    gaps = [
+        abs(item["raw_mrsf_root_value_ev"] - target_energy)
+        for item_root, item in states.items()
+        if item_root > 0 and item_root != root and "raw_mrsf_root_value_ev" in item
+    ]
+    return min(gaps) if gaps else None
+
+
+def summarize_root_continuity_dir(path: Path | str, root: int, near_degenerate_threshold_ev: float = 1.0e-3) -> dict[str, Any]:
+    root_dir = Path(path)
+    log_paths = sorted(root_dir.glob("grad/*.log")) + sorted(root_dir.glob("e_*/*.log"))
+    entries: list[dict[str, Any]] = []
+    s2_values: list[float] = []
+    neighbor_gaps: list[float] = []
+    trah_logs: list[str] = []
+    missing_target_logs: list[str] = []
+    for log_path in log_paths:
+        text = log_path.read_text(errors="replace")
+        if "SCF did not converge. Restarting SCF with the TRAH method." in text or "TRAH / Trust-Region Augmented Hessian Settings" in text:
+            trah_logs.append(str(log_path))
+        states = parse_mrsf_log_state_table(text)
+        target = states.get(root)
+        if not target:
+            missing_target_logs.append(str(log_path))
+            continue
+        if "s2" in target:
+            s2_values.append(target["s2"])
+        gap = _target_neighbor_gap(states, root)
+        if gap is not None:
+            neighbor_gaps.append(gap)
+        entries.append(
+            {
+                "log": str(log_path),
+                "root": root,
+                "physical_state": physical_state_for_mrsf_root(root),
+                "raw_mrsf_root_value_ev": target.get("raw_mrsf_root_value_ev"),
+                "physical_excitation_energy_ev": target.get("physical_excitation_energy_ev"),
+                "s2": target.get("s2"),
+                "oscillator_strength": target.get("oscillator_strength"),
+                "transition_dipole_abs": target.get("transition_dipole_abs"),
+                "nearest_neighbor_gap_ev": gap,
+            }
+        )
+    s2_evidence = "present" if s2_values else "unknown"
+    s2_max_delta = max(s2_values) - min(s2_values) if s2_values else 0.0
+    min_neighbor_gap = min(neighbor_gaps) if neighbor_gaps else None
+    near_degenerate = min_neighbor_gap is not None and min_neighbor_gap < near_degenerate_threshold_ev
+    if trah_logs:
+        evidence_hint = "not-clean: TRAH fallback present; inspect SCF before algebra edits"
+    elif s2_evidence == "unknown":
+        evidence_hint = "state-character evidence missing; parse/rerun root-continuity metadata before algebra edits"
+    elif near_degenerate:
+        evidence_hint = "root-continuity risk: target root is near-degenerate with a neighboring response root"
+    elif s2_max_delta > 0.5:
+        evidence_hint = "root-continuity risk: target <S^2> changes across displaced geometries"
+    else:
+        evidence_hint = "target <S^2> evidence is present; no large <S^2> change detected"
+    return {
+        "root_dir": str(root_dir),
+        "root": root,
+        "physical_state": physical_state_for_mrsf_root(root),
+        "log_count": len(log_paths),
+        "parsed_target_log_count": len(entries),
+        "missing_target_logs": missing_target_logs,
+        "s2_evidence": s2_evidence,
+        "s2_max_delta": s2_max_delta,
+        "min_neighbor_gap_ev": min_neighbor_gap,
+        "near_degenerate_target": near_degenerate,
+        "trah_log_count": len(trah_logs),
+        "trah_logs": trah_logs,
+        "evidence_hint": evidence_hint,
+        "entries": entries,
+    }
+
+
 def summarize_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
     all_rows = list(rows)
     failures = [
@@ -327,11 +477,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv_path", type=Path, nargs="+")
     parser.add_argument("--components", action="store_true", help="Summarize per-component FD diagnostics CSV")
+    parser.add_argument("--root-continuity", action="store_true", help="Summarize MRSF root-continuity evidence from a root run directory")
+    parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
     args = parser.parse_args(argv)
 
-    if args.components:
+    if args.root_continuity:
+        if args.root is None:
+            parser.error("--root-continuity requires --root")
+        if len(args.csv_path) != 1:
+            parser.error("--root-continuity accepts exactly one root directory")
+        summary = summarize_root_continuity_dir(args.csv_path[0], args.root)
+    elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
         else:
