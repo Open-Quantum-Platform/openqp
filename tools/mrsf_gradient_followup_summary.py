@@ -1170,6 +1170,76 @@ def summarize_source_hypothesis_diagnostic(
     }
 
 
+def _hypotheses_by_id(source_hypothesis: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(item.get("hypothesis_id")): dict(item)
+        for item in source_hypothesis.get("ranked_source_hypotheses", [])
+        if item.get("hypothesis_id")
+    }
+
+
+def summarize_source_level_validation(source_hypothesis: dict[str, Any]) -> dict[str, Any]:
+    """Validate the next source-level diagnostic ordering without editing algebra.
+
+    The narrow H2S root-5 residual has complete FD/no-fix/root-continuity
+    controls, so the next useful step is to compare the two source seams and pick
+    one variable for a future source trial.  This helper records that comparison
+    as an artifact only; it does not change Fortran gradient algebra or claim a
+    production fix.
+    """
+
+    hypotheses = _hypotheses_by_id(source_hypothesis)
+    channel7 = hypotheses.get("channel7_density_provenance", {})
+    xc_handoff = hypotheses.get("mrsf_xc_density_handoff", {})
+    controls_complete = bool(source_hypothesis.get("controls_complete"))
+    trah_detected = bool(source_hypothesis.get("trah_detected"))
+    residual_components = list(source_hypothesis.get("residual_components", []))
+    reproduced_residual = any(bool(component.get("reproduces_prior_residual")) for component in residual_components)
+    ready_for_validation = controls_complete and reproduced_residual and not trah_detected and bool(channel7) and bool(xc_handoff)
+
+    validation_points = [
+        {
+            "hypothesis_id": "channel7_density_provenance",
+            "validation_role": "primary_one_variable_source_trial_candidate",
+            "source_locations": channel7.get("source_locations", []),
+            "source_snippets": channel7.get("source_snippets", []),
+            "source_seam": "tdhf_mrsf_z_vector.F90 channel-7 density provenance into OQP_td_mrsf_density",
+            "discriminating_question": "Does preserving the mrsfcbc channel-7 density, rather than overwriting it with td_abxc, move H2S root 5 a0_z toward the FD control?",
+            "guardrail": "one source variable only; keep FD/no-fix controls and do not claim a production fix from static source evidence",
+        },
+        {
+            "hypothesis_id": "mrsf_xc_density_handoff",
+            "validation_role": "secondary_deferred_source_trial_candidate",
+            "source_locations": xc_handoff.get("source_locations", []),
+            "source_snippets": xc_handoff.get("source_snippets", []),
+            "source_seam": "tdhf_mrsf_gradient.F90 utddft_xc_gradient MRSF density handoff",
+            "discriminating_question": "Does an MRSF-specific spin-resolved XC-density handoff explain the same localized z residual after channel-7 provenance is isolated?",
+            "guardrail": "do not pass td_abxc directly as xa/xb; prior evidence says direct td_abxc handoff is not a valid MRSF spin-resolved density fix",
+        },
+    ]
+
+    return {
+        "validation_scope": "source_level_validation_only",
+        "selected": source_hypothesis.get("selected"),
+        "controls_complete": controls_complete,
+        "trah_detected": trah_detected,
+        "residual_components": residual_components,
+        "compared_hypotheses": ["channel7_density_provenance", "mrsf_xc_density_handoff"],
+        "primary_next_source_test": "channel7_density_provenance",
+        "secondary_next_source_test": "mrsf_xc_density_handoff",
+        "validation_points": validation_points,
+        "source_level_validation_status": "validated_for_source_trial" if ready_for_validation else "blocked_missing_controls_or_hypotheses",
+        "production_gradient_algebra_edited": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "prepare_one_variable_channel7_source_trial_or_instrumentation"
+            if ready_for_validation
+            else "complete_controls_and_source_hypothesis_pair_before_validation"
+        ),
+        "scope_guard": "diagnostic-only source-level validation; no production algebra edit and no fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1421,6 +1491,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Rank source hypotheses from static source evidence plus completed validation controls without editing algebra",
     )
+    parser.add_argument(
+        "--source-level-validation",
+        action="store_true",
+        help="Compare channel-7 density provenance against MRSF XC-density handoff without editing algebra",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1479,6 +1554,11 @@ def main(argv: list[str] | None = None) -> int:
         source_evidence = json.loads(args.csv_path[0].read_text())
         validation_results = json.loads(args.csv_path[1].read_text())
         summary = summarize_source_hypothesis_diagnostic(source_evidence, validation_results)
+    elif args.source_level_validation:
+        if len(args.csv_path) != 1:
+            parser.error("--source-level-validation accepts exactly one source-hypothesis diagnostic JSON")
+        source_hypothesis = json.loads(args.csv_path[0].read_text())
+        summary = summarize_source_level_validation(source_hypothesis)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

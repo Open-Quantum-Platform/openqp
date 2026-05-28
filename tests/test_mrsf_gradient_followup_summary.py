@@ -1287,6 +1287,52 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("source_hypothesis_validation_required", diagnostic["next_action"])
         self.assertIn("no production algebra edit", diagnostic["scope_guard"])
 
+    def test_source_level_validation_compares_channel7_provenance_before_xc_handoff(self):
+        module = load_module()
+        source_hypothesis = {
+            "selected": "h2s root 5 / physical S4",
+            "controls_complete": True,
+            "trah_detected": False,
+            "ready_for_production_fix_claim": False,
+            "residual_components": [
+                {
+                    "component": "a0_z",
+                    "max_abs_diff_ha_per_bohr": 0.07927826,
+                    "reproduces_prior_residual": True,
+                    "root_continuity_no_trah_status": "present",
+                }
+            ],
+            "ranked_source_hypotheses": [
+                {
+                    "hypothesis_id": "channel7_density_provenance",
+                    "rank": 1,
+                    "source_locations": [842],
+                    "source_snippets": [{"line": 842, "text": "fmrst1(1,7,:,:) = td_abxc"}],
+                },
+                {
+                    "hypothesis_id": "mrsf_xc_density_handoff",
+                    "rank": 2,
+                    "source_locations": [156],
+                    "source_snippets": [{"line": 156, "text": "call utddft_xc_gradient(basis=basis, &"}],
+                },
+            ],
+        }
+
+        validation = module.summarize_source_level_validation(source_hypothesis)
+
+        self.assertEqual("source_level_validation_only", validation["validation_scope"])
+        self.assertEqual("h2s root 5 / physical S4", validation["selected"])
+        self.assertEqual(["channel7_density_provenance", "mrsf_xc_density_handoff"], validation["compared_hypotheses"])
+        self.assertEqual("channel7_density_provenance", validation["primary_next_source_test"])
+        self.assertEqual("mrsf_xc_density_handoff", validation["secondary_next_source_test"])
+        self.assertEqual("validated_for_source_trial", validation["source_level_validation_status"])
+        self.assertFalse(validation["production_gradient_algebra_edited"])
+        self.assertFalse(validation["ready_for_production_fix_claim"])
+        self.assertIn("fmrst1(1,7", validation["validation_points"][0]["source_snippets"][0]["text"])
+        self.assertIn("do not pass td_abxc directly", validation["validation_points"][1]["guardrail"])
+        self.assertEqual("prepare_one_variable_channel7_source_trial_or_instrumentation", validation["next_action"])
+        self.assertIn("diagnostic-only", validation["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
