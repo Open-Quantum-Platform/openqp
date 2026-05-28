@@ -43,6 +43,24 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("ekt_metric = density_mo", source)
         self.assertIn("ekt_operator = fock_mo - lagrangian_mo", source)
 
+    def test_examples_cover_mrsf_ekt_ip_and_ea(self):
+        cases = {
+            "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp.inp": "type=mrsf_ekt_ip",
+            "examples/other/h2o_rohf_mrsf_ekt_ea_6-31g_bhhlyp.inp": "type=mrsf_ekt_ea",
+        }
+
+        for relpath, td_type in cases.items():
+            with self.subTest(relpath=relpath):
+                path = ROOT / relpath
+                ref = path.with_suffix(".json")
+                self.assertTrue(path.exists(), f"missing example input: {relpath}")
+                self.assertTrue(ref.exists(), f"missing example reference: {ref.relative_to(ROOT)}")
+                text = path.read_text()
+                self.assertIn("method=tdhf", text)
+                self.assertIn("runtype=energy", text)
+                self.assertIn("type=rohf", text)
+                self.assertIn(td_type, text)
+
 
 if __name__ == "__main__":
     unittest.main()
