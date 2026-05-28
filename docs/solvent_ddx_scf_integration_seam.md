@@ -101,7 +101,7 @@ This is the natural first path for converting ddX apparent charges/cavity-point 
 4. Add the nuclear potential at those sites to form total `phi_cav`.
 5. Use ddX to solve the reaction field and retrieve the point representation needed for OpenQP.
 6. Use `external_charge_potential` to build packed `V_pcm` from reaction charges/sites.
-7. Add `V_pcm` to all spin Fock blocks before diagonalization/convergence acceleration.
+7. Add `V_pcm` to all spin Fock blocks before diagonalization/convergence acceleration. The dependency-light helper `reference_scf_reaction_fock_updates()` now records this intended replication: one packed RHF block receives one update, while ROHF two-block storage receives the same scalar/electrostatic reaction-potential update on both alpha and beta Fock blocks.
 8. Add a dedicated PCM energy term to `scf_energy_t` rather than hiding it inside `ehf1`; this avoids confusing final energy breakdowns.
 
 ## Deliberate non-goals for the first implementation

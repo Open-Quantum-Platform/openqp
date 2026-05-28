@@ -141,6 +141,28 @@ def reference_scf_pcm_energy_terms(density_blocks, reaction_potential):
     }
 
 
+def reference_scf_reaction_fock_updates(density_blocks, reaction_potential):
+    """Return guarded packed AO reaction-potential updates for reference Focks.
+
+    The first runtime PCM seam will add a validated packed AO reaction-field
+    matrix to each RHF/ROHF reference-SCF Fock block.  This helper records the
+    intended block replication and bookkeeping without enabling production PCM,
+    state-specific response solvent, gradients, or optimizer support.
+    """
+    terms = reference_scf_pcm_energy_terms(density_blocks, reaction_potential)
+    potential = terms["reaction_potential"]
+    return {
+        "nbf": terms["nbf"],
+        "nfocks": terms["nfocks"],
+        "density_packed": terms["density_packed"],
+        "reaction_potential": potential,
+        "fock_updates": [list(potential) for _ in range(terms["nfocks"])],
+        "density_reaction_dot": terms["density_reaction_dot"],
+        "candidate_polarization_energy": terms["candidate_polarization_energy"],
+        "application_scope": "add reaction_potential to each reference SCF Fock block",
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

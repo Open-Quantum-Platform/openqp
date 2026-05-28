@@ -229,6 +229,29 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertAlmostEqual(terms["candidate_polarization_energy"], 0.125)
         self.assertEqual(terms["energy_convention"], "0.5 * dot(reference_density_packed, reaction_potential)")
 
+    def test_reference_scf_reaction_fock_updates_replicate_reaction_potential_per_fock(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_fock_updates", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        updates = solvent.reference_scf_reaction_fock_updates(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+
+        self.assertEqual(updates["nbf"], 2)
+        self.assertEqual(updates["nfocks"], 2)
+        self.assertEqual(updates["density_packed"], [1.75, 0.0, 0.25])
+        self.assertEqual(updates["reaction_potential"], [0.1, 0.2, 0.3])
+        self.assertEqual(updates["fock_updates"], [[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]])
+        self.assertAlmostEqual(updates["candidate_polarization_energy"], 0.125)
+        self.assertEqual(updates["application_scope"], "add reaction_potential to each reference SCF Fock block")
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
