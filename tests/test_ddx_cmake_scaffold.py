@@ -147,6 +147,18 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("call_site_shape_validated", bridge_section)
         self.assertIn("len(pcm_reaction_potential_in) == expected_packed_ao_length", bridge_section)
 
+    def test_validation_matrix_records_call_site_shape_audit_boolean_boundary(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        bridge_section = text.split("reference_scf_pcm_calc_fock_call_site_bridge()", 1)[1].split(
+            "The native `calc_fock", 1
+        )[0]
+        self.assertIn("call_site_shape_validated=True", bridge_section)
+        self.assertIn("call_site_shape_validated=False", bridge_section)
+        self.assertIn("forwarded payloads", bridge_section)
+        self.assertIn("disabled/no-payload", bridge_section)
+        self.assertIn("expected_packed_ao_length", bridge_section)
+        self.assertIn("pcm_reaction_potential_in", bridge_section)
+
 
 if __name__ == "__main__":
     unittest.main()
