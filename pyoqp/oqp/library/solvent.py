@@ -117,6 +117,7 @@ def reference_scf_pcm_coupling_contract(density_blocks, cavity_xyz, reaction_pot
         "reference_target": "RHF/ROHF reference density",
         "response_solvent_coupling": "not enabled",
         "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
     }
 
 

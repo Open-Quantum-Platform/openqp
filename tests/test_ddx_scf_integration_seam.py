@@ -207,6 +207,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(contract["reference_target"], "RHF/ROHF reference density")
         self.assertEqual(contract["response_solvent_coupling"], "not enabled")
         self.assertEqual(contract["gradient_support"], "not enabled")
+        self.assertFalse(contract["runtime_pcm_enabled"])
         self.assertNotIn("density_blocks", contract)
         self.assertNotIn("state_density", contract)
 
