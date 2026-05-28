@@ -433,6 +433,16 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("pcm_reaction_potential=pcm_reaction_potential_in", calc_fock)
         self.assertNotIn("pcm%enabled", calc_fock.lower())
 
+    def test_scf_energy_type_has_dedicated_pcm_bookkeeping_field(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        energy_type = text.split("type :: scf_energy_t", 1)[1].split("end type scf_energy_t", 1)[0]
+        self.assertIn("epcm", energy_type)
+        self.assertIn("PCM reaction-field energy", energy_type)
+        printer = text.split("subroutine print_scf_energy", 1)[1].split("end subroutine print_scf_energy", 1)[0]
+        self.assertIn("PCM reaction-field energy", printer)
+        calc_jk_xc = text.split("subroutine calc_jk_xc", 1)[1].split("end subroutine calc_jk_xc", 1)[0]
+        self.assertIn("E%epcm = 0.0_dp", calc_jk_xc)
+
 
 if __name__ == "__main__":
     unittest.main()

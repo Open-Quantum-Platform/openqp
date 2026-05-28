@@ -273,6 +273,7 @@ module scf_addons
     real(kind=dp) :: virial   ! Virial ratio (V/T)
     real(kind=dp) :: tkin     ! Kinetic energy
     real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
+    real(kind=dp) :: epcm     ! PCM reaction-field energy
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
   contains
@@ -324,6 +325,7 @@ contains
      write(IW,"('                One electron energy =',F19.10)") this%ehf1
      write(IW,"('                Two electron energy =',F19.10)") this%vee
      write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
+     write(IW,"('        PCM reaction-field energy =',F19.10)") this%epcm
      write(IW,"(38X,18('-'))")
      write(IW,"('                       TOTAL energy =',F19.10)") this%etot
      write(IW,*)
@@ -1421,6 +1423,7 @@ contains
     !----------------------------------------------------------------------------
     E%ehf = 0.0_dp
     E%ehf1 = 0.0_dp
+    E%epcm = 0.0_dp
 
     ! compute one and two-electron energies
     do ii = 1, nfocks
