@@ -12,6 +12,7 @@ Created: Aug 2024
 import os
 import time
 import subprocess
+import shutil
 from typing import List, Dict, Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
@@ -106,6 +107,39 @@ class OQPTester:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return "Unable to retrieve Git information"
 
+    @staticmethod
+    def _read_simple_input_value(input_file: str, section: str, key: str, default: str = "") -> str:
+        current_section = None
+        try:
+            with open(input_file, encoding="utf-8") as handle:
+                for raw_line in handle:
+                    line = raw_line.strip()
+                    if not line or line.startswith(("#", ";")):
+                        continue
+                    if line.startswith("[") and line.endswith("]"):
+                        current_section = line[1:-1].strip().lower()
+                        continue
+                    if current_section == section.lower() and "=" in line:
+                        name, value = line.split("=", 1)
+                        if name.strip().lower() == key.lower():
+                            return value.strip().strip('"').strip("'")
+        except OSError:
+            return default
+        return default
+
+    def _optional_backend_skip_reason(self, input_file: str) -> str:
+        method = self._read_simple_input_value(input_file, "input", "method").lower()
+        if method != "dftb":
+            return ""
+        executable = self._read_simple_input_value(input_file, "dftb", "executable", "dftb+") or "dftb+"
+        if shutil.which(executable) is None:
+            return (
+                f"DFTB+ executable not found on PATH: {executable}. "
+                "Skipping optional DFTB+ backend test; install DFTB+ and configure "
+                "the [dftb] executable/sk_path settings for full test coverage."
+            )
+        return ""
+
     def run_single_test(self, input_file: str) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
@@ -138,6 +172,14 @@ class OQPTester:
         }
 
         start_time = time.perf_counter()
+        skip_reason = self._optional_backend_skip_reason(input_file)
+        if skip_reason:
+            self.log(f"Skipping test {project_name}: {skip_reason}")
+            result["status"] = "SKIPPED"
+            result["message"] = skip_reason
+            result["execution_time"] = time.perf_counter() - start_time
+            return result
+
         try:
             runner = Runner(project=project_name,
                             input_file=input_file,
@@ -172,7 +214,10 @@ class OQPTester:
                 os.makedirs(self.output_dir)
 
         input_files = self._get_input_files(test_path)
+        if test_path == 'all':
+            self.max_workers = int(os.environ.get('OQP_TEST_MAX_WORKERS', '1'))
         if not input_files:
+            self.end_time = time.perf_counter()
             return
 
         if self.mpi_manager.use_mpi:
@@ -186,7 +231,20 @@ class OQPTester:
                     for input_file in input_files
                 }
                 for future in as_completed(future_to_file):
-                    self.results.append(future.result())
+                    input_file = future_to_file[future]
+                    try:
+                        self.results.append(future.result())
+                    except Exception as err:
+                        project_name = os.path.splitext(os.path.basename(input_file))[0]
+                        self.log(f"Error in test {project_name}: {type(err).__name__} - {str(err)}")
+                        self.results.append({
+                            "project": project_name,
+                            "input_file": input_file,
+                            "log_file": os.path.join(self.output_dir, f"{project_name}.log"),
+                            "status": "ERROR",
+                            "message": f"PyOQP worker error: {type(err).__name__} - {str(err)}",
+                            "execution_time": 0,
+                        })
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
@@ -231,6 +289,10 @@ class OQPTester:
             1 for result in self.results
             if result['status'] == 'ERROR'
         )
+        skipped = sum(
+            1 for result in self.results
+            if result['status'] == 'SKIPPED'
+        )
         self.status = 1 if failed > 0 or errors > 0 else 0
 
         total_time = self.end_time - self.start_time
@@ -249,6 +311,7 @@ Total tests: {len(self.results)}
 Passed: {passed}
 Failed: {failed}
 Errors: {errors}
+Skipped: {skipped}
 
 Total CPUs: MPI Processors = {self.mpi_manager.size}, OpenMp Threads = {self.omp_threads}
 Max parallel tests: {self.max_workers}
@@ -290,8 +353,24 @@ Total execution time: {self.format_time(total_time)}
         if os.path.exists(self.report_file):
             os.remove(self.report_file)
 
-        self.run_tests(test_path)
+        try:
+            self.run_tests(test_path)
+        except Exception as err:
+            self.log(f"OpenQP test harness error: {type(err).__name__} - {str(err)}")
+            self.results.append({
+                "project": "test_harness",
+                "input_file": test_path,
+                "log_file": self.report_file,
+                "status": "ERROR",
+                "message": f"PyOQP test harness error: {type(err).__name__} - {str(err)}",
+                "execution_time": 0,
+            })
+            if self.start_time is None:
+                self.start_time = time.perf_counter()
+            self.end_time = time.perf_counter()
         if self.mpi_manager.rank == 0:
+            if not os.path.exists(self.output_dir):
+                os.makedirs(self.output_dir)
             report = self.generate_report()
             self.log("OpenQP tests completed")
             return report
