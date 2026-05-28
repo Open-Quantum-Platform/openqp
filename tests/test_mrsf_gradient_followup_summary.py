@@ -1333,6 +1333,60 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("prepare_one_variable_channel7_source_trial_or_instrumentation", validation["next_action"])
         self.assertIn("diagnostic-only", validation["scope_guard"])
 
+    def test_channel7_source_trial_plan_is_review_only_and_one_variable(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp)
+            gradient = source_root / "source" / "modules" / "tdhf_mrsf_gradient.F90"
+            z_vector = source_root / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
+            gradient.parent.mkdir(parents=True)
+            gradient.write_text("call utddft_xc_gradient(basis=basis, &\n")
+            z_vector.write_text("call mrsfcbc(..., mo_a, mo_a, ball)\nfmrst1(1,7,:,:) = td_abxc\n")
+            source_level_validation = {
+                "selected": "h2s root 5 / physical S4",
+                "source_level_validation_status": "validated_for_source_trial",
+                "primary_next_source_test": "channel7_density_provenance",
+                "secondary_next_source_test": "mrsf_xc_density_handoff",
+                "residual_components": [
+                    {
+                        "component": "a0_z",
+                        "max_abs_diff_ha_per_bohr": 0.07927826,
+                        "reproduces_prior_residual": True,
+                        "root_continuity_no_trah_status": "present",
+                    }
+                ],
+                "validation_points": [
+                    {
+                        "hypothesis_id": "channel7_density_provenance",
+                        "source_locations": [842],
+                        "source_snippets": [{"line": 842, "text": "fmrst1(1,7,:,:) = td_abxc"}],
+                    },
+                    {
+                        "hypothesis_id": "mrsf_xc_density_handoff",
+                        "source_locations": [156],
+                        "source_snippets": [{"line": 156, "text": "call utddft_xc_gradient(basis=basis, &"}],
+                    },
+                ],
+            }
+
+            plan = module.summarize_channel7_source_trial_plan(source_level_validation, source_root=source_root)
+
+        self.assertEqual("channel7_source_trial_plan_only", plan["trial_scope"])
+        self.assertEqual("h2s root 5 / physical S4", plan["selected"])
+        self.assertEqual("channel7_density_provenance", plan["one_variable_under_test"])
+        self.assertTrue(plan["ready_for_manual_source_trial"])
+        self.assertFalse(plan["production_gradient_algebra_edited"])
+        self.assertFalse(plan["source_files_modified_by_planner"])
+        self.assertFalse(plan["ready_for_production_fix_claim"])
+        self.assertIn("mrsf_xc_density_handoff", plan["forbidden_bundled_changes"])
+        self.assertIn("ovov_sign_baseline_control", plan["forbidden_bundled_changes"])
+        self.assertIn("a0_z", plan["residual_components_to_recheck"])
+        self.assertEqual("source_file_hashes_for_manual_review", plan["source_snapshot"]["snapshot_scope"])
+        self.assertTrue(plan["source_snapshot"]["all_source_files_present"])
+        self.assertEqual("manual_review_before_source_edit", plan["manual_review_status"]["next_gate"])
+        self.assertEqual("run_one_variable_channel7_trial_then_repeat_fd_control", plan["next_action"])
+        self.assertIn("no source files modified", plan["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

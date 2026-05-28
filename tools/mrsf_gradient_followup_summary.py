@@ -1240,6 +1240,83 @@ def summarize_source_level_validation(source_hypothesis: dict[str, Any]) -> dict
     }
 
 
+def _validation_points_by_id(source_level_validation: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(item.get("hypothesis_id")): dict(item)
+        for item in source_level_validation.get("validation_points", [])
+        if item.get("hypothesis_id")
+    }
+
+
+def summarize_channel7_source_trial_plan(
+    source_level_validation: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Plan a one-variable channel-7 source trial without editing source files."""
+
+    validation_points = _validation_points_by_id(source_level_validation)
+    channel7 = validation_points.get("channel7_density_provenance", {})
+    ready_for_manual_source_trial = (
+        source_level_validation.get("source_level_validation_status") == "validated_for_source_trial"
+        and source_level_validation.get("primary_next_source_test") == "channel7_density_provenance"
+        and bool(channel7)
+    )
+    residual_components = [
+        str(component.get("component"))
+        for component in source_level_validation.get("residual_components", [])
+        if component.get("component")
+    ]
+    source_snapshot = _source_snapshot(source_root)
+    manual_blockers = ["manual_review_before_source_edit"]
+    if not ready_for_manual_source_trial:
+        manual_blockers.append("source_level_validation_not_ready")
+    if not source_snapshot["all_source_files_present"]:
+        manual_blockers.append("missing_source_snapshot_files")
+
+    return {
+        "trial_scope": "channel7_source_trial_plan_only",
+        "selected": source_level_validation.get("selected"),
+        "one_variable_under_test": "channel7_density_provenance",
+        "ready_for_manual_source_trial": ready_for_manual_source_trial,
+        "manual_review_status": {
+            "manual_review_required": True,
+            "approved_to_edit_source": False,
+            "reviewed_by": None,
+            "next_gate": "manual_review_before_source_edit",
+            "blockers": manual_blockers,
+        },
+        "source_snapshot": source_snapshot,
+        "source_trial_intent": {
+            "source_file": "source/modules/tdhf_mrsf_z_vector.F90",
+            "target_signal": "channel-7 mrsfcbc density provenance before OQP_td_mrsf_density handoff",
+            "candidate_change_description": "isolate whether preserving mrsfcbc channel-7 density instead of overwriting it with td_abxc changes the validated H2S root-5 a0_z residual",
+            "source_locations": channel7.get("source_locations", []),
+            "source_snippets": channel7.get("source_snippets", []),
+        },
+        "residual_components_to_recheck": residual_components,
+        "required_post_trial_controls": [
+            "rerun the same a0_z gradient/plus/minus finite-difference controls",
+            "compare against the recorded no-fix/pre-change control",
+            "confirm root-continuity/no-TRAH evidence remains clean",
+        ],
+        "forbidden_bundled_changes": [
+            "mrsf_xc_density_handoff",
+            "ovov_sign_baseline_control",
+            "new SPC scaling changes",
+            "multi-component or multi-molecule source edits",
+        ],
+        "source_files_modified_by_planner": False,
+        "production_gradient_algebra_edited": False,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "run_one_variable_channel7_trial_then_repeat_fd_control"
+            if ready_for_manual_source_trial and source_snapshot["all_source_files_present"]
+            else "resolve_manual_review_or_snapshot_blockers_before_source_trial"
+        ),
+        "scope_guard": "review-only one-variable source-trial plan; no source files modified, no quantum jobs launched, and no production fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1496,6 +1573,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Compare channel-7 density provenance against MRSF XC-density handoff without editing algebra",
     )
+    parser.add_argument(
+        "--channel7-source-trial-plan",
+        action="store_true",
+        help="Plan a review-only one-variable channel-7 source trial without editing source files",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1559,6 +1641,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--source-level-validation accepts exactly one source-hypothesis diagnostic JSON")
         source_hypothesis = json.loads(args.csv_path[0].read_text())
         summary = summarize_source_level_validation(source_hypothesis)
+    elif args.channel7_source_trial_plan:
+        if len(args.csv_path) != 1:
+            parser.error("--channel7-source-trial-plan accepts exactly one source-level validation JSON")
+        source_level_validation = json.loads(args.csv_path[0].read_text())
+        summary = summarize_channel7_source_trial_plan(source_level_validation, source_root=args.source_root)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
