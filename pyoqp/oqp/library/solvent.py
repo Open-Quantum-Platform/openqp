@@ -411,10 +411,20 @@ def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_
     A future SCF caller can use this dependency-light shim to map OpenQP's
     old-density/old-Fock buffers onto the existing non-incremental-only request
     guard.  Presence of either buffer means the incremental-Fock shortcut is in
-    play and reviewed reference-PCM payloads must fail fast.
+    play and reviewed reference-PCM payloads must fail fast with explicit old
+    buffer provenance.
     """
     audit = reference_scf_pcm_incremental_fock_audit(dens_old=dens_old, f_old=f_old)
-    request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=audit["scf_state_incremental_fock"])
+    try:
+        request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=audit["scf_state_incremental_fock"])
+    except ValueError as exc:
+        if audit["scf_state_incremental_fock"] and "reference PCM incremental Fock is not validated" in str(exc):
+            raise ValueError(
+                "reference PCM incremental Fock is not validated; "
+                f"dens_old_present={str(audit['scf_state_dens_old_present']).lower()}; "
+                f"f_old_present={str(audit['scf_state_f_old_present']).lower()}"
+            ) from exc
+        raise
     request.update(audit)
     return request
 

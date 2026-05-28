@@ -650,9 +650,15 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(request["incremental_trigger_fields"], [])
         self.assertEqual(request["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
 
-        with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "reference PCM incremental Fock is not validated.*dens_old_present=true.*f_old_present=false",
+        ):
             solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=[0.0], f_old=None)
-        with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "reference PCM incremental Fock is not validated.*dens_old_present=false.*f_old_present=true",
+        ):
             solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=None, f_old=[0.0])
 
         disabled = solvent.reference_scf_pcm_calc_fock_request_from_scf_state(
