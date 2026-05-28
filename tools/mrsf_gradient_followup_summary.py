@@ -624,6 +624,25 @@ def _line_snippets(source_text: str, lines: Iterable[int], limit: int = 3) -> li
     return snippets
 
 
+def _next_validation_plan(source_plan: dict[str, Any]) -> dict[str, Any]:
+    candidate = source_plan.get("selected_candidate") or {}
+    bad_components = candidate.get("bad_components") or []
+    component_names = [str(item.get("component")) for item in bad_components if item.get("component")]
+    return {
+        "molecule": candidate.get("molecule"),
+        "method": candidate.get("method"),
+        "root": candidate.get("root"),
+        "physical_state": candidate.get("physical_state"),
+        "diagnostic_family": source_plan.get("diagnostic_family"),
+        "root_dir": candidate.get("root_dir"),
+        "components_to_validate": component_names,
+        "requires_no_fix_control": True,
+        "requires_finite_difference_rerun": True,
+        "requires_root_continuity_evidence": True,
+        "scope_guard": "diagnostic plan only; no production algebra edit until FD/no-fix/root-continuity validation exists",
+    }
+
+
 def summarize_source_diagnostic_evidence(
     source_plan: dict[str, Any],
     source_root: Path | str = Path("."),
@@ -720,6 +739,7 @@ def summarize_source_diagnostic_evidence(
         "source_signals": source_signals,
         "source_signal_locations": source_signal_locations,
         "source_signal_snippets": source_signal_snippets,
+        "next_validation_plan": _next_validation_plan(source_plan),
         "static_hypotheses_to_test": static_hypotheses,
         "validation_required_before_fix_claim": [
             "finite-difference validation on the selected stable target residual",

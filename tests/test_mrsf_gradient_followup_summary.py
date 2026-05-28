@@ -841,6 +841,14 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
             [{"line": 4, "text": "td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)"}],
             snippets["z_vector_td_mrsf_den_handoff"],
         )
+        next_validation = evidence["next_validation_plan"]
+        self.assertEqual("h2s", next_validation["molecule"])
+        self.assertEqual(5, next_validation["root"])
+        self.assertEqual("S4", next_validation["physical_state"])
+        self.assertEqual("localized_z_component", next_validation["diagnostic_family"])
+        self.assertEqual(["a0_z"], next_validation["components_to_validate"])
+        self.assertTrue(next_validation["requires_no_fix_control"])
+        self.assertTrue(next_validation["requires_finite_difference_rerun"])
         self.assertIn("no production algebra edit", evidence["scope_guard"])
         self.assertIn("finite-difference", " ".join(evidence["validation_required_before_fix_claim"]))
 
