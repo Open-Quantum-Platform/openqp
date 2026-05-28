@@ -517,6 +517,10 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(disabled["pcm_scope"], "reference_scf_energy_only")
         self.assertEqual(disabled["reference_target"], "RHF/ROHF reference density")
         self.assertFalse(disabled["runtime_pcm_enabled"])
+        self.assertEqual(
+            disabled["backend_validation_status"],
+            "pending PySCF/ddX/reference cross-check",
+        )
         self.assertEqual(disabled["handoff_target"], "calc_fock pcm_reaction_potential_in")
 
         payload = solvent.reference_scf_pcm_runtime_payload(

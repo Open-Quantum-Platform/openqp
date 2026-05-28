@@ -351,6 +351,7 @@ def reference_scf_pcm_calc_fock_handoff_from_molecule(mol):
             "runtime_pcm_enabled": False,
             "response_solvent_coupling": "not enabled",
             "gradient_support": "not enabled",
+            "backend_validation_status": "pending PySCF/ddX/reference cross-check",
             "handoff_target": "calc_fock pcm_reaction_potential_in",
         }
     handoff = reference_scf_pcm_calc_fock_handoff(payload)
