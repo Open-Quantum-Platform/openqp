@@ -502,6 +502,84 @@ def _recommended_source_check(group: dict[str, Any]) -> str:
     return "Prioritize a source-level SPC/XC density-handoff diagnostic across the listed bad components; no production algebra edit yet."
 
 
+def _source_file_presence(source_root: Path, relative_paths: Iterable[str]) -> list[dict[str, Any]]:
+    files = []
+    for relative_path in relative_paths:
+        path = source_root / relative_path
+        files.append({"path": relative_path, "exists": path.exists()})
+    return files
+
+
+def summarize_source_diagnostic_plan(
+    source_targets: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Create a conservative source-inspection plan for the top stable residual.
+
+    The plan intentionally does not edit algebra.  It records the first source
+    files and guardrails to inspect before any future production fix claim.
+    """
+
+    stable = list(source_targets.get("stable_source_candidates", []))
+    stable.sort(key=lambda item: (-float(item.get("max_abs_diff_ha_per_bohr", 0.0)), str(item.get("molecule", "")), int(item.get("root", 0))))
+    if not stable:
+        return {
+            "selected_candidate": None,
+            "diagnostic_family": "none",
+            "scope_guard": "no production algebra edit; no stable no-TRAH source candidate selected",
+            "source_files_to_inspect": [],
+            "source_checklist": [],
+            "validation_required_before_fix_claim": [
+                "finite-difference validation is required before claiming any MRSF gradient source fix"
+            ],
+        }
+
+    candidate = stable[0]
+    axes = set(candidate.get("bad_axes", []))
+    if axes == {"z"}:
+        diagnostic_family = "localized_z_component"
+        checklist = [
+            "Inspect MRSF Z-vector/operator mapping for the target root and bad Cartesian component.",
+            "Compare gradient assembly terms against existing SPC toggle evidence before changing signs or densities.",
+            "Preserve root-continuity classification and avoid NH3-style near-degenerate cases as source-fix evidence.",
+        ]
+    else:
+        diagnostic_family = "multi_component_spc_xc_density_handoff"
+        checklist = [
+            "Inspect MRSF SPC/XC density handoff across all bad components before changing algebra.",
+            "Separate SPC toggle, XC-gradient, and Z-vector hypotheses with source-level diagnostics first.",
+            "Preserve root-continuity classification and avoid near-degenerate cases as source-fix evidence.",
+        ]
+
+    return {
+        "selected_candidate": {
+            "molecule": candidate.get("molecule"),
+            "method": candidate.get("method"),
+            "root": candidate.get("root"),
+            "physical_state": candidate.get("physical_state"),
+            "max_abs_diff_ha_per_bohr": candidate.get("max_abs_diff_ha_per_bohr"),
+            "bad_axes": candidate.get("bad_axes", []),
+            "bad_components": candidate.get("bad_components", []),
+            "root_dir": candidate.get("root_dir"),
+        },
+        "diagnostic_family": diagnostic_family,
+        "scope_guard": "no production algebra edit; source diagnostic plan only",
+        "source_files_to_inspect": _source_file_presence(
+            Path(source_root),
+            [
+                "source/modules/tdhf_mrsf_gradient.F90",
+                "source/modules/tdhf_mrsf_z_vector.F90",
+            ],
+        ),
+        "source_checklist": checklist,
+        "validation_required_before_fix_claim": [
+            "finite-difference validation on the selected stable target residual",
+            "root-continuity evidence with real <S^2> and no TRAH for R/R+h/R-h logs",
+            "no-fix or pre-change control artifact for the same molecule/root/component",
+        ],
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -633,6 +711,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Combine component and root-continuity summaries to rank stable source-diagnostic candidates",
     )
+    parser.add_argument(
+        "--source-diagnostic-plan",
+        action="store_true",
+        help="Create a conservative source-inspection plan from ranked source-diagnostic candidates",
+    )
+    parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for --source-diagnostic-plan")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
@@ -654,6 +738,11 @@ def main(argv: list[str] | None = None) -> int:
         component_summary = json.loads(args.csv_path[0].read_text())
         root_continuity_summary = json.loads(args.csv_path[1].read_text())
         summary = summarize_source_diagnostic_targets(component_summary, root_continuity_summary)
+    elif args.source_diagnostic_plan:
+        if len(args.csv_path) != 1:
+            parser.error("--source-diagnostic-plan accepts exactly one source-diagnostic targets JSON")
+        source_targets = json.loads(args.csv_path[0].read_text())
+        summary = summarize_source_diagnostic_plan(source_targets, source_root=args.source_root)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

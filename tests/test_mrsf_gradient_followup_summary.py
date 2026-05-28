@@ -737,6 +737,41 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertIn('"stable_source_candidate_count": 1', written)
         self.assertIn('"diagnostic_status": "source_diagnostic_candidate"', written)
 
+    def test_source_diagnostic_plan_selects_top_candidate_and_source_guards(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = Path(tmpdir)
+            module_dir = source_root / "source" / "modules"
+            module_dir.mkdir(parents=True)
+            (module_dir / "tdhf_mrsf_gradient.F90").write_text("call utddft_xc_gradient\n")
+            (module_dir / "tdhf_mrsf_z_vector.F90").write_text("call mrsf_z_vector\n")
+            source_targets = {
+                "stable_source_candidates": [
+                    {
+                        "molecule": "h2s",
+                        "method": "mrsf",
+                        "root": 5,
+                        "physical_state": "S4",
+                        "max_abs_diff_ha_per_bohr": 0.07927826,
+                        "bad_axes": ["z"],
+                        "bad_components": [
+                            {"component": "a0_z", "axis": "z", "abs_diff_ha_per_bohr": 0.07927826}
+                        ],
+                        "root_dir": "artifact/h2s/mrsf/root_5",
+                    }
+                ]
+            }
+
+            plan = module.summarize_source_diagnostic_plan(source_targets, source_root=source_root)
+
+        self.assertEqual("h2s", plan["selected_candidate"]["molecule"])
+        self.assertEqual(5, plan["selected_candidate"]["root"])
+        self.assertEqual("S4", plan["selected_candidate"]["physical_state"])
+        self.assertEqual("localized_z_component", plan["diagnostic_family"])
+        self.assertTrue(all(item["exists"] for item in plan["source_files_to_inspect"]))
+        self.assertIn("finite-difference", " ".join(plan["validation_required_before_fix_claim"]))
+        self.assertIn("no production algebra edit", plan["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
