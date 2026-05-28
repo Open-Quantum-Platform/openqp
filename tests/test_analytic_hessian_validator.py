@@ -210,6 +210,46 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertEqual(payload["basis"], "sto-3g")
         self.assertTrue(payload["passed"])
 
+    def test_cli_returns_nonzero_when_contextual_validation_fails_tolerances(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            analytic = tmp / "analytic.txt"
+            reference = tmp / "reference.txt"
+            output = tmp / "summary.json"
+            analytic.write_text("1.0 1.010\n1.000 2.0\n")
+            reference.write_text("1.0 1.000\n1.000 2.0\n")
+
+            status = validator.main(
+                [
+                    str(analytic),
+                    str(reference),
+                    "--method",
+                    "tdhf",
+                    "--td-type",
+                    "rpa",
+                    "--state",
+                    "1",
+                    "--molecule",
+                    "h2o",
+                    "--basis",
+                    "sto-3g",
+                    "--displacement",
+                    "0.005",
+                    "--max-tolerance",
+                    "0.003",
+                    "--rms-tolerance",
+                    "0.020",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            payload = json.loads(output.read_text())
+        self.assertEqual(status, 1)
+        self.assertFalse(payload["passed"])
+        self.assertEqual(payload["failed_metrics"], ["max_abs_diff"])
+
 
 if __name__ == "__main__":
     unittest.main()

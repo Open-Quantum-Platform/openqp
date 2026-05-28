@@ -259,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(payload + "\n")
     else:
         print(payload)
+    if "passed" in summary and not summary["passed"]:
+        return 1
     return 0
 
 
