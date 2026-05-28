@@ -1387,6 +1387,44 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("run_one_variable_channel7_trial_then_repeat_fd_control", plan["next_action"])
         self.assertIn("no source files modified", plan["scope_guard"])
 
+    def test_source_trial_outcome_defers_channel7_after_negative_result(self):
+        module = load_module()
+        source_level_validation = {
+            "selected": "h2s root 5 / physical S4",
+            "primary_next_source_test": "channel7_density_provenance",
+            "secondary_next_source_test": "mrsf_xc_density_handoff",
+            "validation_points": [
+                {"hypothesis_id": "channel7_density_provenance", "source_locations": [842]},
+                {"hypothesis_id": "mrsf_xc_density_handoff", "source_locations": [156]},
+            ],
+        }
+        trial_results = {
+            "trial_scope": "channel7_source_trial_results",
+            "selected": "h2s root 5 / physical S4",
+            "one_variable_under_test": "channel7_density_provenance",
+            "component": "a0_z",
+            "abs_diff_ha_per_bohr": 0.07927826468642385,
+            "control_no_fix_abs_diff_ha_per_bohr": 0.07927826468642385,
+            "delta_vs_no_fix_abs_diff_ha_per_bohr": 0.0,
+            "moved_toward_fd_control": False,
+            "residual_removed": False,
+            "trah_detected": False,
+            "production_gradient_algebra_edited": False,
+        }
+
+        outcome = module.summarize_source_trial_outcome(source_level_validation, trial_results)
+
+        self.assertEqual("source_trial_outcome_diagnostic_only", outcome["outcome_scope"])
+        self.assertEqual("h2s root 5 / physical S4", outcome["selected"])
+        self.assertEqual("channel7_density_provenance", outcome["completed_source_test"])
+        self.assertEqual("negative_no_change", outcome["completed_source_test_status"])
+        self.assertEqual("mrsf_xc_density_handoff", outcome["next_source_test"])
+        self.assertIn("channel7_density_provenance", outcome["deferred_hypotheses"])
+        self.assertFalse(outcome["production_gradient_algebra_edited"])
+        self.assertFalse(outcome["ready_for_production_fix_claim"])
+        self.assertEqual("plan_mrsf_xc_density_handoff_diagnostic", outcome["next_action"])
+        self.assertIn("diagnostic-only", outcome["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

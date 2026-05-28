@@ -1317,6 +1317,61 @@ def summarize_channel7_source_trial_plan(
     }
 
 
+def summarize_source_trial_outcome(
+    source_level_validation: dict[str, Any],
+    trial_results: dict[str, Any],
+) -> dict[str, Any]:
+    """Summarize a completed one-variable source trial without claiming a fix."""
+
+    completed = str(trial_results.get("one_variable_under_test") or source_level_validation.get("primary_next_source_test") or "")
+    moved = bool(trial_results.get("moved_toward_fd_control"))
+    removed = bool(trial_results.get("residual_removed"))
+    trah_detected = bool(trial_results.get("trah_detected"))
+    production_edit = bool(trial_results.get("production_gradient_algebra_edited"))
+    if trah_detected:
+        status = "not_clean_trah_detected"
+    elif removed:
+        status = "positive_residual_removed"
+    elif moved:
+        status = "partial_positive_moved_toward_fd"
+    else:
+        status = "negative_no_change"
+
+    deferred = []
+    if status == "negative_no_change" and completed:
+        deferred.append(completed)
+    secondary = str(source_level_validation.get("secondary_next_source_test") or "")
+    next_source_test = secondary if status == "negative_no_change" and secondary else None
+    if trah_detected:
+        next_action = "recheck_clean_no_trah_controls_before_source_hypothesis"
+    elif status == "negative_no_change" and next_source_test == "mrsf_xc_density_handoff":
+        next_action = "plan_mrsf_xc_density_handoff_diagnostic"
+    elif status in {"positive_residual_removed", "partial_positive_moved_toward_fd"}:
+        next_action = "repeat_controls_before_any_production_fix_claim"
+    else:
+        next_action = "record_source_trial_outcome_and_reassess_hypotheses"
+
+    return {
+        "outcome_scope": "source_trial_outcome_diagnostic_only",
+        "selected": trial_results.get("selected") or source_level_validation.get("selected"),
+        "completed_source_test": completed,
+        "completed_source_test_status": status,
+        "component": trial_results.get("component"),
+        "abs_diff_ha_per_bohr": trial_results.get("abs_diff_ha_per_bohr"),
+        "control_no_fix_abs_diff_ha_per_bohr": trial_results.get("control_no_fix_abs_diff_ha_per_bohr"),
+        "delta_vs_no_fix_abs_diff_ha_per_bohr": trial_results.get("delta_vs_no_fix_abs_diff_ha_per_bohr"),
+        "moved_toward_fd_control": moved,
+        "residual_removed": removed,
+        "trah_detected": trah_detected,
+        "next_source_test": next_source_test,
+        "deferred_hypotheses": deferred,
+        "production_gradient_algebra_edited": production_edit,
+        "ready_for_production_fix_claim": False,
+        "next_action": next_action,
+        "scope_guard": "diagnostic-only source-trial outcome; no production fix claim and no additional source edit",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 
@@ -1578,6 +1633,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Plan a review-only one-variable channel-7 source trial without editing source files",
     )
+    parser.add_argument(
+        "--source-trial-outcome",
+        action="store_true",
+        help="Summarize a completed source-trial result and rank the next diagnostic without claiming a fix",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1646,6 +1706,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--channel7-source-trial-plan accepts exactly one source-level validation JSON")
         source_level_validation = json.loads(args.csv_path[0].read_text())
         summary = summarize_channel7_source_trial_plan(source_level_validation, source_root=args.source_root)
+    elif args.source_trial_outcome:
+        if len(args.csv_path) != 2:
+            parser.error("--source-trial-outcome accepts source-level validation JSON and source-trial results JSON")
+        source_level_validation = json.loads(args.csv_path[0].read_text())
+        trial_results = json.loads(args.csv_path[1].read_text())
+        summary = summarize_source_trial_outcome(source_level_validation, trial_results)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
