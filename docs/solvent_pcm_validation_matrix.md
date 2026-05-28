@@ -52,6 +52,8 @@ Reviewed reference-PCM reaction potentials may only enter the first prototype th
 
 The native `calc_fock(..., pcm_reaction_potential_in=...)` guard must independently validate the same shape before `calc_jk_xc`: `size(pcm_reaction_potential_in)` must match `nbf_tri`, and malformed prototype callers must fail with `reference PCM reaction potential length must match packed AO dimension` rather than forwarding a wrong-length AO reaction field into the Fock build.
 
+The downstream `calc_jk_xc` seam remains opt-in/prototype-only until backend validation lands. Its first reviewed boundary is an optional `pcm_reaction_potential(:)` argument that is applied after `hcore` is present on the Fock blocks and before SCF energy accumulation records the candidate `0.5 * D dot V` PCM bookkeeping. The contract must keep `pcm%enabled` out of this seam for now so the helper cannot be mistaken for production runtime PCM, state-specific MRSF solvent response, gradients, or solution-phase optimization support.
+
 ## Runtime payload shape contract
 
 `reference_scf_pcm_runtime_payload()` must produce the packed AO shape metadata (`nbf`, `packed_ao_length`, `expected_packed_ao_length`, and `packed_ao_shape_formula`) together with the reviewed `OQP::pcm_reaction_potential`. The consumer `reference_scf_pcm_reaction_potential_from_payload()` must not trust stale metadata: the consumer must recompute and validate the triangular packed AO length before exposing `pcm_reaction_potential_in` to any `calc_fock` bridge. This keeps every no-runtime handoff boundary aligned on the same `nbf * (nbf + 1) / 2` contract before native SCF wiring.

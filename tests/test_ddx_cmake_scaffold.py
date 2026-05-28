@@ -112,6 +112,15 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("boolean numeric", text)
         self.assertIn("backend_validation_status", text)
 
+    def test_validation_matrix_records_opt_in_calc_jk_xc_prototype_boundary(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        self.assertIn("calc_jk_xc", text)
+        self.assertIn("opt-in/prototype-only", text)
+        self.assertIn("optional `pcm_reaction_potential(:)`", text)
+        self.assertIn("after `hcore`", text)
+        self.assertIn("before SCF energy accumulation", text)
+        self.assertIn("keep `pcm%enabled` out", text)
+
     def test_validation_matrix_records_molecule_payload_nonmapping_guard(self):
         text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
         self.assertIn("Molecule.set_pcm_runtime_payload()", text)
