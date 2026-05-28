@@ -926,6 +926,11 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
             ],
             manifest["control_artifact_plan"],
         )
+        readiness = manifest["validation_readiness"]
+        self.assertFalse(readiness["ready_for_source_edit"])
+        self.assertEqual("blocked_missing_or_partial_controls", readiness["status"])
+        self.assertIn("finite_difference_rerun_for_selected_components", readiness["blocking_controls"])
+        self.assertIn("no_fix_or_pre_change_control_same_case", readiness["blocking_controls"])
         self.assertIn("diagnostic manifest only", manifest["scope_guard"])
 
 

@@ -807,6 +807,31 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
 
     fd_status = _status_from_exists(fd_artifact_exists)
     no_fix_status = _status_from_exists(no_fix_artifact_exists)
+    root_continuity_status = "present" if root_dir_exists and log_paths and not trah_detected else "missing"
+    required_controls = [
+        {
+            "control": "finite_difference_rerun_for_selected_components",
+            "components": components,
+            "status": fd_status,
+            "reason": "static evidence is not a fresh FD validation of a source hypothesis",
+        },
+        {
+            "control": "no_fix_or_pre_change_control_same_case",
+            "status": no_fix_status,
+            "reason": "needed to separate source-hypothesis effects from existing post-PR #153 residuals",
+        },
+        {
+            "control": "root_continuity_no_trah_evidence",
+            "status": root_continuity_status,
+            "reason": "existing logs are acceptable only when parseable and TRAH-free",
+        },
+    ]
+    blocking_controls = [control["control"] for control in required_controls if control["status"] != "present"]
+    validation_readiness = {
+        "ready_for_source_edit": not blocking_controls,
+        "status": "ready_for_source_edit" if not blocking_controls else "blocked_missing_or_partial_controls",
+        "blocking_controls": blocking_controls,
+    }
     return {
         "selected_case": {
             "molecule": plan.get("molecule"),
@@ -824,24 +849,8 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
             "log_paths": [str(path) for path in log_paths],
         },
         "control_artifact_plan": control_artifact_plan,
-        "required_controls": [
-            {
-                "control": "finite_difference_rerun_for_selected_components",
-                "components": components,
-                "status": fd_status,
-                "reason": "static evidence is not a fresh FD validation of a source hypothesis",
-            },
-            {
-                "control": "no_fix_or_pre_change_control_same_case",
-                "status": no_fix_status,
-                "reason": "needed to separate source-hypothesis effects from existing post-PR #153 residuals",
-            },
-            {
-                "control": "root_continuity_no_trah_evidence",
-                "status": "present" if root_dir_exists and log_paths and not trah_detected else "missing",
-                "reason": "existing logs are acceptable only when parseable and TRAH-free",
-            },
-        ],
+        "required_controls": required_controls,
+        "validation_readiness": validation_readiness,
         "scope_guard": "diagnostic manifest only; no production algebra edit or fix claim",
     }
 
