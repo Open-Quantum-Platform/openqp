@@ -81,6 +81,53 @@ def compare_hessians(analytic: Any, reference: Any, top_n: int = 10) -> dict[str
     }
 
 
+def build_validation_summary(
+    analytic: Any,
+    reference: Any,
+    *,
+    method: str,
+    td_type: str,
+    state: int,
+    molecule: str,
+    basis: str,
+    displacement: float,
+    max_tolerance: float,
+    rms_tolerance: float,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """Compare Hessians and attach validation context plus pass/fail status.
+
+    This stays deliberately dependency-light and file-format agnostic: callers can
+    supply analytic Hessians from a native kernel and reference Hessians from
+    central finite differences, while this helper records the scientific context
+    needed to interpret the comparison without dumping full matrices.
+    """
+
+    summary = compare_hessians(analytic, reference, top_n=top_n)
+    tolerances = {
+        "max_abs_diff": float(max_tolerance),
+        "rms_diff": float(rms_tolerance),
+    }
+    failed_metrics = []
+    if summary["max_abs_diff"] > tolerances["max_abs_diff"]:
+        failed_metrics.append("max_abs_diff")
+    if summary["rms_diff"] > tolerances["rms_diff"]:
+        failed_metrics.append("rms_diff")
+
+    return {
+        "method": method,
+        "td_type": td_type,
+        "state": int(state),
+        "molecule": molecule,
+        "basis": basis,
+        "displacement": float(displacement),
+        "tolerances": tolerances,
+        "passed": not failed_metrics,
+        "failed_metrics": failed_metrics,
+        **summary,
+    }
+
+
 def summary_to_json(summary: dict[str, Any]) -> str:
     """Serialize a compact Hessian validation summary deterministically."""
 
@@ -101,9 +148,58 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("reference", type=Path, help="Reference Hessian matrix (.npy or text)")
     parser.add_argument("--top", type=int, default=10, help="Largest components to report")
     parser.add_argument("--output", type=Path, help="Optional JSON summary output path")
+    parser.add_argument("--method", help="Method label for contextual validation summaries")
+    parser.add_argument("--td-type", default="none", help="TDHF type label, or 'none' for ground state")
+    parser.add_argument("--state", type=int, help="State/root index used for the comparison")
+    parser.add_argument("--molecule", help="Molecule/system label")
+    parser.add_argument("--basis", help="Basis-set label")
+    parser.add_argument("--displacement", type=float, help="Finite-difference displacement used for the reference Hessian")
+    parser.add_argument("--max-tolerance", type=float, help="Pass/fail threshold for max_abs_diff")
+    parser.add_argument("--rms-tolerance", type=float, help="Pass/fail threshold for rms_diff")
     args = parser.parse_args(argv)
 
-    summary = compare_hessians(_load_matrix(args.analytic), _load_matrix(args.reference), top_n=args.top)
+    analytic = _load_matrix(args.analytic)
+    reference = _load_matrix(args.reference)
+    contextual_fields = [
+        args.method,
+        args.state,
+        args.molecule,
+        args.basis,
+        args.displacement,
+        args.max_tolerance,
+        args.rms_tolerance,
+    ]
+    if any(value is not None for value in contextual_fields):
+        missing = [
+            name
+            for name, value in [
+                ("--method", args.method),
+                ("--state", args.state),
+                ("--molecule", args.molecule),
+                ("--basis", args.basis),
+                ("--displacement", args.displacement),
+                ("--max-tolerance", args.max_tolerance),
+                ("--rms-tolerance", args.rms_tolerance),
+            ]
+            if value is None
+        ]
+        if missing:
+            parser.error("contextual validation summaries require " + ", ".join(missing))
+        summary = build_validation_summary(
+            analytic,
+            reference,
+            method=args.method,
+            td_type=args.td_type,
+            state=args.state,
+            molecule=args.molecule,
+            basis=args.basis,
+            displacement=args.displacement,
+            max_tolerance=args.max_tolerance,
+            rms_tolerance=args.rms_tolerance,
+            top_n=args.top,
+        )
+    else:
+        summary = compare_hessians(analytic, reference, top_n=args.top)
     payload = summary_to_json(summary)
     if args.output:
         args.output.write_text(payload + "\n")

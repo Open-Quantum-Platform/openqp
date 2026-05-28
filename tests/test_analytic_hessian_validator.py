@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -61,6 +63,97 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertIn('"max_abs_diff": 0.0', payload)
         self.assertNotIn('"analytic"', payload)
         self.assertNotIn('"reference"', payload)
+
+    def test_build_validation_summary_includes_context_tolerances_and_pass_flag(self):
+        validator = load_validator()
+        analytic = np.array([[1.0, 1.002], [1.001, 2.0]])
+        reference = np.array([[1.0, 1.0], [1.0, 2.0]])
+
+        summary = validator.build_validation_summary(
+            analytic,
+            reference,
+            method="hf",
+            td_type="none",
+            state=0,
+            molecule="h2",
+            basis="sto-3g",
+            displacement=0.005,
+            max_tolerance=0.003,
+            rms_tolerance=0.002,
+            top_n=1,
+        )
+
+        self.assertEqual(summary["method"], "hf")
+        self.assertEqual(summary["td_type"], "none")
+        self.assertEqual(summary["state"], 0)
+        self.assertEqual(summary["molecule"], "h2")
+        self.assertEqual(summary["basis"], "sto-3g")
+        self.assertAlmostEqual(summary["displacement"], 0.005)
+        self.assertAlmostEqual(summary["tolerances"]["max_abs_diff"], 0.003)
+        self.assertAlmostEqual(summary["tolerances"]["rms_diff"], 0.002)
+        self.assertTrue(summary["passed"])
+
+    def test_build_validation_summary_fails_when_either_tolerance_is_exceeded(self):
+        validator = load_validator()
+        analytic = np.array([[1.0, 1.01], [1.0, 2.0]])
+        reference = np.array([[1.0, 1.0], [1.0, 2.0]])
+
+        summary = validator.build_validation_summary(
+            analytic,
+            reference,
+            method="tdhf",
+            td_type="rpa",
+            state=1,
+            molecule="h2o",
+            basis="sto-3g",
+            displacement=0.005,
+            max_tolerance=0.003,
+            rms_tolerance=0.02,
+        )
+
+        self.assertFalse(summary["passed"])
+        self.assertIn("max_abs_diff", summary["failed_metrics"])
+
+    def test_cli_writes_contextual_validation_summary_when_metadata_is_supplied(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            analytic = tmp / "analytic.txt"
+            reference = tmp / "reference.txt"
+            output = tmp / "summary.json"
+            analytic.write_text("1.0 1.002\n1.001 2.0\n")
+            reference.write_text("1.0 1.0\n1.0 2.0\n")
+
+            status = validator.main(
+                [
+                    str(analytic),
+                    str(reference),
+                    "--method",
+                    "hf",
+                    "--td-type",
+                    "none",
+                    "--state",
+                    "0",
+                    "--molecule",
+                    "h2",
+                    "--basis",
+                    "sto-3g",
+                    "--displacement",
+                    "0.005",
+                    "--max-tolerance",
+                    "0.003",
+                    "--rms-tolerance",
+                    "0.002",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            payload = json.loads(output.read_text())
+        self.assertEqual(status, 0)
+        self.assertEqual(payload["method"], "hf")
+        self.assertEqual(payload["basis"], "sto-3g")
+        self.assertTrue(payload["passed"])
 
 
 if __name__ == "__main__":
