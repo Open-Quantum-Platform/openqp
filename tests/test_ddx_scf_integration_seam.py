@@ -78,6 +78,25 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["z"], [0.2, 1.2])
         self.assertEqual(inputs["chg"], [-0.1, 0.2])
 
+    def test_solvent_helpers_reject_nonfinite_numeric_inputs(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_finite_values", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "finite"):
+            solvent.reference_scf_phi_cav_inputs([[1.0, float("nan"), 0.25]], [0.0, 0.1, 0.2])
+        with self.assertRaisesRegex(ValueError, "finite"):
+            solvent.provisional_ddx_reaction_field_inputs(
+                [0.2, float("inf")],
+                [0.0, 0.1, 0.2, 1.0, 1.1, 1.2],
+                allow_provisional=True,
+            )
+
     def test_reference_scf_total_density_sums_spin_blocks_for_ddx_phi_cav(self):
         import importlib.util
 

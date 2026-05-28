@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from math import isqrt
+from math import isfinite, isqrt
 
 
 def _as_float_list(values, *, name: str):
-    return [float(value) for value in values]
+    floats = [float(value) for value in values]
+    if any(not isfinite(value) for value in floats):
+        raise ValueError(f"{name} values must be finite")
+    return floats
 
 
 def _packed_nbf(packed_length: int) -> int:
