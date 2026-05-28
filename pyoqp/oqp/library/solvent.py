@@ -290,6 +290,7 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     return {
         "reaction_potential": potential,
         "nbf": nbf,
+        "packed_ao_length": len(potential),
         "candidate_polarization_energy": epcm,
         "pcm_runtime_payload_version": 1,
         "pcm_scope": "reference_scf_energy_only",
@@ -320,6 +321,7 @@ def reference_scf_pcm_calc_fock_handoff(payload):
             "pcm_reaction_potential_in": list(reviewed["reaction_potential"]),
         },
         "nbf": reviewed["nbf"],
+        "packed_ao_length": reviewed["packed_ao_length"],
         "candidate_polarization_energy": reviewed["candidate_polarization_energy"],
         "pcm_runtime_payload_version": reviewed["pcm_runtime_payload_version"],
         "pcm_scope": reviewed["pcm_scope"],

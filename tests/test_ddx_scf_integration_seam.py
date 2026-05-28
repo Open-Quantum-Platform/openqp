@@ -488,6 +488,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
 
         self.assertEqual(handoff["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
         self.assertEqual(handoff["nbf"], 2)
+        self.assertEqual(handoff["packed_ao_length"], 3)
         self.assertAlmostEqual(handoff["candidate_polarization_energy"], 0.125)
         self.assertEqual(handoff["handoff_target"], "calc_fock pcm_reaction_potential_in")
         self.assertEqual(handoff["pcm_scope"], "reference_scf_energy_only")
