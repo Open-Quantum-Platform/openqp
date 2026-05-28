@@ -135,6 +135,10 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
 
         self.assertFalse(summary["passed"])
         self.assertIn("max_abs_diff", summary["failed_metrics"])
+        self.assertEqual(summary["failed_metric_details"][0]["metric"], "max_abs_diff")
+        self.assertAlmostEqual(summary["failed_metric_details"][0]["observed"], 0.01)
+        self.assertAlmostEqual(summary["failed_metric_details"][0]["tolerance"], 0.003)
+        self.assertAlmostEqual(summary["failed_metric_details"][0]["excess"], 0.007)
 
     def test_cli_requires_td_type_when_any_validation_metadata_is_supplied(self):
         validator = load_validator()

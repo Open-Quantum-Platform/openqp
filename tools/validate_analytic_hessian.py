@@ -145,10 +145,20 @@ def build_validation_summary(
         "rms_diff": float(rms_tolerance),
     }
     failed_metrics = []
-    if summary["max_abs_diff"] > tolerances["max_abs_diff"]:
-        failed_metrics.append("max_abs_diff")
-    if summary["rms_diff"] > tolerances["rms_diff"]:
-        failed_metrics.append("rms_diff")
+    failed_metric_details = []
+    for metric in ("max_abs_diff", "rms_diff"):
+        observed = float(summary[metric])
+        tolerance = tolerances[metric]
+        if observed > tolerance:
+            failed_metrics.append(metric)
+            failed_metric_details.append(
+                {
+                    "metric": metric,
+                    "observed": observed,
+                    "tolerance": tolerance,
+                    "excess": observed - tolerance,
+                }
+            )
 
     return {
         "method": method,
@@ -160,6 +170,7 @@ def build_validation_summary(
         "tolerances": tolerances,
         "passed": not failed_metrics,
         "failed_metrics": failed_metrics,
+        "failed_metric_details": failed_metric_details,
         **summary,
     }
 
