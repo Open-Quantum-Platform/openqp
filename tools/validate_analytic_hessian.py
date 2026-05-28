@@ -139,6 +139,7 @@ def build_validation_summary(
     displacement: float,
     max_tolerance: float,
     rms_tolerance: float,
+    asymmetry_tolerance: float | None = None,
     top_n: int = 10,
 ) -> dict[str, Any]:
     """Compare Hessians and attach validation context plus pass/fail status.
@@ -157,11 +158,17 @@ def build_validation_summary(
         "max_abs_diff": max_tolerance_value,
         "rms_diff": rms_tolerance_value,
     }
+    if asymmetry_tolerance is not None:
+        tolerances["max_asymmetry"] = _positive_finite_context_scalar(
+            "asymmetry_tolerance", asymmetry_tolerance
+        )
 
     failed_metrics = []
     failed_metric_details = []
     worst_component = summary["largest_components"][0] if summary["largest_components"] else None
-    for metric in ("max_abs_diff", "rms_diff"):
+    for metric in ("max_abs_diff", "rms_diff", "max_asymmetry"):
+        if metric not in tolerances:
+            continue
         observed = float(summary[metric])
         tolerance = tolerances[metric]
         if observed > tolerance:
@@ -172,7 +179,7 @@ def build_validation_summary(
                 "tolerance": tolerance,
                 "excess": observed - tolerance,
             }
-            if worst_component is not None:
+            if metric in {"max_abs_diff", "rms_diff"} and worst_component is not None:
                 detail["worst_component"] = worst_component
             failed_metric_details.append(detail)
 
@@ -236,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--displacement", type=float, help="Finite-difference displacement used for the reference Hessian")
     parser.add_argument("--max-tolerance", type=float, help="Pass/fail threshold for max_abs_diff")
     parser.add_argument("--rms-tolerance", type=float, help="Pass/fail threshold for rms_diff")
+    parser.add_argument(
+        "--asymmetry-tolerance",
+        type=float,
+        help="Optional pass/fail threshold for analytic Hessian max_asymmetry",
+    )
     args = parser.parse_args(argv)
 
     analytic = _load_matrix(args.analytic)
@@ -249,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         args.displacement,
         args.max_tolerance,
         args.rms_tolerance,
+        args.asymmetry_tolerance,
     ]
     if any(value is not None for value in contextual_fields):
         missing = [
@@ -279,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
                 displacement=args.displacement,
                 max_tolerance=args.max_tolerance,
                 rms_tolerance=args.rms_tolerance,
+                asymmetry_tolerance=args.asymmetry_tolerance,
                 top_n=args.top,
             )
         except ValueError as exc:
