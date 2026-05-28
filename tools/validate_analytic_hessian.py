@@ -11,6 +11,7 @@ printing only a symmetrized matrix.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -302,6 +303,10 @@ def main(argv: list[str] | None = None) -> int:
     summary["matrix_sources"] = {
         "analytic": str(args.analytic),
         "reference": str(args.reference),
+    }
+    summary["matrix_source_sha256"] = {
+        "analytic": hashlib.sha256(args.analytic.read_bytes()).hexdigest(),
+        "reference": hashlib.sha256(args.reference.read_bytes()).hexdigest(),
     }
     payload = summary_to_json(summary)
     if args.output:

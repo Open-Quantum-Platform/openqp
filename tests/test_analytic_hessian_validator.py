@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import tempfile
@@ -273,6 +274,8 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
             output = tmp / "summary.json"
             analytic.write_text("1.0 0.0\n0.0 1.0\n")
             reference.write_text("1.0 0.0\n0.0 1.0\n")
+            expected_analytic_sha = hashlib.sha256(analytic.read_bytes()).hexdigest()
+            expected_reference_sha = hashlib.sha256(reference.read_bytes()).hexdigest()
 
             status = validator.main([str(analytic), str(reference), "--output", str(output)])
 
@@ -280,6 +283,8 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(payload["matrix_sources"]["analytic"], str(analytic))
         self.assertEqual(payload["matrix_sources"]["reference"], str(reference))
+        self.assertEqual(payload["matrix_source_sha256"]["analytic"], expected_analytic_sha)
+        self.assertEqual(payload["matrix_source_sha256"]["reference"], expected_reference_sha)
         self.assertNotIn("analytic_matrix", payload)
         self.assertNotIn("reference_matrix", payload)
 
