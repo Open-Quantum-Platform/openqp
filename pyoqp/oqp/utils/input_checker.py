@@ -35,7 +35,7 @@ DFTB_UNSUPPORTED_REASONS = {
 
 METHODS = {"hf", "tdhf", "dftb"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
-TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
+TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -57,7 +57,7 @@ WIKI_HELP = {
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
-    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
+    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, or mrsf_ekt_ip/mrsf_ekt_ea for MRSF-EKT vertical IP/EA analysis.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
     "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, and IRC. scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
@@ -528,7 +528,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown TDHF response type.",
             value=td_type,
             expected=", ".join(sorted(TDHF_TYPES)),
-            action="Choose rpa, tda, sf, mrsf, or umrsf.",
+            action="Choose rpa, tda, sf, mrsf, umrsf, mrsf_ekt_ip, or mrsf_ekt_ea.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
@@ -542,7 +542,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             action="This is valid for state-specific singlet/triplet targets; keep it if intentional.",
         )
 
-    if td_type in {"sf", "mrsf"} and scf_mult == td_mult:
+    if td_type in {"sf", "mrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"} and scf_mult == td_mult:
         report.add(
             "INFO",
             "tdhf.multiplicity",
@@ -551,7 +551,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             action="This can be intentional; verify the target state labeling if results look unexpected.",
         )
 
-    if td_type in {"sf", "mrsf"} and scf_type != "rohf":
+    if td_type in {"sf", "mrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"} and scf_type != "rohf":
         report.add(
             "ERROR",
             "scf.type",

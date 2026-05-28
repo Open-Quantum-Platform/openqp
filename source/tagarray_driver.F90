@@ -29,6 +29,11 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_orbitals_mo = OQP_prefix // "mrsf_ekt_orbitals_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_strengths = OQP_prefix // "mrsf_ekt_strengths"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
@@ -75,10 +80,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
-  character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: all_tags(37) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
+    OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
+    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_strengths, &
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &

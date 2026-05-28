@@ -186,6 +186,8 @@ class SinglePoint(Calculator):
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
             'umrsf': oqp.tdhf_umrsf_energy,
+            'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
+            'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
         }
 
         # initialize state sign
@@ -443,7 +445,7 @@ class SinglePoint(Calculator):
 
     def tddft(self):
         # check td type
-        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf']:
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 
         # do TDDFT
