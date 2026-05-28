@@ -1040,7 +1040,13 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
     def test_validation_control_scripts_plan_commands_without_launching_jobs(self):
         module = load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
-            root_dir = Path(tmpdir) / "h2s" / "mrsf" / "root_5"
+            tmp = Path(tmpdir)
+            source_root = tmp / "repo"
+            module_dir = source_root / "source" / "modules"
+            module_dir.mkdir(parents=True)
+            (module_dir / "tdhf_mrsf_gradient.F90").write_text("df1 = df1 + sgnk*qfspcp2*db2\n")
+            (module_dir / "tdhf_mrsf_z_vector.F90").write_text("fmrst1(1,7,:,:) = td_abxc\n")
+            root_dir = tmp / "h2s" / "mrsf" / "root_5"
             grad_dir = root_dir / "grad"
             plus_dir = root_dir / "e_a0_z_plus"
             minus_dir = root_dir / "e_a0_z_minus"
@@ -1070,7 +1076,7 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
                 ],
             }
 
-            scripts = module.summarize_validation_control_scripts(controls)
+            scripts = module.summarize_validation_control_scripts(controls, source_root=source_root)
 
         self.assertEqual("validation_control_scripts_plan_only", scripts["control_scope"])
         self.assertFalse(scripts["jobs_launched"])
@@ -1089,6 +1095,12 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn("openqp --nompi grad.inp", component["commands"][0])
         self.assertIn("openqp --nompi e_a0_z_plus.inp", component["commands"][1])
         self.assertIn("openqp --nompi e_a0_z_minus.inp", component["commands"][2])
+        snapshot = scripts["source_snapshot"]
+        self.assertEqual("source_file_hashes_for_manual_review", snapshot["snapshot_scope"])
+        self.assertTrue(snapshot["source_files"][0]["exists"])
+        self.assertEqual("source/modules/tdhf_mrsf_gradient.F90", snapshot["source_files"][0]["path"])
+        self.assertEqual(64, len(snapshot["source_files"][0]["sha256"] or ""))
+        self.assertTrue(snapshot["all_source_files_present"])
         self.assertIn("no shell scripts written", scripts["scope_guard"])
 
 

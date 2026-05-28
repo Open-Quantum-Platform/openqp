@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+import hashlib
 import json
 import re
 import shlex
@@ -949,7 +950,36 @@ def _openqp_command(input_path: Path, output_log: str) -> str:
     )
 
 
-def summarize_validation_control_scripts(validation_control_inputs: dict[str, Any]) -> dict[str, Any]:
+def _source_snapshot(source_root: Path | str) -> dict[str, Any]:
+    """Record source-file hashes for manual review without invoking git."""
+
+    root = Path(source_root)
+    source_files = []
+    for relative_path in [
+        "source/modules/tdhf_mrsf_gradient.F90",
+        "source/modules/tdhf_mrsf_z_vector.F90",
+    ]:
+        path = root / relative_path
+        digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+        source_files.append(
+            {
+                "path": relative_path,
+                "exists": path.exists(),
+                "sha256": digest,
+            }
+        )
+    return {
+        "snapshot_scope": "source_file_hashes_for_manual_review",
+        "source_root": str(root),
+        "source_files": source_files,
+        "all_source_files_present": all(item["exists"] for item in source_files),
+    }
+
+
+def summarize_validation_control_scripts(
+    validation_control_inputs: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
     """Plan exact validation-control shell commands without writing or running them."""
 
     components = []
@@ -1001,6 +1031,7 @@ def summarize_validation_control_scripts(validation_control_inputs: dict[str, An
         "selected_case": validation_control_inputs.get("selected_case", {}),
         "component_count": len(components),
         "components": components,
+        "source_snapshot": _source_snapshot(source_root),
         "next_action": "blocked_missing_existing_inputs" if missing_components else "manual_review_before_launch",
         "scope_guard": "no shell scripts written and no OpenQP jobs launched; commands are a review-only launch plan",
     }
@@ -1208,7 +1239,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(args.csv_path) != 1:
             parser.error("--validation-control-scripts accepts exactly one validation-control inputs JSON")
         validation_control_inputs = json.loads(args.csv_path[0].read_text())
-        summary = summarize_validation_control_scripts(validation_control_inputs)
+        summary = summarize_validation_control_scripts(validation_control_inputs, source_root=args.source_root)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
