@@ -772,6 +772,77 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertIn("finite-difference", " ".join(plan["validation_required_before_fix_claim"]))
         self.assertIn("no production algebra edit", plan["scope_guard"])
 
+    def test_source_diagnostic_evidence_records_static_source_signals_without_fix_claims(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = Path(tmpdir)
+            module_dir = source_root / "source" / "modules"
+            module_dir.mkdir(parents=True)
+            (module_dir / "tdhf_mrsf_gradient.F90").write_text(
+                """
+call utddft_xc_gradient(basis=basis, &
+     molGrid=molGrid, &
+     dedft=infos%atoms%grad)
+df1 = df1 + sgnk*qfspcp2*db2
+spcscale = [infos%tddft%spc_coco, infos%tddft%spc_ovov, infos%tddft%spc_coov]
+"""
+            )
+            (module_dir / "tdhf_mrsf_z_vector.F90").write_text(
+                """
+call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
+fmrst1(1,7,:,:) = td_abxc
+td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
+"""
+            )
+            plan = {
+                "selected_candidate": {
+                    "molecule": "h2s",
+                    "root": 5,
+                    "physical_state": "S4",
+                    "bad_components": [{"component": "a0_z", "axis": "z", "abs_diff_ha_per_bohr": 0.079}],
+                },
+                "diagnostic_family": "localized_z_component",
+            }
+
+            evidence = module.summarize_source_diagnostic_evidence(plan, source_root=source_root)
+
+        self.assertEqual("h2s", evidence["selected_candidate"]["molecule"])
+        self.assertEqual("static_source_diagnostic_only", evidence["evidence_scope"])
+        signals = evidence["source_signals"]
+        self.assertTrue(signals["ovov_gradient_sign_uses_post_pr153_plus"])
+        self.assertTrue(signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"])
+        self.assertTrue(signals["z_vector_mrsfcbc_uses_rohf_same_mo"])
+        self.assertFalse(signals["gradient_xc_call_has_explicit_xa_xb_handoff"])
+        self.assertIn("no production algebra edit", evidence["scope_guard"])
+        self.assertIn("finite-difference", " ".join(evidence["validation_required_before_fix_claim"]))
+
+    def test_cli_source_diagnostic_evidence_writes_static_source_signals(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            source_root = tmp / "repo"
+            module_dir = source_root / "source" / "modules"
+            module_dir.mkdir(parents=True)
+            (module_dir / "tdhf_mrsf_gradient.F90").write_text("df1 = df1 + sgnk*qfspcp2*db2\n")
+            (module_dir / "tdhf_mrsf_z_vector.F90").write_text("fmrst1(1,7,:,:) = td_abxc\n")
+            plan_path = tmp / "plan.json"
+            output = tmp / "evidence.json"
+            plan_path.write_text(json.dumps({"selected_candidate": {"molecule": "h2s", "root": 5}}))
+
+            status = module.main([
+                "--source-diagnostic-evidence",
+                str(plan_path),
+                "--source-root",
+                str(source_root),
+                "--output",
+                str(output),
+            ])
+            written = output.read_text()
+
+        self.assertEqual(0, status)
+        self.assertIn('"evidence_scope": "static_source_diagnostic_only"', written)
+        self.assertIn('"z_vector_channel7_overwrites_mrsfcbc_with_td_abxc": true', written)
+
 
 if __name__ == "__main__":
     unittest.main()

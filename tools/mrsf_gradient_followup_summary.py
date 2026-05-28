@@ -580,6 +580,74 @@ def summarize_source_diagnostic_plan(
     }
 
 
+def _read_source_text(source_root: Path, relative_path: str) -> str:
+    path = source_root / relative_path
+    if not path.exists():
+        return ""
+    return path.read_text(errors="replace")
+
+
+def _xc_call_has_explicit_xa_xb_handoff(source_text: str) -> bool:
+    match = re.search(r"call\s+utddft_xc_gradient\s*\((.*?)\)", source_text, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return False
+    call_text = match.group(1).lower()
+    return bool(re.search(r"\bxa\s*=", call_text)) and bool(re.search(r"\bxb\s*=", call_text))
+
+
+def summarize_source_diagnostic_evidence(
+    source_plan: dict[str, Any],
+    source_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Record static source signals for the selected residual without editing algebra.
+
+    This is a conservative source-diagnostic artifact: it helps choose the next
+    RED diagnostic/live FD check, but it is not validation of a production fix.
+    """
+
+    root = Path(source_root)
+    gradient_text = _read_source_text(root, "source/modules/tdhf_mrsf_gradient.F90")
+    z_vector_text = _read_source_text(root, "source/modules/tdhf_mrsf_z_vector.F90")
+    source_signals = {
+        "gradient_source_present": bool(gradient_text),
+        "z_vector_source_present": bool(z_vector_text),
+        "ovov_gradient_sign_uses_post_pr153_plus": "df1 = df1 + sgnk*qfspcp2*db2" in gradient_text,
+        "ovov_gradient_sign_uses_pre_pr153_minus": "df1 = df1 - sgnk*qfspcp2*db2" in gradient_text,
+        "gradient_xc_call_has_explicit_xa_xb_handoff": _xc_call_has_explicit_xa_xb_handoff(gradient_text),
+        "z_vector_channel7_overwrites_mrsfcbc_with_td_abxc": bool(
+            re.search(r"fmrst1\s*\(\s*1\s*,\s*7\s*,\s*:\s*,\s*:\s*\)\s*=\s*td_abxc", z_vector_text)
+        ),
+        "z_vector_mrsfcbc_uses_rohf_same_mo": bool(
+            re.search(r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", z_vector_text, flags=re.IGNORECASE)
+        ),
+    }
+    static_hypotheses: list[str] = []
+    if source_signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"]:
+        static_hypotheses.append(
+            "channel-7 MRSF density provenance should be isolated with a RED source diagnostic and live FD control"
+        )
+    if not source_signals["gradient_xc_call_has_explicit_xa_xb_handoff"]:
+        static_hypotheses.append(
+            "MRSF XC-gradient density handoff remains a source-inspection seam; do not infer a fix without spin-resolved FD validation"
+        )
+    if source_signals["ovov_gradient_sign_uses_post_pr153_plus"]:
+        static_hypotheses.append("OV-OV SPC gradient sign is at the merged PR #153 baseline")
+
+    return {
+        "selected_candidate": source_plan.get("selected_candidate"),
+        "diagnostic_family": source_plan.get("diagnostic_family"),
+        "evidence_scope": "static_source_diagnostic_only",
+        "scope_guard": "no production algebra edit; static source signals only",
+        "source_signals": source_signals,
+        "static_hypotheses_to_test": static_hypotheses,
+        "validation_required_before_fix_claim": [
+            "finite-difference validation on the selected stable target residual",
+            "root-continuity evidence with real <S^2> and no TRAH for R/R+h/R-h logs",
+            "no-fix or pre-change control artifact for the same molecule/root/component",
+        ],
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -716,7 +784,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Create a conservative source-inspection plan from ranked source-diagnostic candidates",
     )
-    parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for --source-diagnostic-plan")
+    parser.add_argument(
+        "--source-diagnostic-evidence",
+        action="store_true",
+        help="Record static source signals for a planned stable source diagnostic without editing algebra",
+    )
+    parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
@@ -743,6 +816,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--source-diagnostic-plan accepts exactly one source-diagnostic targets JSON")
         source_targets = json.loads(args.csv_path[0].read_text())
         summary = summarize_source_diagnostic_plan(source_targets, source_root=args.source_root)
+    elif args.source_diagnostic_evidence:
+        if len(args.csv_path) != 1:
+            parser.error("--source-diagnostic-evidence accepts exactly one source-diagnostic plan JSON")
+        source_plan = json.loads(args.csv_path[0].read_text())
+        summary = summarize_source_diagnostic_evidence(source_plan, source_root=args.source_root)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
