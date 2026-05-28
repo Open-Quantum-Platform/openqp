@@ -784,7 +784,9 @@ call utddft_xc_gradient(basis=basis, &
      molGrid=molGrid, &
      dedft=infos%atoms%grad)
 df1 = df1 + sgnk*qfspcp2*db2
-spcscale = [infos%tddft%spc_coco, infos%tddft%spc_ovov, infos%tddft%spc_coov]
+spcscale = [infos%tddft%spc_coco, &
+            infos%tddft%spc_ovov, &
+            infos%tddft%spc_coov]
 """
             )
             (module_dir / "tdhf_mrsf_z_vector.F90").write_text(
@@ -812,12 +814,16 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertTrue(signals["ovov_gradient_sign_uses_post_pr153_plus"])
         self.assertTrue(signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"])
         self.assertTrue(signals["z_vector_mrsfcbc_uses_rohf_same_mo"])
+        self.assertTrue(signals["gradient_spcscale_order_present"])
+        self.assertTrue(signals["z_vector_td_mrsf_den_consumes_seven_channels"])
         self.assertFalse(signals["gradient_xc_call_has_explicit_xa_xb_handoff"])
         locations = evidence["source_signal_locations"]
         self.assertEqual([5], locations["ovov_gradient_sign_post_pr153_plus_lines"])
         self.assertEqual([2], locations["gradient_xc_call_lines"])
         self.assertEqual([2], locations["z_vector_mrsfcbc_rohf_same_mo_lines"])
         self.assertEqual([3], locations["z_vector_channel7_td_abxc_overwrite_lines"])
+        self.assertEqual([6], locations["gradient_spcscale_order_lines"])
+        self.assertEqual([4], locations["z_vector_td_mrsf_den_handoff_lines"])
         snippets = evidence["source_signal_snippets"]
         self.assertEqual(
             [{"line": 5, "text": "df1 = df1 + sgnk*qfspcp2*db2"}],
@@ -826,6 +832,14 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual(
             [{"line": 3, "text": "fmrst1(1,7,:,:) = td_abxc"}],
             snippets["z_vector_channel7_td_abxc_overwrite"],
+        )
+        self.assertEqual(
+            [{"line": 6, "text": "spcscale = [infos%tddft%spc_coco, &"}],
+            snippets["gradient_spcscale_order"],
+        )
+        self.assertEqual(
+            [{"line": 4, "text": "td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)"}],
+            snippets["z_vector_td_mrsf_den_handoff"],
         )
         self.assertIn("no production algebra edit", evidence["scope_guard"])
         self.assertIn("finite-difference", " ".join(evidence["validation_required_before_fix_claim"]))

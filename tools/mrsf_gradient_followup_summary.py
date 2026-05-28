@@ -296,6 +296,10 @@ _SUMMARY_ROW_RE = re.compile(
     r"([-+0-9.Ee]+)\s+([-+0-9.Ee]+)\s*$"
 )
 _REFERENCE_ROW_RE = re.compile(r"^\s*0\s+([-+0-9.Ee]+)\s+[-+0-9.Ee]+\s+[-+0-9.Ee]+\s+\(ROHF/UHF Reference state\)")
+_SPCSCALE_ORDER_RE = (
+    r"spcscale\s*=\s*\[\s*infos%tddft%spc_coco\s*,\s*&?\s*"
+    r"infos%tddft%spc_ovov\s*,\s*&?\s*infos%tddft%spc_coov\s*\]"
+)
 
 
 def parse_mrsf_log_state_table(log_text: str) -> dict[int, dict[str, Any]]:
@@ -602,6 +606,13 @@ def _find_line_numbers(source_text: str, pattern: str, flags: int = 0) -> list[i
     return [idx for idx, line in enumerate(source_text.splitlines(), start=1) if compiled.search(line)]
 
 
+def _find_multiline_start_lines(source_text: str, pattern: str, flags: int = 0) -> list[int]:
+    """Return one-based start lines for diagnostic regexes spanning continuations."""
+
+    compiled = re.compile(pattern, flags | re.MULTILINE | re.DOTALL)
+    return [source_text.count("\n", 0, match.start()) + 1 for match in compiled.finditer(source_text)]
+
+
 def _line_snippets(source_text: str, lines: Iterable[int], limit: int = 3) -> list[dict[str, Any]]:
     """Return compact one-line snippets for diagnostic source anchors."""
 
@@ -638,6 +649,10 @@ def summarize_source_diagnostic_evidence(
         "z_vector_mrsfcbc_uses_rohf_same_mo": bool(
             re.search(r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", z_vector_text, flags=re.IGNORECASE)
         ),
+        "gradient_spcscale_order_present": bool(_find_multiline_start_lines(gradient_text, _SPCSCALE_ORDER_RE, flags=re.IGNORECASE)),
+        "z_vector_td_mrsf_den_consumes_seven_channels": bool(
+            re.search(r"td_mrsf_den\s*\(\s*1\s*:\s*7\s*,\s*:\s*,\s*:\s*\)\s*=\s*fmrst1", z_vector_text)
+        ),
     }
     source_signal_locations = {
         "ovov_gradient_sign_post_pr153_plus_lines": _find_line_numbers(
@@ -653,6 +668,16 @@ def summarize_source_diagnostic_evidence(
         "z_vector_mrsfcbc_rohf_same_mo_lines": _find_line_numbers(
             z_vector_text, r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", flags=re.IGNORECASE
         ),
+        "gradient_spcscale_order_lines": _find_multiline_start_lines(
+            gradient_text,
+            _SPCSCALE_ORDER_RE,
+            flags=re.IGNORECASE,
+        ),
+        "z_vector_td_mrsf_den_handoff_lines": _find_line_numbers(
+            z_vector_text,
+            r"td_mrsf_den\s*\(\s*1\s*:\s*7\s*,\s*:\s*,\s*:\s*\)\s*=\s*fmrst1",
+            flags=re.IGNORECASE,
+        ),
     }
     source_signal_snippets = {
         "ovov_gradient_sign_post_pr153_plus": _line_snippets(
@@ -667,6 +692,12 @@ def summarize_source_diagnostic_evidence(
         ),
         "z_vector_mrsfcbc_rohf_same_mo": _line_snippets(
             z_vector_text, source_signal_locations["z_vector_mrsfcbc_rohf_same_mo_lines"]
+        ),
+        "gradient_spcscale_order": _line_snippets(
+            gradient_text, source_signal_locations["gradient_spcscale_order_lines"]
+        ),
+        "z_vector_td_mrsf_den_handoff": _line_snippets(
+            z_vector_text, source_signal_locations["z_vector_td_mrsf_den_handoff_lines"]
         ),
     }
     static_hypotheses: list[str] = []
