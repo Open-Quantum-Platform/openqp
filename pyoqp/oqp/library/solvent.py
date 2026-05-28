@@ -229,6 +229,7 @@ def reference_scf_pcm_runtime_payload(density_blocks, reaction_potential):
     return {
         "OQP::pcm_reaction_potential": terms["reaction_potential"],
         "OQP::pcm_epcm": terms["candidate_polarization_energy"],
+        "nbf": terms["nbf"],
         "pcm_runtime_payload_version": 1,
         "pcm_scope": "reference_scf_energy_only",
         "reference_target": "RHF/ROHF reference density",
@@ -270,6 +271,8 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     if not potential:
         raise ValueError("OQP::pcm_reaction_potential must not be empty")
     nbf = _packed_nbf(len(potential))
+    if "nbf" in payload and int(payload["nbf"]) != nbf:
+        raise ValueError("PCM runtime payload nbf must match OQP::pcm_reaction_potential packed length")
     epcm = float(payload["OQP::pcm_epcm"])
     if not isfinite(epcm):
         raise ValueError("OQP::pcm_epcm must be finite")

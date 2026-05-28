@@ -376,6 +376,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(payload["OQP::pcm_reaction_potential"], [0.1, 0.2, 0.3])
         self.assertAlmostEqual(payload["OQP::pcm_epcm"], 0.125)
         self.assertEqual(payload["pcm_runtime_payload_version"], 1)
+        self.assertEqual(payload["nbf"], 2)
         self.assertEqual(payload["pcm_scope"], "reference_scf_energy_only")
         self.assertEqual(payload["reference_target"], "RHF/ROHF reference density")
         self.assertEqual(payload["response_solvent_coupling"], "not enabled")
@@ -442,6 +443,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "OQP::pcm_reaction_potential"):
             solvent.reference_scf_pcm_reaction_potential_from_payload(missing_potential)
+        with self.assertRaisesRegex(ValueError, "nbf"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 3})
 
     def test_reference_scf_pcm_calc_fock_handoff_exposes_only_guarded_keyword_argument(self):
         import importlib.util
