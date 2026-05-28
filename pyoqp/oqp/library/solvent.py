@@ -178,6 +178,44 @@ def reference_scf_reaction_fock_updates(density_blocks, reaction_potential):
     }
 
 
+def reference_scf_pcm_energy_handoff(density_blocks, cavity_xyz, reaction_potential):
+    """Package the current no-runtime reference-SCF PCM energy handoff.
+
+    The staged PCM prototype needs the ddX ``phi_cav`` input, the packed AO
+    reaction-potential Fock update, and the candidate reference-SCF energy
+    bookkeeping to remain tied to the same RHF/ROHF density.  This helper is a
+    dependency-light handoff summary only; it does not enable runtime PCM,
+    response-solvent coupling, gradients, or state-specific corrections.
+    """
+    coupling = reference_scf_pcm_coupling_contract(density_blocks, cavity_xyz, reaction_potential)
+    updates = reference_scf_reaction_fock_updates(density_blocks, reaction_potential)
+    energy_terms = reference_scf_pcm_energy_terms(density_blocks, reaction_potential)
+    return {
+        "nbf": coupling["nbf"],
+        "nfocks": coupling["nfocks"],
+        "ncav": coupling["ncav"],
+        "phi_cav_inputs": {
+            "nbf": coupling["nbf"],
+            "ncav": coupling["ncav"],
+            "density_packed": coupling["density_packed"],
+            "cavity_xyz": coupling["cavity_xyz"],
+            "x": coupling["x"],
+            "y": coupling["y"],
+            "z": coupling["z"],
+        },
+        "reaction_potential": coupling["reaction_potential"],
+        "fock_updates": updates["fock_updates"],
+        "energy_terms": energy_terms,
+        "handoff_stage": "reference_scf_pcm_energy_prototype",
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
+        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
