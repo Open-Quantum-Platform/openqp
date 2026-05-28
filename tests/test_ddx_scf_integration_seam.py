@@ -490,6 +490,20 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "OQP::pcm_epcm must be numeric"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "OQP::pcm_epcm": False})
 
+    def test_reference_scf_pcm_reaction_potential_from_payload_requires_mapping(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_payload_mapping", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        for malformed_payload in (None, [], ()):
+            with self.assertRaisesRegex(ValueError, "PCM runtime payload must be a mapping"):
+                solvent.reference_scf_pcm_reaction_potential_from_payload(malformed_payload)
+
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from math import isfinite, isqrt
 
 
@@ -257,6 +258,8 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     coupling and it rejects state-specific or malformed payloads before a packed
     AO reaction potential can reach the SCF Fock builder.
     """
+    if not isinstance(payload, Mapping):
+        raise ValueError("PCM runtime payload must be a mapping")
     if payload.get("pcm_scope") != "reference_scf_energy_only":
         raise ValueError("PCM runtime payload must have pcm_scope=reference_scf_energy_only")
     if payload.get("reference_target") != "RHF/ROHF reference density":
