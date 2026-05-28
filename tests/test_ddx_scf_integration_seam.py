@@ -509,8 +509,10 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         empty_mol = types.SimpleNamespace(get_pcm_runtime_payload=lambda: {})
         disabled = solvent.reference_scf_pcm_calc_fock_handoff_from_molecule(empty_mol)
         self.assertEqual(disabled["calc_fock_kwargs"], {})
-        self.assertFalse(disabled["runtime_pcm_enabled"])
         self.assertFalse(disabled["payload_present"])
+        self.assertEqual(disabled["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(disabled["reference_target"], "RHF/ROHF reference density")
+        self.assertFalse(disabled["runtime_pcm_enabled"])
         self.assertEqual(disabled["handoff_target"], "calc_fock pcm_reaction_potential_in")
 
         payload = solvent.reference_scf_pcm_runtime_payload(

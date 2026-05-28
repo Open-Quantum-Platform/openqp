@@ -340,6 +340,8 @@ def reference_scf_pcm_calc_fock_handoff_from_molecule(mol):
         return {
             "calc_fock_kwargs": {},
             "payload_present": False,
+            "pcm_scope": "reference_scf_energy_only",
+            "reference_target": "RHF/ROHF reference density",
             "runtime_pcm_enabled": False,
             "response_solvent_coupling": "not enabled",
             "gradient_support": "not enabled",
