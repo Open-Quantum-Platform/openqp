@@ -692,6 +692,9 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("f_old_present=true", guard)
         self.assertIn("dens_old_present=false", guard)
         self.assertIn("f_old_present=false", guard)
+        self.assertIn("incremental_trigger_fields=dens_old,f_old", guard)
+        self.assertIn("incremental_trigger_fields=dens_old", guard)
+        self.assertIn("incremental_trigger_fields=f_old", guard)
 
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
