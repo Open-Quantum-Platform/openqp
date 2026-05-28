@@ -31,13 +31,14 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         ]:
             self.assertIn(symbol, source)
 
-    def test_hf_native_dispatch_is_explicitly_not_a_numerical_fallback(self):
+    def test_hf_dispatch_uses_external_pyscf_bridge_without_numerical_fallback(self):
         source = read("pyoqp/oqp/library/single_point.py")
 
         self.assertIn("native_hess_func", source)
         self.assertIn("no numerical fallback", source.lower())
-        self.assertIn("Native HF/DFT analytic Hessian kernels are not available", source)
-        self.assertIn("native_hess(self.mol)", source)
+        self.assertIn("external PySCF HF/RHF Hessian bridge", source)
+        self.assertIn("analytic_hessian_from_pyscf", source)
+        self.assertNotIn("native_hess(self.mol)", source)
 
     def test_public_sf_dispatch_is_separate_from_private_mrsf_path(self):
         source = read("pyoqp/oqp/library/single_point.py")

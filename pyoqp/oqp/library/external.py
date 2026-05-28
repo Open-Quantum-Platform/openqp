@@ -10,10 +10,11 @@ from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 
 try:
-    from pyscf import gto, dft, lib
+    from pyscf import gto, scf, dft, lib
 
 except ModuleNotFoundError:
     gto = None
+    scf = None
     dft = None
     lib = None
 
@@ -303,14 +304,86 @@ def guess_from_pyscf_initial_density(mol, guess_type):
     return
 
 
-def _flatten_pyscf_hessian(raw_hessian):
+def _compact_hessian_summary(flat_hessian, max_asymmetry):
+    """Return compact Hessian metadata without embedding the matrix payload."""
+
+    return {
+        "schema_version": "analytic_hessian_validation.v1",
+        "report_type": "runtime_hessian_bridge",
+        "matrix_payload": "omitted",
+        "shape": list(flat_hessian.shape),
+        "max_asymmetry_before_symmetrization": float(max_asymmetry),
+    }
+
+
+def _flatten_pyscf_hessian(raw_hessian, return_metadata=False):
     """Convert PySCF's (nat, nat, 3, 3) Hessian to OpenQP (3N, 3N)."""
 
     hess4 = np.asarray(raw_hessian, dtype=float)
     if hess4.ndim != 4 or hess4.shape[2:] != (3, 3) or hess4.shape[0] != hess4.shape[1]:
         raise ValueError(f"Expected PySCF Hessian shape (nat, nat, 3, 3), got {hess4.shape}")
     flat = hess4.transpose(0, 2, 1, 3).reshape(hess4.shape[0] * 3, hess4.shape[1] * 3)
-    return 0.5 * (flat + flat.T)
+    max_asymmetry = float(np.max(np.abs(flat - flat.T))) if flat.size else 0.0
+    sym_flat = 0.5 * (flat + flat.T)
+    if return_metadata:
+        return sym_flat, _compact_hessian_summary(sym_flat, max_asymmetry)
+    return sym_flat
+
+
+def _build_pyscf_hessian_mf(mol):
+    """Build a guarded PySCF mean-field object for HF/RHF analytic Hessians."""
+
+    if gto is None or scf is None:
+        raise NotImplementedError(
+            "PySCF is required for the external HF/RHF analytic Hessian bridge; "
+            "no numerical fallback will be used."
+        )
+    if getattr(mol, "usempi", False):
+        raise NotImplementedError(
+            "PySCF external analytic Hessian bridge is disabled under MPI; no numerical fallback will be used."
+        )
+
+    scf_type = mol.config.get("scf", {}).get("type", "rhf").lower()
+    if scf_type != "rhf":
+        raise NotImplementedError(
+            f"PySCF external analytic Hessian bridge currently supports only RHF, got scf.type={scf_type}."
+        )
+
+    atoms = []
+    coord = np.asarray(mol.get_system(), dtype=float).reshape((-1, 3)) * ANGSTROM_TO_BOHR
+    for n, at in enumerate(mol.get_atoms()):
+        atoms.append([ELEMENTS_NAME[SYMBOL_MAP[int(at)]], coord[n]])
+
+    mole = gto.Mole()
+    mole.atom = atoms
+    mole.unit = 'Bohr'
+    mole.basis = mol.config["input"]["basis"]
+    mole.charge = mol.config["input"].get("charge", 0)
+    mole.spin = mol.config["scf"].get("multiplicity", 1) - 1
+    mole.output = '%s.analytic_hess.pyscf' % mol.project_name
+    mole.verbose = 4
+    mole.build(cart=True)
+
+    functional = mol.config.get("input", {}).get("functional", "hf").lower()
+    if functional in {"", "hf"}:
+        mf = scf.RHF(mole)
+    else:
+        if dft is None:
+            raise NotImplementedError(
+                "PySCF DFT support is required for external DFT analytic Hessians; no numerical fallback will be used."
+            )
+        mf = dft.RKS(mole)
+        mf.xc = pyscf_functional.get(functional, functional)
+
+    try:
+        os.environ["PYSCF_MAX_MEMORY"]
+    except KeyError:
+        mf.max_memory = 1000
+    try:
+        os.environ["OMP_NUM_THREADS"]
+    except KeyError:
+        lib.num_threads(1)
+    return mf
 
 
 def analytic_hessian_from_pyscf(mol, mf_factory=None):
@@ -333,9 +406,18 @@ def analytic_hessian_from_pyscf(mol, mf_factory=None):
         raise NotImplementedError(f"Analytic Hessian is not implemented for method={method}")
 
     if mf_factory is None:
-        raise NotImplementedError("Native OpenQP analytic Hessian backend is not implemented yet")
+        mf_factory = _build_pyscf_hessian_mf
     mf = mf_factory(mol)
     mf.kernel()
-    hessian = _flatten_pyscf_hessian(mf.Hessian().kernel())
-    return hessian, ["computed"]
+    hessian, compact_summary = _flatten_pyscf_hessian(mf.Hessian().kernel(), return_metadata=True)
+    metadata = {
+        "backend": "external_pyscf",
+        "native_openqp_kernel": False,
+        "no_numerical_fallback": True,
+        "shape": list(hessian.shape),
+        "max_asymmetry_before_symmetrization": compact_summary["max_asymmetry_before_symmetrization"],
+        "compact_validation_summary": compact_summary,
+    }
+    setattr(mol, "hessian_metadata", metadata)
+    return hessian, ["computed", "external_pyscf"]
 

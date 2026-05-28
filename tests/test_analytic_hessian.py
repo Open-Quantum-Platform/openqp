@@ -80,20 +80,28 @@ class AnalyticHessianExternalRuntimeTests(unittest.TestCase):
         sys.modules.pop("external_analytic_hess_under_test", None)
         restore_modules(self._module_snapshot)
 
-    def test_pyscf_hessian_is_flattened_and_symmetrized_for_openqp(self):
+    def test_pyscf_hessian_is_flattened_symmetrized_and_labeled_for_openqp(self):
         class Mol:
             usempi = False
             project_name = "h2"
             config = {"input": {"method": "hf"}, "scf": {"type": "rhf"}}
 
-        hessian, flags = self.external.analytic_hessian_from_pyscf(Mol(), mf_factory=lambda _mol: FakeMF())
+        mol = Mol()
+        hessian, flags = self.external.analytic_hessian_from_pyscf(mol, mf_factory=lambda _mol: FakeMF())
 
-        self.assertEqual(flags, ["computed"])
+        self.assertEqual(flags, ["computed", "external_pyscf"])
         self.assertEqual(hessian.shape, (6, 6))
         self.assertAlmostEqual(hessian[0, 0], 1.0)
         self.assertAlmostEqual(hessian[0, 5], 3.0)
         self.assertAlmostEqual(hessian[5, 0], 3.0)
         self.assertAlmostEqual(hessian[4, 4], 3.0)
+        self.assertEqual(mol.hessian_metadata["backend"], "external_pyscf")
+        self.assertFalse(mol.hessian_metadata["native_openqp_kernel"])
+        self.assertTrue(mol.hessian_metadata["no_numerical_fallback"])
+        self.assertEqual(mol.hessian_metadata["shape"], [6, 6])
+        self.assertAlmostEqual(mol.hessian_metadata["max_asymmetry_before_symmetrization"], 2.0)
+        self.assertEqual(mol.hessian_metadata["compact_validation_summary"]["matrix_payload"], "omitted")
+        self.assertNotIn("raw_hessian", mol.hessian_metadata["compact_validation_summary"])
 
     def test_mrsf_pyscf_hessian_dispatch_fails_explicitly(self):
         class Mol:
@@ -170,7 +178,25 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
         restore_modules(self._module_snapshot)
 
-    def test_hf_analytical_hessian_calls_native_kernel_and_returns_stored_hessian(self):
+    def test_hf_analytical_hessian_uses_guarded_external_pyscf_bridge_not_native_scaffold(self):
+        external_calls = []
+        external_mod = types.ModuleType("oqp.library.external")
+
+        def analytic_hessian_from_pyscf(mol):
+            external_calls.append(mol)
+            mol.hessian_metadata = {
+                "backend": "external_pyscf",
+                "native_openqp_kernel": False,
+                "no_numerical_fallback": True,
+                "shape": [6, 6],
+                "max_asymmetry_before_symmetrization": 0.0,
+                "compact_validation_summary": {"matrix_payload": "omitted"},
+            }
+            return np.eye(6), ["computed", "external_pyscf"]
+
+        setattr(external_mod, "analytic_hessian_from_pyscf", analytic_hessian_from_pyscf)
+        sys.modules["oqp.library.external"] = external_mod
+
         class Mol:
             config = {
                 "guess": {"save_mol": False},
@@ -183,21 +209,17 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
             }
             data = {"natom": 2}
 
-            def set_hessian_result(self, raw_hessian):
-                self.hessian = 0.5 * (raw_hessian + raw_hessian.T)
-
-            def get_hess(self):
-                return self.hessian.copy()
-
         mol = Mol()
         hessian = self.single_point.Hessian(mol)
 
         result, flags = hessian.analytical_ground_state_hess()
 
-        self.assertEqual(self.native_calls, [mol])
-        self.assertEqual(flags, ["computed"])
+        self.assertEqual(external_calls, [mol])
+        self.assertEqual(self.native_calls, [])
+        self.assertEqual(flags, ["computed", "external_pyscf"])
         self.assertEqual(result.shape, (6, 6))
-        self.assertAlmostEqual(result[0, 1], 3.5)
+        self.assertEqual(mol.hessian_metadata["backend"], "external_pyscf")
+        self.assertFalse(mol.hessian_metadata["native_openqp_kernel"])
 
     def test_sf_analytical_hessian_routes_separately_from_mrsf_private_path(self):
         class Mol:

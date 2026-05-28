@@ -5,6 +5,7 @@ import copy
 import time
 import shutil
 import platform
+import importlib
 import subprocess
 import multiprocessing
 import numpy as np
@@ -645,19 +646,16 @@ class Hessian(Calculator):
         )
 
     def analytical_ground_state_hess(self):
-        native_hess = self.native_hess_func.get('hf')
-        if native_hess is None:
-            raise NotImplementedError(
-                'Native HF/DFT analytic Hessian kernels are not available in this build; no numerical fallback will be used.'
-            )
+        """Run the guarded external PySCF HF/RHF Hessian bridge.
 
-        native_hess(self.mol)
-        hessian = np.asarray(self.mol.get_hess(), dtype=float)
-        if hessian.size == 0:
-            raise NotImplementedError(
-                'Native HF/DFT analytic Hessian kernel did not return a Hessian; no numerical fallback will be used.'
-            )
-        return hessian, ['computed']
+        The native OpenQP HF Hessian ABI is still an aborting scaffold. Until a
+        real native kernel is implemented and validated, analytical HF Hessian
+        requests use the explicitly labeled PySCF bridge and never fall back to
+        numerical Hessians.
+        """
+
+        external = importlib.import_module('oqp.library.external')
+        return external.analytic_hessian_from_pyscf(self.mol)
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']
