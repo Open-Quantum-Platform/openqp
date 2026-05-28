@@ -455,6 +455,12 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 3})
         with self.assertRaisesRegex(ValueError, "nbf must be an integer"):
             solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "nbf": 2.5})
+        with self.assertRaisesRegex(ValueError, "packed_ao_length"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "packed_ao_length": 4})
+        with self.assertRaisesRegex(ValueError, "expected_packed_ao_length"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "expected_packed_ao_length": 4})
+        with self.assertRaisesRegex(ValueError, "packed_ao_shape_formula"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload({**payload, "packed_ao_shape_formula": "n*n"})
 
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util

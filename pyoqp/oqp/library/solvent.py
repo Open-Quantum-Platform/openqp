@@ -280,12 +280,27 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     if not potential:
         raise ValueError("OQP::pcm_reaction_potential must not be empty")
     nbf = _packed_nbf(len(potential))
+    expected_packed_ao_length = nbf * (nbf + 1) // 2
     if "nbf" in payload:
         payload_nbf = payload["nbf"]
         if isinstance(payload_nbf, bool) or not isinstance(payload_nbf, int):
             raise ValueError("PCM runtime payload nbf must be an integer")
         if payload_nbf != nbf:
             raise ValueError("PCM runtime payload nbf must match OQP::pcm_reaction_potential packed length")
+    if "packed_ao_length" in payload:
+        payload_packed_ao_length = payload["packed_ao_length"]
+        if isinstance(payload_packed_ao_length, bool) or not isinstance(payload_packed_ao_length, int):
+            raise ValueError("PCM runtime payload packed_ao_length must be an integer")
+        if payload_packed_ao_length != len(potential):
+            raise ValueError("PCM runtime payload packed_ao_length must match OQP::pcm_reaction_potential length")
+    if "expected_packed_ao_length" in payload:
+        payload_expected_length = payload["expected_packed_ao_length"]
+        if isinstance(payload_expected_length, bool) or not isinstance(payload_expected_length, int):
+            raise ValueError("PCM runtime payload expected_packed_ao_length must be an integer")
+        if payload_expected_length != expected_packed_ao_length:
+            raise ValueError("PCM runtime payload expected_packed_ao_length must match nbf * (nbf + 1) / 2")
+    if payload.get("packed_ao_shape_formula", "nbf * (nbf + 1) / 2") != "nbf * (nbf + 1) / 2":
+        raise ValueError("PCM runtime payload packed_ao_shape_formula must be nbf * (nbf + 1) / 2")
     epcm = float(payload["OQP::pcm_epcm"])
     if not isfinite(epcm):
         raise ValueError("OQP::pcm_epcm must be finite")
@@ -294,7 +309,7 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
         "reaction_potential": potential,
         "nbf": nbf,
         "packed_ao_length": len(potential),
-        "expected_packed_ao_length": nbf * (nbf + 1) // 2,
+        "expected_packed_ao_length": expected_packed_ao_length,
         "packed_ao_shape_formula": "nbf * (nbf + 1) / 2",
         "candidate_polarization_energy": epcm,
         "pcm_runtime_payload_version": 1,
