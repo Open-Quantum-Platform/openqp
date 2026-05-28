@@ -1016,11 +1016,22 @@ def summarize_validation_control_scripts(
             }
         )
     missing_components = [item for item in components if item["missing_existing_inputs"]]
+    source_snapshot = _source_snapshot(source_root)
+    launch_blockers = [
+        "manual_review_before_launch",
+        "finite_difference_jobs_not_started_by_this_planner",
+        "no_fix_control_not_started_by_this_planner",
+    ]
+    if missing_components:
+        launch_blockers.append("missing_existing_inputs")
+    if not source_snapshot["all_source_files_present"]:
+        launch_blockers.append("missing_source_snapshot_files")
     return {
         "control_scope": "validation_control_scripts_plan_only",
         "jobs_launched": False,
         "scripts_written": False,
         "launch_allowed": False,
+        "launch_blockers": launch_blockers,
         "manual_review_checklist": [
             "confirm current branch/source hash",
             "confirm no-fix/pre-change control source ref",
@@ -1031,7 +1042,7 @@ def summarize_validation_control_scripts(
         "selected_case": validation_control_inputs.get("selected_case", {}),
         "component_count": len(components),
         "components": components,
-        "source_snapshot": _source_snapshot(source_root),
+        "source_snapshot": source_snapshot,
         "next_action": "blocked_missing_existing_inputs" if missing_components else "manual_review_before_launch",
         "scope_guard": "no shell scripts written and no OpenQP jobs launched; commands are a review-only launch plan",
     }

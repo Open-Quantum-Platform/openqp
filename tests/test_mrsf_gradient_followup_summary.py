@@ -1083,6 +1083,14 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertFalse(scripts["scripts_written"])
         self.assertEqual("manual_review_before_launch", scripts["next_action"])
         self.assertFalse(scripts["launch_allowed"])
+        self.assertEqual(
+            [
+                "manual_review_before_launch",
+                "finite_difference_jobs_not_started_by_this_planner",
+                "no_fix_control_not_started_by_this_planner",
+            ],
+            scripts["launch_blockers"],
+        )
         self.assertIn("confirm current branch/source hash", scripts["manual_review_checklist"])
         self.assertIn("confirm no-fix/pre-change control source ref", scripts["manual_review_checklist"])
         self.assertIn("confirm root-continuity/no-TRAH evidence", scripts["manual_review_checklist"])
