@@ -876,6 +876,68 @@ def summarize_source_validation_manifest(source_evidence: dict[str, Any]) -> dic
     }
 
 
+def summarize_validation_control_inputs(validation_manifest: dict[str, Any]) -> dict[str, Any]:
+    """Package exact inputs/outputs for the next validation-control step.
+
+    This is intentionally no-run metadata.  It lets a later bounded job generate
+    one tiny finite-difference/no-fix control for the selected component without
+    re-reading full component CSVs or accidentally changing the target axis.
+    """
+
+    selected_case = dict(validation_manifest.get("selected_case") or {})
+    root_dir = Path(str(selected_case.get("root_dir") or ""))
+    artifact_by_component = {
+        str(item.get("component")): item for item in validation_manifest.get("control_artifact_plan", [])
+    }
+    components = []
+    missing_inputs = []
+    for item in validation_manifest.get("bad_components_to_validate", []):
+        component = str(item.get("component") or "")
+        if not component:
+            continue
+        gradient_input = root_dir / "grad" / "grad.inp"
+        plus_input = root_dir / f"e_{component}_plus" / f"e_{component}_plus.inp"
+        minus_input = root_dir / f"e_{component}_minus" / f"e_{component}_minus.inp"
+        existing_input_files = {
+            "gradient_input": str(gradient_input),
+            "gradient_input_exists": gradient_input.exists(),
+            "plus_input": str(plus_input),
+            "plus_input_exists": plus_input.exists(),
+            "minus_input": str(minus_input),
+            "minus_input_exists": minus_input.exists(),
+        }
+        for label, exists in existing_input_files.items():
+            if label.endswith("_exists") and not exists:
+                missing_inputs.append(label.removesuffix("_exists"))
+        artifact_plan = artifact_by_component.get(component, {})
+        components.append(
+            {
+                "component": component,
+                "axis": item.get("axis"),
+                "abs_diff_ha_per_bohr": item.get("abs_diff_ha_per_bohr"),
+                "analytic_ha_per_bohr": item.get("analytic_ha_per_bohr"),
+                "fd_ha_per_bohr": item.get("fd_ha_per_bohr"),
+                "existing_input_files": existing_input_files,
+                "planned_outputs": {
+                    "fd_component_csv": artifact_plan.get("fd_component_csv"),
+                    "fd_summary_json": artifact_plan.get("fd_summary_json"),
+                    "no_fix_control_json": artifact_plan.get("no_fix_control_json"),
+                },
+            }
+        )
+    next_action = "ready_to_generate_control_scripts" if components and not missing_inputs else "blocked_missing_existing_inputs"
+    return {
+        "control_scope": "validation_control_inputs_only",
+        "jobs_launched": False,
+        "selected_case": selected_case,
+        "component_count": len(components),
+        "components": components,
+        "missing_existing_inputs": sorted(set(missing_inputs)),
+        "next_action": next_action,
+        "scope_guard": "no OpenQP jobs launched; package existing validation-control inputs only",
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -1022,6 +1084,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Record existing evidence and missing controls before any source-fix claim",
     )
+    parser.add_argument(
+        "--validation-control-inputs",
+        action="store_true",
+        help="Package exact existing inputs and planned outputs for no-run validation-control generation",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1059,6 +1126,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--source-validation-manifest accepts exactly one source-diagnostic evidence JSON")
         source_evidence = json.loads(args.csv_path[0].read_text())
         summary = summarize_source_validation_manifest(source_evidence)
+    elif args.validation_control_inputs:
+        if len(args.csv_path) != 1:
+            parser.error("--validation-control-inputs accepts exactly one source-validation manifest JSON")
+        validation_manifest = json.loads(args.csv_path[0].read_text())
+        summary = summarize_validation_control_inputs(validation_manifest)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

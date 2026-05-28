@@ -954,6 +954,89 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertIn("no_fix_or_pre_change_control_same_case", readiness["blocking_controls"])
         self.assertIn("diagnostic manifest only", manifest["scope_guard"])
 
+    def test_validation_control_inputs_package_existing_inputs_without_running_jobs(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "h2s" / "mrsf" / "root_5"
+            (root_dir / "grad").mkdir(parents=True)
+            (root_dir / "e_a0_z_plus").mkdir(parents=True)
+            (root_dir / "e_a0_z_minus").mkdir(parents=True)
+            (root_dir / "grad" / "grad.inp").write_text("gradient input\n")
+            (root_dir / "e_a0_z_plus" / "e_a0_z_plus.inp").write_text("plus input\n")
+            (root_dir / "e_a0_z_minus" / "e_a0_z_minus.inp").write_text("minus input\n")
+            manifest = {
+                "selected_case": {
+                    "molecule": "h2s",
+                    "method": "mrsf",
+                    "root": 5,
+                    "physical_state": "S4",
+                    "root_dir": str(root_dir),
+                },
+                "bad_components_to_validate": [
+                    {
+                        "component": "a0_z",
+                        "axis": "z",
+                        "abs_diff_ha_per_bohr": 0.07927826,
+                        "analytic_ha_per_bohr": -0.14875174,
+                        "fd_ha_per_bohr": -0.22803,
+                    }
+                ],
+                "control_artifact_plan": [
+                    {
+                        "component": "a0_z",
+                        "fd_component_csv": str(root_dir / "validation_controls" / "fd_rerun_a0_z_components.csv"),
+                        "fd_summary_json": str(root_dir / "validation_controls" / "fd_rerun_a0_z_summary.json"),
+                        "no_fix_control_json": str(root_dir / "validation_controls" / "no_fix_a0_z_control.json"),
+                    }
+                ],
+            }
+
+            controls = module.summarize_validation_control_inputs(manifest)
+
+        self.assertEqual("validation_control_inputs_only", controls["control_scope"])
+        self.assertFalse(controls["jobs_launched"])
+        self.assertEqual("h2s", controls["selected_case"]["molecule"])
+        self.assertEqual(1, controls["component_count"])
+        component = controls["components"][0]
+        self.assertEqual("a0_z", component["component"])
+        self.assertEqual("z", component["axis"])
+        self.assertEqual(0.07927826, component["abs_diff_ha_per_bohr"])
+        self.assertTrue(component["existing_input_files"]["gradient_input_exists"])
+        self.assertTrue(component["existing_input_files"]["plus_input_exists"])
+        self.assertTrue(component["existing_input_files"]["minus_input_exists"])
+        self.assertEqual(
+            str(root_dir / "validation_controls" / "fd_rerun_a0_z_components.csv"),
+            component["planned_outputs"]["fd_component_csv"],
+        )
+        self.assertEqual("ready_to_generate_control_scripts", controls["next_action"])
+        self.assertIn("no OpenQP jobs launched", controls["scope_guard"])
+
+    def test_cli_validation_control_inputs_writes_no_run_package(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            root_dir = tmp / "h2s" / "mrsf" / "root_5"
+            (root_dir / "grad").mkdir(parents=True)
+            (root_dir / "e_a0_z_plus").mkdir(parents=True)
+            (root_dir / "e_a0_z_minus").mkdir(parents=True)
+            (root_dir / "grad" / "grad.inp").write_text("gradient input\n")
+            (root_dir / "e_a0_z_plus" / "e_a0_z_plus.inp").write_text("plus input\n")
+            (root_dir / "e_a0_z_minus" / "e_a0_z_minus.inp").write_text("minus input\n")
+            manifest_path = tmp / "manifest.json"
+            output = tmp / "controls.json"
+            manifest_path.write_text(json.dumps({
+                "selected_case": {"molecule": "h2s", "method": "mrsf", "root": 5, "root_dir": str(root_dir)},
+                "bad_components_to_validate": [{"component": "a0_z", "axis": "z"}],
+                "control_artifact_plan": [{"component": "a0_z", "fd_component_csv": str(root_dir / "validation_controls" / "fd_rerun_a0_z_components.csv")}],
+            }))
+
+            status = module.main(["--validation-control-inputs", str(manifest_path), "--output", str(output)])
+            written = output.read_text()
+
+        self.assertEqual(0, status)
+        self.assertIn('"control_scope": "validation_control_inputs_only"', written)
+        self.assertIn('"jobs_launched": false', written)
+
 
 if __name__ == "__main__":
     unittest.main()
