@@ -909,6 +909,17 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertFalse(manifest["existing_evidence"]["trah_detected"])
         self.assertIn("finite_difference_rerun", manifest["required_controls"][0]["control"])
         self.assertEqual("missing", manifest["required_controls"][0]["status"])
+        self.assertEqual(
+            [
+                {
+                    "component": "a0_z",
+                    "fd_component_csv": str(root_dir / "validation_controls" / "fd_rerun_a0_z_components.csv"),
+                    "fd_summary_json": str(root_dir / "validation_controls" / "fd_rerun_a0_z_summary.json"),
+                    "no_fix_control_json": str(root_dir / "validation_controls" / "no_fix_a0_z_control.json"),
+                }
+            ],
+            manifest["control_artifact_plan"],
+        )
         self.assertIn("diagnostic manifest only", manifest["scope_guard"])
 
 
