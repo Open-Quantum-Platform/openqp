@@ -1074,6 +1074,100 @@ def summarize_validation_control_scripts(
     }
 
 
+def _load_json_if_present(path: Path | str | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    candidate = Path(str(path))
+    if not candidate.exists():
+        return {}
+    return json.loads(candidate.read_text())
+
+
+def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
+    """Summarize completed validation-control artifacts without claiming a fix.
+
+    This post-run summary is intentionally conservative: completed FD/no-fix
+    artifacts can unblock source-hypothesis diagnostics, but they are not a
+    production algebra edit or proof of a source fix.
+    """
+
+    selected_case = dict(validation_manifest.get("selected_case") or {})
+    selected = (
+        f"{selected_case.get('molecule')} root {selected_case.get('root')} / physical {selected_case.get('physical_state')}"
+    )
+    components = []
+    missing_artifact_count = 0
+    any_production_gradient_edit = False
+    trah_detected = False
+    for artifact in validation_manifest.get("control_artifact_plan", []):
+        component = str(artifact.get("component") or "")
+        fd_component_csv = Path(str(artifact.get("fd_component_csv") or ""))
+        fd_summary_json = Path(str(artifact.get("fd_summary_json") or ""))
+        no_fix_control_json = Path(str(artifact.get("no_fix_control_json") or ""))
+        fd_component_csv_present = fd_component_csv.exists()
+        fd_summary_present = fd_summary_json.exists()
+        no_fix_present = no_fix_control_json.exists()
+        missing_artifact_count += sum(
+            1 for present in [fd_component_csv_present, fd_summary_present, no_fix_present] if not present
+        )
+        fd_summary = _load_json_if_present(fd_summary_json)
+        no_fix = _load_json_if_present(no_fix_control_json)
+        any_production_gradient_edit = any_production_gradient_edit or bool(
+            fd_summary.get("production_gradient_algebra_edited") or no_fix.get("production_gradient_algebra_edited")
+        )
+        trah_detected = trah_detected or bool(fd_summary.get("trah_detected"))
+        components.append(
+            {
+                "component": component,
+                "fd_component_csv": str(fd_component_csv),
+                "fd_component_csv_present": fd_component_csv_present,
+                "fd_summary_json": str(fd_summary_json),
+                "fd_rerun_present": fd_summary_present,
+                "no_fix_control_json": str(no_fix_control_json),
+                "no_fix_control_present": no_fix_present,
+                "jobs_launched": bool(fd_summary.get("jobs_launched")),
+                "max_abs_diff_ha_per_bohr": fd_summary.get("max_abs_diff_ha_per_bohr"),
+                "prior_abs_diff_ha_per_bohr": fd_summary.get("prior_abs_diff_ha_per_bohr"),
+                "reproduces_prior_residual": bool(fd_summary.get("reproduces_prior_residual")),
+                "root_continuity_no_trah_status": fd_summary.get("root_continuity_no_trah_status"),
+                "trah_detected": bool(fd_summary.get("trah_detected")),
+                "production_gradient_algebra_edited": bool(
+                    fd_summary.get("production_gradient_algebra_edited")
+                    or no_fix.get("production_gradient_algebra_edited")
+                ),
+                "no_fix_control_status": no_fix.get("status"),
+            }
+        )
+
+    controls_complete = missing_artifact_count == 0 and bool(components)
+    validation_readiness = dict(validation_manifest.get("validation_readiness") or {})
+    ready_for_source_hypothesis = (
+        controls_complete
+        and validation_readiness.get("ready_for_source_edit") is True
+        and not any_production_gradient_edit
+        and not trah_detected
+    )
+    return {
+        "control_scope": "validation_control_results_summary",
+        "selected_case": selected_case,
+        "selected": selected,
+        "component_count": len(components),
+        "components": components,
+        "missing_artifact_count": missing_artifact_count,
+        "controls_complete": controls_complete,
+        "trah_detected": trah_detected,
+        "production_gradient_algebra_edited": any_production_gradient_edit,
+        "ready_for_source_hypothesis_diagnostic": ready_for_source_hypothesis,
+        "ready_for_production_fix_claim": False,
+        "next_action": (
+            "source_diagnostic_hypothesis_required_before_source_edit"
+            if ready_for_source_hypothesis
+            else "complete_missing_or_clean_validation_controls_before_source_diagnostics"
+        ),
+        "scope_guard": "completed controls summary only; not a production fix claim and no algebra edit included",
+    }
+
+
 def summarize_source_diagnostic_targets(
     component_summary: dict[str, Any],
     root_continuity_summary: dict[str, Any],
@@ -1230,6 +1324,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Plan low-thread validation-control commands without writing scripts or launching OpenQP jobs",
     )
+    parser.add_argument(
+        "--validation-control-results",
+        action="store_true",
+        help="Summarize completed validation-control artifacts without claiming a production fix",
+    )
     parser.add_argument("--source-root", type=Path, default=Path("."), help="Repository root for source diagnostic modes")
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -1277,6 +1376,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--validation-control-scripts accepts exactly one validation-control inputs JSON")
         validation_control_inputs = json.loads(args.csv_path[0].read_text())
         summary = summarize_validation_control_scripts(validation_control_inputs, source_root=args.source_root)
+    elif args.validation_control_results:
+        if len(args.csv_path) != 1:
+            parser.error("--validation-control-results accepts exactly one source-validation manifest JSON")
+        validation_manifest = json.loads(args.csv_path[0].read_text())
+        summary = summarize_validation_control_results(validation_manifest)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)

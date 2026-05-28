@@ -1157,6 +1157,83 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertTrue(snapshot["all_source_files_present"])
         self.assertIn("no shell scripts written", scripts["scope_guard"])
 
+    def test_validation_control_results_summarizes_completed_artifacts_without_fix_claim(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root_dir = Path(tmp) / "h2s" / "mrsf" / "root_5"
+            control_dir = root_dir / "validation_controls"
+            control_dir.mkdir(parents=True)
+            fd_csv = control_dir / "fd_rerun_a0_z_components.csv"
+            fd_csv.write_text("component,axis,abs_diff_ha_per_bohr\na0_z,z,0.07927826\n")
+            fd_summary = control_dir / "fd_rerun_a0_z_summary.json"
+            fd_summary.write_text(
+                json.dumps(
+                    {
+                        "component": "a0_z",
+                        "jobs_launched": True,
+                        "max_abs_diff_ha_per_bohr": 0.07927826,
+                        "prior_abs_diff_ha_per_bohr": 0.07927825,
+                        "reproduces_prior_residual": True,
+                        "production_gradient_algebra_edited": False,
+                        "root_continuity_no_trah_status": "present",
+                        "trah_detected": False,
+                        "next_action": "debug_source_level_z_vector_or_density_handoff",
+                    }
+                )
+            )
+            no_fix = control_dir / "no_fix_a0_z_control.json"
+            no_fix.write_text(
+                json.dumps(
+                    {
+                        "component": "a0_z",
+                        "jobs_launched": True,
+                        "production_gradient_algebra_edited": False,
+                        "status": "current_baseline_control_recorded",
+                    }
+                )
+            )
+            manifest = {
+                "selected_case": {
+                    "molecule": "h2s",
+                    "method": "mrsf",
+                    "root": 5,
+                    "physical_state": "S4",
+                    "root_dir": str(root_dir),
+                },
+                "components_to_validate": ["a0_z"],
+                "control_artifact_plan": [
+                    {
+                        "component": "a0_z",
+                        "fd_component_csv": str(fd_csv),
+                        "fd_summary_json": str(fd_summary),
+                        "no_fix_control_json": str(no_fix),
+                    }
+                ],
+                "validation_readiness": {
+                    "ready_for_source_edit": True,
+                    "status": "ready_for_source_edit",
+                    "blocking_controls": [],
+                },
+            }
+
+            results = module.summarize_validation_control_results(manifest)
+
+        self.assertEqual("validation_control_results_summary", results["control_scope"])
+        self.assertEqual("h2s root 5 / physical S4", results["selected"])
+        self.assertEqual(1, results["component_count"])
+        self.assertEqual(0, results["missing_artifact_count"])
+        self.assertTrue(results["controls_complete"])
+        self.assertFalse(results["ready_for_production_fix_claim"])
+        self.assertEqual("source_diagnostic_hypothesis_required_before_source_edit", results["next_action"])
+        component = results["components"][0]
+        self.assertEqual("a0_z", component["component"])
+        self.assertTrue(component["fd_rerun_present"])
+        self.assertTrue(component["no_fix_control_present"])
+        self.assertTrue(component["reproduces_prior_residual"])
+        self.assertEqual(0.07927826, component["max_abs_diff_ha_per_bohr"])
+        self.assertEqual("current_baseline_control_recorded", component["no_fix_control_status"])
+        self.assertIn("not a production fix claim", results["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
