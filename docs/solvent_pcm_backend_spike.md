@@ -89,6 +89,18 @@ Record:
 - SCF iteration count
 - final dipole if available
 
+## Current guarded `calc_fock` handoff contract
+
+The current branch has a reviewed-payload-to-`calc_fock` guard chain, but it still keeps runtime PCM disabled:
+
+1. `reference_scf_pcm_runtime_payload()` records only a first-scope `OQP::pcm_reaction_potential`, matching candidate `OQP::pcm_epcm`, `nbf`, and disabled-runtime/reference-SCF metadata.
+2. `reference_scf_pcm_reaction_potential_from_payload()` rejects malformed payloads, state-density leaks, raw `density_blocks`, non-finite payloads, and inconsistent packed AO `nbf` metadata before a reaction potential can be consumed.
+3. `reference_scf_pcm_calc_fock_handoff()` exposes only `calc_fock_kwargs={"pcm_reaction_potential_in": ...}` plus compact metadata; it does not expose density blocks or state-specific response solvent data.
+4. `reference_scf_pcm_calc_fock_request_from_scf_state()` derives whether the SCF old-buffer/incremental-Fock path is active from `dens_old` and `f_old` presence. A reviewed payload is allowed only on the non-incremental Fock path; blocked requests report explicit `dens_old_present`, `f_old_present`, and ordered `incremental_trigger_fields` diagnostics.
+5. Native `calc_fock(..., pcm_reaction_potential_in=...)` carries the same fail-fast guard before forwarding to `calc_jk_xc`. The guard is deliberately diagnostic-only until PCM incremental-energy behavior is separately derived and validated.
+
+This contract is a staging seam for reference-SCF energy-only PCM. It is not state-specific MRSF PCM, nonequilibrium PCM, analytic PCM gradients, or optimizer support.
+
 ## Current branch changes
 
 This branch only adds input-level scaffolding, tests, optional backend link plumbing, and a disposable ddX API spike:
