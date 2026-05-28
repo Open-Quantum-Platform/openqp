@@ -42,6 +42,10 @@ Out of scope until separate implementation and validation:
 
 The current adapter smoke exposes cavity coordinates and a projected cavity quantity suitable for the future `external_charge_potential` seam. The **ddX q_cav sign/scale is provisional**: finite-difference smoke data suggests testing `chg = -0.5*q_cav`, but this must be cross-checked against PySCF/ddX/reference-package data before runtime PCM is enabled.
 
+## Incremental Fock guard
+
+Reviewed reference-PCM reaction potentials may only enter the first prototype through the non-incremental SCF Fock path. If OpenQP old-buffer state is present, the guard must fail fast with the diagnostic `reference PCM incremental Fock is not validated` and preserve whether `dens_old`, `f_old`, or both triggered the incremental Fock shortcut. This keeps the candidate PCM energy bookkeeping from silently mixing with an unvalidated incremental-Fock reuse path.
+
 ## Reporting rules
 
 For validation reports, include:

@@ -332,6 +332,14 @@ epsilon=water
         self.assertIn("analytic PCM gradients", text)
         self.assertIn("ddX q_cav sign/scale is provisional", text)
 
+    def test_validation_matrix_documents_incremental_fock_blocker(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("incremental Fock", text)
+        self.assertIn("dens_old", text)
+        self.assertIn("f_old", text)
+        self.assertIn("reference PCM incremental Fock is not validated", text)
+
 
 if __name__ == "__main__":
     unittest.main()
