@@ -291,6 +291,32 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
     }
 
 
+def reference_scf_pcm_calc_fock_handoff(payload):
+    """Package a reviewed PCM payload as opt-in ``calc_fock`` kwargs.
+
+    This helper is the final Python-side guard before a future prototype caller
+    forwards a packed reference-SCF reaction potential into
+    ``calc_fock(..., pcm_reaction_potential_in=...)``.  It intentionally exposes
+    only the keyword argument and compact disabled-runtime metadata; raw density
+    blocks and state/response densities must not pass this boundary.
+    """
+    reviewed = reference_scf_pcm_reaction_potential_from_payload(payload)
+    return {
+        "calc_fock_kwargs": {
+            "pcm_reaction_potential_in": list(reviewed["reaction_potential"]),
+        },
+        "candidate_polarization_energy": reviewed["candidate_polarization_energy"],
+        "pcm_runtime_payload_version": reviewed["pcm_runtime_payload_version"],
+        "pcm_scope": reviewed["pcm_scope"],
+        "reference_target": reviewed["reference_target"],
+        "response_solvent_coupling": reviewed["response_solvent_coupling"],
+        "gradient_support": reviewed["gradient_support"],
+        "runtime_pcm_enabled": reviewed["runtime_pcm_enabled"],
+        "backend_validation_status": reviewed["backend_validation_status"],
+        "handoff_target": reviewed["handoff_target"],
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

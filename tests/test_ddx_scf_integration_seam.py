@@ -442,6 +442,35 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "OQP::pcm_reaction_potential"):
             solvent.reference_scf_pcm_reaction_potential_from_payload(missing_potential)
 
+    def test_reference_scf_pcm_calc_fock_handoff_exposes_only_guarded_keyword_argument(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_calc_fock_handoff", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+
+        handoff = solvent.reference_scf_pcm_calc_fock_handoff(payload)
+
+        self.assertEqual(handoff["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
+        self.assertAlmostEqual(handoff["candidate_polarization_energy"], 0.125)
+        self.assertEqual(handoff["handoff_target"], "calc_fock pcm_reaction_potential_in")
+        self.assertEqual(handoff["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(handoff["response_solvent_coupling"], "not enabled")
+        self.assertEqual(handoff["gradient_support"], "not enabled")
+        self.assertFalse(handoff["runtime_pcm_enabled"])
+        self.assertNotIn("density_blocks", handoff)
+        self.assertNotIn("state_density", handoff)
+        with self.assertRaisesRegex(ValueError, "runtime_pcm_enabled must be False"):
+            solvent.reference_scf_pcm_calc_fock_handoff({**payload, "runtime_pcm_enabled": True})
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
