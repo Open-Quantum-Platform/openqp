@@ -116,6 +116,31 @@ def reference_scf_pcm_coupling_contract(density_blocks, cavity_xyz, reaction_pot
     }
 
 
+def reference_scf_pcm_energy_terms(density_blocks, reaction_potential):
+    """Return guarded reference-SCF PCM energy bookkeeping terms.
+
+    This dependency-light helper keeps the candidate polarization-energy
+    convention tied to the same packed RHF/ROHF reference density and reaction
+    potential validated for the future SCF hook.  It records only the
+    conventional ``0.5 * D dot V`` bookkeeping candidate; backend-specific
+    energy conventions still need independent validation before runtime PCM is
+    enabled.
+    """
+    reaction = reference_scf_reaction_field_contract(density_blocks, reaction_potential)
+    density = reaction["total_density"]
+    potential = reaction["reaction_potential"]
+    density_reaction_dot = sum(d_value * v_value for d_value, v_value in zip(density, potential))
+    return {
+        "nbf": reaction["nbf"],
+        "nfocks": reaction["nfocks"],
+        "density_packed": density,
+        "reaction_potential": potential,
+        "density_reaction_dot": density_reaction_dot,
+        "candidate_polarization_energy": 0.5 * density_reaction_dot,
+        "energy_convention": "0.5 * dot(reference_density_packed, reaction_potential)",
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

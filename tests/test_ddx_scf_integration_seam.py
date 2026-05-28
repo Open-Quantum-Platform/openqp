@@ -205,6 +205,30 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(contract["z"], [0.2, 1.2])
         self.assertNotIn("density_blocks", contract)
 
+    def test_reference_scf_pcm_energy_terms_use_validated_packed_density_and_potential(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_energy_terms", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "same packed length"):
+            solvent.reference_scf_pcm_energy_terms([[1.0, 0.5, 0.25]], [0.1, 0.2])
+
+        terms = solvent.reference_scf_pcm_energy_terms(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+        self.assertEqual(terms["nbf"], 2)
+        self.assertEqual(terms["density_packed"], [1.75, 0.0, 0.25])
+        self.assertEqual(terms["reaction_potential"], [0.1, 0.2, 0.3])
+        self.assertAlmostEqual(terms["density_reaction_dot"], 0.25)
+        self.assertAlmostEqual(terms["candidate_polarization_energy"], 0.125)
+        self.assertEqual(terms["energy_convention"], "0.5 * dot(reference_density_packed, reaction_potential)")
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
