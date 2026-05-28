@@ -93,6 +93,14 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("pending PySCF/ddX/reference cross-check", text)
         self.assertIn("required before exposing `pcm_reaction_potential_in`", text)
 
+    def test_validation_matrix_records_old_buffer_provenance_for_incremental_fock_guard(self):
+        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
+        self.assertIn("dens_old_present", text)
+        self.assertIn("f_old_present", text)
+        self.assertIn("incremental_trigger_fields=dens_old,f_old", text)
+        self.assertIn("incremental_trigger_fields=dens_old", text)
+        self.assertIn("incremental_trigger_fields=f_old", text)
+
     def test_mapping_doc_records_payload_consumer_required_fields_and_nonmapping_guard(self):
         text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
         self.assertIn("PCM runtime payload must be a mapping", text)

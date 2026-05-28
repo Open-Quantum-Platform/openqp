@@ -44,7 +44,7 @@ The current adapter smoke exposes cavity coordinates and a projected cavity quan
 
 ## Incremental Fock guard
 
-Reviewed reference-PCM reaction potentials may only enter the first prototype through the non-incremental SCF Fock path. If OpenQP old-buffer state is present, the guard must fail fast with the diagnostic `reference PCM incremental Fock is not validated` and preserve whether `dens_old`, `f_old`, or both triggered the incremental Fock shortcut. This keeps the candidate PCM energy bookkeeping from silently mixing with an unvalidated incremental-Fock reuse path.
+Reviewed reference-PCM reaction potentials may only enter the first prototype through the non-incremental SCF Fock path. If OpenQP old-buffer state is present, the guard must fail fast with the diagnostic `reference PCM incremental Fock is not validated` and preserve whether `dens_old`, `f_old`, or both triggered the incremental Fock shortcut. Caller-facing and native diagnostics should carry exact old-buffer provenance fields (`dens_old_present=true/false`, `f_old_present=true/false`) plus ordered trigger labels (`incremental_trigger_fields=dens_old,f_old`, `incremental_trigger_fields=dens_old`, or `incremental_trigger_fields=f_old`) before any reviewed `pcm_reaction_potential_in` reaches `calc_jk_xc`. This keeps the candidate PCM energy bookkeeping from silently mixing with an unvalidated incremental-Fock reuse path and lets later SCF-call-site wiring identify which stale buffer caused the block without rerunning the audit helper.
 
 ## SCF call-site bridge contract
 
