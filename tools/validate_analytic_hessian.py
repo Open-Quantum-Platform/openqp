@@ -109,6 +109,9 @@ def compare_hessians(analytic: Any, reference: Any, top_n: int = 10) -> dict[str
         )
 
     return {
+        "schema_version": "analytic_hessian_validation.v1",
+        "report_type": "metric_comparison",
+        "matrix_payload": "omitted",
         "shape": [int(nrow), int(ncol)],
         "max_abs_diff": max_abs_diff,
         "rms_diff": rms_diff,
@@ -183,6 +186,7 @@ def build_validation_summary(
         "failed_metrics": failed_metrics,
         "failed_metric_details": failed_metric_details,
         **summary,
+        "report_type": "contextual_validation",
     }
 
 

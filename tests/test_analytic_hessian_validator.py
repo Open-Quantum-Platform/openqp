@@ -67,6 +67,16 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertNotIn('"analytic"', payload)
         self.assertNotIn('"reference"', payload)
 
+    def test_summary_metadata_marks_compact_schema_without_full_matrices(self):
+        validator = load_validator()
+        summary = validator.compare_hessians([[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]])
+
+        self.assertEqual(summary["schema_version"], "analytic_hessian_validation.v1")
+        self.assertEqual(summary["report_type"], "metric_comparison")
+        self.assertEqual(summary["matrix_payload"], "omitted")
+        self.assertNotIn("analytic_matrix", summary)
+        self.assertNotIn("reference_matrix", summary)
+
     def test_load_matrix_accepts_openqp_hess_json_files(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -113,6 +123,9 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertAlmostEqual(summary["displacement"], 0.005)
         self.assertAlmostEqual(summary["tolerances"]["max_abs_diff"], 0.003)
         self.assertAlmostEqual(summary["tolerances"]["rms_diff"], 0.002)
+        self.assertEqual(summary["schema_version"], "analytic_hessian_validation.v1")
+        self.assertEqual(summary["report_type"], "contextual_validation")
+        self.assertEqual(summary["matrix_payload"], "omitted")
         self.assertTrue(summary["passed"])
 
     def test_build_validation_summary_fails_when_either_tolerance_is_exceeded(self):
