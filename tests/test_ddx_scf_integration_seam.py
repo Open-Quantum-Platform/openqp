@@ -447,6 +447,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             "response_solvent_coupling": "not enabled",
             "gradient_support": "not enabled",
             "pcm_runtime_payload_version": 1,
+            "backend_validation_status": "pending PySCF/ddX/reference cross-check",
             "OQP::pcm_epcm": 0.125,
         }
         with self.assertRaisesRegex(ValueError, "OQP::pcm_reaction_potential"):
@@ -470,6 +471,10 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             missing_shape_payload.pop(required_shape_key)
             with self.assertRaisesRegex(ValueError, required_shape_key):
                 solvent.reference_scf_pcm_reaction_potential_from_payload(missing_shape_payload)
+        missing_backend_status = dict(payload)
+        missing_backend_status.pop("backend_validation_status")
+        with self.assertRaisesRegex(ValueError, "backend_validation_status"):
+            solvent.reference_scf_pcm_reaction_potential_from_payload(missing_backend_status)
 
     def test_reference_scf_pcm_reaction_potential_from_payload_rejects_density_leakage(self):
         import importlib.util

@@ -267,6 +267,10 @@ def reference_scf_pcm_reaction_potential_from_payload(payload):
         raise ValueError("PCM runtime payload gradient_support must be not enabled")
     if payload.get("pcm_runtime_payload_version") != 1:
         raise ValueError("PCM runtime payload version must be 1")
+    if payload.get("backend_validation_status") != "pending PySCF/ddX/reference cross-check":
+        raise ValueError(
+            "PCM runtime payload backend_validation_status must be pending PySCF/ddX/reference cross-check"
+        )
     if "density_blocks" in payload:
         raise ValueError("PCM runtime payload must not include raw density_blocks")
     if "state_density" in payload:
