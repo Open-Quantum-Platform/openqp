@@ -340,6 +340,15 @@ epsilon=water
         self.assertIn("f_old", text)
         self.assertIn("reference PCM incremental Fock is not validated", text)
 
+    def test_validation_matrix_documents_call_site_bridge_shape_contract(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("reference_scf_pcm_calc_fock_call_site_bridge", text)
+        self.assertIn("disabled/no-payload", text)
+        self.assertIn("pcm_reaction_potential_in", text)
+        self.assertIn("packed AO length", text)
+        self.assertIn("size(pcm_reaction_potential_in) == nbf * (nbf + 1) / 2", text)
+
 
 if __name__ == "__main__":
     unittest.main()

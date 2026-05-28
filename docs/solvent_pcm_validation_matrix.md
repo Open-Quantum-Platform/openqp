@@ -46,6 +46,10 @@ The current adapter smoke exposes cavity coordinates and a projected cavity quan
 
 Reviewed reference-PCM reaction potentials may only enter the first prototype through the non-incremental SCF Fock path. If OpenQP old-buffer state is present, the guard must fail fast with the diagnostic `reference PCM incremental Fock is not validated` and preserve whether `dens_old`, `f_old`, or both triggered the incremental Fock shortcut. This keeps the candidate PCM energy bookkeeping from silently mixing with an unvalidated incremental-Fock reuse path.
 
+## SCF call-site bridge contract
+
+`reference_scf_pcm_calc_fock_call_site_bridge()` is the dependency-light staging helper for the future SCF caller. A molecule with no reviewed runtime payload remains an explicit disabled/no-payload request even when old SCF buffers are present. A reviewed payload may forward only `pcm_reaction_potential_in` through the non-incremental path, with compact `nbf` and packed AO length metadata preserved so the native caller can enforce `size(pcm_reaction_potential_in) == nbf * (nbf + 1) / 2` before any reaction field reaches the Fock builder.
+
 ## Reporting rules
 
 For validation reports, include:
