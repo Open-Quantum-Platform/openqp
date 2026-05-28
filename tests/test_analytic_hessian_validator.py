@@ -67,6 +67,25 @@ class AnalyticHessianValidatorTests(unittest.TestCase):
         self.assertNotIn('"analytic"', payload)
         self.assertNotIn('"reference"', payload)
 
+    def test_load_matrix_accepts_openqp_hess_json_files(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hess_json = Path(tmpdir) / "h2.hess.json"
+            hess_json.write_text(json.dumps({"hessian": [[1.0, 0.0], [0.0, 2.0]], "freqs": []}))
+
+            matrix = validator._load_matrix(hess_json)
+
+        self.assertEqual(matrix, [[1.0, 0.0], [0.0, 2.0]])
+
+    def test_load_matrix_rejects_json_without_hessian_field(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_json = Path(tmpdir) / "missing.hess.json"
+            bad_json.write_text(json.dumps({"freqs": []}))
+
+            with self.assertRaisesRegex(ValueError, "must contain a hessian field"):
+                validator._load_matrix(bad_json)
+
     def test_build_validation_summary_includes_context_tolerances_and_pass_flag(self):
         validator = load_validator()
         analytic = [[1.0, 1.002], [1.001, 2.0]]

@@ -178,6 +178,12 @@ def _load_matrix(path: Path) -> Matrix:
             raise SystemExit("reading .npy Hessian matrices requires NumPy") from exc
         return _as_float_matrix(str(path), np.load(path))
 
+    if path.suffix == ".json" or path.name.endswith(".hess.json"):
+        data = json.loads(path.read_text())
+        if "hessian" not in data:
+            raise ValueError(f"{path} must contain a hessian field")
+        return _as_float_matrix(f"{path}:hessian", data["hessian"])
+
     rows = []
     for line in path.read_text().splitlines():
         stripped = line.strip()
