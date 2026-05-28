@@ -381,6 +381,30 @@ def reference_scf_pcm_calc_fock_request(mol, *, incremental_fock: bool = False):
     return handoff
 
 
+def reference_scf_pcm_incremental_fock_audit(*, dens_old=None, f_old=None):
+    """Return explicit old-buffer metadata for the reference-PCM guard.
+
+    OpenQP's incremental Fock shortcut can be triggered by either an old density
+    or an old Fock buffer.  The first reference-SCF PCM path must preserve these
+    as separate audit fields, not just a combined boolean, so blocked prototype
+    call sites remain diagnosable.
+    """
+    dens_old_present = dens_old is not None
+    f_old_present = f_old is not None
+    triggers = []
+    if dens_old_present:
+        triggers.append("dens_old")
+    if f_old_present:
+        triggers.append("f_old")
+    return {
+        "scf_state_incremental_fock": bool(triggers),
+        "scf_state_dens_old_present": dens_old_present,
+        "scf_state_f_old_present": f_old_present,
+        "incremental_trigger_fields": triggers,
+        "scf_state_guard": "dens_old/f_old presence blocks reviewed reference PCM payloads",
+    }
+
+
 def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_old=None):
     """Derive the PCM ``calc_fock`` request from current SCF buffer state.
 
@@ -389,14 +413,9 @@ def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_
     guard.  Presence of either buffer means the incremental-Fock shortcut is in
     play and reviewed reference-PCM payloads must fail fast.
     """
-    dens_old_present = dens_old is not None
-    f_old_present = f_old is not None
-    incremental_fock = dens_old_present or f_old_present
-    request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=incremental_fock)
-    request["scf_state_incremental_fock"] = incremental_fock
-    request["scf_state_dens_old_present"] = dens_old_present
-    request["scf_state_f_old_present"] = f_old_present
-    request["scf_state_guard"] = "dens_old/f_old presence blocks reviewed reference PCM payloads"
+    audit = reference_scf_pcm_incremental_fock_audit(dens_old=dens_old, f_old=f_old)
+    request = reference_scf_pcm_calc_fock_request(mol, incremental_fock=audit["scf_state_incremental_fock"])
+    request.update(audit)
     return request
 
 

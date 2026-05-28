@@ -598,6 +598,30 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 incremental_fock="unknown",
             )
 
+    def test_reference_scf_pcm_incremental_fock_audit_preserves_old_buffer_metadata(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_incremental_audit", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        audit = solvent.reference_scf_pcm_incremental_fock_audit(dens_old=[0.0], f_old=None)
+        self.assertTrue(audit["scf_state_incremental_fock"])
+        self.assertTrue(audit["scf_state_dens_old_present"])
+        self.assertFalse(audit["scf_state_f_old_present"])
+        self.assertEqual(audit["incremental_trigger_fields"], ["dens_old"])
+        self.assertEqual(
+            audit["scf_state_guard"],
+            "dens_old/f_old presence blocks reviewed reference PCM payloads",
+        )
+
+        empty = solvent.reference_scf_pcm_incremental_fock_audit(dens_old=None, f_old=None)
+        self.assertFalse(empty["scf_state_incremental_fock"])
+        self.assertEqual(empty["incremental_trigger_fields"], [])
+
     def test_reference_scf_pcm_calc_fock_request_from_scf_state_blocks_old_buffers(self):
         import importlib.util
         import types
@@ -623,6 +647,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(request["scf_state_incremental_fock"], False)
         self.assertFalse(request["scf_state_dens_old_present"])
         self.assertFalse(request["scf_state_f_old_present"])
+        self.assertEqual(request["incremental_trigger_fields"], [])
         self.assertEqual(request["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
 
         with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
