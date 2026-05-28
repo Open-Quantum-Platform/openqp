@@ -617,6 +617,126 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertEqual("h2s", summary["missing_cases"][0]["molecule"])
         self.assertIn("h2s/mrsf/root_5", summary["missing_cases"][0]["expected_root_dir"])
 
+    def test_source_diagnostic_targets_prioritize_stable_no_trah_cases(self):
+        module = load_module()
+        component_summary = {
+            "target_bad_groups": [
+                {
+                    "molecule": "nh3",
+                    "method": "mrsf",
+                    "root": 4,
+                    "physical_state": "S3",
+                    "source_csv": "artifact/components.csv",
+                    "max_abs_diff_ha_per_bohr": 0.092,
+                    "worst_component": "a0_y",
+                    "bad_component_count": 1,
+                    "bad_axes": ["y"],
+                    "bad_components": [{"component": "a0_y", "axis": "y", "abs_diff_ha_per_bohr": 0.092}],
+                    "mechanism_hint": "root_tracking_or_state_character_change",
+                },
+                {
+                    "molecule": "h2s",
+                    "method": "mrsf",
+                    "root": 5,
+                    "physical_state": "S4",
+                    "source_csv": "artifact/components.csv",
+                    "max_abs_diff_ha_per_bohr": 0.079,
+                    "worst_component": "a0_z",
+                    "bad_component_count": 1,
+                    "bad_axes": ["z"],
+                    "bad_components": [{"component": "a0_z", "axis": "z", "abs_diff_ha_per_bohr": 0.079}],
+                    "mechanism_hint": "localized_z_component_z_vector_or_operator_mapping",
+                },
+                {
+                    "molecule": "ch2o",
+                    "method": "mrsf",
+                    "root": 4,
+                    "physical_state": "S3",
+                    "source_csv": "artifact/components.csv",
+                    "max_abs_diff_ha_per_bohr": 0.021,
+                    "worst_component": "a1_z",
+                    "bad_component_count": 1,
+                    "bad_axes": ["z"],
+                    "bad_components": [{"component": "a1_z", "axis": "z", "abs_diff_ha_per_bohr": 0.021}],
+                    "mechanism_hint": "localized_z_component_z_vector_or_operator_mapping",
+                },
+            ]
+        }
+        continuity_summary = {
+            "cases": [
+                {"molecule": "nh3", "method": "mrsf", "root": 4, "near_degenerate_target": True, "trah_log_count": 0, "s2_evidence": "present"},
+                {"molecule": "h2s", "method": "mrsf", "root": 5, "near_degenerate_target": False, "trah_log_count": 0, "s2_evidence": "present"},
+                {"molecule": "ch2o", "method": "mrsf", "root": 4, "near_degenerate_target": False, "trah_log_count": 0, "s2_evidence": "present"},
+            ],
+            "missing_cases": [],
+        }
+
+        summary = module.summarize_source_diagnostic_targets(component_summary, continuity_summary)
+
+        self.assertEqual(2, summary["stable_source_candidate_count"])
+        self.assertEqual(1, summary["deferred_root_continuity_risk_count"])
+        self.assertEqual("h2s", summary["stable_source_candidates"][0]["molecule"])
+        self.assertEqual(5, summary["stable_source_candidates"][0]["root"])
+        self.assertEqual("source_diagnostic_candidate", summary["stable_source_candidates"][0]["diagnostic_status"])
+        self.assertIn("Z-vector/operator", summary["stable_source_candidates"][0]["recommended_next_check"])
+        self.assertEqual("nh3", summary["deferred_root_continuity_risks"][0]["molecule"])
+
+    def test_cli_source_diagnostic_targets_writes_ranked_candidates(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            component_summary = Path(tmpdir) / "component_summary.json"
+            continuity_summary = Path(tmpdir) / "continuity_summary.json"
+            output = Path(tmpdir) / "source_targets.json"
+            component_summary.write_text(
+                json.dumps(
+                    {
+                        "target_bad_groups": [
+                            {
+                                "molecule": "h2s",
+                                "method": "mrsf",
+                                "root": 5,
+                                "physical_state": "S4",
+                                "source_csv": "artifact/components.csv",
+                                "max_abs_diff_ha_per_bohr": 0.079,
+                                "bad_axes": ["z"],
+                                "bad_components": [{"component": "a0_z", "axis": "z", "abs_diff_ha_per_bohr": 0.079}],
+                            }
+                        ]
+                    }
+                )
+            )
+            continuity_summary.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "molecule": "h2s",
+                                "method": "mrsf",
+                                "root": 5,
+                                "source_csv": "artifact/components.csv",
+                                "near_degenerate_target": False,
+                                "trah_log_count": 0,
+                                "s2_evidence": "present",
+                            }
+                        ],
+                        "missing_cases": [],
+                    }
+                )
+            )
+
+            status = module.main([
+                "--source-diagnostic-targets",
+                str(component_summary),
+                str(continuity_summary),
+                "--output",
+                str(output),
+            ])
+
+            written = output.read_text()
+        self.assertEqual(0, status)
+        self.assertIn('"stable_source_candidate_count": 1', written)
+        self.assertIn('"diagnostic_status": "source_diagnostic_candidate"', written)
+
 
 if __name__ == "__main__":
     unittest.main()

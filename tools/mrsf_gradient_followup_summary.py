@@ -486,6 +486,102 @@ def summarize_root_continuity_targets(
     }
 
 
+def _case_key(item: dict[str, Any]) -> tuple[str, str, str, int]:
+    return (
+        str(item.get("source_csv", "")),
+        str(item.get("molecule", "")).lower(),
+        str(item.get("method", "")),
+        int(item.get("root", 0)),
+    )
+
+
+def _recommended_source_check(group: dict[str, Any]) -> str:
+    axes = set(group.get("bad_axes", []))
+    if axes == {"z"}:
+        return "Prioritize a source-level Z-vector/operator mapping diagnostic for the localized z component; no production algebra edit yet."
+    return "Prioritize a source-level SPC/XC density-handoff diagnostic across the listed bad components; no production algebra edit yet."
+
+
+def summarize_source_diagnostic_targets(
+    component_summary: dict[str, Any],
+    root_continuity_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Rank target residuals that are clean enough for source-level diagnostics.
+
+    This combines component-level FD residuals with parsed root-continuity evidence.
+    Near-degenerate, TRAH, missing, or unparsed cases are deferred rather than
+    labeled as algebra/source candidates.
+    """
+
+    continuity_by_key = {_case_key(case): case for case in root_continuity_summary.get("cases", [])}
+    continuity_by_case = {
+        (str(case.get("molecule", "")).lower(), str(case.get("method", "")), int(case.get("root", 0))): case
+        for case in root_continuity_summary.get("cases", [])
+    }
+    missing_by_key = {_case_key(case): case for case in root_continuity_summary.get("missing_cases", [])}
+    missing_by_case = {
+        (str(case.get("molecule", "")).lower(), str(case.get("method", "")), int(case.get("root", 0))): case
+        for case in root_continuity_summary.get("missing_cases", [])
+    }
+    stable: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for group in component_summary.get("target_bad_groups", []):
+        key = _case_key(group)
+        case_key = (str(group.get("molecule", "")).lower(), str(group.get("method", "")), int(group.get("root", 0)))
+        merged = dict(group)
+        continuity = continuity_by_key.get(key) or continuity_by_case.get(case_key)
+        missing_case = missing_by_key.get(key) or missing_by_case.get(case_key)
+        if missing_case is not None:
+            merged.update(missing_case)
+            merged["diagnostic_status"] = "missing_root_continuity_evidence"
+            missing.append(merged)
+            continue
+        if continuity is None:
+            merged["diagnostic_status"] = "missing_root_continuity_evidence"
+            missing.append(merged)
+            continue
+        merged.update(
+            {
+                "root_dir": continuity.get("root_dir"),
+                "s2_evidence": continuity.get("s2_evidence"),
+                "s2_max_delta": continuity.get("s2_max_delta"),
+                "min_neighbor_gap_ev": continuity.get("min_neighbor_gap_ev"),
+                "near_degenerate_target": continuity.get("near_degenerate_target"),
+                "trah_log_count": continuity.get("trah_log_count", 0),
+                "parsed_target_log_count": continuity.get("parsed_target_log_count"),
+            }
+        )
+        if merged["trah_log_count"]:
+            merged["diagnostic_status"] = "defer_trah_or_failed"
+            deferred.append(merged)
+        elif merged["s2_evidence"] != "present" or merged["near_degenerate_target"]:
+            merged["diagnostic_status"] = "defer_root_continuity_risk"
+            deferred.append(merged)
+        else:
+            merged["diagnostic_status"] = "source_diagnostic_candidate"
+            merged["recommended_next_check"] = _recommended_source_check(merged)
+            stable.append(merged)
+
+    stable.sort(key=lambda item: (-float(item.get("max_abs_diff_ha_per_bohr", 0.0)), item["molecule"], int(item["root"])))
+    deferred.sort(key=lambda item: (-float(item.get("max_abs_diff_ha_per_bohr", 0.0)), item["molecule"], int(item["root"])))
+    missing.sort(key=lambda item: (item["molecule"], int(item["root"])))
+    return {
+        "stable_source_candidate_count": len(stable),
+        "deferred_root_continuity_risk_count": sum(
+            1 for item in deferred if item.get("diagnostic_status") == "defer_root_continuity_risk"
+        ),
+        "deferred_trah_or_failed_count": sum(1 for item in deferred if item.get("diagnostic_status") == "defer_trah_or_failed"),
+        "missing_root_continuity_count": len(missing),
+        "stable_source_candidates": stable,
+        "deferred_root_continuity_risks": [
+            item for item in deferred if item.get("diagnostic_status") == "defer_root_continuity_risk"
+        ],
+        "deferred_trah_or_failed": [item for item in deferred if item.get("diagnostic_status") == "defer_trah_or_failed"],
+        "missing_root_continuity": missing,
+    }
+
+
 def summarize_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
     all_rows = list(rows)
     failures = [
@@ -532,6 +628,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Resolve target_bad_groups from a component summary and summarize each existing root run directory",
     )
+    parser.add_argument(
+        "--source-diagnostic-targets",
+        action="store_true",
+        help="Combine component and root-continuity summaries to rank stable source-diagnostic candidates",
+    )
     parser.add_argument("--root", type=int, help="Target MRSF response root for --root-continuity")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
@@ -547,6 +648,12 @@ def main(argv: list[str] | None = None) -> int:
         if len(args.csv_path) != 1:
             parser.error("--root-continuity-targets accepts exactly one component summary JSON")
         summary = summarize_root_continuity_targets(args.csv_path[0])
+    elif args.source_diagnostic_targets:
+        if len(args.csv_path) != 2:
+            parser.error("--source-diagnostic-targets accepts component summary JSON and root-continuity summary JSON")
+        component_summary = json.loads(args.csv_path[0].read_text())
+        root_continuity_summary = json.loads(args.csv_path[1].read_text())
+        summary = summarize_source_diagnostic_targets(component_summary, root_continuity_summary)
     elif args.components:
         if len(args.csv_path) == 1:
             summary = summarize_components_csv(args.csv_path[0], args.threshold)
