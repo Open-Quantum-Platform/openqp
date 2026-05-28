@@ -1547,6 +1547,9 @@ contains
 
     fock_ao = 0.0_dp
     if (present(pcm_reaction_potential_in)) then
+      if (size(pcm_reaction_potential_in) /= nbf_tri) then
+        error stop 'calc_fock: reference PCM reaction potential length must match packed AO dimension'
+      end if
       if (present(dens_old) .and. present(f_old)) then
         error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=true f_old_present=true incremental_trigger_fields=dens_old,f_old'
       else if (present(dens_old)) then

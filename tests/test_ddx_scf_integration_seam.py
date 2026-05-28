@@ -700,6 +700,13 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("incremental_trigger_fields=dens_old", guard)
         self.assertIn("incremental_trigger_fields=f_old", guard)
 
+    def test_calc_fock_validates_pcm_reaction_potential_shape_before_fock_build(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        body = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]
+        guard = body.split("call calc_jk_xc", 1)[0]
+        self.assertIn("size(pcm_reaction_potential_in) /= nbf_tri", guard)
+        self.assertIn("reference PCM reaction potential length must match packed AO dimension", guard)
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
