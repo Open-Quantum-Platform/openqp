@@ -1886,6 +1886,79 @@ def summarize_mrsf_ball_open_open_norm_trace(
     }
 
 
+def summarize_mrsf_ball_open_open_source_trial_plan(
+    norm_trace: dict[str, Any], source_root: Path | str = Path(".")
+) -> dict[str, Any]:
+    """Plan the next one-variable ball/open-open source trial without editing source.
+
+    The source-unit norm trace can justify a reviewed source trial, but it is not
+    finite-difference validation and must not be interpreted as a production fix.
+    This planner records the exact split terms and source hashes while keeping
+    all execution/source-edit guards closed.
+    """
+
+    selected = str(norm_trace.get("selected") or "")
+    component = str(norm_trace.get("component") or "")
+    one_variable = str(norm_trace.get("one_variable_under_test") or "ball_open_open_alpha_beta_split")
+    identities_passed = bool(norm_trace.get("source_unit_identities_passed"))
+    source_snapshot = _source_snapshot(source_root)
+    launch_blockers = [
+        "manual_review_before_source_edit",
+        "fd_validation_not_started_by_this_planner",
+        "no_production_fix_claim_from_source_unit_trace",
+    ]
+    if not identities_passed:
+        launch_blockers.append("source_unit_identities_not_passed")
+    if norm_trace.get("production_gradient_algebra_edited"):
+        launch_blockers.append("unexpected_prior_production_gradient_edit")
+    if norm_trace.get("xc_handoff_changed"):
+        launch_blockers.append("unexpected_prior_xc_handoff_change")
+    if not source_snapshot["all_source_files_present"]:
+        launch_blockers.append("missing_source_snapshot_files")
+    return {
+        "trial_plan_scope": "mrsf_ball_open_open_source_trial_plan",
+        "selected": selected,
+        "component": component,
+        "one_variable_under_test": one_variable,
+        "required_precondition": "source_unit_identities_passed",
+        "source_unit_identities_passed": identities_passed,
+        "norm_trace_summary": {
+            "candidate_norms": dict(norm_trace.get("candidate_norms") or {}),
+            "identity_norms": dict(norm_trace.get("identity_norms") or {}),
+        },
+        "planned_source_trial_terms": [
+            "oo_left_alpha_cross_spin",
+            "oo_right_beta_cross_spin_transpose",
+            "preserve_current_pair_sum_alpha_beta",
+            "do_not_bundle_o21v_co12_or_direct_td_abxc_xa_xb",
+        ],
+        "forbidden_bundled_changes": [
+            "direct_td_abxc_as_xa_xb",
+            "blind_half_split_ball",
+            "duplicate_full_ball_into_xa_and_xb",
+            "new_spc_scaling_changes",
+            "channel7_density_provenance_change",
+            "multi_molecule_source_edit_before_single_component_fd_control",
+        ],
+        "source_snapshot": source_snapshot,
+        "execution_status": "review_only_no_source_edit",
+        "jobs_launched": False,
+        "source_files_modified_by_planner": False,
+        "scripts_written": False,
+        "production_gradient_algebra_edited": False,
+        "xc_handoff_changed": False,
+        "ready_for_fd_validation": False,
+        "ready_for_production_fix_claim": False,
+        "launch_blockers": launch_blockers,
+        "next_action": (
+            "plan_reviewed_one_variable_ball_oo_source_trial_then_fd_control"
+            if identities_passed
+            else "fix_source_unit_identity_before_source_trial_planning"
+        ),
+        "scope_guard": "review-only source-trial plan; no source edit, no quantum jobs, no FD validation, and no production fix claim",
+    }
+
+
 def summarize_validation_control_results(validation_manifest: dict[str, Any]) -> dict[str, Any]:
     """Summarize completed validation-control artifacts without claiming a fix.
 

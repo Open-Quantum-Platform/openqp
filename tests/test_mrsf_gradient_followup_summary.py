@@ -1660,6 +1660,49 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual("source_unit_identities_passed_ready_for_review_not_fd", trace["next_action"])
         self.assertIn("no FD validation", trace["scope_guard"])
 
+    def test_ball_open_open_source_trial_plan_keeps_review_only_guards_after_norm_trace(self):
+        module = load_module()
+        norm_trace = {
+            "trace_scope": "mrsf_ball_open_open_source_unit_norm_trace",
+            "selected": "h2s root 5 / physical S4",
+            "component": "a0_z",
+            "one_variable_under_test": "ball_open_open_alpha_beta_split",
+            "source_unit_identities_passed": True,
+            "candidate_norms": {
+                "current_pair_sum_alpha_frobenius": 5.47,
+                "current_pair_sum_beta_frobenius": 3.12,
+                "singlet_ball_oo_frobenius": 3.77,
+                "triplet_ball_oo_frobenius": 3.75,
+            },
+            "identity_norms": {
+                "singlet": {"reconstruction_residual_frobenius": 0.0},
+                "triplet": {"reconstruction_residual_frobenius": 0.0},
+            },
+            "production_gradient_algebra_edited": False,
+            "xc_handoff_changed": False,
+        }
+
+        plan = module.summarize_mrsf_ball_open_open_source_trial_plan(norm_trace, source_root=ROOT)
+
+        self.assertEqual("mrsf_ball_open_open_source_trial_plan", plan["trial_plan_scope"])
+        self.assertEqual("h2s root 5 / physical S4", plan["selected"])
+        self.assertEqual("a0_z", plan["component"])
+        self.assertEqual("ball_open_open_alpha_beta_split", plan["one_variable_under_test"])
+        self.assertEqual("review_only_no_source_edit", plan["execution_status"])
+        self.assertFalse(plan["jobs_launched"])
+        self.assertFalse(plan["source_files_modified_by_planner"])
+        self.assertFalse(plan["production_gradient_algebra_edited"])
+        self.assertFalse(plan["xc_handoff_changed"])
+        self.assertFalse(plan["ready_for_fd_validation"])
+        self.assertFalse(plan["ready_for_production_fix_claim"])
+        self.assertIn("manual_review_before_source_edit", plan["launch_blockers"])
+        self.assertIn("fd_validation_not_started_by_this_planner", plan["launch_blockers"])
+        self.assertIn("oo_left_alpha_cross_spin", plan["planned_source_trial_terms"])
+        self.assertIn("oo_right_beta_cross_spin_transpose", plan["planned_source_trial_terms"])
+        self.assertEqual("plan_reviewed_one_variable_ball_oo_source_trial_then_fd_control", plan["next_action"])
+        self.assertTrue(plan["source_snapshot"]["all_source_files_present"])
+        self.assertIn("review-only", plan["scope_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()
