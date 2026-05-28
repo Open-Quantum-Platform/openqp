@@ -322,6 +322,8 @@ def reference_scf_pcm_calc_fock_handoff(payload):
         },
         "nbf": reviewed["nbf"],
         "packed_ao_length": reviewed["packed_ao_length"],
+        "expected_packed_ao_length": reviewed["nbf"] * (reviewed["nbf"] + 1) // 2,
+        "packed_ao_shape_formula": "nbf * (nbf + 1) / 2",
         "candidate_polarization_energy": reviewed["candidate_polarization_energy"],
         "pcm_runtime_payload_version": reviewed["pcm_runtime_payload_version"],
         "pcm_scope": reviewed["pcm_scope"],
