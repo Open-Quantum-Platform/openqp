@@ -78,6 +78,27 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["z"], [0.2, 1.2])
         self.assertEqual(inputs["chg"], [-0.1, 0.2])
 
+    def test_provisional_ddx_reaction_field_inputs_label_sign_scale_and_runtime_scope(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_provisional_scope", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        inputs = solvent.provisional_ddx_reaction_field_inputs(
+            [0.2],
+            [0.0, 0.1, 0.2],
+            allow_provisional=True,
+        )
+
+        self.assertTrue(inputs["provisional_sign_scale"])
+        self.assertEqual(inputs["sign_scale_convention"], "chg = -0.5 * q_cav")
+        self.assertEqual(inputs["validation_status"], "requires PySCF/ddX/reference cross-check before runtime use")
+        self.assertFalse(inputs["runtime_pcm_enabled"])
+
     def test_solvent_helpers_reject_nonfinite_numeric_inputs(self):
         import importlib.util
 

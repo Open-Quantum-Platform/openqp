@@ -215,4 +215,8 @@ def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisiona
         "y": xyz_values[1::3],
         "z": xyz_values[2::3],
         "chg": charges,
+        "provisional_sign_scale": True,
+        "sign_scale_convention": "chg = -0.5 * q_cav",
+        "validation_status": "requires PySCF/ddX/reference cross-check before runtime use",
+        "runtime_pcm_enabled": False,
     }
