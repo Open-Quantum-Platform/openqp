@@ -174,6 +174,7 @@ The branch also has a dependency-light Python handoff chain for carrying a revie
 2. `reference_scf_pcm_reaction_potential_from_payload(payload)` is the consumer gate. It accepts only `pcm_scope="reference_scf_energy_only"`, `reference_target="RHF/ROHF reference density"`, `runtime_pcm_enabled=False`, no response-solvent coupling, no gradients, and finite packed values with matching `nbf`.
 3. `reference_scf_pcm_calc_fock_handoff(payload)` exposes only `calc_fock_kwargs={"pcm_reaction_potential_in": ...}` plus compact metadata for a future opt-in prototype `calc_fock(..., pcm_reaction_potential_in=...)` call.
 4. `reference_scf_pcm_calc_fock_handoff_from_molecule(mol)` is the molecule-level no-runtime gate: an empty/restored payload returns empty `calc_fock_kwargs`, while a present payload must pass the reviewed consumer before any packed reaction potential is exposed.
+5. `reference_scf_pcm_calc_fock_request(mol, incremental_fock=...)` is the first caller-facing request guard. It forwards reviewed payloads only to the non-incremental Fock path, returns a labeled disabled request when no payload is present, and fails fast with `reference PCM incremental Fock is not validated` if a restored reference-PCM payload would otherwise enter OpenQP's existing incremental-Fock shortcut.
 
 This is intentionally not a production solvent switch: runtime PCM remains disabled, with no state-specific or nonequilibrium MRSF solvent response, no MRSF-kernel solvent response, no analytic PCM gradients, and no solution-phase optimization claim.
 
