@@ -662,6 +662,11 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
             "reference PCM incremental Fock is not validated.*dens_old_present=false.*f_old_present=true",
         ):
             solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=None, f_old=[0.0])
+        with self.assertRaisesRegex(
+            ValueError,
+            "reference PCM incremental Fock is not validated.*dens_old_present=true.*f_old_present=true.*incremental_trigger_fields=dens_old,f_old",
+        ):
+            solvent.reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=[0.0], f_old=[0.0])
 
         disabled = solvent.reference_scf_pcm_calc_fock_request_from_scf_state(
             types.SimpleNamespace(get_pcm_runtime_payload=lambda: {}),

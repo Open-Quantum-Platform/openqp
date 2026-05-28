@@ -424,7 +424,8 @@ def reference_scf_pcm_calc_fock_request_from_scf_state(mol, *, dens_old=None, f_
             raise ValueError(
                 "reference PCM incremental Fock is not validated; "
                 f"dens_old_present={str(audit['scf_state_dens_old_present']).lower()}; "
-                f"f_old_present={str(audit['scf_state_f_old_present']).lower()}"
+                f"f_old_present={str(audit['scf_state_f_old_present']).lower()}; "
+                f"incremental_trigger_fields={','.join(audit['incremental_trigger_fields'])}"
             ) from exc
         raise
     request.update(audit)
