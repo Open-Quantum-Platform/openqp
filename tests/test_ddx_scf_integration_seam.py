@@ -574,6 +574,28 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 incremental_fock=True,
             )
 
+    def test_reference_scf_pcm_calc_fock_request_requires_boolean_incremental_flag(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_calc_fock_request_bool", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25]],
+            [0.1, 0.2, 0.3],
+        )
+
+        with self.assertRaisesRegex(ValueError, "incremental_fock must be boolean"):
+            solvent.reference_scf_pcm_calc_fock_request(
+                types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload),
+                incremental_fock="unknown",
+            )
+
     def test_calc_fock_pcm_incremental_guard_checks_both_old_density_and_fock_state(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         body = text.split("subroutine calc_fock", 1)[1].split("end subroutine calc_fock", 1)[0]

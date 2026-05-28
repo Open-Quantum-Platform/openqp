@@ -361,6 +361,8 @@ def reference_scf_pcm_calc_fock_request(mol, *, incremental_fock: bool = False):
     the incremental-Fock shortcut, fail fast until PCM incremental-energy
     behavior is derived and validated.
     """
+    if not isinstance(incremental_fock, bool):
+        raise ValueError("incremental_fock must be boolean")
     handoff = reference_scf_pcm_calc_fock_handoff_from_molecule(mol)
     if not handoff["calc_fock_kwargs"]:
         handoff["call_mode"] = "disabled_no_payload"
