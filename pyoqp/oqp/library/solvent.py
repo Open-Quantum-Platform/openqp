@@ -216,6 +216,29 @@ def reference_scf_pcm_energy_handoff(density_blocks, cavity_xyz, reaction_potent
     }
 
 
+def reference_scf_pcm_runtime_payload(density_blocks, reaction_potential):
+    """Return a guarded no-runtime payload for future PCM runtime storage.
+
+    The future SCF caller needs a validated packed ``pcm_reaction_potential``
+    and the matching candidate ``epcm`` bookkeeping value to travel together.
+    This helper deliberately records only a compact OpenQP-tag-style payload for
+    review/prototype storage; it does not enable runtime PCM or expose raw
+    spin-density blocks/state densities.
+    """
+    terms = reference_scf_pcm_energy_terms(density_blocks, reaction_potential)
+    return {
+        "OQP::pcm_reaction_potential": terms["reaction_potential"],
+        "OQP::pcm_epcm": terms["candidate_polarization_energy"],
+        "pcm_runtime_payload_version": 1,
+        "pcm_scope": "reference_scf_energy_only",
+        "reference_target": "RHF/ROHF reference density",
+        "response_solvent_coupling": "not enabled",
+        "gradient_support": "not enabled",
+        "runtime_pcm_enabled": False,
+        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

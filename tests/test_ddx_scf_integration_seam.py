@@ -358,6 +358,33 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertNotIn("density_blocks", handoff)
         self.assertNotIn("state_density", handoff)
 
+    def test_reference_scf_pcm_runtime_payload_records_validated_potential_and_epcm(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_runtime_payload", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+
+        self.assertEqual(payload["OQP::pcm_reaction_potential"], [0.1, 0.2, 0.3])
+        self.assertAlmostEqual(payload["OQP::pcm_epcm"], 0.125)
+        self.assertEqual(payload["pcm_runtime_payload_version"], 1)
+        self.assertEqual(payload["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(payload["reference_target"], "RHF/ROHF reference density")
+        self.assertEqual(payload["response_solvent_coupling"], "not enabled")
+        self.assertEqual(payload["gradient_support"], "not enabled")
+        self.assertFalse(payload["runtime_pcm_enabled"])
+        self.assertEqual(payload["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
+        self.assertNotIn("density_blocks", payload)
+        self.assertNotIn("state_density", payload)
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
