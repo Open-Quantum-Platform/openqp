@@ -126,6 +126,32 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(contract["total_density"], [1.75, 0.0, 0.25])
         self.assertEqual(contract["reaction_potential"], [0.1, 0.2, 0.3])
 
+    def test_reference_scf_phi_cav_inputs_validate_density_and_cavity_points(self):
+        import importlib.util
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_phi_cav", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        with self.assertRaisesRegex(ValueError, "3 \* ncav"):
+            solvent.reference_scf_phi_cav_inputs([[1.0, 0.5, 0.25]], [0.0, 0.1])
+        with self.assertRaisesRegex(ValueError, "at least one cavity point"):
+            solvent.reference_scf_phi_cav_inputs([[1.0, 0.5, 0.25]], [])
+
+        inputs = solvent.reference_scf_phi_cav_inputs(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.0, 0.1, 0.2, 1.0, 1.1, 1.2],
+        )
+        self.assertEqual(inputs["nbf"], 2)
+        self.assertEqual(inputs["ncav"], 2)
+        self.assertEqual(inputs["total_density"], [1.75, 0.0, 0.25])
+        self.assertEqual(inputs["x"], [0.0, 1.0])
+        self.assertEqual(inputs["y"], [0.1, 1.1])
+        self.assertEqual(inputs["z"], [0.2, 1.2])
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)

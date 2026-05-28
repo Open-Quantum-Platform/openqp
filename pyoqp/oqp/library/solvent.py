@@ -59,6 +59,32 @@ def reference_scf_reaction_field_contract(density_blocks, reaction_potential):
     }
 
 
+def reference_scf_phi_cav_inputs(density_blocks, cavity_xyz):
+    """Validate inputs for reference-density electrostatic potential on a ddX cavity.
+
+    This prepares the dependency-light contract for the future
+    ``electrostatic_potential_unweighted`` call that supplies ddX ``phi_cav``
+    from the RHF/ROHF reference density.  It does not enable runtime PCM or
+    define solvent energy bookkeeping.
+    """
+    total_density = reference_scf_total_density(density_blocks)
+    nbf = _packed_nbf(len(total_density))
+    xyz_values = _as_float_list(cavity_xyz, name="cavity_xyz")
+    if not xyz_values:
+        raise ValueError("cavity_xyz must contain at least one cavity point")
+    if len(xyz_values) % 3 != 0:
+        raise ValueError("cavity_xyz must contain 3 * ncav values")
+    return {
+        "nbf": nbf,
+        "ncav": len(xyz_values) // 3,
+        "total_density": total_density,
+        "cavity_xyz": xyz_values,
+        "x": xyz_values[0::3],
+        "y": xyz_values[1::3],
+        "z": xyz_values[2::3],
+    }
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 
