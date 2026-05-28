@@ -308,6 +308,65 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         self.assertTrue(summary["groups"][0]["target_case"])
         self.assertFalse(summary["groups"][1]["target_case"])
 
+    def test_multi_component_summary_preserves_source_csv_for_artifact_triage(self):
+        module = load_module()
+        first = [
+            {
+                "method": "mrsf",
+                "molecule": "ch2o",
+                "root": 4,
+                "physical_state": "S3",
+                "component": "a1_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": -0.25282498,
+                "fd_ha_per_bohr": -0.27404,
+                "diff_ha_per_bohr": 0.02121502,
+                "abs_diff_ha_per_bohr": 0.02121502,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "unknown",
+                "bad_component": True,
+                "target_case": True,
+            }
+        ]
+        second = [
+            {
+                "method": "mrsf",
+                "molecule": "h2s",
+                "root": 5,
+                "physical_state": "S4",
+                "component": "a0_z",
+                "axis": "z",
+                "analytic_ha_per_bohr": -0.14875174,
+                "fd_ha_per_bohr": -0.22803,
+                "diff_ha_per_bohr": 0.07927826,
+                "abs_diff_ha_per_bohr": 0.07927826,
+                "trah_count": 0,
+                "failed_any": False,
+                "s2_max_delta": 0.0,
+                "s2_evidence": "present",
+                "bad_component": True,
+                "target_case": True,
+            }
+        ]
+
+        summary = module.summarize_component_datasets(
+            [("first/components.csv", first), ("second/components.csv", second)],
+            threshold=1.0e-3,
+        )
+
+        self.assertEqual(2, summary["dataset_count"])
+        self.assertEqual(2, summary["target_bad_group_count"])
+        self.assertEqual(
+            {"first/components.csv", "second/components.csv"},
+            {group["source_csv"] for group in summary["target_bad_groups"]},
+        )
+        self.assertEqual(
+            {"first/components.csv", "second/components.csv"},
+            {group["source_csv"] for group in summary["groups"]},
+        )
+
     def test_cli_components_mode_writes_component_group_summary(self):
         module = load_module()
         tmp = tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False)

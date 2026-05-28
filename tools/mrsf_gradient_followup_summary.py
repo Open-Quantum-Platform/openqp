@@ -196,12 +196,12 @@ def _component_mechanism_hint(group: dict[str, Any]) -> str:
 
 
 def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
-    grouped: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, str, int, str], list[dict[str, Any]]] = {}
     for row in rows:
-        grouped.setdefault((row["method"], row["molecule"], row["root"]), []).append(row)
+        grouped.setdefault((row["method"], row["molecule"], row["root"], str(row.get("source_csv", ""))), []).append(row)
 
     summaries: list[dict[str, Any]] = []
-    for (method, molecule, root), items in grouped.items():
+    for (method, molecule, root, source_csv), items in grouped.items():
         worst = max(items, key=lambda item: item["abs_diff_ha_per_bohr"])
         bad_items = [item for item in items if item["abs_diff_ha_per_bohr"] > threshold]
         bad_items.sort(key=lambda item: (-item["abs_diff_ha_per_bohr"], item["component"]))
@@ -221,6 +221,7 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
             "method": method,
             "molecule": molecule,
             "root": root,
+            "source_csv": source_csv,
             "physical_state": worst["physical_state"],
             "max_abs_diff_ha_per_bohr": worst["abs_diff_ha_per_bohr"],
             "worst_component": worst["component"],
@@ -259,6 +260,31 @@ def summarize_component_rows(rows: Iterable[dict[str, Any]], threshold: float = 
 
 def summarize_components_csv(path: Path | str, threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
     return summarize_component_rows(load_components_csv(Path(path), threshold), threshold)
+
+
+def summarize_component_datasets(
+    datasets: Iterable[tuple[str, Iterable[dict[str, Any]]]],
+    threshold: float = DEFAULT_THRESHOLD,
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    dataset_count = 0
+    for source_csv, dataset_rows in datasets:
+        dataset_count += 1
+        for row in dataset_rows:
+            tagged = dict(row)
+            tagged["source_csv"] = source_csv
+            rows.append(tagged)
+    summary = summarize_component_rows(rows, threshold)
+    summary["dataset_count"] = dataset_count
+    return summary
+
+
+def summarize_components_csvs(paths: Iterable[Path | str], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
+    datasets = []
+    for path in paths:
+        csv_path = Path(path)
+        datasets.append((str(csv_path), load_components_csv(csv_path, threshold)))
+    return summarize_component_datasets(datasets, threshold)
 
 
 def summarize_rows(rows: Iterable[dict[str, Any]], threshold: float = DEFAULT_THRESHOLD) -> dict[str, Any]:
