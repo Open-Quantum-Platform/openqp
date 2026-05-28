@@ -352,6 +352,29 @@ def reference_scf_pcm_calc_fock_handoff_from_molecule(mol):
     return handoff
 
 
+def reference_scf_pcm_calc_fock_request(mol, *, incremental_fock: bool = False):
+    """Return a guarded prototype request for ``calc_fock`` PCM handoff.
+
+    The reviewed reference-SCF PCM payload may only be forwarded through the
+    non-incremental Fock path.  If no payload is present this returns an explicit
+    disabled/no-op request; if a payload is present and the caller is attempting
+    the incremental-Fock shortcut, fail fast until PCM incremental-energy
+    behavior is derived and validated.
+    """
+    handoff = reference_scf_pcm_calc_fock_handoff_from_molecule(mol)
+    if not handoff["calc_fock_kwargs"]:
+        handoff["call_mode"] = "disabled_no_payload"
+        handoff["requires_non_incremental_fock"] = False
+        handoff["incremental_fock_allowed"] = False
+        return handoff
+    if incremental_fock:
+        raise ValueError("reference PCM incremental Fock is not validated")
+    handoff["call_mode"] = "non_incremental_only"
+    handoff["requires_non_incremental_fock"] = True
+    handoff["incremental_fock_allowed"] = False
+    return handoff
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

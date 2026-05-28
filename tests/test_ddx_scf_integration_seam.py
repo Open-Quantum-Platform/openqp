@@ -532,6 +532,48 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
                 types.SimpleNamespace(get_pcm_runtime_payload=lambda: {**payload, "runtime_pcm_enabled": True})
             )
 
+    def test_reference_scf_pcm_calc_fock_request_blocks_incremental_fock(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_calc_fock_request", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+        request = solvent.reference_scf_pcm_calc_fock_request(
+            types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload),
+            incremental_fock=False,
+        )
+        self.assertEqual(request["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
+        self.assertEqual(request["call_mode"], "non_incremental_only")
+        self.assertTrue(request["requires_non_incremental_fock"])
+        self.assertFalse(request["incremental_fock_allowed"])
+        self.assertTrue(request["payload_present"])
+        self.assertFalse(request["runtime_pcm_enabled"])
+        self.assertEqual(request["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(request["handoff_target"], "calc_fock pcm_reaction_potential_in")
+
+        disabled = solvent.reference_scf_pcm_calc_fock_request(
+            types.SimpleNamespace(get_pcm_runtime_payload=lambda: {}),
+            incremental_fock=True,
+        )
+        self.assertEqual(disabled["calc_fock_kwargs"], {})
+        self.assertFalse(disabled["payload_present"])
+        self.assertEqual(disabled["call_mode"], "disabled_no_payload")
+
+        with self.assertRaisesRegex(ValueError, "reference PCM incremental Fock is not validated"):
+            solvent.reference_scf_pcm_calc_fock_request(
+                types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload),
+                incremental_fock=True,
+            )
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
