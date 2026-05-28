@@ -322,6 +322,30 @@ def reference_scf_pcm_calc_fock_handoff(payload):
     }
 
 
+def reference_scf_pcm_calc_fock_handoff_from_molecule(mol):
+    """Return opt-in ``calc_fock`` kwargs only when a reviewed payload exists.
+
+    This is a no-runtime prototype call-site gate: a molecule with no restored
+    PCM runtime payload produces no ``calc_fock`` keyword arguments, while a
+    molecule carrying the reviewed reference-SCF payload must pass the same
+    consumer validation as ``reference_scf_pcm_calc_fock_handoff()`` before the
+    packed reaction potential can be forwarded.
+    """
+    payload = mol.get_pcm_runtime_payload()
+    if not payload:
+        return {
+            "calc_fock_kwargs": {},
+            "payload_present": False,
+            "runtime_pcm_enabled": False,
+            "response_solvent_coupling": "not enabled",
+            "gradient_support": "not enabled",
+            "handoff_target": "calc_fock pcm_reaction_potential_in",
+        }
+    handoff = reference_scf_pcm_calc_fock_handoff(payload)
+    handoff["payload_present"] = True
+    return handoff
+
+
 def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     """Return candidate OpenQP external-charge weights from ddX ``q_cav``.
 

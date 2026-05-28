@@ -476,6 +476,41 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runtime_pcm_enabled must be False"):
             solvent.reference_scf_pcm_calc_fock_handoff({**payload, "runtime_pcm_enabled": True})
 
+    def test_reference_scf_pcm_calc_fock_handoff_from_molecule_requires_explicit_payload(self):
+        import importlib.util
+        import types
+
+        module_path = ROOT / "pyoqp" / "oqp" / "library" / "solvent.py"
+        spec = importlib.util.spec_from_file_location("solvent_under_test_molecule_calc_fock_handoff", module_path)
+        if spec is None or spec.loader is None:
+            self.fail(f"Unable to load {module_path}")
+        solvent = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solvent)
+
+        empty_mol = types.SimpleNamespace(get_pcm_runtime_payload=lambda: {})
+        disabled = solvent.reference_scf_pcm_calc_fock_handoff_from_molecule(empty_mol)
+        self.assertEqual(disabled["calc_fock_kwargs"], {})
+        self.assertFalse(disabled["runtime_pcm_enabled"])
+        self.assertFalse(disabled["payload_present"])
+        self.assertEqual(disabled["handoff_target"], "calc_fock pcm_reaction_potential_in")
+
+        payload = solvent.reference_scf_pcm_runtime_payload(
+            [[1.0, 0.5, 0.25], [0.75, -0.5, 0.0]],
+            [0.1, 0.2, 0.3],
+        )
+        payload_mol = types.SimpleNamespace(get_pcm_runtime_payload=lambda: payload)
+        handoff = solvent.reference_scf_pcm_calc_fock_handoff_from_molecule(payload_mol)
+        self.assertEqual(handoff["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
+        self.assertTrue(handoff["payload_present"])
+        self.assertEqual(handoff["nbf"], 2)
+        self.assertEqual(handoff["pcm_scope"], "reference_scf_energy_only")
+        self.assertEqual(handoff["response_solvent_coupling"], "not enabled")
+        self.assertFalse(handoff["runtime_pcm_enabled"])
+        with self.assertRaisesRegex(ValueError, "runtime_pcm_enabled must be False"):
+            solvent.reference_scf_pcm_calc_fock_handoff_from_molecule(
+                types.SimpleNamespace(get_pcm_runtime_payload=lambda: {**payload, "runtime_pcm_enabled": True})
+            )
+
     def test_unweighted_electrostatic_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
         self.assertIn("public electrostatic_potential_unweighted", text)
