@@ -850,6 +850,15 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("finite_difference_delta", source)
         self.assertIn("fabs(q_cav_fd_derivative", source)
 
+    def test_ddx_seam_doc_preserves_old_buffer_blocker_diagnostics(self):
+        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
+        self.assertIn("dens_old_present", text)
+        self.assertIn("f_old_present", text)
+        self.assertIn("incremental_trigger_fields=dens_old,f_old", text)
+        self.assertIn("incremental_trigger_fields=dens_old", text)
+        self.assertIn("incremental_trigger_fields=f_old", text)
+        self.assertIn("before exposing `pcm_reaction_potential_in`", text)
+
     def test_scf_fock_builder_is_identified_for_solvent_hook(self):
         text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
         self.assertIn("subroutine calc_jk_xc", text.lower())
