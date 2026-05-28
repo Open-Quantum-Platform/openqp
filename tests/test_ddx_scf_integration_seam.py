@@ -420,6 +420,9 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
 
         self.assertEqual(reviewed["reaction_potential"], [0.1, 0.2, 0.3])
         self.assertEqual(reviewed["nbf"], 2)
+        self.assertEqual(reviewed["packed_ao_length"], 3)
+        self.assertEqual(reviewed["expected_packed_ao_length"], 3)
+        self.assertEqual(reviewed["packed_ao_shape_formula"], "nbf * (nbf + 1) / 2")
         self.assertAlmostEqual(reviewed["candidate_polarization_energy"], 0.125)
         self.assertEqual(reviewed["pcm_runtime_payload_version"], 1)
         self.assertEqual(reviewed["pcm_scope"], "reference_scf_energy_only")
@@ -489,6 +492,8 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(handoff["calc_fock_kwargs"], {"pcm_reaction_potential_in": [0.1, 0.2, 0.3]})
         self.assertEqual(handoff["nbf"], 2)
         self.assertEqual(handoff["packed_ao_length"], 3)
+        self.assertEqual(handoff["expected_packed_ao_length"], 3)
+        self.assertEqual(handoff["packed_ao_shape_formula"], "nbf * (nbf + 1) / 2")
         self.assertAlmostEqual(handoff["candidate_polarization_energy"], 0.125)
         self.assertEqual(handoff["handoff_target"], "calc_fock pcm_reaction_potential_in")
         self.assertEqual(handoff["pcm_scope"], "reference_scf_energy_only")
