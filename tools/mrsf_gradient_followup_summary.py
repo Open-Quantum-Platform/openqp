@@ -602,6 +602,17 @@ def _find_line_numbers(source_text: str, pattern: str, flags: int = 0) -> list[i
     return [idx for idx, line in enumerate(source_text.splitlines(), start=1) if compiled.search(line)]
 
 
+def _line_snippets(source_text: str, lines: Iterable[int], limit: int = 3) -> list[dict[str, Any]]:
+    """Return compact one-line snippets for diagnostic source anchors."""
+
+    source_lines = source_text.splitlines()
+    snippets = []
+    for line in list(lines)[:limit]:
+        if 1 <= line <= len(source_lines):
+            snippets.append({"line": line, "text": source_lines[line - 1].strip()})
+    return snippets
+
+
 def summarize_source_diagnostic_evidence(
     source_plan: dict[str, Any],
     source_root: Path | str = Path("."),
@@ -643,6 +654,21 @@ def summarize_source_diagnostic_evidence(
             z_vector_text, r"call\s+mrsfcbc\s*\([^\n]*mo_a\s*,\s*mo_a", flags=re.IGNORECASE
         ),
     }
+    source_signal_snippets = {
+        "ovov_gradient_sign_post_pr153_plus": _line_snippets(
+            gradient_text, source_signal_locations["ovov_gradient_sign_post_pr153_plus_lines"]
+        ),
+        "ovov_gradient_sign_pre_pr153_minus": _line_snippets(
+            gradient_text, source_signal_locations["ovov_gradient_sign_pre_pr153_minus_lines"]
+        ),
+        "gradient_xc_call": _line_snippets(gradient_text, source_signal_locations["gradient_xc_call_lines"]),
+        "z_vector_channel7_td_abxc_overwrite": _line_snippets(
+            z_vector_text, source_signal_locations["z_vector_channel7_td_abxc_overwrite_lines"]
+        ),
+        "z_vector_mrsfcbc_rohf_same_mo": _line_snippets(
+            z_vector_text, source_signal_locations["z_vector_mrsfcbc_rohf_same_mo_lines"]
+        ),
+    }
     static_hypotheses: list[str] = []
     if source_signals["z_vector_channel7_overwrites_mrsfcbc_with_td_abxc"]:
         static_hypotheses.append(
@@ -662,6 +688,7 @@ def summarize_source_diagnostic_evidence(
         "scope_guard": "no production algebra edit; static source signals only",
         "source_signals": source_signals,
         "source_signal_locations": source_signal_locations,
+        "source_signal_snippets": source_signal_snippets,
         "static_hypotheses_to_test": static_hypotheses,
         "validation_required_before_fix_claim": [
             "finite-difference validation on the selected stable target residual",

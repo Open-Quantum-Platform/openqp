@@ -818,6 +818,15 @@ td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
         self.assertEqual([2], locations["gradient_xc_call_lines"])
         self.assertEqual([2], locations["z_vector_mrsfcbc_rohf_same_mo_lines"])
         self.assertEqual([3], locations["z_vector_channel7_td_abxc_overwrite_lines"])
+        snippets = evidence["source_signal_snippets"]
+        self.assertEqual(
+            [{"line": 5, "text": "df1 = df1 + sgnk*qfspcp2*db2"}],
+            snippets["ovov_gradient_sign_post_pr153_plus"],
+        )
+        self.assertEqual(
+            [{"line": 3, "text": "fmrst1(1,7,:,:) = td_abxc"}],
+            snippets["z_vector_channel7_td_abxc_overwrite"],
+        )
         self.assertIn("no production algebra edit", evidence["scope_guard"])
         self.assertIn("finite-difference", " ".join(evidence["validation_required_before_fix_claim"]))
 
