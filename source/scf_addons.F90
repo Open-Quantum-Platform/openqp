@@ -226,6 +226,7 @@ module scf_addons
   public :: get_solver_name
   public :: compute_energy
   public :: calc_jk_xc
+  public :: add_reference_pcm_reaction_field
   public :: get_response_packed
   public :: get_scf_name
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
@@ -1302,6 +1303,34 @@ contains
     end if
 
   end subroutine calc_dft_xc
+
+  !> @brief Add a validated reference-SCF PCM reaction-field matrix to Fock blocks.
+  !> @detail This helper is the guarded source-level handoff for the planned
+  !>         energy-only PCM seam.  The caller must supply a packed AO
+  !>         reaction_potential already validated against the RHF/ROHF reference
+  !>         density.  Runtime PCM remains disabled until backend sign/scale and
+  !>         energy bookkeeping are validated.
+  subroutine add_reference_pcm_reaction_field(f, reaction_potential, nfocks)
+    use precision, only : dp
+    implicit none
+
+    real(dp), intent(inout) :: f(:,:)
+    real(dp), intent(in)    :: reaction_potential(:)
+    integer, intent(in)     :: nfocks
+
+    integer :: ii
+
+    if (size(f,1) /= size(reaction_potential)) then
+      error stop 'add_reference_pcm_reaction_field: packed AO reaction field size mismatch'
+    end if
+    if (size(f,2) < nfocks) then
+      error stop 'add_reference_pcm_reaction_field: insufficient Fock blocks for reference PCM'
+    end if
+
+    do ii = 1, nfocks
+      f(:,ii) = f(:,ii) + reaction_potential
+    end do
+  end subroutine add_reference_pcm_reaction_field
 
   !> @brief Builds J/K (and optional DFT XC) Fock contribution(s) and energies.
   !> @detail Forms two-electron Fock using `fock_jk`, adds the one-electron core

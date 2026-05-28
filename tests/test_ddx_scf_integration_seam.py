@@ -292,6 +292,19 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertIn("f(:,ii) =  f(:,ii) + hcore", text)
         self.assertIn("E%ehf1 = E%ehf1 + traceprod_sym_packed", text)
 
+    def test_reference_pcm_reaction_field_helper_replicates_per_fock_block(self):
+        text = (ROOT / "source" / "scf_addons.F90").read_text(encoding="utf-8")
+        self.assertIn("public :: add_reference_pcm_reaction_field", text)
+        self.assertIn("subroutine add_reference_pcm_reaction_field", text.lower())
+        helper = text.split("subroutine add_reference_pcm_reaction_field", 1)[1].split(
+            "end subroutine add_reference_pcm_reaction_field", 1
+        )[0]
+        self.assertIn("size(f,1) /= size(reaction_potential)", helper)
+        self.assertIn("size(f,2) < nfocks", helper)
+        self.assertIn("do ii = 1, nfocks", helper)
+        self.assertIn("f(:,ii) = f(:,ii) + reaction_potential", helper)
+        self.assertNotIn("pcm%enabled", helper.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
