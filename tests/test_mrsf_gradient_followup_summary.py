@@ -367,11 +367,8 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
             {group["source_csv"] for group in summary["groups"]},
         )
 
-    def test_cli_components_mode_writes_component_group_summary(self):
-        module = load_module()
+    def write_components_csv(self, rows):
         tmp = tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False)
-        output = tempfile.NamedTemporaryFile("r", suffix=".json", delete=False)
-        output.close()
         fieldnames = [
             "molecule",
             "method",
@@ -391,7 +388,14 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
         with tmp:
             writer = csv.DictWriter(tmp, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerow(
+            for row in rows:
+                writer.writerow(row)
+        return Path(tmp.name)
+
+    def test_cli_components_mode_writes_component_group_summary(self):
+        module = load_module()
+        csv_path = self.write_components_csv(
+            [
                 {
                     "molecule": "hcn",
                     "method": "mrsf",
@@ -408,15 +412,72 @@ class MrsfGradientFollowupSummaryTests(unittest.TestCase):
                     "s2_plus": "{6: 0.02}",
                     "s2_minus": "{6: 0.02}",
                 }
-            )
+            ]
+        )
+        output = tempfile.NamedTemporaryFile("r", suffix=".json", delete=False)
+        output.close()
 
-        status = module.main(["--components", tmp.name, "--output", output.name])
+        status = module.main(["--components", str(csv_path), "--output", output.name])
 
         self.assertEqual(0, status)
         written = output.name and Path(output.name).read_text()
         self.assertIn('"component_group_count": 1', written)
         self.assertIn('"physical_state": "S5"', written)
         self.assertIn("localized_z_component", written)
+
+    def test_cli_components_mode_accepts_multiple_csvs_for_artifact_ranking(self):
+        module = load_module()
+        first = self.write_components_csv(
+            [
+                {
+                    "molecule": "ch2o",
+                    "method": "mrsf",
+                    "root": "4",
+                    "physical_state": "",
+                    "component": "a1_z",
+                    "analytic_ha_per_bohr": "-0.25282498",
+                    "fd_ha_per_bohr": "-0.27404",
+                    "diff_ha_per_bohr": "0.02121502",
+                    "abs_diff_ha_per_bohr": "0.02121502",
+                    "trah_count": "0",
+                    "failed_any": "False",
+                    "s2_grad": "{}",
+                    "s2_plus": "{}",
+                    "s2_minus": "{}",
+                }
+            ]
+        )
+        second = self.write_components_csv(
+            [
+                {
+                    "molecule": "h2s",
+                    "method": "mrsf",
+                    "root": "5",
+                    "physical_state": "",
+                    "component": "a0_z",
+                    "analytic_ha_per_bohr": "-0.14875174",
+                    "fd_ha_per_bohr": "-0.22803",
+                    "diff_ha_per_bohr": "0.07927826",
+                    "abs_diff_ha_per_bohr": "0.07927826",
+                    "trah_count": "0",
+                    "failed_any": "False",
+                    "s2_grad": "{5: 0.01}",
+                    "s2_plus": "{5: 0.01}",
+                    "s2_minus": "{5: 0.01}",
+                }
+            ]
+        )
+        output = tempfile.NamedTemporaryFile("r", suffix=".json", delete=False)
+        output.close()
+
+        status = module.main(["--components", str(first), str(second), "--output", output.name])
+
+        self.assertEqual(0, status)
+        written = Path(output.name).read_text()
+        self.assertIn('"dataset_count": 2', written)
+        self.assertIn('"target_bad_group_count": 2', written)
+        self.assertIn(str(first), written)
+        self.assertIn(str(second), written)
 
 
 if __name__ == "__main__":

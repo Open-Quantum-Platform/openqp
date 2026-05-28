@@ -325,16 +325,21 @@ def summarize_compact_csv(path: Path | str, threshold: float = DEFAULT_THRESHOLD
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("csv_path", type=Path)
+    parser.add_argument("csv_path", type=Path, nargs="+")
     parser.add_argument("--components", action="store_true", help="Summarize per-component FD diagnostics CSV")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--output", type=Path, help="Write JSON summary to this path")
     args = parser.parse_args(argv)
 
     if args.components:
-        summary = summarize_components_csv(args.csv_path, args.threshold)
+        if len(args.csv_path) == 1:
+            summary = summarize_components_csv(args.csv_path[0], args.threshold)
+        else:
+            summary = summarize_components_csvs(args.csv_path, args.threshold)
     else:
-        summary = summarize_compact_csv(args.csv_path, args.threshold)
+        if len(args.csv_path) != 1:
+            parser.error("compact summary mode accepts exactly one CSV path")
+        summary = summarize_compact_csv(args.csv_path[0], args.threshold)
     payload = json.dumps(summary, indent=2, sort_keys=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
