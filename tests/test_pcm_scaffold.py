@@ -360,6 +360,15 @@ epsilon=water
         self.assertIn("missing `packed_ao_shape_formula`", text)
         self.assertIn("boolean numeric", text)
 
+    def test_validation_matrix_documents_molecule_payload_roundtrip_allowlist(self):
+        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
+        text = matrix_path.read_text(encoding="utf-8")
+        self.assertIn("Molecule.set_pcm_runtime_payload()", text)
+        self.assertIn("JSON round-trip", text)
+        self.assertIn("explicit allowlist", text)
+        self.assertIn("backend_validation_status", text)
+        self.assertIn("must not be stripped", text)
+
 
 if __name__ == "__main__":
     unittest.main()
