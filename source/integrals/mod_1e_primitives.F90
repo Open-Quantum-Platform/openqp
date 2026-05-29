@@ -46,6 +46,10 @@ MODULE mod_1e_primitives
  PUBLIC comp_coulomb_helfeyder1
  PUBLIC comp_kinetic_der1
  PUBLIC comp_overlap_der1
+ PUBLIC comp_kinetic_der2
+ PUBLIC comp_overlap_der2
+ PUBLIC der_kinovl_xyz
+ PUBLIC der2_kinovl_xyz
  PUBLIC comp_ewaldlr_der1
  PUBLIC comp_ewaldlr_helfeyder1
 
@@ -765,6 +769,151 @@ END SUBROUTINE
     END DO
  END SUBROUTINE
 
+!> @brief Bra-center second derivative of the 1e overlap contribution.
+!> @details Accumulates the symmetric 3x3 block of second derivatives of
+!>  sum_ij dij*S_ij with respect to the bra (center i) Cartesian coordinates,
+!>  i.e. d2/dA_a dA_b. The full Hessian's other blocks (A-B, B-B) follow from
+!>  translational invariance of the two-center integral.
+!> @param[in]    cp    shell pair data
+!> @param[in]    dij   density (or energy-weighted density) matrix block
+!> @param[inout] de2   dimension(3,3), accumulated bra-center 2nd derivatives
+ SUBROUTINE comp_overlap_der2(cp, dij, de2)
+!dir$ attributes inline :: comp_overlap_der2
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: de2(:,:)
+
+    REAL(REAL64) :: de_loc(3,3), w
+    REAL(REAL64) :: sx, sy, sz, dx, dy, dz, d2x, d2y, d2z
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+4,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: ovl_der2(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    ! compute overlap [i+2|j]
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+2, jang, ovl_int)
+
+    ! compute 1D overlap 1st and 2nd derivatives [i|j]
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(ovl_der2, ovl_int, iang, jang, pp%ai)
+
+    de_loc = 0.0
+    DO i = 1, inao
+        ix = CART_X(i,iang)
+        iy = CART_Y(i,iang)
+        iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang)
+            jy = CART_Y(j,jang)
+            jz = CART_Z(j,jang)
+            sx = ovl_int(jx,ix,1); sy = ovl_int(jy,iy,2); sz = ovl_int(jz,iz,3)
+            dx = ovl_der(jx,ix,1); dy = ovl_der(jy,iy,2); dz = ovl_der(jz,iz,3)
+            d2x = ovl_der2(jx,ix,1); d2y = ovl_der2(jy,iy,2); d2z = ovl_der2(jz,iz,3)
+            w = dij(i,j)
+            de_loc(1,1) = de_loc(1,1) + w * d2x*sy*sz
+            de_loc(2,2) = de_loc(2,2) + w * sx*d2y*sz
+            de_loc(3,3) = de_loc(3,3) + w * sx*sy*d2z
+            de_loc(2,1) = de_loc(2,1) + w * dx*dy*sz
+            de_loc(3,1) = de_loc(3,1) + w * dx*sy*dz
+            de_loc(3,2) = de_loc(3,2) + w * sx*dy*dz
+        END DO
+    END DO
+    de2(1,1) = de2(1,1) + de_loc(1,1)*pp%expfac
+    de2(2,2) = de2(2,2) + de_loc(2,2)*pp%expfac
+    de2(3,3) = de2(3,3) + de_loc(3,3)*pp%expfac
+    de2(2,1) = de2(2,1) + de_loc(2,1)*pp%expfac
+    de2(1,2) = de2(1,2) + de_loc(2,1)*pp%expfac
+    de2(3,1) = de2(3,1) + de_loc(3,1)*pp%expfac
+    de2(1,3) = de2(1,3) + de_loc(3,1)*pp%expfac
+    de2(3,2) = de2(3,2) + de_loc(3,2)*pp%expfac
+    de2(2,3) = de2(2,3) + de_loc(3,2)*pp%expfac
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Bra-center second derivative of the 1e kinetic-energy contribution.
+!> @details Accumulates the symmetric 3x3 block d2/dA_a dA_b of
+!>  sum_ij dij*T_ij. As with comp_kinetic_der1, the kinetic operator factorizes
+!>  across the three Cartesian directions as T = Tx*Sy*Sz + Sx*Ty*Sz + Sx*Sy*Tz.
+!> @param[in]    cp    shell pair data
+!> @param[in]    dij   density (or energy-weighted density) matrix block
+!> @param[inout] de2   dimension(3,3), accumulated bra-center 2nd derivatives
+ SUBROUTINE comp_kinetic_der2(cp, dij, de2)
+!dir$ attributes inline :: comp_kinetic_der2
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: de2(:,:)
+
+    REAL(REAL64) :: de_loc(3,3), w
+    REAL(REAL64) :: sx, sy, sz, dsx, dsy, dsz, d2sx, d2sy, d2sz
+    REAL(REAL64) :: tx, ty, tz, dtx, dty, dtz, d2tx, d2ty, d2tz
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+4,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: ovl_der2(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_int(0:max_ang,0:max_ang+2,3)
+    real(real64) :: kin_der(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_der2(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    ! compute overlap [i+4|j]
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+4, jang, ovl_int)
+
+    ! compute 1D kinetic [i+2|j]
+    CALL kinetic_xyz_i(kin_int, ovl_int, iang+2, jang, pp%ai)
+
+    ! 1st and 2nd bra-center derivatives of 1D overlap and kinetic
+    CALL der_kinovl_xyz(ovl_der,  ovl_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(ovl_der2, ovl_int, iang, jang, pp%ai)
+    CALL der_kinovl_xyz(kin_der,  kin_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(kin_der2, kin_int, iang, jang, pp%ai)
+
+    de_loc = 0.0
+    DO i = 1, inao
+        ix = CART_X(i,iang)
+        iy = CART_Y(i,iang)
+        iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang)
+            jy = CART_Y(j,jang)
+            jz = CART_Z(j,jang)
+            sx = ovl_int(jx,ix,1);  sy = ovl_int(jy,iy,2);  sz = ovl_int(jz,iz,3)
+            dsx = ovl_der(jx,ix,1); dsy = ovl_der(jy,iy,2); dsz = ovl_der(jz,iz,3)
+            d2sx = ovl_der2(jx,ix,1); d2sy = ovl_der2(jy,iy,2); d2sz = ovl_der2(jz,iz,3)
+            tx = kin_int(jx,ix,1);  ty = kin_int(jy,iy,2);  tz = kin_int(jz,iz,3)
+            dtx = kin_der(jx,ix,1); dty = kin_der(jy,iy,2); dtz = kin_der(jz,iz,3)
+            d2tx = kin_der2(jx,ix,1); d2ty = kin_der2(jy,iy,2); d2tz = kin_der2(jz,iz,3)
+            w = dij(i,j)
+            ! diagonal: d2/dA_a^2 of (Tx Sy Sz + Sx Ty Sz + Sx Sy Tz)
+            de_loc(1,1) = de_loc(1,1) + w*( d2tx*sy*sz + d2sx*ty*sz + d2sx*sy*tz )
+            de_loc(2,2) = de_loc(2,2) + w*( tx*d2sy*sz + sx*d2ty*sz + sx*d2sy*tz )
+            de_loc(3,3) = de_loc(3,3) + w*( tx*sy*d2sz + sx*ty*d2sz + sx*sy*d2tz )
+            ! off-diagonal: d2/dA_a dA_b
+            de_loc(2,1) = de_loc(2,1) + w*( dtx*dsy*sz + dsx*dty*sz + dsx*dsy*tz )
+            de_loc(3,1) = de_loc(3,1) + w*( dtx*sy*dsz + dsx*ty*dsz + dsx*sy*dtz )
+            de_loc(3,2) = de_loc(3,2) + w*( tx*dsy*dsz + sx*dty*dsz + sx*dsy*dtz )
+        END DO
+    END DO
+    de2(1,1) = de2(1,1) + de_loc(1,1)*pp%expfac
+    de2(2,2) = de2(2,2) + de_loc(2,2)*pp%expfac
+    de2(3,3) = de2(3,3) + de_loc(3,3)*pp%expfac
+    de2(2,1) = de2(2,1) + de_loc(2,1)*pp%expfac
+    de2(1,2) = de2(1,2) + de_loc(2,1)*pp%expfac
+    de2(3,1) = de2(3,1) + de_loc(3,1)*pp%expfac
+    de2(1,3) = de2(1,3) + de_loc(3,1)*pp%expfac
+    de2(3,2) = de2(3,2) + de_loc(3,2)*pp%expfac
+    de2(2,3) = de2(2,3) + de_loc(3,2)*pp%expfac
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
 !> @brief Compute 1e Coulomb contribution to the gradient (v.r.t. shifts of
 !>  shell's centers)
 !> @param[in]       nroots      roots for GaussRys
@@ -1357,6 +1506,31 @@ END SUBROUTINE
 
     DO i = 1, lit
         dxyz(0:ljt,i,:) = dxyz(0:ljt,i,:) - i*xyz(0:ljt,i-1,:)
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Second derivative of 1D overlap/kinetic integrals w.r.t. the bra
+!>  center, obtained by applying the bra-center derivative operator twice:
+!>    d2[j,i] = 4 ai^2 [j,i+2] - 2 ai (2i+1) [j,i] + i(i-1) [j,i-2]
+!>  This is identical to der_kinovl_xyz composed with itself; the input array
+!>  must therefore be available up to bra index lit+2.
+ SUBROUTINE der2_kinovl_xyz(d2xyz,xyz,lit,ljt,ai)
+!dir$ attributes forceinline :: der2_kinovl_xyz
+    REAL(REAL64), INTENT(IN) ::  ai
+    REAL(REAL64), CONTIGUOUS, INTENT(IN) ::  xyz(0:,0:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: d2xyz(0:,0:,:)
+    INTEGER, INTENT(IN) :: lit, ljt
+    INTEGER :: i
+
+    d2xyz(0:ljt,0:lit,:) = 4*ai*ai * xyz(0:ljt,2:lit+2,:)
+
+    DO i = 0, lit
+        d2xyz(0:ljt,i,:) = d2xyz(0:ljt,i,:) - 2*ai*(2*i+1)*xyz(0:ljt,i,:)
+    END DO
+
+    DO i = 2, lit
+        d2xyz(0:ljt,i,:) = d2xyz(0:ljt,i,:) + i*(i-1)*xyz(0:ljt,i-2,:)
     END DO
 
  END SUBROUTINE

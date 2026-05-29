@@ -11,6 +11,7 @@ module grd1
    use mod_1e_primitives, only: &
        comp_coulomb_der1, comp_coulomb_helfeyder1, comp_kinetic_der1, &
        comp_overlap_der1, &
+       comp_overlap_der2, comp_kinetic_der2, &
        comp_ewaldlr_der1, comp_ewaldlr_helfeyder1, &
        density_ordered
 
@@ -30,6 +31,8 @@ module grd1
    public hess_nn
    public grad_ee_overlap
    public grad_ee_kinetic
+   public hess_ee_overlap
+   public hess_ee_kinetic
    public grad_en_hellman_feynman
    public grad_en_pulay
    public grad_1e_ecp
@@ -386,6 +389,142 @@ contains
     de = de + de_priv
     DEALLOCATE(de_priv)
 
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Overlap second-derivative contribution to the Cartesian Hessian.
+!> @details Accumulates  sum_uv M_uv d2 S_uv / dR_a dR_b  into the (3N,3N)
+!>   Hessian, where M is the matrix passed in packed form (the energy-weighted
+!>   density W for the HF Hessian). Mirrors grad_ee_overlap: it loops ordered
+!>   shell pairs, evaluates the bra-center second derivative (comp_overlap_der2)
+!>   with the same factor-2 convention as the gradient, and uses translational
+!>   invariance of the two-center integral (d/dB = -d/dA) for the cross block.
+ SUBROUTINE hess_ee_overlap(basis, denab, hess, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    real(kind=dp), intent(inout) :: hess(:,:)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, a, b, ai, bi
+    REAL(kind=dp) :: tol, de2(3,3)
+    LOGICAL :: norm
+    REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    norm = .true.
+    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+
+    allocate(hess_priv, mold=hess)
+    hess_priv = 0.0d0
+
+!$omp parallel &
+!$omp   private(ii, jj, a, b, ai, bi, shi, shj, cntp, de2) &
+!$omp   reduction(+:hess_priv)
+    CALL cntp%alloc(basis)
+!$omp do schedule(dynamic)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+            de2 = 0.0d0
+            CALL comp_overlap_der2(cntp, &
+                dens(basis%ao_offset(ii):, basis%ao_offset(jj):), de2)
+            ! d/dR_C of  G_A = 2*sum_bra-on-A ...  : C=A gives +2*de2, C=B gives -2*de2
+            DO a = 1, 3
+                ai = 3*(shi%atid-1) + a
+                DO b = 1, 3
+                    hess_priv(3*(shi%atid-1)+b, ai) = &
+                        hess_priv(3*(shi%atid-1)+b, ai) + 2*de2(b,a)
+                    hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) = &
+                        hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) - 2*de2(b,a)
+                END DO
+            END DO
+        END DO
+    END DO
+!$omp end do
+!$omp end parallel
+
+    hess = hess + hess_priv
+    DEALLOCATE(hess_priv)
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Kinetic-energy second-derivative contribution to the Cartesian Hessian.
+!> @details Accumulates  sum_uv M_uv d2 T_uv / dR_a dR_b  into the (3N,3N)
+!>   Hessian. Same structure and conventions as hess_ee_overlap, using
+!>   comp_kinetic_der2.
+ SUBROUTINE hess_ee_kinetic(basis, denab, hess, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    real(kind=dp), intent(inout) :: hess(:,:)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, a, b, ai
+    REAL(kind=dp) :: tol, de2(3,3)
+    LOGICAL :: norm
+    REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    norm = .true.
+    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+
+    allocate(hess_priv, mold=hess)
+    hess_priv = 0.0d0
+
+!$omp parallel &
+!$omp   private(ii, jj, a, b, ai, shi, shj, cntp, de2) &
+!$omp   reduction(+:hess_priv)
+    CALL cntp%alloc(basis)
+!$omp do schedule(dynamic)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+            de2 = 0.0d0
+            CALL comp_kinetic_der2(cntp, &
+                dens(basis%ao_offset(ii):, basis%ao_offset(jj):), de2)
+            DO a = 1, 3
+                ai = 3*(shi%atid-1) + a
+                DO b = 1, 3
+                    hess_priv(3*(shi%atid-1)+b, ai) = &
+                        hess_priv(3*(shi%atid-1)+b, ai) + 2*de2(b,a)
+                    hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) = &
+                        hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) - 2*de2(b,a)
+                END DO
+            END DO
+        END DO
+    END DO
+!$omp end do
+!$omp end parallel
+
+    hess = hess + hess_priv
+    DEALLOCATE(hess_priv)
  END SUBROUTINE
 
 !-------------------------------------------------------------------------------

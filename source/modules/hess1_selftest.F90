@@ -1,0 +1,119 @@
+module hess1_selftest_mod
+!> @brief Diagnostic self-test for the native 1e (overlap + kinetic) Hessian
+!>   contributions. It checks the analytic second-derivative drivers
+!>   (grd1::hess_ee_overlap, grd1::hess_ee_kinetic) against a central finite
+!>   difference of the production gradient routines (grd1::grad_ee_overlap,
+!>   grd1::grad_ee_kinetic), contracted with the same fixed matrix. The identity
+!>   d/dR [ sum M*dX/dR ] = sum M*d2X/dR2 holds for any fixed symmetric M, so a
+!>   deterministic placeholder matrix is used and no SCF density is required.
+!>
+!>   This is a validation harness only; it does not compute or return a physical
+!>   Hessian and is independent of the guarded hf_hessian kernel.
+
+  implicit none
+
+  character(len=*), parameter :: module_name = "hess1_selftest_mod"
+
+contains
+
+!###############################################################################
+
+  subroutine hess1_selftest_C(c_handle) bind(C, name="hess1_selftest")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call hess1_selftest(inf)
+  end subroutine hess1_selftest_C
+
+!###############################################################################
+
+  subroutine hess1_selftest(infos)
+    use types, only: information
+    use precision, only: dp
+    use io_constants, only: iw
+    use grd1, only: grad_ee_overlap, grad_ee_kinetic, &
+                    hess_ee_overlap, hess_ee_kinetic
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+
+    integer :: nbf, nbf_tri, natom, n3, p, k, a, ka
+    real(dp), allocatable :: m_packed(:)
+    real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:)
+    real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:)
+    real(dp), allocatable :: gp(:,:), gm(:,:)
+    real(dp) :: h, err_o, err_k, sym_o, sym_k
+
+    associate(basis => infos%basis)
+
+    nbf = basis%nbf
+    nbf_tri = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2)
+    n3 = 3*natom
+
+    ! deterministic, bounded fixed matrix (packed lower triangle)
+    allocate(m_packed(nbf_tri))
+    do p = 1, nbf_tri
+      m_packed(p) = 1.0_dp / real(p+1, dp)
+    end do
+
+    allocate(hess_o_an(n3,n3), hess_k_an(n3,n3), source=0.0_dp)
+    allocate(hess_o_fd(n3,n3), hess_k_fd(n3,n3), source=0.0_dp)
+    allocate(gp(3,natom), gm(3,natom))
+
+    ! analytic second-derivative contributions
+    call hess_ee_overlap(basis, m_packed, hess_o_an)
+    call hess_ee_kinetic(basis, m_packed, hess_k_an)
+
+    ! central finite difference of the analytic gradient routines
+    h = 1.0e-4_dp
+    do k = 1, natom
+      do a = 1, 3
+        ka = 3*(k-1) + a
+
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        gp = 0.0_dp; call grad_ee_overlap(basis, m_packed, gp)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) - 2*h
+        gm = 0.0_dp; call grad_ee_overlap(basis, m_packed, gm)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        hess_o_fd(:,ka) = reshape((gp-gm)/(2*h), [n3])
+
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        gp = 0.0_dp; call grad_ee_kinetic(basis, m_packed, gp)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) - 2*h
+        gm = 0.0_dp; call grad_ee_kinetic(basis, m_packed, gm)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        hess_k_fd(:,ka) = reshape((gp-gm)/(2*h), [n3])
+      end do
+    end do
+
+    err_o = maxval(abs(hess_o_an - hess_o_fd))
+    err_k = maxval(abs(hess_k_an - hess_k_fd))
+    sym_o = maxval(abs(hess_o_an - transpose(hess_o_an)))
+    sym_k = maxval(abs(hess_k_an - transpose(hess_k_an)))
+
+    block
+      integer :: u
+      open(newunit=u, file='/tmp/hess1_selftest.out', status='replace', action='write')
+      write(u,'(a,es12.4)') 'overlap max|an-fd| = ', err_o
+      write(u,'(a,es12.4)') 'kinetic max|an-fd| = ', err_k
+      write(u,'(a,es12.4)') 'overlap asymmetry  = ', sym_o
+      write(u,'(a,es12.4)') 'kinetic asymmetry  = ', sym_k
+      if (max(err_o, err_k) < 1.0e-6_dp) then
+        write(u,'(a)') 'HESS1E_SELFTEST PASS'
+      else
+        write(u,'(a)') 'HESS1E_SELFTEST FAIL'
+      end if
+      close(u)
+    end block
+
+    deallocate(m_packed, hess_o_an, hess_k_an, hess_o_fd, hess_k_fd, gp, gm)
+    end associate
+  end subroutine hess1_selftest
+
+end module hess1_selftest_mod
