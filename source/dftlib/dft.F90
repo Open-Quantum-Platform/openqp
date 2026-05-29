@@ -145,7 +145,7 @@ contains
 
   end subroutine update_dft_HF_exchange_from_input
 
-  subroutine dft_initialize(infos, basis, molGrid, orbitals_cutoff, verbose)
+  subroutine dft_initialize(infos, basis, molGrid, orbitals_cutoff, verbose, need_functional)
     use basis_tools, only: basis_set
     use types, only: information
 
@@ -156,6 +156,7 @@ contains
     type(dft_grid_t), intent(inout) :: molGrid
     real(kind=dp), optional :: orbitals_cutoff
     logical, optional :: verbose
+    logical, optional :: need_functional
 
     real(kind=dp) :: logtol
     type(dft_grid_pruned_t) :: pruned
@@ -166,7 +167,7 @@ contains
     call basis%set_screening(logtol)
 
 !   Set grid DFT options
-    call dft_set_options(infos, pruned)
+    call dft_set_options(infos, pruned, need_functional)
 
 !   Initialize grid
     call dft_prepare_grid(infos, basis, molGrid, pruned, verbose)
@@ -226,7 +227,7 @@ contains
     call libxc_destroy(infos%functional)
   end subroutine
 
-  subroutine dft_set_options(infos, pruned)
+  subroutine dft_set_options(infos, pruned, need_functional)
     use iso_c_binding, only: c_null_char
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
@@ -237,12 +238,17 @@ contains
 
     type(information), intent(inout) :: infos
     type(dft_grid_pruned_t), intent(inout) :: pruned
+    logical, optional, intent(in) :: need_functional
     type(saved_HF_info) :: saved_hf
+    logical :: need_func
 
     integer :: iatm, nrad
     character(len=20) :: xc_func_name
     integer :: nat, i, slen, ntyps
     character(:), allocatable :: pruned_name
+
+    need_func = .true.
+    if (present(need_functional)) need_func = need_functional
 
 !   Default radial/angular grid is 96/302 for LDA/GGA.
     nrad     = infos%dft%grid_rad_size
@@ -315,7 +321,7 @@ contains
 
       ! update HFscale, or cam_alpha,beta,mu from input
       if(saved_HF%do) call saved_HF%update_HF(infos)
-    else
+    else if (need_func) then
       call show_message('Please, specify functional in the input file', WITH_ABORT)
     end if
 

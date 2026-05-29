@@ -42,6 +42,26 @@ def try_basis(basis, path=None, fallback='6-31g'):
     raise FileNotFoundError(f"Basis `{basis}` is not available")
 
 
+def try_data_file(name):
+    """Resolve a data file shipped under share/basis_sets (installed) or the
+    source basis_sets/ tree (development)."""
+
+    try:
+        root = os.environ["OPENQP_ROOT"]
+    except KeyError:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+    for candidate in (
+        name,
+        os.path.join(root, "share", "basis_sets", name),
+        os.path.join(root, "basis_sets", name),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(f"Data file `{name}` is not available")
+
+
 def what_is_time():
     # This function return current time
 

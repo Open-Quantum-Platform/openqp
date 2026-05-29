@@ -4,6 +4,7 @@ import os
 import copy
 import oqp
 from oqp.utils.file_utils import try_basis
+from oqp.utils.file_utils import try_data_file
 from oqp.utils.file_utils import dump_log
 from oqp.library.external import guess_from_pyscf
 
@@ -58,6 +59,15 @@ def guess(mol):
             oqp.guess_huckel(mol)
             alpha = 'computed'
             beta = 'computed'
+
+    elif guess_type == 'sap':
+        # Native Fortran SAP: superposition of atomic potentials integrated
+        # on the DFT grid (Lehtola, JCTC 15, 1593 (2019)). No PySCF needed.
+        sapdata = try_data_file('sap_grasp.dat')
+        mol.data["OQP::hbasis_filename"] = sapdata
+        oqp.guess_sap(mol)
+        alpha = 'computed'
+        beta = 'computed'
 
     elif guess_type == 'pyscf':
         guess_from_pyscf(mol)

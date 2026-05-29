@@ -102,7 +102,7 @@ install(
 INSTALL(
     DIRECTORY ${CMAKE_SOURCE_DIR}/basis_sets/
     DESTINATION share/basis_sets
-    FILES_MATCHING PATTERN "*.basis"
+    FILES_MATCHING PATTERN "*.basis" PATTERN "*.dat"
 )
 install(
     DIRECTORY ${CMAKE_SOURCE_DIR}/examples/
