@@ -56,8 +56,9 @@ pip install .
 ```
 This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
 
-or 
-#### Detailed Compile
+#### Detailed compile for developers
+
+The `pip install .` command above is the normal and recommended source install path. The manual CMake commands below are intended for developers who need to inspect or debug the native build directly. After changing build options, run `pip install .` again from the repository root so the installed `openqp` command uses the same source tree and installed native library.
 
 ##### OpenMP Support
 
@@ -65,7 +66,6 @@ or
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF
 ninja -C build install
-cd pyoqp
 pip install .
 ```
 
@@ -75,7 +75,6 @@ pip install .
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
 ninja -C build install
-cd pyoqp
 pip install .
 ```
 
@@ -85,18 +84,24 @@ pip install .
 cd openqp
 cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
 make -C build install
-cd pyoqp
 pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
 - Use `-DLINALG_LIB_INT64=OFF` to ensure compatibility with third-party software like libdlfind compiled with 32-bit BLAS.
 
-#### Environmental Settings
+#### Runtime environment
+
+A package installed with `pip install .` does not require `OPENQP_ROOT` for normal `openqp` command-line use. Set only runtime tuning variables as needed:
 
 ```bash
-export OPENQP_ROOT=/path/to/openqp                           # Path to the Root of openqp
 export OMP_NUM_THREADS=4                                     # The number of cores to be used for OpenMP runs
+```
+
+If you are running directly from an uninstalled manual CMake tree, set `OPENQP_ROOT` and the library path for that tree:
+
+```bash
+export OPENQP_ROOT=/path/to/openqp                           # Path to the root of an uninstalled OpenQP tree
 export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
 ```
 
