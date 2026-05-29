@@ -201,6 +201,7 @@ void guess_huckel(struct oqp_handle_t *inf);
 void guess_modhuckel(struct oqp_handle_t *inf);
 void guess_json(struct oqp_handle_t *inf);
 void guess_sap(struct oqp_handle_t *inf);
+void guess_minao(struct oqp_handle_t *inf);
 void proj_dm_newbas(struct oqp_handle_t *inf);
 
 void hf_energy(struct oqp_handle_t *inf);

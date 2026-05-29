@@ -69,6 +69,16 @@ def guess(mol):
         alpha = 'computed'
         beta = 'computed'
 
+    elif guess_type == 'minao':
+        # Native Fortran MINAO: project superposed atomic minimal-basis
+        # densities onto the target basis. No PySCF needed at runtime.
+        minbas = try_basis('sto-3g', fallback=None)
+        minaodata = try_data_file('minao_sto3g.dat')
+        mol.data["OQP::hbasis_filename"] = minbas + '|' + minaodata
+        oqp.guess_minao(mol)
+        alpha = 'computed'
+        beta = 'computed'
+
     elif guess_type == 'pyscf':
         guess_from_pyscf(mol)
         alpha = 'computed'
