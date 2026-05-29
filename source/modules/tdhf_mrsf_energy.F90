@@ -306,6 +306,13 @@ contains
             infos%tddft%cam_mu = infos%dft%cam_mu
     end if
     if (dft) scale_exch = infos%tddft%HFscale
+    ! Pure HF reference (no DFT functional): the effective exact-exchange scale
+    ! is 1.0. Without a DFT functional infos%dft%HFscale is left at the -1.0
+    ! sentinel, so the response HFscale (and hence the spin-pair coupling below)
+    ! would inherit -1.0. The energy tolerates this (the fmrst2 rescale is
+    ! skipped because spc == HFscale either way), but the MRSF gradient uses the
+    ! spin-pair coupling values directly and needs the correct +1.0.
+    if (.not. dft) infos%tddft%HFscale = 1.0_dp
     ! set spin-pair coupling
     if (infos%tddft%spc_coco==-1.0_dp) &
           infos%tddft%spc_coco = infos%tddft%HFscale
