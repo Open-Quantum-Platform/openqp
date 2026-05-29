@@ -28,6 +28,13 @@ def guess(mol):
         alpha = 'computed'
         beta = 'computed'
 
+    elif guess_type == "modhuckel":
+        hubas = try_basis("MINI_huckel", fallback=None)
+        mol.data["OQP::hbasis_filename"] = hubas
+        oqp.guess_modhuckel(mol)
+        alpha = 'computed'
+        beta = 'computed'
+
     elif guess_type == "hcore":
         oqp.guess_hcore(mol)
         alpha = 'computed'

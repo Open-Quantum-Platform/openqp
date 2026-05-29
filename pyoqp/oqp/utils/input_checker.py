@@ -20,7 +20,7 @@ ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
-GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf"}
+GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "pyscf"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
@@ -43,7 +43,7 @@ WIKI_HELP = {
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
-    "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, or pyscf to build a guess externally.",
+    "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, json with a JSON restart file, auto for JSON-if-present otherwise Huckel, or pyscf to build a guess externally.",
     "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
     "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
