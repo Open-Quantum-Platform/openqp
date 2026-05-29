@@ -27,6 +27,7 @@ module grd1
    public print_gradient
    public eijden
    public grad_nn
+   public hess_nn
    public grad_ee_overlap
    public grad_ee_kinetic
    public grad_en_hellman_feynman
@@ -785,6 +786,54 @@ atoms:      DO ic = 1, nat
     end do
 
   end subroutine grad_nn
+
+!-------------------------------------------------------------------------------
+
+!> @brief Nuclear-repulsion contribution to the Cartesian Hessian.
+!> @details Accumulates the second derivatives of the nuclear-repulsion energy
+!>   E_nn = sum_{k>l} Zk*Zl / r_kl into the (3N, 3N) Hessian in OpenQP
+!>   atom-major coordinate order (x1,y1,z1,x2,...). For each pair (k,l) the
+!>   3x3 block is  Zk*Zl * (3 p_a p_b / r^5 - delta_ab / r^3), with p = r_k-r_l;
+!>   it is added to the (k,k) and (l,l) diagonal blocks and subtracted from the
+!>   (k,l) and (l,k) off-diagonal blocks. Effective nuclear charges use the same
+!>   (zn - ecp_el) convention as grad_nn. The result is added in place so the
+!>   routine composes with the electronic Hessian terms.
+  subroutine hess_nn(atoms, ecp_el, hess)
+    implicit none
+    type(atomic_structure), intent(in) :: atoms
+    integer, intent(in) :: ecp_el(:)
+    real(kind=dp), intent(inout) :: hess(:,:)
+
+    integer :: k, l, a, b, ka, lb
+    real(kind=dp) :: pkl(3), r, r2, r3, zz, blk(3,3)
+
+    do k = 2, ubound(atoms%zn, 1)
+        do l = 1, k-1
+            pkl = atoms%xyz(:,k) - atoms%xyz(:,l)
+            r = norm2(pkl)
+            r2 = r*r
+            r3 = r*r2
+            zz = (atoms%zn(k)-ecp_el(k))*(atoms%zn(l)-ecp_el(l))
+            do a = 1, 3
+                do b = 1, 3
+                    blk(b,a) = zz * 3.0_dp*pkl(b)*pkl(a) / (r2*r3)
+                    if (a == b) blk(b,a) = blk(b,a) - zz/r3
+                end do
+            end do
+            do a = 1, 3
+                ka = 3*(k-1) + a
+                lb = 3*(l-1) + a
+                do b = 1, 3
+                    hess(3*(k-1)+b, ka) = hess(3*(k-1)+b, ka) + blk(b,a)
+                    hess(3*(l-1)+b, lb) = hess(3*(l-1)+b, lb) + blk(b,a)
+                    hess(3*(k-1)+b, 3*(l-1)+a) = hess(3*(k-1)+b, 3*(l-1)+a) - blk(b,a)
+                    hess(3*(l-1)+b, 3*(k-1)+a) = hess(3*(l-1)+b, 3*(k-1)+a) - blk(b,a)
+                end do
+            end do
+        end do
+    end do
+
+  end subroutine hess_nn
 
 !-------------------------------------------------------------------------------
 

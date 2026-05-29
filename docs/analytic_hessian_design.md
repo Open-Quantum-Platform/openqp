@@ -20,6 +20,16 @@ The ground-state HF Hessian is the first native target. The implementation shoul
 
 Initial validation must compare H2/H2O/formaldehyde HF Hessians against central finite differences of analytic gradients. Report max absolute error, RMS error, symmetry error, and displacement size.
 
+### Native implementation progress
+
+The native HF Hessian is being built term-by-term. Each term is validated in isolation before the full `[hess] type=analytical` HF path is unguarded, so an incomplete Hessian is never returned.
+
+- **Done — nuclear-repulsion second derivatives.** `grd1::hess_nn` accumulates the `E_nn` second derivatives directly into the `(3N, 3N)` atom-major Hessian, reusing the effective-charge convention of `grd1::grad_nn`. Each pair `(k,l)` contributes the `3x3` block `Zk*Zl * (3 p_a p_b / r^5 - delta_ab / r^3)` to the `(k,k)`/`(l,l)` diagonal blocks and its negative to the `(k,l)`/`(l,k)` off-diagonal blocks. Validated by finite difference of `grd1::grad_nn` (Fortran link test `tests/fortran/test_hess_nn.F90`) and by a dependency-light NumPy reference (`tests/test_nuclear_repulsion_hessian.py`), which also checks Hessian symmetry and translational invariance.
+- **Next — one-electron `der2` integral terms** (`sum P * d2h - sum W * d2S`): requires new second-derivative primitives (overlap, kinetic, nuclear attraction) alongside the existing `comp_*_der1` routines in `mod_1e_primitives`, contracted with the density and the energy-weighted density (`eijden`).
+- **Deferred — two-electron `d2(uv|ls)` terms and the CPHF orbital-response term.** The two-electron second-derivative integrals require extending the Rys engine (`grd2_rys`) beyond its current first-derivative-only (`nder = 1`) form; the CPHF solve can reuse the `pcg` solver following the `tdhf_z_vector` pattern.
+
+Until the electronic terms above are implemented and validated, the native `hf_hessian` kernel remains an explicit guarded scaffold (it aborts rather than returning a partial matrix), and analytical HF Hessian requests are served by the clearly-labeled external PySCF bridge with no silent numerical fallback.
+
 ## DFT analytic Hessian
 
 DFT builds on the HF Hessian structure but adds exchange-correlation grid derivatives and Kohn-Sham response terms. The first accepted scope should explicitly name supported functional classes. If meta-GGA, unsupported grid derivatives, or unavailable ECP second derivatives are not ready, input checking must reject them rather than proceeding with incomplete terms.
