@@ -23,3 +23,5 @@ __pycache__/
 *.pyc
 openqp_test_tmp_*
 tools/_grad_validation_scratch/
+tools/_stress_scratch/
+tools/_example_grad_scratch/

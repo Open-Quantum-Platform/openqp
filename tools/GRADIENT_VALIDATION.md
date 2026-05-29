@@ -30,6 +30,45 @@ and the investigation that this validation triggered.
   the two codes are solving the identical problem and makes any gradient
   discrepancy unambiguous.
 
+* `stress_test_gradients.py` — runs the analytical-vs-numerical (and, if
+  available, analytical-vs-PySCF) check on a spread of harder systems:
+  larger molecules, second-row atoms (H2S), correlation-consistent bases,
+  and open-shell radicals/triplets (OH, NH2, CH3, O2, CH2) in both UHF and
+  ROHF.
+
+  ```bash
+  python tools/stress_test_gradients.py            # all built-in systems
+  python tools/stress_test_gradients.py --only co_rhf oh_uhf
+  ```
+
+* `check_example_gradients.py` — sweeps **every** `runtype=grad` example in
+  `examples/` and checks the analytical gradient against a warm-started
+  (consistent-SCF-guess) finite difference, for the state(s) the example
+  requests.  Tolerances are method-aware (HF gradients are grid-free and
+  match to ~1e-7; DFT gradients carry XC-grid finite-difference noise ~1e-3).
+
+  ```bash
+  python tools/check_example_gradients.py                 # all grad examples
+  python tools/check_example_gradients.py --dir HF DFT ECP
+  python tools/check_example_gradients.py --glob '*_hf.inp'
+  ```
+
+  Representative results after the fix (analytical vs numerical, max|Δ|):
+
+  | family | examples | result |
+  |--------|----------|--------|
+  | HF RHF/UHF/ROHF (6-31G*, cc-pVTZ) | all | PASS, ~1e-7 (dimer ROHF ~2e-5) |
+  | DFT ground state (B3LYP5/BHHLYP/CAM-B3LYP/M06-2X/PBE/Slater) | all | PASS, ≤1e-4 |
+  | ECP (HBr, NaCl, C2H4-MRSF) | all | PASS, ≤1e-4 |
+  | pure-HF MRSF / SF (S0 etc.) | all | PASS, ~1e-7–1e-4 |
+  | open-shell radicals/triplets vs PySCF | OH/NH2/CH3/O2/CH2 | match PySCF ~1e-8 |
+
+  Excited roots that are (near-)degenerate on the symmetric H2O reference
+  (e.g. RPA/TDA state 3) are reported as `inspect`: the analytical gradient
+  is sound but a plain energy-index finite difference tracks the wrong root
+  there.  The lowest, well-separated root is the reliable check, and the
+  low-symmetry C2H4-MRSF ECP case validates to ~3e-5.
+
 ## Bug found and fixed: pure Hartree-Fock 2-electron gradient
 
 The validation uncovered a real bug in the **pure Hartree-Fock** gradient
