@@ -50,7 +50,7 @@ contains
     type(par_env_t) :: pe
 
     real(kind=dp), allocatable :: dmin(:,:), sco(:,:), qmat(:,:), sfull(:,:)
-    real(kind=dp), allocatable :: shalf(:,:), pmat(:,:), dt(:,:), tmpmn(:,:)
+    real(kind=dp), allocatable :: pmat(:,:), dt(:,:), tmpmn(:,:)
     real(kind=dp), allocatable :: wrk(:,:), occ(:), cno(:,:)
     integer, allocatable :: at_ao0(:), at_nao(:)
 
@@ -148,31 +148,39 @@ contains
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
     end if
 
-  ! S^{-1/2} (qmat) and full overlap S (unpacked)
-    allocate(qmat(nbf,nbf), sfull(nbf,nbf), shalf(nbf,nbf))
+  ! Canonical orthogonalizer Q from matrix_invsqrt (Q = U L^{-1/2}, so that
+  ! Q^T S Q = I and Q Q^T = S^{-1}), plus the full overlap S (unpacked).
+    allocate(qmat(nbf,nbf), sfull(nbf,nbf))
     call matrix_invsqrt(smat, qmat, nbf)
     call unpack_matrix(smat, sfull)
-    ! S^{1/2} = S * S^{-1/2}
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, sfull, nbf, qmat, nbf, 0.0_dp, shalf, nbf)
 
-  ! Projector pmat(target,min) = S^{-1} * Scross(target,min), Sinv = qmat*qmat.
-  ! Then D_t = pmat * D_min * pmat^T in the target basis.
+  ! Projector pmat(target,min) = S^{-1} Scross(target,min) = Q (Q^T Scross),
+  ! with Scross(target,min) = sco^T (sco is stored (min,target)). Then form the
+  ! projected density D_t = pmat * D_min * pmat^T in the target basis.
     allocate(pmat(nbf, nbf_min), tmpmn(nbf, nbf_min), dt(nbf, nbf), wrk(nbf, nbf))
-    ! tmpmn = qmat * sco^T   (qmat symmetric S^{-1/2}; sco is (min,target))
-    call dgemm('n','t', nbf, nbf_min, nbf, 1.0_dp, qmat, nbf, sco, nbf_min, 0.0_dp, tmpmn, nbf)
-    ! pmat = qmat * tmpmn
+    ! tmpmn = Q^T * sco^T   (= Q^T Scross)
+    call dgemm('t','t', nbf, nbf_min, nbf, 1.0_dp, qmat, nbf, sco, nbf_min, 0.0_dp, tmpmn, nbf)
+    ! pmat = Q * tmpmn
     call dgemm('n','n', nbf, nbf_min, nbf, 1.0_dp, qmat, nbf, tmpmn, nbf, 0.0_dp, pmat, nbf)
     ! D_t = pmat * D_min * pmat^T
     call dgemm('n','n', nbf, nbf_min, nbf_min, 1.0_dp, pmat, nbf, dmin, nbf_min, 0.0_dp, tmpmn, nbf)
     call dgemm('n','t', nbf, nbf, nbf_min, 1.0_dp, tmpmn, nbf, pmat, nbf, 0.0_dp, dt, nbf)
 
-  ! Natural orbitals: diagonalize M = S^{1/2} D_t S^{1/2}
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, shalf, nbf, dt, nbf, 0.0_dp, wrk, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, wrk, nbf, shalf, nbf, 0.0_dp, dt, nbf)
+  ! Natural orbitals in the orthonormal (Q) basis: diagonalize
+  ! M = Q^T (S D_t S) Q = W n W^T. Eigenvalues n are occupations; the AO-basis
+  ! natural orbitals are C = Q W and reconstruct D_t exactly.
+    ! wrk = S * D_t
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, sfull, nbf, dt, nbf, 0.0_dp, wrk, nbf)
+    ! dt <- (S D_t) * S
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, wrk, nbf, sfull, nbf, 0.0_dp, dt, nbf)
+    ! wrk = Q^T * (S D_t S)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, qmat, nbf, dt, nbf, 0.0_dp, wrk, nbf)
+    ! dt = wrk * Q  = Q^T S D_t S Q
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, wrk, nbf, qmat, nbf, 0.0_dp, dt, nbf)
     allocate(occ(nbf), cno(nbf,nbf))
     call diag_symm_full(1, nbf, dt, nbf, occ, ok)
     if (ok /= 0) call show_message('Guess_MINAO: NO diagonalization failed', WITH_ABORT)
-    ! NOs in AO basis: C = S^{-1/2} * U   (U = eigenvectors in dt)
+    ! NOs in AO basis: C = Q * W   (W = eigenvectors in dt)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, qmat, nbf, dt, nbf, 0.0_dp, cno, nbf)
 
   ! diag_symm_full returns ascending occupations; reverse so highest-occupied first
