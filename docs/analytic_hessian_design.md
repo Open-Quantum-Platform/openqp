@@ -52,6 +52,22 @@ The native HF Hessian is being built term-by-term. Each term is validated in iso
     **Chosen integral backend: libint (deriv order 2).** Rather than extend OpenQP's own Rys engine for second derivatives or add libcint, the native Hessian will use the libint integrals OpenQP already links. The libint wrapper (`int_libint.F90`) already exposes a `deriv_order` interface and a `libint2_build_eri2` (second-derivative ERI) code path gated by `#if INCLUDE_ERI >= 2`, and the Rys and libint 2e engines already coexist and are selected at runtime via `libint2_active` (see `int2.F90`), so turning libint on does not remove the Rys path. Plan: (a) regenerate the custom `oqp-libint` tarball with deriv order 2 and build with `INCLUDE_ERI=2`; (b) use libint's second-derivative 1e and 2e integrals (`ipipnuc`/`ipnucip`/`ipiprinv` and `eri2`) to feed the already-validated `hess_en`/Hessian block bookkeeping; (c) keep `USE_LIBINT=OFF` as a lighter default build in which the native analytic Hessian is unavailable and dispatch falls back, with an explicit error, to the PySCF bridge or numerical Hessian (no silent fallback). PySCF/libcint remains the *test-time* validation oracle (element-wise vs `int1e_ipipnuc`, `int2e_ipip1`), not a runtime dependency.
 - **Deferred — two-electron `d2(uv|ls)` terms and the CPHF orbital-response term.** The two-electron second-derivative integrals require extending the Rys engine (`grd2_rys`) beyond its current first-derivative-only (`nder = 1`) form; the CPHF solve can reuse the `pcg` solver following the `tdhf_z_vector` pattern.
 
+### CPHF orbital response (Phase 3) — concrete reuse map
+
+The CPHF/CPKS solve for nuclear-perturbation orbital responses can reuse the existing TDDFT Z-vector machinery almost entirely; the static CPHF A-matrix is the same orbital Hessian `(A+B)_{ia,jb}` that the Z-vector solver already applies.
+
+Reuse (little or no new code):
+- **PCG solver** `source/pcg.F90` (`pcg_t`, `pcg%init/step`) — drive identically to `tdhf_z_vector` (`oqp_tdhf_z_vector`, line ~54).
+- **A-matrix action** = `compute_apbx` (`tdhf_z_vector.F90`, ~line 611): unpacks the MO trial vector to an AO density (`iatogen`), builds the response Fock via the ERI driver `int2_compute_t%run` with `int2_td_data_t(int_apb=.true.)` (`tdhf_lib.F90`), adds the DFT `fxc` kernel, transforms back to MO (`mntoia`), and adds the orbital-energy-difference diagonal. CPHF reuses this verbatim.
+- **Preconditioner** `precond` (diagonal `1/(e_a - e_i)`); **MO transforms** `iatogen`/`mntoia` (`tdhf_lib.F90`); **MO data** via tagarray (`OQP_VEC_MO_A`, `OQP_E_MO_A`, `OQP_DM_A`, `OQP_SM`, `OQP_FOCK_A`; beta tags for UHF).
+
+New code required (the perturbation RHS `B^x`, x = 3N nuclear coordinates):
+- Derivative-integral **matrices** `dS/dx`, `dh/dx` in AO form. The existing `grd1`/`mod_1e_primitives` routines (`comp_overlap_der1`, `comp_kinetic_der1`, `comp_coulomb_der1`) only *contract* derivatives into a gradient scalar; CPHF needs the full `(nbf,nbf)` derivative matrices. Write thin matrix-assembling variants reusing the same primitives (`der_kinovl_xyz`, `der_coul_xyz`). Validate each against finite differences of the AO `S`/`h` matrices.
+- Derivative **two-electron response** `dJ/dx[P]`, `dK/dx[P]` (matrix form, per coordinate). This needs the first-derivative ERI driver in a Fock-build (not gradient-contraction) mode -- the natural place is the libint deriv-1 path used like `int2_td_data_t`, again validatable against finite differences of the Fock build.
+- Assemble `B^x_{ia} = (dh/dx + dJ/dx[P] - 1/2 dK/dx[P] - e_i dS/dx)` in MO occ-vir, solve `A U^x = B^x` with PCG, and contract `U^x` into the response part of the Hessian.
+
+Validation: the response `U^x` against finite differences of the converged MO coefficients, and the assembled full HF Hessian against both the FD of the HF gradient and the PySCF bridge (which already includes CPHF). CPHF is independent of the second-derivative *integral* work and can be implemented and validated first.
+
 Until the electronic terms above are implemented and validated, the native `hf_hessian` kernel remains an explicit guarded scaffold (it aborts rather than returning a partial matrix), and analytical HF/DFT Hessian requests are served by the clearly-labeled external PySCF bridge with no silent numerical fallback.
 
 ## External PySCF bridge (supported delivery path)
