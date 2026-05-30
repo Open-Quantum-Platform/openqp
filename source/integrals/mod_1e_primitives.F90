@@ -48,6 +48,8 @@ MODULE mod_1e_primitives
  PUBLIC comp_overlap_der1
  PUBLIC comp_overlap_der1_block
  PUBLIC comp_kinetic_der1_block
+ PUBLIC comp_coulomb_der1_block
+ PUBLIC comp_coulomb_helfeyder1_block
  PUBLIC comp_kinetic_der2
  PUBLIC comp_overlap_der2
  PUBLIC der_kinovl_xyz
@@ -1152,6 +1154,85 @@ END SUBROUTINE
         END ASSOCIATE
     END DO
 
+ END SUBROUTINE
+
+!> @brief Bra-center first derivative of the nuclear-attraction integral for one
+!>   charge, returned as an (inao, jnao, 3) block (not contracted). Mirrors
+!>   comp_coulomb_der1; used to assemble the dV/dR matrix for the CPHF RHS.
+ SUBROUTINE comp_coulomb_der1_block(cp, c, znuc, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    REAL(REAL64) :: xx, fac, der(3)
+    type(rys_root_t) :: ryscomp
+    INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
+    real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
+
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+        xx = pp%aa*sum((pp%r-c)**2)
+        ryscomp%nroots = cp%nroots
+        ryscomp%x = xx
+        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 1)
+        CALL der_coul_xyz(dxyzc, xyzin, iang, jang, pp%ai, cp%nroots)
+        fac = pp%expfac*TWOPI*pp%aa1
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+                der(1) = sum(dxyzc(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(2) = sum(xyzin(jx,ix,1,1:cp%nroots)*dxyzc(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(3) = sum(xyzin(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*dxyzc(jz,iz,3,1:cp%nroots))
+                dblk(i,j,1) = dblk(i,j,1) + der(1)*fac
+                dblk(i,j,2) = dblk(i,j,2) + der(2)*fac
+                dblk(i,j,3) = dblk(i,j,3) + der(3)*fac
+            END DO
+        END DO
+        END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Charge-center (Hellmann-Feynman) first derivative of the
+!>   nuclear-attraction integral for one charge, returned as an (inao, jnao, 3)
+!>   block (not contracted). Mirrors comp_coulomb_helfeyder1.
+ SUBROUTINE comp_coulomb_helfeyder1_block(cp, c, znuc, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    REAL(REAL64) :: xx, fac, der(3), ric(3)
+    type(rys_root_t) :: ryscomp
+    INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
+    real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
+
+    ric = cp%ri(:3) - c(:3)
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+        xx = pp%aa*sum((pp%r-c)**2)
+        fac = pp%expfac*TWOPI*2
+        ryscomp%nroots = cp%nroots
+        ryscomp%x = xx
+        CALL DQGaussRys(ryscomp, cp, id, c, znuc, xyzin)
+        CALL der_helfey_xyz(dxyzc, xyzin, iang, jang, ric, cp%nroots)
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+                der(1) = sum(dxyzc(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(2) = sum(xyzin(jx,ix,1,1:cp%nroots)*dxyzc(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(3) = sum(xyzin(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*dxyzc(jz,iz,3,1:cp%nroots))
+                dblk(i,j,1) = dblk(i,j,1) + der(1)*fac
+                dblk(i,j,2) = dblk(i,j,2) + der(2)*fac
+                dblk(i,j,3) = dblk(i,j,3) + der(3)*fac
+            END DO
+        END DO
+        END ASSOCIATE
+    END DO
  END SUBROUTINE
 
 !> @brief Bra-center and bra-charge second derivatives of the nuclear-attraction

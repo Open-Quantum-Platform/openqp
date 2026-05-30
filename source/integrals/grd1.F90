@@ -13,6 +13,7 @@ module grd1
        comp_overlap_der1, &
        comp_overlap_der2, comp_kinetic_der2, comp_coulomb_der2_braC, &
        comp_overlap_der1_block, comp_kinetic_der1_block, &
+       comp_coulomb_der1_block, comp_coulomb_helfeyder1_block, &
        comp_ewaldlr_der1, comp_ewaldlr_helfeyder1, &
        density_ordered
 
@@ -37,6 +38,7 @@ module grd1
    public hess_en
    public der_overlap_matrix
    public der_kinetic_matrix
+   public der_nucattr_matrix
    public grad_en_hellman_feynman
    public grad_en_pulay
    public grad_1e_ecp
@@ -688,6 +690,73 @@ contains
                 END DO
             END DO
             deallocate(dblk)
+        END DO
+    END DO
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Build the AO nuclear-attraction first-derivative matrices dV_uv/dR for
+!>   every nuclear coordinate (a CPHF right-hand-side building block).
+!> @details V_uv = sum_C (-Z_C) <u|1/|r-C||v> depends on three centers: bra atom
+!>   A, ket atom B, and each charge atom C. For every ordered shell pair and
+!>   nucleus C, the bra-center derivative (comp_coulomb_der1_block) is scattered
+!>   to A, the charge-center derivative (comp_coulomb_helfeyder1_block) to C, and
+!>   the ket-center derivative follows from translational invariance of the
+!>   integral, d/dB = -(d/dA + d/dC), scattered to B. Contracting dV with the
+!>   normalized density reproduces grad_en_pulay + grad_en_hellman_feynman.
+ SUBROUTINE der_nucattr_matrix(basis, coord, zq, dV, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), contiguous, intent(in) :: coord(:,:), zq(:)
+    real(kind=dp), intent(out) :: dV(:,:,:,:)   ! (nbf, nbf, 3, natom)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, ic, c, i, j, gi, gj, A_at, B_at, oi, oj, nat
+    REAL(kind=dp) :: tol, dba, dbc
+    REAL(kind=dp), ALLOCATABLE :: dA(:,:,:), dC(:,:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    nat = ubound(coord, 2)
+    dV = 0.0d0
+
+    CALL cntp%alloc(basis)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        A_at = shi%atid
+        oi = basis%ao_offset(ii) - 1
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            B_at = shj%atid
+            oj = basis%ao_offset(jj) - 1
+            CALL cntp%shell_pair(basis, shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            allocate(dA(cntp%inao, cntp%jnao, 3), dC(cntp%inao, cntp%jnao, 3))
+            DO ic = 1, nat
+                dA = 0.0d0; dC = 0.0d0
+                CALL comp_coulomb_der1_block(cntp, coord(:,ic), -zq(ic), dA)
+                CALL comp_coulomb_helfeyder1_block(cntp, coord(:,ic), -zq(ic), dC)
+                DO c = 1, 3
+                    DO i = 1, cntp%inao
+                        gi = oi + i
+                        DO j = 1, cntp%jnao
+                            gj = oj + j
+                            dba = dA(i,j,c); dbc = dC(i,j,c)
+                            dV(gi, gj, c, A_at) = dV(gi, gj, c, A_at) + dba
+                            dV(gi, gj, c, ic)   = dV(gi, gj, c, ic)   + dbc
+                            dV(gi, gj, c, B_at) = dV(gi, gj, c, B_at) - (dba + dbc)
+                        END DO
+                    END DO
+                END DO
+            END DO
+            deallocate(dA, dC)
         END DO
     END DO
  END SUBROUTINE
