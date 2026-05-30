@@ -50,6 +50,8 @@ MODULE mod_1e_primitives
  PUBLIC comp_overlap_der2
  PUBLIC der_kinovl_xyz
  PUBLIC der2_kinovl_xyz
+ PUBLIC der_coul_xyz
+ PUBLIC der2_coul_xyz
  PUBLIC comp_ewaldlr_der1
  PUBLIC comp_ewaldlr_helfeyder1
 
@@ -1448,6 +1450,43 @@ END SUBROUTINE
 
     DO i = 1, lit
         dxyzdi(0:ljt,i,1:3,1:nroots) = dxyzdi(0:ljt,i,1:3,1:nroots) - i*xyzin(0:ljt,i-1,1:3,1:nroots)
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Second derivative of the 1D Coulomb (nuclear-attraction) integrals
+!>  with respect to the bra center, obtained by applying the bra-center
+!>  derivative recursion (der_coul_xyz) twice:
+!>    d2[j,i] = 4 ai^2 [j,i+2] - 2 ai (2i+1) [j,i] + i(i-1) [j,i-2]
+!>  per Rys root. The input array must be available up to bra index lit+2
+!>  (build QGaussRys with igrd=2 and a correspondingly sized xyzin).
+!>
+!>  Together with the analogous ket-center derivatives, this provides the
+!>  basis-center second-derivative blocks (AA, AB, BB) of the nuclear-attraction
+!>  Hessian. The charge-center (Hellmann-Feynman) and mixed blocks follow from
+!>  translational invariance, d/dC = -(d/dA + d/dB), so no second-derivative Rys
+!>  root machinery is required.
+ SUBROUTINE der2_coul_xyz(d2xyz,xyzin,lit,ljt,ai,nroots)
+!dir$ attributes forceinline :: der2_coul_xyz
+    REAL(REAL64), INTENT(IN) ::  ai
+    REAL(REAL64), CONTIGUOUS, INTENT(IN) ::  xyzin(0:,0:,:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: d2xyz(0:,0:,:,:)
+    INTEGER, INTENT(IN) :: lit, ljt, nroots
+
+    INTEGER :: i
+!dir$ assume_aligned xyzin : 64
+!dir$ assume_aligned d2xyz : 64
+
+    d2xyz(0:ljt,0:lit,1:3,1:nroots) = 4*ai*ai * xyzin(0:ljt,2:lit+2,1:3,1:nroots)
+
+    DO i = 0, lit
+        d2xyz(0:ljt,i,1:3,1:nroots) = d2xyz(0:ljt,i,1:3,1:nroots) &
+            - 2*ai*(2*i+1)*xyzin(0:ljt,i,1:3,1:nroots)
+    END DO
+
+    DO i = 2, lit
+        d2xyz(0:ljt,i,1:3,1:nroots) = d2xyz(0:ljt,i,1:3,1:nroots) &
+            + i*(i-1)*xyzin(0:ljt,i-2,1:3,1:nroots)
     END DO
 
  END SUBROUTINE
