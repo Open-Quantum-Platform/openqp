@@ -5,10 +5,41 @@ module cphf_dpdx_selftest_mod
 !>   it to a central finite difference of the converged SCF alpha density at
 !>   displaced geometries (the reference).
 !>
-!> @warning WORK IN PROGRESS, NOT YET VALIDATED. The assembled dP/dx disagrees
-!>   with the finite-difference reference by a CONSTANT (h-independent) amount
-!>   (flat plateau, rel ~0.53), i.e. a systematic formula error in THIS assembly,
-!>   not finite-difference noise.
+!> @warning WORK IN PROGRESS, NOT YET VALIDATED.
+!>
+!>   DENSITY-CONVENTION AUDIT (this session). Established facts, verified from
+!>   production code (not assumed):
+!>     * OQP::DM_A is the TOTAL closed-shell density: DM_A = 2 P_alpha,
+!>       P_alpha = sum_occ C C^T (idempotent, P_alpha S P_alpha = P_alpha).
+!>     * Production Fock: F = Hcore + fock_jk(D_total)  (scf_addons calc_jk_xc),
+!>       so fock_jk EXPECTS the total density and returns G[D_total].
+!>     * Fortran mo_a is indexed (AO, MO); C^T S C = I is proven in
+!>       hess1_selftest. (A Python reshape suggested (MO,AO); that was a NumPy
+!>       packing artifact, NOT a Fortran issue -- the MO axis here is correct.)
+!>     * cphf_solve's A-matrix (cphf_apbx) builds its trial density from the bare
+!>       occ-vir amplitude (alpha/bare scale) and was validated by the dipole
+!>       polarizability test, so the RHS must be in the same bare/alpha scale.
+!>
+!>   Term-by-term density convention:
+!>     #1 pfull = DM_A (total)                                      raw, ok
+!>     #2 Sx, hx (C^T dS/dh C)                  density-free        ok
+!>     #3 F^x skeleton = 2 fock_deriv_contract(D_total, probe)      ok (gateway
+!>        validated with pfull=DM_A; gives dG[D_total]/dx)
+!>     #5/#6 Gd0 = fock_jk(d0): d0 was built at alpha scale but fock_jk needs
+!>        total -> CORRECTED with a factor 2 (d0 -> 2 d0).
+!>     #9 dP reconstruction sum_occ(dC C + C dC) = d(P_alpha): this is the ALPHA
+!>        density derivative; the FD reference must be d(DM_A/2), not d(DM_A).
+!>
+!>   After matching the alpha reference (#9) and the Gd0 factor (#5/#6), the
+!>   relative error dropped 0.53 -> 0.062 -> 0.042, BUT it is STILL a flat
+!>   (h-independent) plateau (~0.042, abs ~1.6e-2). So a residual STRUCTURAL
+!>   issue remains in the occupied-occupied overlap-response term (not a single
+!>   factor): the -1/2 S_ij occ-occ rotation contributes both to the response
+!>   density fed to fock_jk AND to a reorthonormalization piece of dP; the
+!>   present harness does not yet treat these consistently. NEXT: derive the
+!>   occ-occ term from the orthonormality constraint d(C^T S C)=0 directly and
+!>   re-audit, rather than apply further ad hoc factors. NOT wired into any
+!>   production path; hf_hessian stays guarded.
 !>
 !>   LOCALIZED (U_ai isolation): the bug is in the B^x construction / density
 !>   convention layer, NOT in F^x, dS/dx, dT/dx, dV/dx, or cphf_solve (each
@@ -133,13 +164,17 @@ contains
       end do
     end do
 
-    ! occ-occ overlap response density D0_uv = sum_ij U_ij C_ui C_vj, U_ij=-1/2 Sx_ij
+    ! occ-occ overlap response density D0_uv = sum_ij U_ij C_ui C_vj, U_ij=-1/2 Sx_ij.
+    ! AUDIT: fock_jk expects the TOTAL density (production: F = h + fock_jk(D_total),
+    ! D_total = DM_A = 2 P_alpha). The occ-occ rotation density here is built at
+    ! alpha scale (sum over occupied of C C^T), so multiply by 2 to pass a total-
+    ! scale density to fock_jk, consistent with the response operator.
     allocate(d0(nbf,nbf), source=0.0_dp)
     do i = 1, nocc
       do j = 1, nocc
         do mu = 1, nbf
           do nu = 1, nbf
-            d0(mu,nu) = d0(mu,nu) - 0.5_dp*Sx(i,j)*mo_a(mu,i)*mo_a(nu,j)
+            d0(mu,nu) = d0(mu,nu) - 2.0_dp*0.5_dp*Sx(i,j)*mo_a(mu,i)*mo_a(nu,j)
           end do
         end do
       end do
