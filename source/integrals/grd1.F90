@@ -12,7 +12,7 @@ module grd1
        comp_coulomb_der1, comp_coulomb_helfeyder1, comp_kinetic_der1, &
        comp_overlap_der1, &
        comp_overlap_der2, comp_kinetic_der2, comp_coulomb_der2_braC, &
-       comp_overlap_der1_block, &
+       comp_overlap_der1_block, comp_kinetic_der1_block, &
        comp_ewaldlr_der1, comp_ewaldlr_helfeyder1, &
        density_ordered
 
@@ -36,6 +36,7 @@ module grd1
    public hess_ee_kinetic
    public hess_en
    public der_overlap_matrix
+   public der_kinetic_matrix
    public grad_en_hellman_feynman
    public grad_en_pulay
    public grad_1e_ecp
@@ -683,6 +684,59 @@ contains
                         gj = oj + j
                         dS(gi, gj, c, A_at) = dS(gi, gj, c, A_at) + dblk(i,j,c)
                         dS(gi, gj, c, B_at) = dS(gi, gj, c, B_at) - dblk(i,j,c)
+                    END DO
+                END DO
+            END DO
+            deallocate(dblk)
+        END DO
+    END DO
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Build the AO kinetic-energy first-derivative matrices dT_uv/dR for
+!>   every nuclear coordinate (a CPHF right-hand-side building block). Same
+!>   structure and conventions as der_overlap_matrix, using comp_kinetic_der1_block.
+ SUBROUTINE der_kinetic_matrix(basis, dT, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(out) :: dT(:,:,:,:)   ! (nbf, nbf, 3, natom)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, c, i, j, gi, gj, A_at, B_at, oi, oj
+    REAL(kind=dp) :: tol
+    REAL(kind=dp), ALLOCATABLE :: dblk(:,:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    dT = 0.0d0
+
+    CALL cntp%alloc(basis)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        A_at = shi%atid
+        oi = basis%ao_offset(ii) - 1
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            B_at = shj%atid
+            oj = basis%ao_offset(jj) - 1
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+            allocate(dblk(cntp%inao, cntp%jnao, 3), source=0.0d0)
+            CALL comp_kinetic_der1_block(cntp, dblk)
+            DO c = 1, 3
+                DO i = 1, cntp%inao
+                    gi = oi + i
+                    DO j = 1, cntp%jnao
+                        gj = oj + j
+                        dT(gi, gj, c, A_at) = dT(gi, gj, c, A_at) + dblk(i,j,c)
+                        dT(gi, gj, c, B_at) = dT(gi, gj, c, B_at) - dblk(i,j,c)
                     END DO
                 END DO
             END DO

@@ -47,6 +47,7 @@ MODULE mod_1e_primitives
  PUBLIC comp_kinetic_der1
  PUBLIC comp_overlap_der1
  PUBLIC comp_overlap_der1_block
+ PUBLIC comp_kinetic_der1_block
  PUBLIC comp_kinetic_der2
  PUBLIC comp_overlap_der2
  PUBLIC der_kinovl_xyz
@@ -801,6 +802,49 @@ END SUBROUTINE
     END DO
     ! add scaled contribution to gradient
     de = de + de_loc*pp%expfac
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Bra-center first derivative of the kinetic-energy integral, returned as
+!>   an (inao, jnao, 3) block (not contracted), for the dT/dR matrix used in the
+!>   CPHF right-hand side. Mirrors comp_kinetic_der1.
+ SUBROUTINE comp_kinetic_der1_block(cp, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+3,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_int(0:max_ang,0:max_ang+1,3)
+    real(real64) :: kin_der(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+3, jang, ovl_int)
+    CALL kinetic_xyz_i(kin_int, ovl_int, iang+1, jang, pp%ai)
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    CALL der_kinovl_xyz(kin_der, kin_int, iang, jang, pp%ai)
+    DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+            dblk(i,j,1) = dblk(i,j,1) + ( &
+                kin_der(jx,ix,1)*ovl_int(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_der(jx,ix,1)*kin_int(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_der(jx,ix,1)*ovl_int(jy,iy,2)*kin_int(jz,iz,3) )*pp%expfac
+            dblk(i,j,2) = dblk(i,j,2) + ( &
+                kin_int(jx,ix,1)*ovl_der(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_int(jx,ix,1)*kin_der(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_int(jx,ix,1)*ovl_der(jy,iy,2)*kin_int(jz,iz,3) )*pp%expfac
+            dblk(i,j,3) = dblk(i,j,3) + ( &
+                kin_int(jx,ix,1)*ovl_int(jy,iy,2)*ovl_der(jz,iz,3) + &
+                ovl_int(jx,ix,1)*kin_int(jy,iy,2)*ovl_der(jz,iz,3) + &
+                ovl_int(jx,ix,1)*ovl_int(jy,iy,2)*kin_der(jz,iz,3) )*pp%expfac
+        END DO
+    END DO
     END ASSOCIATE
     END DO
  END SUBROUTINE

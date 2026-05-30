@@ -38,7 +38,7 @@ contains
     use grd1, only: grad_ee_overlap, grad_ee_kinetic, &
                     hess_ee_overlap, hess_ee_kinetic, &
                     grad_en_hellman_feynman, grad_en_pulay, hess_en, &
-                    der_overlap_matrix
+                    der_overlap_matrix, der_kinetic_matrix
     use basis_tools, only: bas_norm_matrix
     use mathlib, only: unpack_matrix
 
@@ -51,7 +51,7 @@ contains
     real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:)
     real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:), hess_v_fd(:,:)
     real(dp), allocatable :: gp(:,:), gm(:,:), gp2(:,:), gm2(:,:)
-    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds
+    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds, err_dt
 
     associate(basis => infos%basis)
 
@@ -137,6 +137,22 @@ contains
       g_ref = 0.0_dp
       call grad_ee_overlap(basis, m_packed, g_ref)
       err_ds = maxval(abs(g_an - g_ref))
+
+      ! same check for the kinetic derivative matrix vs grad_ee_kinetic
+      call der_kinetic_matrix(basis, dSmat)
+      g_an = 0.0_dp
+      do kk = 1, natom
+        do cc = 1, 3
+          do mu = 1, nbf
+            do nu = 1, nbf
+              g_an(cc,kk) = g_an(cc,kk) + mnorm(mu,nu)*dSmat(mu,nu,cc,kk)
+            end do
+          end do
+        end do
+      end do
+      g_ref = 0.0_dp
+      call grad_ee_kinetic(basis, m_packed, g_ref)
+      err_dt = maxval(abs(g_an - g_ref))
       deallocate(dSmat, mnorm, g_an, g_ref)
     end block
 
@@ -210,6 +226,7 @@ contains
       write(u,'(a,es12.4)') 'nucattr max|an-fd| (WIP) = ', err_v
       write(u,'(a,es12.4)') 'nucattr asymmetry  (WIP) = ', sym_v
       write(u,'(a,es12.4)') 'dS/dR matrix vs grad     = ', err_ds
+      write(u,'(a,es12.4)') 'dT/dR matrix vs grad     = ', err_dt
       if (max(err_o, err_k) < 1.0e-6_dp) then
         write(u,'(a)') 'HESS1E_SELFTEST PASS'
       else
