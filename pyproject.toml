@@ -44,6 +44,9 @@ ENABLE_OPENMP = "ON"
 LINALG_LIB_INT64 = "OFF"
 CMAKE_INSTALL_PREFIX = "."
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 #[tool.cibuildwheel]
 #before-all = "yum install -y openblas-devel gcc-gfortran"
 #environment = { CMAKE_ARGS = "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH" }

@@ -2,7 +2,6 @@
 
 import oqp
 import oqp.library
-from oqp.library.dftbplus import optimize_openqp_molecule, run_openqp_molecule
 from oqp.library.single_point import (
     SinglePoint, Gradient, Hessian, LastStep,
     BasisOverlap, NACME, NAC
@@ -21,10 +20,6 @@ from oqp.library.libgeometric import (
 
 
 def compute_energy(mol):
-    if mol.config['input']['method'] == 'dftb':
-        run_openqp_molecule(mol, gradient=False)
-        return
-
     # compute energy
     SinglePoint(mol).energy()
 
@@ -52,10 +47,6 @@ def compute_scf_prop(mol):
 
 
 def compute_grad(mol):
-    if mol.config['input']['method'] == 'dftb':
-        run_openqp_molecule(mol, gradient=True)
-        return
-
     # compute energy
     SinglePoint(mol).energy()
 
@@ -116,10 +107,6 @@ def compute_thermo(mol):
 
 
 def compute_geom(mol):
-    if mol.config['input']['method'] == 'dftb':
-        optimize_openqp_molecule(mol)
-        return
-
     # initialize optimizer
     optimizer = get_optimizer(mol)
 

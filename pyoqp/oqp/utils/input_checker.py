@@ -16,24 +16,8 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-DFTB_SUPPORTED_RUNTYPES = {"energy", "grad", "optimize"}
-DFTB_UNSUPPORTED_REASONS = {
-    "hess": "DFTB+ Hessian/frequency support is out of scope because this bridge has no Hessian parser or numerical-Hessian callback wired to the external backend.",
-    "nac": "DFTB+ NAC support is out of scope because OpenQP NAC workflows require TDHF/MRSF state data that this external backend does not provide.",
-    "nacme": "DFTB+ NACME support is out of scope because the overlap workflow requires OpenQP TDHF/MRSF state data.",
-    "bp": "DFTB+ branching-plane support is out of scope because it depends on unsupported NAC data.",
-    "meci": "DFTB+ conical-intersection optimization is out of scope because excited-state and NAC data are not mapped from DFTB+.",
-    "mecp": "DFTB+ MECP optimization is out of scope for this external-backend PR.",
-    "mep": "DFTB+ MEP optimization is out of scope because only single-state local minimization is wired.",
-    "ts": "DFTB+ transition-state optimization is out of scope because the external backend exposes only energy and gradient callbacks.",
-    "prop": "TD-DFTB and DFTB+ excited-state properties are out of scope because this bridge does not parse or populate OpenQP TD data.",
-    "data": "DFTB+ data workflows are out of scope because the external backend does not produce OpenQP wavefunction/restart tensors.",
-    "md": "DFTB+ molecular dynamics is out of scope because OpenQP has no DFTB+ MD workflow in this branch.",
-    "soc": "DFTB+ spin-orbit coupling is not implemented in this branch.",
-    "neb": "DFTB+ NEB is not implemented in this branch.",
-}
 
-METHODS = {"hf", "tdhf", "dftb"}
+METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
 GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
@@ -53,7 +37,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, or method=dftb for the optional external DFTB+ backend.",
+    "input.method": "Use method=hf for HF/DFT and method=tdhf for TDHF/TDDFT/SF/MRSF runs.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -267,9 +251,6 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_basis(config: dict[str, Any], report: CheckReport) -> None:
-    if _as_lower(_get(config, "input", "method", "hf")) == "dftb":
-        return
-
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
@@ -729,9 +710,6 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         )
         return
 
-    if method == "dftb" and runtype not in DFTB_SUPPORTED_RUNTYPES:
-        return
-
     if runtype == "grad":
         if method == "hf":
             if _max_state(_as_list(_get(config, "properties", "grad", []))) > 0:
@@ -742,7 +720,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                     value=_get(config, "properties", "grad", []),
                     action="Use grad=0 or switch to method=tdhf.",
                 )
-        elif method == "tdhf" and 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
+        elif 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
             report.add(
                 "ERROR",
                 "properties.grad",
@@ -777,37 +755,6 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
-
-    if method == "dftb":
-        if runtype == "optimize":
-            if lib != "scipy":
-                report.add(
-                    "ERROR",
-                    "optimize.lib",
-                    "DFTB+ geometry optimization is currently wired only through scipy.optimize.",
-                    value=lib,
-                    expected="scipy",
-                    action="Set [optimize] lib=scipy.",
-                )
-            if istate != 0:
-                report.add(
-                    "ERROR",
-                    "optimize.istate",
-                    "DFTB+ geometry optimization supports only the ground state.",
-                    value=istate,
-                    expected="0",
-                    action="Set [optimize] istate=0.",
-                )
-            if optimizer not in SCIPY_OPTIMIZERS:
-                report.add(
-                    "ERROR",
-                    "optimize.optimizer",
-                    "Unknown SciPy optimizer.",
-                    value=optimizer,
-                    expected=", ".join(sorted(SCIPY_OPTIMIZERS)),
-                    action="Use a supported SciPy optimizer.",
-                )
-        return
 
     if lib not in OPT_LIBS:
         report.add(
@@ -1296,24 +1243,8 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf, tdhf, or dftb.",
+            action="Choose hf or tdhf.",
             wiki=WIKI_HELP["input.method"],
-        )
-
-    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
-    if method == "dftb" and runtype not in DFTB_SUPPORTED_RUNTYPES:
-        reason = DFTB_UNSUPPORTED_REASONS.get(
-            runtype,
-            "Only energy, gradient, and ground-state geometry optimization are wired to the external DFTB+ backend.",
-        )
-        report.add(
-            "ERROR",
-            "input.runtype",
-            f"DFTB+ external backend does not support runtype={runtype}. {reason}",
-            value=runtype,
-            expected=", ".join(sorted(DFTB_SUPPORTED_RUNTYPES)),
-            action="Use method=dftb with runtype=energy, grad, or optimize, or switch to OpenQP native HF/TDHF workflows.",
-            wiki=WIKI_HELP["input.runtype"],
         )
 
     _check_system(config, report)
