@@ -19,10 +19,21 @@ contains
   end subroutine nmr_shielding_C
 
 !> @brief NMR nuclear magnetic shielding tensors (common gauge origin).
-!> @details v1 scope: RHF and closed-shell pure DFT / HF, common gauge origin
-!>  (CGO), uncoupled paramagnetic term (exact CPKS for pure functionals and the
-!>  HF-uncoupled approximation). The isotropic shielding is reported as
-!>  sigma = sigma_dia + sigma_para per nucleus.
+!> @details v1 scope: RHF and closed-shell DFT, common gauge origin (CGO). Both
+!>  the uncoupled and the coupled (CPHF/CPKS) paramagnetic responses are reported.
+!>  The coupled response includes the exact-exchange response of the imaginary
+!>  antisymmetric first-order magnetic density (Phase 0); the Coulomb and
+!>  semi-local XC-kernel responses vanish by symmetry, so the coupling is exact
+!>  exchange scaled by the exchange fraction c_x (zero for pure functionals, where
+!>  coupled == uncoupled). The isotropic shielding is sigma = sigma_dia +
+!>  sigma_para per nucleus.
+!>
+!> Phase-0 validation (H2O/STO-3G, CGO at COM; PySCF common-gauge oracle in
+!> tests/fixtures/nmr/pyscf_cgo_reference.json):
+!>   - HF coupled para matches the oracle exactly (O -230.63, H 3.506 ppm).
+!>   - Coulomb response of P^B ~0; exact-exchange response nonzero (gates 1-2).
+!>   - Pure PBE: coupled == uncoupled (gate 3). HF/hybrid coupled != uncoupled,
+!>     with the coupling scaling with c_x (gates 4, 6).
 !>
 !> Validation (H2O/STO-3G, RHF, CGO at the center of mass; PySCF reference):
 !>   - Diamagnetic term matches PySCF common-gauge `dia()` to ~6 significant
@@ -66,6 +77,12 @@ contains
     real(kind=8), allocatable :: moP(:,:,:)     ! PSO in MO basis (nmo,nmo,3)
     real(kind=8), allocatable :: sig_para(:,:,:)! paramagnetic shielding tensor (3,3,nat)
     real(kind=8), allocatable :: siso_para(:), siso_tot(:)
+    ! Phase 0: coupled (CPHF/CPKS) magnetic response
+    real(kind=8), allocatable :: rcoup(:,:)     ! coupled response vectors (lvir,3)
+    real(kind=8), allocatable :: sig_para_c(:,:,:), siso_para_c(:), siso_tot_c(:)
+    real(kind=8) :: scale_exch, pb_asym, jnorm, knorm
+    integer :: nvir, lvir
+    logical :: is_dft
     real(kind=8) :: o(3), com(3), trg, pso_diag_max, pso_asym_max
     integer :: nat, i, c, t, s, nocc, nmo
 
@@ -170,8 +187,25 @@ contains
       call ao_to_mo(lfull(:,:,c), mo_a, moL(:,:,c), nbf, nmo)
     end do
 
+    ! ----------------------------------------------------------------------
+    ! Phase 0: coupled magnetic response (CPHF/CPKS).
+    ! The first-order magnetic density is imaginary/antisymmetric, so the
+    ! Coulomb and (semi-local) XC-kernel responses vanish; only the exact
+    ! exchange response survives, scaled by the exchange fraction c_x. For
+    ! pure functionals (c_x = 0) the coupled response equals the uncoupled one.
+    ! ----------------------------------------------------------------------
+    nvir = nmo - nocc
+    lvir = nocc*nvir
+    is_dft = infos%control%hamilton == 20
+    scale_exch = 1.0d0
+    if (is_dft) scale_exch = infos%dft%HFscale
+    allocate(rcoup(lvir,3), source=0.0d0)
+    call compute_coupled_para(infos, basis, mo_a, mo_e_a, nocc, nbf, nvir, &
+                              moL, scale_exch, rcoup, pb_asym, jnorm, knorm)
+
     allocate(pso_full(nbf,nbf,3), moP(nmo,nmo,3), source=0.0d0)
     allocate(sig_para(3,3,nat), siso_para(nat), siso_tot(nat), source=0.0d0)
+    allocate(sig_para_c(3,3,nat), siso_para_c(nat), siso_tot_c(nat), source=0.0d0)
 
     pso_diag_max = 0.0d0
     pso_asym_max = 0.0d0
@@ -191,27 +225,37 @@ contains
       end do
       do t = 1, 3
         do s = 1, 3
-          sig_para(t,s,i) = twoa2 * sum_ov(moL(:,:,t), moP(:,:,s), mo_e_a, nocc, nmo)
+          sig_para(t,s,i)   = twoa2 * sum_ov(moL(:,:,t), moP(:,:,s), mo_e_a, nocc, nmo)
+          sig_para_c(t,s,i) = -twoa2 * sum_resp(rcoup(:,t), moP(:,:,s), nocc, nvir)
         end do
       end do
-      siso_para(i) = (sig_para(1,1,i)+sig_para(2,2,i)+sig_para(3,3,i))/3.0d0 * PPM
-      siso_tot(i)  = siso_dia(i) + siso_para(i)
+      siso_para(i)   = (sig_para(1,1,i)+sig_para(2,2,i)+sig_para(3,3,i))/3.0d0 * PPM
+      siso_tot(i)    = siso_dia(i) + siso_para(i)
+      siso_para_c(i) = (sig_para_c(1,1,i)+sig_para_c(2,2,i)+sig_para_c(3,3,i))/3.0d0 * PPM
+      siso_tot_c(i)  = siso_dia(i) + siso_para_c(i)
     end do
 
-    write(iw,'(/4x,a)') 'Isotropic shielding (CGO, uncoupled, ppm):'
-    write(iw,'(4x,a)')  '   Atom    Z      sigma_dia      sigma_para       sigma_total'
+    write(iw,'(/4x,a,f8.4,a)') 'Isotropic shielding (CGO, ppm)   [exact-exchange c_x =', &
+           scale_exch, ']'
+    write(iw,'(4x,a)')  '   Atom    Z   sigma_dia   para_uncoupled   para_coupled'// &
+           '   total_uncoupled   total_coupled'
     do i = 1, nat
-      write(iw,'(4x,i6,f8.1,3f16.6)') i, basis%atoms%zn(i), &
-             siso_dia(i), siso_para(i), siso_tot(i)
+      write(iw,'(4x,i6,f6.1,5f16.6)') i, basis%atoms%zn(i), &
+             siso_dia(i), siso_para(i), siso_para_c(i), siso_tot(i), siso_tot_c(i)
     end do
 
-    ! PSO antisymmetry diagnostics (must be ~0 for the anti-Hermitian operator)
-    write(iw,'(/4x,a,2es12.3)') 'PSO diagnostics  max|diag|, max|A+A^T| = ', &
+    ! ---- Phase-0 validation gates (reported as diagnostics) ----
+    write(iw,'(/4x,a)') 'Phase-0 magnetic-response gates:'
+    write(iw,'(4x,a,es12.3)') '  gate0  max|P^B + (P^B)^T|        = ', pb_asym
+    write(iw,'(4x,a,es12.3)') '  gate1  ||J(P^B)|| (Coulomb)      = ', jnorm
+    write(iw,'(4x,a,es12.3)') '  gate2  ||K(P^B)|| (exact exch.)  = ', knorm
+    write(iw,'(4x,a,2es12.3)') '  PSO    max|diag|, max|A+A^T|    = ', &
            pso_diag_max, pso_asym_max
     call flush(iw)
 
     deallocate(amom, lfull, gdia, coords, sig_dia, siso_dia)
     deallocate(pso_full, moL, moP, sig_para, siso_para, siso_tot)
+    deallocate(rcoup, sig_para_c, siso_para_c, siso_tot_c)
     close(iw)
 
   end subroutine nmr_shielding
@@ -261,5 +305,132 @@ contains
       end do
     end do
   end function sum_ov
+
+!> @brief Contract a coupled response vector (occ-vir, length nocc*nvir, packed
+!>  as k=(a-1)*nocc+i to match iatogen) with the PSO occ-vir block.
+  function sum_resp(rt, pmo, nocc, nvir) result(val)
+    real(kind=8), intent(in) :: rt(:)        ! (nocc*nvir)
+    real(kind=8), intent(in) :: pmo(:,:)     ! PSO[s] in MO basis (nmo,nmo)
+    integer, intent(in) :: nocc, nvir
+    real(kind=8) :: val
+    integer :: i, a, k
+    val = 0.0d0
+    k = 0
+    do a = 1, nvir
+      do i = 1, nocc
+        k = k + 1
+        val = val + rt(k)*pmo(i, nocc+a)
+      end do
+    end do
+  end function sum_resp
+
+!> @brief Build the antisymmetric AO first-order magnetic density from an
+!>  occ-vir response vector: pa = C * (av - av^T) * C^T, av(occ,vir) = rin.
+  subroutine magnetic_pb_density(mo, pa, av, nbf, nocc, rin)
+    use tdhf_lib, only: iatogen
+    use mathlib, only: orthogonal_transform
+    real(kind=8), intent(in) :: mo(:,:)
+    real(kind=8), intent(inout), target :: pa(:,:,:)
+    real(kind=8), intent(inout) :: av(:,:)
+    integer, intent(in) :: nbf, nocc
+    real(kind=8), intent(in) :: rin(:)
+    call iatogen(rin, av, nocc, nocc)
+    av = av - transpose(av)
+    call orthogonal_transform('t', nbf, mo, av, pa(:,:,1))
+  end subroutine magnetic_pb_density
+
+!> @brief Solve the coupled (CPHF/CPKS) magnetic response for the three field
+!>  components and report the Phase-0 gate diagnostics.
+!> @details Fixed-point solve of  (eps_a-eps_i) R + c_x*K[P^B(R)] = b,
+!>  with b = orbital-Zeeman occ-vir block and K the exact-exchange image of the
+!>  antisymmetric first-order density. Coulomb (J) and the semi-local XC kernel
+!>  do not contribute (imaginary antisymmetric density). For c_x = 0 the loop is
+!>  skipped and R = b/(eps_a-eps_i) (uncoupled).
+  subroutine compute_coupled_para(infos, basis, mo, mo_e, nocc, nbf, nvir, &
+                                  moL, scale_exch, rcoup, pb_asym, jnorm, knorm)
+    use int2_compute, only: int2_compute_t
+    use tdhf_lib, only: int2_td_data_t, mntoia
+    use types, only: information
+    use basis_tools, only: basis_set
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=8), intent(in) :: mo(:,:), mo_e(:), moL(:,:,:)
+    integer, intent(in) :: nocc, nbf, nvir
+    real(kind=8), intent(in) :: scale_exch
+    real(kind=8), intent(out) :: rcoup(:,:)         ! (lvir,3)
+    real(kind=8), intent(out) :: pb_asym, jnorm, knorm
+
+    integer, parameter :: maxit = 100
+    real(kind=8), parameter :: tol = 1.0d-9, half = 0.5d0
+    real(kind=8), parameter :: kappa = 1.0d0        ! coupling sign (validated vs PySCF)
+    type(int2_compute_t) :: int2_driver
+    type(int2_td_data_t), target :: kdat, kdat1, jdat
+    real(kind=8), allocatable, target :: pa(:,:,:)
+    real(kind=8), allocatable :: av(:,:), bb(:,:), dd(:), gx(:), rprev(:), gao(:,:)
+    integer :: lvir, t, i, a, k, it
+
+    lvir = nocc*nvir
+    allocate(pa(nbf,nbf,1), av(nbf,nbf), gao(nbf,nbf), &
+             bb(lvir,3), dd(lvir), gx(lvir), rprev(lvir), source=0.0d0)
+
+    ! RHS (orbital-Zeeman occ-vir block) and orbital-energy denominators
+    do t = 1, 3
+      k = 0
+      do a = 1, nvir
+        do i = 1, nocc
+          k = k + 1
+          bb(k,t) = moL(i, nocc+a, t)
+        end do
+      end do
+    end do
+    k = 0
+    do a = 1, nvir
+      do i = 1, nocc
+        k = k + 1
+        dd(k) = mo_e(nocc+a) - mo_e(i)
+      end do
+    end do
+
+    do t = 1, 3
+      rcoup(:,t) = bb(:,t)/dd                        ! uncoupled start
+    end do
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+
+    ! Coupled iteration (skipped for pure functionals, c_x = 0)
+    if (abs(scale_exch) > 1.0d-12) then
+      kdat = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
+                            tamm_dancoff=.false., scale_exchange=scale_exch)
+      do t = 1, 3
+        do it = 1, maxit
+          rprev = rcoup(:,t)
+          call magnetic_pb_density(mo, pa, av, nbf, nocc, rcoup(:,t))
+          call int2_driver%run(kdat)
+          gao = half*kdat%amb(:,:,1,1)
+          call mntoia(gao, gx, mo, mo, nocc, nocc)
+          rcoup(:,t) = (bb(:,t) - kappa*gx)/dd
+          if (maxval(abs(rcoup(:,t)-rprev)) < tol) exit
+        end do
+      end do
+    end if
+
+    ! ---- Gate diagnostics on the converged z-component first-order density ----
+    call magnetic_pb_density(mo, pa, av, nbf, nocc, rcoup(:,3))
+    pb_asym = maxval(abs(pa(:,:,1) + transpose(pa(:,:,1))))      ! gate 0
+
+    jdat = int2_td_data_t(d2=pa, int_apb=.true., int_amb=.false., &
+                          tamm_dancoff=.false., scale_exchange=0.0d0)
+    call int2_driver%run(jdat)
+    jnorm = sqrt(sum((half*jdat%apb(:,:,1,1))**2))               ! gate 1 (Coulomb)
+
+    kdat1 = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
+                           tamm_dancoff=.false., scale_exchange=1.0d0)
+    call int2_driver%run(kdat1)
+    knorm = sqrt(sum((half*kdat1%amb(:,:,1,1))**2))              ! gate 2 (exchange)
+
+    deallocate(pa, av, gao, bb, dd, gx, rprev)
+  end subroutine compute_coupled_para
 
 end module nmr_shielding_mod

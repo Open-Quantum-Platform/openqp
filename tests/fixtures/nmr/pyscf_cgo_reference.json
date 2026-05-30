@@ -1,0 +1,133 @@
+{
+  "description": "PySCF common-gauge-origin NMR shielding reference (gate-4 oracle for OpenQP coupled magnetic response).",
+  "molecule": "H2O",
+  "basis": "sto-3g",
+  "unit_coords": "Angstrom",
+  "geometry": "O  0.000000000  0.000000000 -0.041061554\n          H -0.533194329  0.533194329 -0.614469223\n          H  0.533194329 -0.533194329 -0.614469223",
+  "gauge_origin_bohr": [
+    0.0,
+    0.0,
+    -0.19886422
+  ],
+  "shielding_unit": "ppm",
+  "atom_order": [
+    "O",
+    "H",
+    "H"
+  ],
+  "pyscf_version": "2.13.0",
+  "results": {
+    "HF": {
+      "exact_exchange_fraction": 1.0,
+      "sigma_dia": [
+        411.4176,
+        28.0618,
+        28.0618
+      ],
+      "sigma_para_uncoupled": [
+        -113.6305,
+        1.7849,
+        1.7849
+      ],
+      "sigma_para_coupled": [
+        -230.6294,
+        3.5059,
+        3.5059
+      ],
+      "sigma_total_uncoupled": [
+        297.7871,
+        29.8468,
+        29.8468
+      ],
+      "sigma_total_coupled": [
+        180.7882,
+        31.5677,
+        31.5677
+      ]
+    },
+    "bhandhlyp": {
+      "exact_exchange_fraction": 0.5,
+      "sigma_dia": [
+        411.4683,
+        28.0157,
+        28.0157
+      ],
+      "sigma_para_uncoupled": [
+        -156.742,
+        2.3886,
+        2.3886
+      ],
+      "sigma_para_coupled": [
+        -242.064,
+        3.5802,
+        3.5802
+      ],
+      "sigma_total_uncoupled": [
+        254.7263,
+        30.4042,
+        30.4042
+      ],
+      "sigma_total_coupled": [
+        169.4043,
+        31.5959,
+        31.5959
+      ]
+    },
+    "pbe0": {
+      "exact_exchange_fraction": 0.25,
+      "sigma_dia": [
+        411.4463,
+        28.0558,
+        28.0558
+      ],
+      "sigma_para_uncoupled": [
+        -194.2395,
+        2.8747,
+        2.8747
+      ],
+      "sigma_para_coupled": [
+        -248.8778,
+        3.6061,
+        3.6061
+      ],
+      "sigma_total_uncoupled": [
+        217.2069,
+        30.9305,
+        30.9305
+      ],
+      "sigma_total_coupled": [
+        162.5686,
+        31.6619,
+        31.6619
+      ]
+    },
+    "pbe": {
+      "exact_exchange_fraction": 0.0,
+      "sigma_dia": [
+        411.3488,
+        28.192,
+        28.192
+      ],
+      "sigma_para_uncoupled": [
+        -258.3205,
+        3.6507,
+        3.6507
+      ],
+      "sigma_para_coupled": [
+        -258.3205,
+        3.6507,
+        3.6507
+      ],
+      "sigma_total_uncoupled": [
+        153.0282,
+        31.8427,
+        31.8427
+      ],
+      "sigma_total_coupled": [
+        153.0282,
+        31.8427,
+        31.8427
+      ]
+    }
+  }
+}

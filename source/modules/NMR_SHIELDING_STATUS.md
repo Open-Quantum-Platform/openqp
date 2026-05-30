@@ -80,8 +80,39 @@ The PySCF reference values were generated with `pyscf.prop.nmr.rhf` using
 uncoupled response, and the `dia()` / `para()` helpers, with the unit conversion
 `unit = pyscf.data.nist.ALPHA**2 * 1e6`.
 
+## Phase 0 — coupled HF/hybrid magnetic response (ground state)
+
+Extends the paramagnetic term from uncoupled to the coupled CPHF/CPKS response.
+The first-order magnetic density `P^B` is imaginary/antisymmetric, so its Coulomb
+response and the semi-local XC-kernel response vanish; only the exact-exchange
+response survives, scaled by the functional's exact-exchange fraction `c_x`. The
+coupled response is solved by fixed-point iteration of
+`(eps_a-eps_i)R + c_x*K[P^B(R)] = b` (b = orbital-Zeeman occ-vir block; `K` the
+antisymmetric exchange image built via the `int2` A-B path). For `c_x = 0` the
+loop is skipped and the result equals the uncoupled response.
+
+Validation vs the PySCF common-gauge oracle (H2O/STO-3G, CGO at COM):
+
+| Functional | c_x | O para uncoupled | O para coupled (OQP / PySCF) |
+|------------|-----|------------------|------------------------------|
+| HF         | 1.00 | -113.63 | **-230.63 / -230.63** (exact) |
+| BHHLYP     | 0.50 | -156.76 | -242.11 / -242.06 |
+| PBE0       | 0.25 | -194.30 | -248.97 / -248.88 |
+| PBE        | 0.00 | -258.44 | **-258.44 / -258.32** (coupled == uncoupled) |
+
+HF (grid-free) matches the oracle exactly. For the DFT functionals the absolute
+numbers differ from PySCF by ~0.1 ppm due to cross-code DFT-SCF/grid differences
+(the diamagnetic part differs only ~0.003 ppm); the **coupling contribution**
+`Delta = coupled - uncoupled` matches the oracle to ~0.03 ppm and scales
+monotonically with `c_x` — the SCF-robust validation of the coupling itself.
+
+**Gates (automated in `tests/test_nmr_coupled.py`):** gate 0 `max|P^B+P^B^T|~1e-16`;
+gate 1 `||J(P^B)||~1e-16` (Coulomb vanishes); gate 2 `||K(P^B)||~0.54` (exchange
+nonzero); gate 3 PBE coupled == uncoupled (exact); gate 4 HF matches oracle and the
+coupling `Delta` matches for all functionals; gate 6 `|Delta|` scales with `c_x`.
+Oracle: `tests/fixtures/nmr/generate_pyscf_cgo_reference.py` -> `pyscf_cgo_reference.json`.
+
 ## Out of scope (future work)
 
-GIAO (gauge-including atomic orbitals), hybrid functionals and the coupled HF
-exchange response, UHF/ROHF open-shell references, and spin–spin coupling
-constants.
+GIAO (gauge-including atomic orbitals), UHF/ROHF open-shell references, MRSF-TDDFT
+NMR (see `MRSF_NMR_DESIGN.md`), and spin-spin coupling constants.

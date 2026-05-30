@@ -93,17 +93,14 @@ class NMRShieldingTests(unittest.TestCase):
         self.assertIsNotNone(m, "PSO diagnostics line not found in log")
         diag_max, asym_max = float(m.group(1)), float(m.group(2))
 
-        # Shielding rows: "   <atom>  <Z>  <dia>  <para>  <total>"
+        # Shielding rows (5 columns): atom Z dia para_unc para_cpl tot_unc tot_cpl.
+        # This test validates the UNCOUPLED numbers (dia, para_unc, tot_unc).
         rows = {}
         for line in text.splitlines():
-            mm = re.match(
-                r"\s*(\d+)\s+[\d.]+\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s*$",
-                line,
-            )
+            mm = re.match(r"\s*(\d+)\s+[\d.]+" + r"\s+(-?\d+\.\d+)" * 5 + r"\s*$", line)
             if mm:
-                rows[int(mm.group(1))] = (
-                    float(mm.group(2)), float(mm.group(3)), float(mm.group(4))
-                )
+                vals = [float(mm.group(j)) for j in range(2, 7)]
+                rows[int(mm.group(1))] = (vals[0], vals[1], vals[3])  # dia, para_unc, tot_unc
         return diag_max, asym_max, rows
 
     def test_nmr_shielding(self):
