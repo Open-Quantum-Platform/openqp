@@ -95,6 +95,7 @@ OQP_CONFIG_SCHEMA = {
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
+        'stability': {'type': bool, 'default': 'True'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},

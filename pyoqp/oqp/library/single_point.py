@@ -169,6 +169,8 @@ class SinglePoint(Calculator):
         self.scf_maxit = mol.config['scf']['maxit']
         self.forced_attempt = mol.config['scf']['forced_attempt']
         self.alternative_scf = mol.config["scf"]["alternative_scf"]
+        self.converger_type = mol.config["scf"]["converger_type"]
+        self.stability = mol.config["scf"]["stability"]
         self.scf_mult = mol.config['scf']['multiplicity']
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
@@ -378,24 +380,7 @@ class SinglePoint(Calculator):
 
         self.swapmo()
 
-        scf_flag = False
-        itr = 0
-        energy = 0
-        for itr in range(self.forced_attempt):
-            self.scf()
-            energy = [self.mol.mol_energy.energy]
-
-            # check convergence
-            scf_flag = self.mol.mol_energy.SCF_converged
-
-            if scf_flag:
-                dump_log(self.mol, title='PyOQP: SCF energy is converged after %s attempts' % (itr + 1), section='')
-                break
-            else:
-                dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
-                self.mol.data.set_scf_converger_type(self.alternative_scf)
-                self.mol.data.set_sd_scf(False)
-                dump_log(self.mol, title=f'PyOQP: Enable the {self.alternative_scf} in SCF to improve convergence.', section='input')
+        scf_flag = self._run_scf()
 
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
@@ -408,9 +393,89 @@ class SinglePoint(Calculator):
             guess_file = self.pack_molden_name('scf', self.scf_type, self.functional)
             self.mol.write_molden(guess_file)
 
+        energy = [self.mol.mol_energy.energy]
         self.mol.energies = energy
 
         return energy
+
+    def _run_scf(self):
+        """Unified robust SCF driver.
+
+        Replaces the old ``forced_attempt`` / ``alternative_scf`` retry loop
+        with a single coherent robustness ladder:
+
+          1. **Primary converger** (``scf.converger_type``, default DIIS) —
+             fast, gets most cases.
+          2. **Escalation** — if the primary converger does not converge,
+             switch to ``scf.alternative_scf`` (default TRAH, a globally
+             convergent trust-region method), warm-started from the current
+             orbitals.
+          3. **Stability safeguard** (``scf.stability``, default on) — seed a
+             stability-following TRAH pass from the converged orbitals.  At a
+             genuine minimum this is a ~0-iteration no-op; when the converged
+             point is an unstable saddle it relaxes to the lowest solution.
+             This catches the case where DIIS *converges* to a non-aufbau /
+             non-lowest open-shell (UHF/ROHF) solution and would otherwise be
+             returned silently.
+
+        Returns
+        -------
+        bool
+            True if a converged SCF solution was obtained.
+        """
+        data = self.mol.data
+        primary = self.converger_type
+        fallback = self.alternative_scf
+        trah_stab_default = self.mol.config['scf']['trh_stab']
+
+        # --- Stage 1: primary converger ---
+        data.set_scf_converger_type(primary)
+        self.scf()
+        converged = self.mol.mol_energy.SCF_converged
+        if converged:
+            dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
+
+        # --- Stage 2: escalate the converger on non-convergence ---
+        if not converged and fallback and fallback != primary:
+            dump_log(self.mol,
+                     title='PyOQP: SCF not converged with %s; escalating to %s' % (primary, fallback),
+                     section='input')
+            data.set_scf_converger_type(fallback)
+            data.set_sd_scf(False)
+            self.scf()
+            converged = self.mol.mol_energy.SCF_converged
+
+        # --- Stage 3: stability safeguard ---
+        if converged and self.stability and primary != 'trah':
+            e_pre = self.mol.mol_energy.energy
+            dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
+            data.set_scf_converger_type('trah')
+            data.set_trah_stability(True)
+            data.set_sd_scf(False)
+            self.scf()
+            if self.mol.mol_energy.SCF_converged:
+                e_post = self.mol.mol_energy.energy
+                if e_post < e_pre - 1.0e-7:
+                    dump_log(self.mol,
+                             title='PyOQP: SCF point was unstable; relaxed to a lower '
+                                   'solution (dE = %.3e Hartree)' % (e_post - e_pre),
+                             section='')
+            else:
+                # Verification did not converge: recover a converged solution
+                # with the primary converger (warm-started) and warn.
+                dump_log(self.mol,
+                         title='PyOQP: stability verification did not converge; '
+                               'reverting to %s' % primary,
+                         section='')
+                data.set_scf_converger_type(primary)
+                self.scf()
+                converged = self.mol.mol_energy.SCF_converged
+            # restore the user-configured stability flag for later SCF calls
+            data.set_trah_stability(trah_stab_default)
+
+        # restore the primary converger for any subsequent reference() calls
+        data.set_scf_converger_type(primary)
+        return converged
 
     def excitation(self, ref_energy):
         self.tddft()
