@@ -77,6 +77,29 @@ The libint wrapper already has the deriv-2 ERI code path (`int_libint.F90`,
   element-wise cross-check vs PySCF `int2e_ipip1`/`int2e_ipvip1`.
 
 ### Task C — CPHF orbital response
+
+> **Key enabler (native, no libint): the A-matrix builder already exists.**
+> `scf_addons.F90::get_response_packed(basis, infos, molGrid, mo_a, dm1_tri,
+> v1_tri, mo_b)` builds the AO linear-response vector `v1 = J/K(dm1) + fxc(dm1)`
+> from a first-order density, for RHF/UHF/ROHF, using the native Rys 2e engine
+> (`fock_jk`) plus the DFT XC kernel (`tddft_fxc`/`utddft_fxc`). This *is* the
+> CPHF/CPKS A-matrix action. So the CPHF solver needs no libint: drive `pcg`
+> with an `update` callback that (i) `iatogen`: MO trial vector U -> AO density,
+> (ii) `get_response_packed`: AO density -> AO response Fock, (iii) `mntoia`:
+> back to MO occ-vir, (iv) add the orbital-energy diagonal `(e_a - e_i) U_ia`.
+> Preconditioner = `1/(e_a - e_i)`. This mirrors `tdhf_z_vector::compute_apbx`
+> but calls the public `get_response_packed` instead of the private TD path.
+>
+> **Validate the solver independently of geometry derivatives** via the static
+> **dipole polarizability**: build the dipole-integral RHS (AO dipole matrices
+> exist in `electric_moments`), solve `A U = -mu_ai`, contract to get
+> `alpha = -2 sum_ia mu_ai U_ia`, and compare to PySCF
+> `mf.Polarizability().polarizability()` (or finite difference of the SCF dipole
+> under a field). This exercises the exact A-matrix + PCG the Hessian uses, with
+> no libint and no geometry-derivative integrals -- so the solver can be written
+> and fully validated in any environment. Only the *nuclear* RHS (the 2e
+> `dJ/dx[P]` piece, Task B's libint deriv-1) is environment-gated.
+
 - **RHS `B^x` (per nuclear coordinate x):** the 1e parts are done
   (`der_overlap_matrix`, `der_kinetic_matrix`, `der_nucattr_matrix`). Add the 2e
   response `dJ/dx[P]`, `dK/dx[P]` (libint deriv-1 Fock build, or the existing
