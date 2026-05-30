@@ -132,8 +132,12 @@ contains
           k1 = loc(3) + k
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*this%mmat(i1,j1)*this%pmat(k1,l1)
+            ! Coulomb: symmetrized over the (ij)<->(kl) permutation the driver
+            ! exploits: 2 c (M_ij P_kl + M_kl P_ij) (reduces to 4 c P_ij P_kl at M=P).
+            df1 = 0.5_dp*coulfact*( this%mmat(i1,j1)*this%pmat(k1,l1) &
+                                  + this%mmat(k1,l1)*this%pmat(i1,j1) )
             if (xcfact/=0.0_dp) then
+              ! Exchange: symmetrized 4-term (reduces to x(P_ik P_jl+P_il P_jk) at M=P).
               dq1 = 0.5_dp*( this%mmat(i1,k1)*this%pmat(j1,l1) &
                           + this%mmat(i1,l1)*this%pmat(j1,k1) &
                           + this%pmat(i1,k1)*this%mmat(j1,l1) &

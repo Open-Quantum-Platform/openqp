@@ -207,6 +207,7 @@ void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void cphf_polarizability_selftest(struct oqp_handle_t *inf);
 void fockx_selftest(struct oqp_handle_t *inf);
+void cphf_f0x_selftest(struct oqp_handle_t *inf);
 
 void tdhf_energy(struct oqp_handle_t *inf);
 void tdhf_z_vector(struct oqp_handle_t *inf);
