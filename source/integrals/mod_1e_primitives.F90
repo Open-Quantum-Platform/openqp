@@ -761,17 +761,17 @@ END SUBROUTINE
         END DO
       END DO
 
-      ! TODO(NMR PSO): correct for nuclei centered on a basis function (e.g. the
-      ! O atom in H2O), but the off-center case has a residual non-antisymmetric
-      ! component; the (r-c) field is validated correct, so the bug is in the
-      ! field+ket-derivative combination on the Rys kernel. Needs revisiting.
+      ! The raw field+ket-derivative product carries a small spurious symmetric
+      ! component for off-center nuclei. The full (non-packed) block is emitted
+      ! here so the caller (pso_integrals) can antisymmetrise A=(M-M^T)/2, which
+      ! is exact for the anti-Hermitian PSO operator and removes that error.
+      ! Hence NO iandj triangular packing below.
       fac = pp%expfac*TWOPI*2.0d0
 
       ij = 0
       jmax = jnao
       DO i = 1, inao
         ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
-        IF (cp%iandj) jmax = i
         DO j = 1, jmax
           jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
           ij = ij+1

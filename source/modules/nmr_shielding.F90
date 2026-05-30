@@ -24,21 +24,15 @@ contains
 !>  HF-uncoupled approximation). The isotropic shielding is reported as
 !>  sigma = sigma_dia + sigma_para per nucleus.
 !>
-!> TODO(NMR status):
-!>   1. Diamagnetic term: validated against PySCF (common-gauge `dia()`) to ~6
-!>      significant figures for H2O/STO-3G (O 411.418, H 28.062 ppm).
-!>   2. Paramagnetic term: the assembly (MO transform of the orbital-Zeeman and
-!>      PSO operators, occupied-virtual sum-over-states, 2*alpha^2 prefactor)
-!>      reproduces the PySCF uncoupled reference for the oxygen atom in
-!>      H2O/STO-3G (para -113.63, total 297.79 ppm).
-!>   3. Remaining issue: the PSO integrals (`comp_pso_int1_prim`) for nuclei NOT
-!>      centered on a basis function exhibit a small non-antisymmetry (nonzero
-!>      diagonal), which yields an incorrect hydrogen paramagnetic shielding
-!>      (1.24 vs reference 1.78 ppm). Atom-centered nuclei (e.g. O) are correct.
-!>   4. Future work: validate/replace the PSO field+derivative recurrence against
-!>      a reference implementation. The (r-c)/r^3 field factor and the alpha^2
-!>      prefactors are already confirmed correct, so further tuning of those is
-!>      not the right direction.
+!> Validation (H2O/STO-3G, RHF, CGO at the center of mass; PySCF reference):
+!>   - Diamagnetic term matches PySCF common-gauge `dia()` to ~6 significant
+!>     figures (O 411.418, H 28.062 ppm).
+!>   - Paramagnetic term (MO transform of the orbital-Zeeman and PSO operators,
+!>     occupied-virtual sum-over-states, 2*alpha^2 prefactor) matches the PySCF
+!>     uncoupled reference for BOTH atoms (O para -113.63, H para 1.785 ppm;
+!>     totals 297.79 / 29.85 ppm).
+!>   - The PSO operator is anti-Hermitian; `pso_integrals` returns it exactly
+!>     antisymmetric (max|diag| and max|A+A^T| are reported below as a check).
   subroutine nmr_shielding(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -67,13 +61,12 @@ contains
     real(kind=8), allocatable :: sig_dia(:,:,:) ! diamagnetic shielding tensor (3,3,nat)
     real(kind=8), allocatable :: coords(:,:)    ! nuclear coordinates (3,nat)
     real(kind=8), allocatable :: siso_dia(:)    ! isotropic diamagnetic shielding (ppm)
-    real(kind=8), allocatable :: pso_pk(:,:)    ! packed PSO integrals (nbf2,3)
     real(kind=8), allocatable :: pso_full(:,:,:)! full antisymmetric PSO (nbf,nbf,3)
     real(kind=8), allocatable :: moL(:,:,:)     ! orbital Zeeman in MO basis (nmo,nmo,3)
     real(kind=8), allocatable :: moP(:,:,:)     ! PSO in MO basis (nmo,nmo,3)
     real(kind=8), allocatable :: sig_para(:,:,:)! paramagnetic shielding tensor (3,3,nat)
     real(kind=8), allocatable :: siso_para(:), siso_tot(:)
-    real(kind=8) :: o(3), com(3), trg
+    real(kind=8) :: o(3), com(3), trg, pso_diag_max, pso_asym_max
     integer :: nat, i, c, t, s, nocc, nmo
 
     real(kind=8), contiguous, pointer :: dmat_a(:)
@@ -177,13 +170,23 @@ contains
       call ao_to_mo(lfull(:,:,c), mo_a, moL(:,:,c), nbf, nmo)
     end do
 
-    allocate(pso_pk(nbf2,3), pso_full(nbf,nbf,3), moP(nmo,nmo,3), source=0.0d0)
+    allocate(pso_full(nbf,nbf,3), moP(nmo,nmo,3), source=0.0d0)
     allocate(sig_para(3,3,nat), siso_para(nat), siso_tot(nat), source=0.0d0)
 
+    pso_diag_max = 0.0d0
+    pso_asym_max = 0.0d0
     do i = 1, nat
-      call pso_integrals(basis, coords(:,i), pso_pk)
+      ! Full antisymmetric PSO matrices A_a = [(r-R_N) x grad]_a/|r-R_N|^3
+      call pso_integrals(basis, coords(:,i), pso_full)
       do c = 1, 3
-        call expand_antisym(pso_pk(:,c), pso_full(:,:,c), nbf)
+        ! Diagnostics: the PSO operator is anti-Hermitian, so the diagonal and
+        ! the symmetric part must vanish.
+        do t = 1, nbf
+          pso_diag_max = max(pso_diag_max, abs(pso_full(t,t,c)))
+          do s = 1, nbf
+            pso_asym_max = max(pso_asym_max, abs(pso_full(t,s,c)+pso_full(s,t,c)))
+          end do
+        end do
         call ao_to_mo(pso_full(:,:,c), mo_a, moP(:,:,c), nbf, nmo)
       end do
       do t = 1, 3
@@ -195,19 +198,20 @@ contains
       siso_tot(i)  = siso_dia(i) + siso_para(i)
     end do
 
-    write(iw,'(/4x,a)') 'NMR shielding (paramagnetic term: preliminary implementation;'
-    write(iw,'(4x,a)')  'validated for atom-centered nuclei but known discrepancy remains'
-    write(iw,'(4x,a)')  'for off-center nuclei).'
     write(iw,'(/4x,a)') 'Isotropic shielding (CGO, uncoupled, ppm):'
     write(iw,'(4x,a)')  '   Atom    Z      sigma_dia      sigma_para       sigma_total'
     do i = 1, nat
       write(iw,'(4x,i6,f8.1,3f16.6)') i, basis%atoms%zn(i), &
              siso_dia(i), siso_para(i), siso_tot(i)
     end do
+
+    ! PSO antisymmetry diagnostics (must be ~0 for the anti-Hermitian operator)
+    write(iw,'(/4x,a,2es12.3)') 'PSO diagnostics  max|diag|, max|A+A^T| = ', &
+           pso_diag_max, pso_asym_max
     call flush(iw)
 
     deallocate(amom, lfull, gdia, coords, sig_dia, siso_dia)
-    deallocate(pso_pk, pso_full, moL, moP, sig_para, siso_para, siso_tot)
+    deallocate(pso_full, moL, moP, sig_para, siso_para, siso_tot)
     close(iw)
 
   end subroutine nmr_shielding

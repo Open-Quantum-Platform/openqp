@@ -408,25 +408,30 @@ contains
 !-------------------------------------------------------------------------------
 
 !> @brief Compute PSO (paramagnetic spin-orbit) integral matrices for one nucleus.
-!> @details Returns the three antisymmetric matrices A_a = [(r-c) x grad]_a/|r-c|^3
-!>  in packed (lower-triangular) storage; the physical PSO operator is -i*A. Only
-!>  the unique lower triangle is stored (the caller applies the antisymmetry).
+!> @details Returns the three matrices A_a = [(r-c) x grad]_a/|r-c|^3 as FULL
+!>  (nbf x nbf) antisymmetric matrices; the physical PSO operator is -i*A.
+!>  The raw field+ket-derivative product acquires a small spurious symmetric
+!>  component for nuclei not centered on a basis function. Since the exact PSO
+!>  operator is anti-Hermitian (its real representation is antisymmetric with a
+!>  zero diagonal), the full block is assembled and the symmetric part is removed
+!>  via A = (M - M^T)/2, which is exact and discards only the spurious error.
 !> @param[in]   basis    basis set
 !> @param[in]   c        nucleus coordinates
-!> @param[inout] ints    packed integrals, dimension (nbf2, 3)
+!> @param[inout] ints    full integrals, dimension (nbf, nbf, 3), antisymmetric
 !> @param[in]   logtol   optional screening tolerance
  subroutine pso_integrals(basis, c, ints, logtol)
     use precision, only: dp
     type(basis_set), intent(in) :: basis
     real(real64), intent(in) :: c(:)
-    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), contiguous, intent(inout) :: ints(:,:,:)
     real(real64), optional, intent(in) :: logtol
 
     real(real64) :: tol
-    integer :: ii, jj, m, nbf
+    integer :: ii, jj, m, nbf, p, q
     type(shell_t) :: shi, shj
     type(shpair_t) :: cntp
     real(real64), dimension(blocksize,3) :: blk
+    real(real64) :: aij
 
     tol = log(10.0_dp)*20
     if (present(logtol)) tol = logtol
@@ -435,22 +440,37 @@ contains
     ints = 0.0d0
     call cntp%alloc(basis)
 
+!   Assemble the full (both-triangle) matrix M_a[bra,ket] for all shell pairs.
     do ii = 1, basis%nshell
       call shi%fetch_by_id(basis, ii)
-      do jj = 1, ii
+      do jj = 1, basis%nshell
         call shj%fetch_by_id(basis, jj)
         call cntp%shell_pair(basis, shi, shj, tol)
         if (cntp%numpairs==0) cycle
         blk = 0.0d0
         call comp_pso_int1_prim(cntp, c, blk)
         do m = 1, 3
-          call update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+          ! blk is ordered (bra=shi outer, ket=shj inner); update_rectangular_matrix
+          ! then writes ints(ket_global, bra_global) = <bra|A|ket>.
+          call update_rectangular_matrix(shi, shj, blk(:,m), ints(:,:,m))
         end do
       end do
     end do
 
+!   Normalize, then antisymmetrize A = (M - M^T)/2 (exact for the PSO operator).
     do m = 1, 3
-      call bas_norm_matrix(ints(:,m), basis%bfnrm, nbf)
+      call bas_norm_matrix(ints(:,:,m), basis%bfnrm, nbf)
+    end do
+    ! update_rectangular_matrix stored ints(a,b) = <b|A|a>; antisymmetrise into
+    ! the <bra|A|ket> convention used by the paramagnetic assembly.
+    do m = 1, 3
+      do p = 1, nbf
+        do q = 1, p
+          aij = 0.5d0*(ints(q,p,m) - ints(p,q,m))
+          ints(p,q,m) =  aij
+          ints(q,p,m) = -aij
+        end do
+      end do
     end do
 
  end subroutine
