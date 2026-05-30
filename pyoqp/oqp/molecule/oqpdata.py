@@ -57,7 +57,7 @@ OQP_CONFIG_SCHEMA = {
         'd4': {'type': bool, 'default': 'False'},
     },
     'guess': {
-        'type': {'type': string, 'default': 'huckel'},
+        'type': {'type': string, 'default': 'sap'},
         'file': {'type': str, 'default': ''},
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},

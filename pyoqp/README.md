@@ -213,8 +213,11 @@ guess section handle the guess orbitals
 
 - type // choose the type of guess orbital
 
-      huckel     huckel guess (default)
-      hcore      hcore guess
+      sap        superposition of atomic potentials (default, native Fortran)
+      minao      projected atomic minimal-basis densities (native Fortran)
+      huckel     extended Huckel guess (native Fortran)
+      modhuckel  modified (weighted Wolfsberg-Helmholz) Huckel (native Fortran)
+      hcore      bare core-Hamiltonian guess
       model      read orbital from molden
       json       load data from json
 

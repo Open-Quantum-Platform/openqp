@@ -307,7 +307,7 @@ def _check_basis(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
-    guess_type = _as_lower(_get(config, "guess", "type", "huckel"))
+    guess_type = _as_lower(_get(config, "guess", "type", "sap"))
     guess_file = _get(config, "guess", "file", "")
     guess_file2 = _get(config, "guess", "file2", "")
     continue_geom = _get(config, "guess", "continue_geom", False)
