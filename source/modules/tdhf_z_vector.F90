@@ -216,10 +216,16 @@ contains
 
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
+    ! The Z-vector (orbital-relaxation) equation uses the ground-state
+    ! orbital Hessian (A+B), which is identical for TDA and full RPA - the
+    ! Tamm-Dancoff approximation only affects the excitation vectors and the
+    ! RHS, not the relaxation operator. Forcing tamm_dancoff here would build
+    ! the A matrix into %amb (which compute_apbx never reads), leaving the
+    ! operator without its two-electron part for TDA.
     int2_data = int2_td_data_t(d2=pa, &
             int_apb=.true., &
             int_amb=.false., &
-            tamm_dancoff=tda, &
+            tamm_dancoff=.false., &
             scale_exchange=scale_exch)
 
     pxm(1:nocc, 1:nvir) => xm(1:)

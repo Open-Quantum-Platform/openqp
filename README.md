@@ -18,17 +18,12 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
 - **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
 - [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
-- Optional external [DFTB+](https://dftbplus.org/) backend for ground-state energy, gradient, and geometry optimization workflows
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
 - Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
 - Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
   
-### Backend Integrations
-
-Optional external-backend integrations let OpenQP call user-provided engines for targeted workflows; the current DFTB+ bridge covers ground-state energy, gradient, and geometry optimization when configured in the `[dftb]` input section.
-
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
@@ -61,8 +56,9 @@ pip install .
 ```
 This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
 
-or 
-#### Detailed Compile
+#### Detailed compile for developers
+
+The `pip install .` command above is the normal and recommended source install path. The manual CMake commands below are intended for developers who need to inspect or debug the native build directly. After changing build options, run `pip install .` again from the repository root so the installed `openqp` command uses the same source tree and installed native library.
 
 ##### OpenMP Support
 
@@ -70,7 +66,6 @@ or
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF
 ninja -C build install
-cd pyoqp
 pip install .
 ```
 
@@ -80,7 +75,6 @@ pip install .
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
 ninja -C build install
-cd pyoqp
 pip install .
 ```
 
@@ -90,18 +84,24 @@ pip install .
 cd openqp
 cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
 make -C build install
-cd pyoqp
 pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
 - Use `-DLINALG_LIB_INT64=OFF` to ensure compatibility with third-party software like libdlfind compiled with 32-bit BLAS.
 
-#### Environmental Settings
+#### Runtime environment
+
+A package installed with `pip install .` does not require `OPENQP_ROOT` for normal `openqp` command-line use. Set only runtime tuning variables as needed:
 
 ```bash
-export OPENQP_ROOT=/path/to/openqp                           # Path to the Root of openqp
 export OMP_NUM_THREADS=4                                     # The number of cores to be used for OpenMP runs
+```
+
+If you are running directly from an uninstalled manual CMake tree, set `OPENQP_ROOT` and the library path for that tree:
+
+```bash
+export OPENQP_ROOT=/path/to/openqp                           # Path to the root of an uninstalled OpenQP tree
 export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
 ```
 

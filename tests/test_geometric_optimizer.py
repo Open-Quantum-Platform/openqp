@@ -78,11 +78,16 @@ def install_runfunc_stubs():
         def __init__(self, mol):
             self.mol = mol
 
+    class GeometricNEBOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
     libgeometric.GeometricOpt = GeometricOpt
     libgeometric.GeometricMECIOpt = GeometricMECIOpt
     libgeometric.GeometricMECPOpt = GeometricMECPOpt
     libgeometric.GeometricTSOpt = GeometricTSOpt
     libgeometric.GeometricIRCOpt = GeometricIRCOpt
+    libgeometric.GeometricNEBOpt = GeometricNEBOpt
     sys.modules["oqp.library.libgeometric"] = libgeometric
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
