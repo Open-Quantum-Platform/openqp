@@ -20,3 +20,4 @@ share/*
 examples/data_*
 __pycache__/
 *.py[cod]
+build/
