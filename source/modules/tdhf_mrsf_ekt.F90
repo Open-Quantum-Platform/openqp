@@ -45,10 +45,10 @@ contains
     logical, intent(in) :: electron_affinity
 
     type(basis_set), pointer :: basis
-    integer :: nbf, nbf2, nroot, ok, i, j, k, ierr
+    integer :: nbf, nbf2, nroot, ok, i
     integer :: nactive
-    integer, allocatable :: active(:)
-    real(kind=dp), parameter :: metric_tol = 1.0e-8_dp
+    real(kind=dp), parameter :: ekt_occ_tol = 1.0e-8_dp
+    real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
     real(kind=dp), allocatable :: dens_pack(:), fock_pack(:), lag_pack(:)
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
     real(kind=dp), allocatable :: density_alpha_mo(:,:), density_beta_mo(:,:)
@@ -56,7 +56,7 @@ contains
     real(kind=dp), allocatable :: smat(:)
     real(kind=dp), allocatable :: density_mo(:,:), fock_mo(:,:), lagrangian_mo(:,:)
     real(kind=dp), allocatable :: ekt_metric(:,:), ekt_operator(:,:)
-    real(kind=dp), allocatable :: op_active(:,:), metric_active(:,:), eig(:), vec_active(:,:)
+    real(kind=dp), allocatable :: eig(:)
     real(kind=dp), allocatable :: orbitals(:,:), strengths(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
     real(kind=dp), contiguous, pointer :: density_store(:,:), lagrangian_store(:,:)
@@ -101,8 +101,6 @@ contains
              density_mo(nbf,nbf), fock_mo(nbf,nbf), &
              lagrangian_mo(nbf,nbf), ekt_metric(nbf,nbf), ekt_operator(nbf,nbf), &
              orbitals(nbf,nroot), strengths(nroot), smat(nbf2), source=0.0_dp, stat=ok)
-    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
-    allocate(active(nbf), source=0, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
     ! MRSF-EKT uses the relaxed target-state one-particle density P and the
@@ -154,36 +152,17 @@ contains
       ekt_operator = lagrangian_mo
     end if
 
-    nactive = 0
-    do i = 1, nbf
-      if (ekt_metric(i,i) > metric_tol) then
-        nactive = nactive + 1
-        active(nactive) = i
-      end if
-    end do
-    if (nactive == 0) call show_message('MRSF-EKT metric has no active subspace', WITH_ABORT)
-
-    allocate(op_active(nactive,nactive), metric_active(nactive,nactive), eig(nactive), &
-             vec_active(nactive,nactive), source=0.0_dp, stat=ok)
+    ! Natural-orbital occupation deflation + EKT generalized solve.
+    ! The metric D_MO is non-diagonal, so a diag(D) > tol active-space
+    ! selection is mathematically invalid.  Diagonalize the metric to obtain
+    ! natural orbitals/occupations, keep occ > occ_tol, project W and D into
+    ! the retained NO subspace, solve the generalized eigenproblem there,
+    ! metric-normalize, and back-transform the Dyson orbitals.  Pole strengths
+    ! come out <= 1 by construction.
+    allocate(eig(nroot), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
-
-    do j = 1, nactive
-      do i = 1, nactive
-        op_active(i,j) = ekt_operator(active(i), active(j))
-        metric_active(i,j) = ekt_metric(active(i), active(j))
-      end do
-    end do
-
-    call solve_symmetric_generalized(op_active, metric_active, eig, vec_active, nactive, ierr)
-    if (ierr /= 0) call show_message('(A,I0)', 'MRSF-EKT generalized eigensolver failed; info=', ierr, WITH_ABORT)
-
-    orbitals = 0.0_dp
-    do j = 1, min(nroot, nactive)
-      do i = 1, nactive
-        orbitals(active(i),j) = vec_active(i,j)
-      end do
-      strengths(j) = sum(orbitals(:,j)**2)
-    end do
+    call solve_ekt_no_deflation(nbf, nroot, ekt_operator, ekt_metric, &
+         ekt_occ_tol, eig, orbitals, strengths, nactive, iw)
 
     call infos%dat%remove_records(tags_alloc)
     call infos%dat%reserve_data(OQP_mrsf_ekt_density_mo, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), &
@@ -209,13 +188,18 @@ contains
     strength_store = strengths
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT electron affinities (hartree)")')
+      write(iw,'(/,2x,"MRSF-EKT electron affinities")')
     else
-      write(iw,'(/,2x,"MRSF-EKT ionization potentials (hartree)")')
+      write(iw,'(/,2x,"MRSF-EKT ionization potentials (Dyson eBEs)")')
     end if
-    write(iw,'(2x,"state",5x,"energy",11x,"strength")')
+    ! eig holds the EKT eigenvalues epsilon of  W C = D C epsilon.  The
+    ! electron binding energy (IP) of a detachment is -epsilon; print both
+    ! the eigenvalue and the eBE in hartree and eV with the Dyson pole
+    ! strength (norm of the Dyson vector, <= 1 for a physical root).
+    write(iw,'(2x,"state",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"strength")')
     do i = 1, min(nroot, nactive)
-      write(iw,'(2x,I5,2x,F16.8,2x,F16.8)') i, eig(i), strengths(i)
+      write(iw,'(2x,I5,2x,F14.6,2x,F14.6,2x,F12.4,2x,F12.6)') &
+            i, eig(i), -eig(i), -eig(i)*hartree_to_ev, strengths(i)
     end do
     call flush(iw)
 
@@ -322,6 +306,134 @@ contains
     call flush(iw)
     deallocate(pa, pb, s_ao)
   end subroutine ekt_density_trace_checks
+
+  !> @brief EKT solve with natural-orbital occupation deflation.
+  !> @details Solves  W X = D X eps  where the metric D (= ekt_metric) is the
+  !>          relaxed one-particle density (IP) or its particle complement (EA),
+  !>          and W (= ekt_operator) is the EKT Lagrangian.  Because D is
+  !>          non-diagonal, deflation must be done on its NATURAL ORBITALS, not
+  !>          its diagonal:
+  !>            1. symmetrize D
+  !>            2. diagonalize  D U = U n   (natural orbitals U, occupations n)
+  !>            3. keep NOs with n_i > occ_tol
+  !>            4. project  D_NO = U_keep^T D U_keep,  W_NO = U_keep^T W U_keep
+  !>            5. solve the generalized problem in the retained NO space
+  !>            6. metric-normalize eigenvectors:  X^T D_NO X = 1
+  !>            7. back-transform Dyson orbitals  C = U_keep X
+  !>            8. pole strength = X^T D_NO X  (<= 1 physical)
+  subroutine solve_ekt_no_deflation(nbf, nroot, wmat, dmat, occ_tol, &
+       eig, dyson_mo, strengths, nkeep, iw)
+    use precision, only: dp
+    use eigen, only: diag_symm_full
+    use messages, only: show_message, with_abort
+    implicit none
+    integer, intent(in) :: nbf, nroot, iw
+    real(kind=dp), intent(in) :: wmat(nbf,nbf), dmat(nbf,nbf), occ_tol
+    real(kind=dp), intent(out) :: eig(nroot)
+    real(kind=dp), intent(out) :: dyson_mo(nbf,nroot)
+    real(kind=dp), intent(out) :: strengths(nroot)
+    integer, intent(out) :: nkeep
+    real(kind=dp), allocatable :: dsym(:,:), nocc(:), uno(:,:), ukeep(:,:)
+    real(kind=dp), allocatable :: d_no(:,:), w_no(:,:), tmp(:,:)
+    real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:)
+    real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str
+    integer :: i, j, m, ierr, ok, nout
+
+    ! (1) symmetrize the metric
+    allocate(dsym(nbf,nbf), nocc(nbf), uno(nbf,nbf), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    do j = 1, nbf
+      do i = 1, nbf
+        dsym(i,j) = 0.5_dp*(dmat(i,j) + dmat(j,i))
+      end do
+    end do
+
+    ! (2) diagonalize the metric -> natural orbitals U, occupations n
+    uno = dsym
+    call diag_symm_full(1, nbf, uno, nbf, nocc, ierr)
+    if (ierr /= 0) call show_message('EKT: NO diagonalization failed', WITH_ABORT)
+
+    ! (3) keep NOs with physical occupation n_i > occ_tol
+    m = 0
+    tr_disc = 0.0_dp
+    do i = 1, nbf
+      if (nocc(i) > occ_tol) then
+        m = m + 1
+      else
+        tr_disc = tr_disc + nocc(i)
+      end if
+    end do
+    if (m == 0) call show_message('EKT: no NOs above occupation tolerance', WITH_ABORT)
+    nkeep = m
+
+    allocate(ukeep(nbf,m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    j = 0
+    occ_min = 1.0d30; occ_max = -1.0d30
+    do i = 1, nbf
+      if (nocc(i) > occ_tol) then
+        j = j + 1
+        ukeep(:,j) = uno(:,i)
+        occ_min = min(occ_min, nocc(i))
+        occ_max = max(occ_max, nocc(i))
+      end if
+    end do
+
+    ! (4) deflation diagnostics
+    write(iw,'(/,2x,"--- EKT natural-orbital deflation ---")')
+    write(iw,'(2x,"occ_tol = ",es10.2,"   retained NOs = ",i0," / ",i0)') occ_tol, m, nbf
+    write(iw,'(2x,"discarded trace = ",f12.6,"   retained occ range = [",f10.6,",",f10.6,"]")') &
+          tr_disc, occ_min, occ_max
+    write(iw,'(2x,"-------------------------------------",/)')
+
+    ! (5) project D and W into the retained NO space
+    allocate(d_no(m,m), w_no(m,m), tmp(nbf,m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    tmp  = matmul(dsym, ukeep)
+    d_no = matmul(transpose(ukeep), tmp)
+    tmp  = matmul(wmat, ukeep)
+    w_no = matmul(transpose(ukeep), tmp)
+    d_no = 0.5_dp*(d_no + transpose(d_no))
+    w_no = 0.5_dp*(w_no + transpose(w_no))
+
+    ! (6) solve the generalized problem in the retained NO space
+    allocate(xvec(m,m), eps(m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    call solve_symmetric_generalized(w_no, d_no, eps, xvec, m, ierr)
+    if (ierr /= 0) call show_message('(A,I0)', &
+         'EKT: NO-space generalized solve failed; info=', ierr, WITH_ABORT)
+
+    ! (7) metric-normalize eigenvectors:  X^T D_NO X = 1
+    do j = 1, m
+      xnorm = 0.0_dp
+      do i = 1, m
+        xnorm = xnorm + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
+      end do
+      if (xnorm > 1.0e-14_dp) xvec(:,j) = xvec(:,j)/sqrt(xnorm)
+    end do
+
+    ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X,
+    !     pole strength = X^T D_NO X  (<= 1 for physical NOs)
+    allocate(cdys(nbf,m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    cdys = matmul(ukeep, xvec)
+
+    nout = min(nroot, m)
+    eig = 0.0_dp
+    dyson_mo = 0.0_dp
+    strengths = 0.0_dp
+    do j = 1, nout
+      eig(j) = eps(j)
+      dyson_mo(:,j) = cdys(:,j)
+      str = 0.0_dp
+      do i = 1, m
+        str = str + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
+      end do
+      strengths(j) = str
+    end do
+
+    deallocate(dsym, nocc, uno, ukeep, d_no, w_no, tmp, xvec, eps, cdys)
+  end subroutine solve_ekt_no_deflation
 
   !> @brief Solve the EKT generalized eigenproblem  op * C = metric * C * lambda
   !> @details The EKT working equation (eq 1 of Park et al., JCTC 2024) is a
