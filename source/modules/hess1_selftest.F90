@@ -36,7 +36,8 @@ contains
     use precision, only: dp
     use io_constants, only: iw
     use grd1, only: grad_ee_overlap, grad_ee_kinetic, &
-                    hess_ee_overlap, hess_ee_kinetic
+                    hess_ee_overlap, hess_ee_kinetic, &
+                    grad_en_hellman_feynman, grad_en_pulay, hess_en
 
     implicit none
 
@@ -44,10 +45,10 @@ contains
 
     integer :: nbf, nbf_tri, natom, n3, p, k, a, ka
     real(dp), allocatable :: m_packed(:)
-    real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:)
-    real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:)
-    real(dp), allocatable :: gp(:,:), gm(:,:)
-    real(dp) :: h, err_o, err_k, sym_o, sym_k
+    real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:)
+    real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:), hess_v_fd(:,:)
+    real(dp), allocatable :: gp(:,:), gm(:,:), gp2(:,:), gm2(:,:)
+    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v
 
     associate(basis => infos%basis)
 
@@ -62,13 +63,14 @@ contains
       m_packed(p) = 1.0_dp / real(p+1, dp)
     end do
 
-    allocate(hess_o_an(n3,n3), hess_k_an(n3,n3), source=0.0_dp)
-    allocate(hess_o_fd(n3,n3), hess_k_fd(n3,n3), source=0.0_dp)
-    allocate(gp(3,natom), gm(3,natom))
+    allocate(hess_o_an(n3,n3), hess_k_an(n3,n3), hess_v_an(n3,n3), source=0.0_dp)
+    allocate(hess_o_fd(n3,n3), hess_k_fd(n3,n3), hess_v_fd(n3,n3), source=0.0_dp)
+    allocate(gp(3,natom), gm(3,natom), gp2(3,natom), gm2(3,natom))
 
     ! analytic second-derivative contributions
     call hess_ee_overlap(basis, m_packed, hess_o_an)
     call hess_ee_kinetic(basis, m_packed, hess_k_an)
+    call hess_en(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, hess_v_an)
 
     ! central finite difference of the analytic gradient routines
     h = 1.0e-4_dp
@@ -89,13 +91,26 @@ contains
         gm = 0.0_dp; call grad_ee_kinetic(basis, m_packed, gm)
         basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
         hess_k_fd(:,ka) = reshape((gp-gm)/(2*h), [n3])
+
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        gp = 0.0_dp; gp2 = 0.0_dp
+        call grad_en_hellman_feynman(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, gp)
+        call grad_en_pulay(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, gp2)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) - 2*h
+        gm = 0.0_dp; gm2 = 0.0_dp
+        call grad_en_hellman_feynman(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, gm)
+        call grad_en_pulay(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, gm2)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        hess_v_fd(:,ka) = reshape(((gp+gp2)-(gm+gm2))/(2*h), [n3])
       end do
     end do
 
     err_o = maxval(abs(hess_o_an - hess_o_fd))
     err_k = maxval(abs(hess_k_an - hess_k_fd))
+    err_v = maxval(abs(hess_v_an - hess_v_fd))
     sym_o = maxval(abs(hess_o_an - transpose(hess_o_an)))
     sym_k = maxval(abs(hess_k_an - transpose(hess_k_an)))
+    sym_v = maxval(abs(hess_v_an - transpose(hess_v_an)))
 
     block
       integer :: u
@@ -104,6 +119,9 @@ contains
       write(u,'(a,es12.4)') 'kinetic max|an-fd| = ', err_k
       write(u,'(a,es12.4)') 'overlap asymmetry  = ', sym_o
       write(u,'(a,es12.4)') 'kinetic asymmetry  = ', sym_k
+      ! Nuclear-attraction (hess_en) is WIP: reported but NOT part of PASS/FAIL.
+      write(u,'(a,es12.4)') 'nucattr max|an-fd| (WIP) = ', err_v
+      write(u,'(a,es12.4)') 'nucattr asymmetry  (WIP) = ', sym_v
       if (max(err_o, err_k) < 1.0e-6_dp) then
         write(u,'(a)') 'HESS1E_SELFTEST PASS'
       else
@@ -112,7 +130,8 @@ contains
       close(u)
     end block
 
-    deallocate(m_packed, hess_o_an, hess_k_an, hess_o_fd, hess_k_fd, gp, gm)
+    deallocate(m_packed, hess_o_an, hess_k_an, hess_v_an, &
+               hess_o_fd, hess_k_fd, hess_v_fd, gp, gm, gp2, gm2)
     end associate
   end subroutine hess1_selftest
 

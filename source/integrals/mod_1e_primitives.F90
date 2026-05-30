@@ -52,6 +52,7 @@ MODULE mod_1e_primitives
  PUBLIC der2_kinovl_xyz
  PUBLIC der_coul_xyz
  PUBLIC der2_coul_xyz
+ PUBLIC comp_coulomb_der2_braC
  PUBLIC comp_ewaldlr_der1
  PUBLIC comp_ewaldlr_helfeyder1
 
@@ -1076,6 +1077,104 @@ END SUBROUTINE
 
  END SUBROUTINE
 
+!> @brief Bra-center and bra-charge second derivatives of the nuclear-attraction
+!>   integral, used to assemble the nuclear-attraction Hessian on a fully
+!>   bra-validated derivative path (no ket-index raising).
+!> @details For a shell pair (bra X, ket Y) and charge c, accumulates the two
+!>   3x3 blocks contracted with the density block dij:
+!>     p_XX(a,b) = d2/dX_a dX_b   (bra second derivative; standard Rys build)
+!>     p_XC(a,b) = d2/dX_a dc_b   (bra derivative of the Hellmann-Feynman charge
+!>                                 derivative; DQ Rys build + der_helfey + der_coul)
+!>   The caller (hess_en) obtains the remaining blocks for each ordered pair by
+!>   also calling this routine with the shells swapped (giving p_YY, p_YC) and
+!>   then using translational invariance d/dc = -(d/dX + d/dY):
+!>     p_XY = -(p_XX + p_XC),  p_cc = p_XX + p_XY + p_XY^T + p_YY.
+ SUBROUTINE comp_coulomb_der2_braC(cp, c, znuc, dij, p_XX, p_XC)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: p_XX(:,:), p_XC(:,:)
+
+    REAL(REAL64) :: xx, facq, fachf, w, ric(3)
+    type(rys_root_t) :: ryscomp
+    INTEGER :: id, i, j, k, a, b, o
+    INTEGER :: ix, iy, iz, jx, jy, jz, ci(3), cj(3)
+    REAL(REAL64) :: bXX(3,3), bXC(3,3)
+    REAL(REAL64) :: s(3), da(3), daa(3), qs(3), hc(3), dxa(3), dxc(3)
+    real(real64) :: xyzinQ(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDA (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDAA(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: xyzinDQ(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gHC (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDXa(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDXC(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+
+    ric = cp%ri(:3) - c(:3)
+
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), &
+                   iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+
+        xx = pp%aa*sum((pp%r-c)**2)
+        ryscomp%nroots = cp%nroots
+        ryscomp%x = xx
+
+        ! --- p_XX : bra second derivative on the standard nuclear-attraction build
+        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzinQ, 2)
+        CALL der_coul_xyz (gDA,  xyzinQ, iang, jang, pp%ai, cp%nroots)
+        CALL der2_coul_xyz(gDAA, xyzinQ, iang, jang, pp%ai, cp%nroots)
+        facq = pp%expfac*TWOPI*pp%aa1
+
+        ! --- p_XC : bra derivative of the Hellmann-Feynman charge derivative
+        ryscomp%x = xx
+        CALL DQGaussRys(ryscomp, cp, id, c, znuc, xyzinDQ, 2)
+        CALL der_helfey_xyz(gHC, xyzinDQ, iang+1, jang, ric, cp%nroots)
+        CALL der_coul_xyz  (gDXa, xyzinDQ, iang, jang, pp%ai, cp%nroots)
+        CALL der_coul_xyz  (gDXC, gHC,     iang, jang, pp%ai, cp%nroots)
+        fachf = pp%expfac*TWOPI*2
+
+        bXX = 0.0_real64; bXC = 0.0_real64
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            ci = [ix, iy, iz]
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+                cj = [jx, jy, jz]
+                w = dij(i,j)
+                DO k = 1, cp%nroots
+                    DO o = 1, 3
+                        s(o)   = xyzinQ (cj(o),ci(o),o,k)
+                        da(o)  = gDA   (cj(o),ci(o),o,k)
+                        daa(o) = gDAA  (cj(o),ci(o),o,k)
+                        qs(o)  = xyzinDQ(cj(o),ci(o),o,k)
+                        hc(o)  = gHC   (cj(o),ci(o),o,k)
+                        dxa(o) = gDXa  (cj(o),ci(o),o,k)
+                        dxc(o) = gDXC  (cj(o),ci(o),o,k)
+                    END DO
+                    DO a = 1, 3
+                        DO b = 1, 3
+                            o = 6 - a - b
+                            if (a == b) then
+                                bXX(a,b) = bXX(a,b) + w*facq*daa(a)*s(mod(a,3)+1)*s(mod(a+1,3)+1)
+                                bXC(a,b) = bXC(a,b) + w*fachf*dxc(a)*qs(mod(a,3)+1)*qs(mod(a+1,3)+1)
+                            else
+                                bXX(a,b) = bXX(a,b) + w*facq*da(a)*da(b)*s(o)
+                                bXC(a,b) = bXC(a,b) + w*fachf*dxa(a)*hc(b)*qs(o)
+                            end if
+                        END DO
+                    END DO
+                END DO
+            END DO
+        END DO
+
+        p_XX = p_XX + bXX
+        p_XC = p_XC + bXC
+        END ASSOCIATE
+    END DO
+
+ END SUBROUTINE
+
 !> @brief Compute 1e Ewald long-range contribution to the gradient (v.r.t. shifts of
 !>  shell's centers)
 !> @param[in]       nroots      roots for GaussRys
@@ -1807,19 +1906,23 @@ END SUBROUTINE
 !     REVISION HISTORY:
 !> @date _Sep, 2018_ Initial release
 !
- SUBROUTINE DQGaussRys(ryscomp, cp, id, c, znuc, xyzin)
+ SUBROUTINE DQGaussRys(ryscomp, cp, id, c, znuc, xyzin, igrd)
 !dir$ attributes forceinline :: DQGaussRys
     TYPE(shpair_t), INTENT(IN) :: cp
     INTEGER, INTENT(IN) :: id
     REAL(REAL64), INTENT(IN)   :: c(3), znuc
     REAL(REAL64), CONTIGUOUS, INTENT(OUT)  :: xyzin(0:,0:,:,:)
+    INTEGER, INTENT(IN), OPTIONAL :: igrd
 
     type(rys_root_t), intent(inout) :: ryscomp
 
-    INTEGER :: ni, nj, k
+    INTEGER :: ni, nj, k, igrd1
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
 !dir$ assume_aligned xyzin : 64
+
+    igrd1 = 1
+    IF (present(igrd)) igrd1 = igrd
 
     call ryscomp%evaluate()
 
@@ -1843,13 +1946,13 @@ END SUBROUTINE
         xyzin(1,0,3,k) = d(3)*ww
 
         ! VRR (Lj+1,0) <- Rpj*(Lj,0) + Lj*b*(Lj-1,0)
-        DO nj = 2, iang+jang+1
+        DO nj = 2, iang+jang+igrd1
             xyzin(nj,0,:,k) = d(:)*xyzin(nj-1,0,:,k) + (nj-1)*b*xyzin(nj-2,0,:,k)
         END DO
 
         ! HRR (Lj,Li+1) <- (Lj+1,Li) + Rij*(Lj,Li)
-        nj = iang+jang+1
-        DO ni = 1, iang+1
+        nj = iang+jang+igrd1
+        DO ni = 1, iang+igrd1
             nj = nj-1
             xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + dij(1)*xyzin(0:nj,ni-1,1,k)
             xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + dij(2)*xyzin(0:nj,ni-1,2,k)

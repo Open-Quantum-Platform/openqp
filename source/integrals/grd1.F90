@@ -11,7 +11,7 @@ module grd1
    use mod_1e_primitives, only: &
        comp_coulomb_der1, comp_coulomb_helfeyder1, comp_kinetic_der1, &
        comp_overlap_der1, &
-       comp_overlap_der2, comp_kinetic_der2, &
+       comp_overlap_der2, comp_kinetic_der2, comp_coulomb_der2_braC, &
        comp_ewaldlr_der1, comp_ewaldlr_helfeyder1, &
        density_ordered
 
@@ -33,6 +33,7 @@ module grd1
    public grad_ee_kinetic
    public hess_ee_overlap
    public hess_ee_kinetic
+   public hess_en
    public grad_en_hellman_feynman
    public grad_en_pulay
    public grad_1e_ecp
@@ -516,6 +517,108 @@ contains
                         hess_priv(3*(shi%atid-1)+b, ai) + 2*de2(b,a)
                     hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) = &
                         hess_priv(3*(shi%atid-1)+b, 3*(shj%atid-1)+a) - 2*de2(b,a)
+                END DO
+            END DO
+        END DO
+    END DO
+!$omp end do
+!$omp end parallel
+
+    hess = hess + hess_priv
+    DEALLOCATE(hess_priv)
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Nuclear-attraction second-derivative contribution to the Cartesian
+!>   Hessian (electron-nucleus 1e term), on a fully bra-validated derivative path.
+!> @warning WORK IN PROGRESS, not yet validated. The mixed bra-charge block
+!>   (p_AC, d2/dA dC) computed from the bra derivative of the Hellmann-Feynman
+!>   term currently disagrees with finite differences (see hess1_selftest,
+!>   nucattr WIP line). This routine is not wired into any production path; the
+!>   native hf_hessian kernel remains guarded.
+!> @details For each ordered shell pair (bra atom A, ket atom B) and nucleus C,
+!>   comp_coulomb_der2_braC is called twice -- as (A,B) giving the bra blocks
+!>   p_AA=d2/dA2, p_AC=d2/dA dC, and swapped as (B,A) giving p_BB=d2/dB2,
+!>   p_BC=d2/dB dC. Translational invariance d/dC = -(d/dA + d/dB) then yields
+!>     p_AB = -(p_AA + p_AC),  p_CC = p_AA + p_AB + p_AB^T + p_BB,
+!>   and all nine atom blocks are scattered into the (3N,3N) Hessian. Summing
+!>   over ordered pairs reproduces the true d2E/dRdR (no extra symmetry factor).
+ SUBROUTINE hess_en(basis, coord, zq, denab, hess, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), contiguous, intent(in) :: coord(:,:), zq(:)
+    REAL(kind=dp), INTENT(INOUT) :: denab(:)
+    real(kind=dp), intent(inout) :: hess(:,:)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, ic, a, b, n, nat, pat, qat
+    REAL(kind=dp) :: tol
+    REAL(kind=dp) :: p_AA(3,3), p_AC(3,3), p_BB(3,3), p_BC(3,3)
+    REAL(kind=dp) :: bAB(3,3), blocks(3,3,9)
+    INTEGER :: atP(9), atQ(9)
+    LOGICAL :: norm
+    REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cab, cba
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    nat = ubound(coord, 2)
+
+    norm = .true.
+    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+
+    allocate(hess_priv, mold=hess)
+    hess_priv = 0.0d0
+
+!$omp parallel &
+!$omp   private(ii, jj, ic, a, b, n, pat, qat, shi, shj, cab, cba, &
+!$omp           p_AA, p_AC, p_BB, p_BC, bAB, blocks, atP, atQ) &
+!$omp   reduction(+:hess_priv)
+    CALL cab%alloc(basis)
+    CALL cba%alloc(basis)
+!$omp do schedule(dynamic)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            CALL cab%shell_pair(basis, shi, shj, tol)
+            IF (cab%numpairs==0) CYCLE
+            CALL cba%shell_pair(basis, shj, shi, tol)
+            DO ic = 1, nat
+                p_AA = 0.0d0; p_AC = 0.0d0; p_BB = 0.0d0; p_BC = 0.0d0
+                CALL comp_coulomb_der2_braC(cab, coord(:,ic), -zq(ic), &
+                    dens(basis%ao_offset(ii):, basis%ao_offset(jj):), p_AA, p_AC)
+                CALL comp_coulomb_der2_braC(cba, coord(:,ic), -zq(ic), &
+                    dens(basis%ao_offset(jj):, basis%ao_offset(ii):), p_BB, p_BC)
+
+                bAB = -(p_AA + p_AC)
+
+                atP(1)=shi%atid; atQ(1)=shi%atid; blocks(:,:,1)=p_AA
+                atP(2)=shj%atid; atQ(2)=shj%atid; blocks(:,:,2)=p_BB
+                atP(3)=shi%atid; atQ(3)=shj%atid; blocks(:,:,3)=bAB
+                atP(4)=shj%atid; atQ(4)=shi%atid; blocks(:,:,4)=transpose(bAB)
+                atP(5)=shi%atid; atQ(5)=ic;       blocks(:,:,5)=p_AC
+                atP(6)=ic;       atQ(6)=shi%atid; blocks(:,:,6)=transpose(p_AC)
+                atP(7)=shj%atid; atQ(7)=ic;       blocks(:,:,7)=p_BC
+                atP(8)=ic;       atQ(8)=shj%atid; blocks(:,:,8)=transpose(p_BC)
+                atP(9)=ic;       atQ(9)=ic;       blocks(:,:,9)=p_AA+bAB+transpose(bAB)+p_BB
+
+                DO n = 1, 9
+                    pat = atP(n); qat = atQ(n)
+                    DO a = 1, 3
+                        DO b = 1, 3
+                            hess_priv(3*(pat-1)+a, 3*(qat-1)+b) = &
+                                hess_priv(3*(pat-1)+a, 3*(qat-1)+b) + blocks(a,b,n)
+                        END DO
+                    END DO
                 END DO
             END DO
         END DO
