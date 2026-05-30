@@ -58,6 +58,26 @@ The libint wrapper already has the deriv-2 ERI code path (`int_libint.F90`,
 
 ## 3. Implementation tasks (dependency order)
 
+### Tasks A & B — second-derivative integrals (1e nuclear-attraction, 2e ERI)
+
+> **Correction (libint is the pragmatic path, not a mathematical necessity).**
+> Native second-derivative nuclear-attraction and ERI integrals are *feasible*
+> without libint, but require extending the Rys engine with **root/weight
+> derivatives**. Code-grounded reason: the Rys argument is center-dependent --
+> 1e: `X = pp%aa*sum((pp%r-c)**2)` (`mod_1e_primitives.F90:383`); 2e:
+> `X = rho*sum((P-Q)**2)` with `P,Q` the Gaussian-product centers
+> (`grd2_rys.F90:309`). The roots `u(X)`/weights `w(X)` therefore depend on the
+> differentiated centers. First derivatives work with *frozen* roots because the
+> polynomial angular-momentum shift alone suffices; the **second** derivative
+> picks up a `(dX/dA)*d(roots)/dX` term that a fixed-root double-shift drops
+> (this is exactly why the `der2_coul` fixed-root attempt failed -- it is a
+> mathematical fact about the scheme, not an implementation bug). A correct
+> native route implements `du/dX`, `dw/dX` and chains through (as GAMESS/HONDO
+> do), or uses a parallel Obara-Saika/McMurchie-Davidson auxiliary-integral
+> scheme. **Libint deriv-2 is chosen here only because it is lower-effort**, and
+> because the deriv-2 ERI path (`libint2_build_eri2`) is already wired
+> (`int_libint.F90`, gated by `#if INCLUDE_ERI >= 2`).
+
 ### Task A — 1e nuclear-attraction second derivative  (libint 1-body deriv-2)
 - Compute libint 1-body deriv-2 integrals: `ipipnuc` (d2/dA2), `ipnucip`
   (d2/dA dB), and per-nucleus `ipiprinv`/`iprinvip` (charge center).
@@ -100,24 +120,92 @@ The libint wrapper already has the deriv-2 ERI code path (`int_libint.F90`,
 > and fully validated in any environment. Only the *nuclear* RHS (the 2e
 > `dJ/dx[P]` piece, Task B's libint deriv-1) is environment-gated.
 
+- **CPHF solver `cphf_solve(infos, nrhs, bvec, uvec)`** — DONE
+  (`source/modules/cphf.F90`), validated vs PySCF dipole polarizability.
 - **RHS `B^x` (per nuclear coordinate x):** the 1e parts are done
-  (`der_overlap_matrix`, `der_kinetic_matrix`, `der_nucattr_matrix`). Add the 2e
-  response `dJ/dx[P]`, `dK/dx[P]` (libint deriv-1 Fock build, or the existing
-  `int2_td_data_t` path driven with derivative integrals). Transform to the MO
-  occupied-virtual block:
-  `B^x_{ia} = (C^T (dh/dx + dG/dx[P]) C)_{ia} - e_i (C^T dS/dx C)_{ia}`.
-  The MO transform path is validated (`C^T S C = I` check in `hess1_selftest`).
-- **Solve `A U^x = B^x`:** reuse the Z-vector CG block from
-  `tdhf_z_vector.F90` *verbatim* with `B^x` as the right-hand side -- the static
-  CPHF A-matrix is the same orbital Hessian `(A+B)` that `compute_apbx` already
-  applies (response Fock via `int2_td_data_t` + `int2_compute_t%run` + DFT
-  `fxc`), with diagonal preconditioner `precond` (`1/(e_a-e_i)`). Expose/refactor
-  `compute_apbx`, `precond`, `tdhf_cg_data` into a shared module so CPHF can call
-  them. The A-matrix uses *undifferentiated* 2e integrals (Rys, no libint deriv).
+  (`der_overlap_matrix`, `der_kinetic_matrix`, `der_nucattr_matrix`). The
+  remaining piece is `F^x` (the 2e derivative-Fock, below).
+
+#### Task C1 — `F^x` 2e derivative-Fock builder (native, no libint)
+
+> **Correction (driver rewrite, not a wrapper).** The code-grounded reality:
+> `grd2_rys.F90` *fuses* the 4-index density contraction into its innermost
+> assembly (`compute_der_ijkl`, ~line 773), emitting only the scalar gradient
+> `gdat%fd(3,4)`; the bare `d(uv|ls)/dx` block is never materialized. So `F^x`
+> reuses ~70% of `grd2_rys` UNCHANGED (`compute_rys_rw`, `compute_coefficients`,
+> `compute_xyz_p0q0`, `compute_xyz_ijkl`, `compute_der_xyz_ijkl` -- the derivative
+> shift `fi = g[m+1]*2*alpha - g[m-1]*(i-1)`), but the final assembly must be a
+> NEW routine that *scatters* into an `(nbf,nbf,3,natom)` Fock derivative
+> (`F^x_uv += d(uv|ls)/dx * D_ls` Coulomb, minus exchange * `HFscale`) instead of
+> contracting all four indices to a scalar. Plus a 2-index density supplier in
+> place of the 4-index `get_density`. ~150-250 new LOC, no new integrals, no
+> libint. This is what makes the full native CPHF chain runnable for the nuclear
+> case.
+
+- Transform to the MO occupied-virtual RHS:
+  `B^x_{ia} = (C^T (dh/dx + dG^x[P]) C)_{ia} - e_i (C^T dS/dx C)_{ia}`,
+  where `dh/dx = dT/dx + dV/dx` (done) and `dG^x[P]` is `F^x`.
+- **Solve** `A U^x = B^x` with `cphf_solve` (done).
 - Assemble the response contribution to the Hessian from `U^x`.
-- **Validate:** `U^x` vs finite differences of the converged MO coefficients;
-  the full HF Hessian (direct + CPHF) vs FD of the HF gradient and vs the PySCF
-  bridge (which already includes CPHF).
+
+#### Validation protocol for `F^x` and the full CPHF chain
+
+The chain `F^x -> B^x -> U^x -> dC/dx -> dP/dx` is validated bottom-up, each
+stage against a reference of known quality. The two-stage design avoids the
+"reference-limited comparison" trap: the integral stages are checked against
+*exact/non-iterative* references (truncation-limited, ~1e-9), and only the SCF
+response stage uses converged-SCF references (whose quality is then *proven* by
+h^2 scaling rather than asserted).
+
+1. **`F^x` AO derivative-Fock (exact, non-iterative reference).**
+   - *Trace identity:* for any fixed symmetric matrix `M`,
+     `sum_uv M_uv F^x_uv` must equal the existing, already-validated 2e gradient
+     contraction `grd2_driver` for the density product `M (x) P`. Equivalently,
+     contracting `F^x[P]` with `P` reproduces the 2e part of the energy gradient
+     `dE_2e/dx` (a single scalar per coordinate) to ~1e-9.
+   - *Element-wise FD:* `F^x_uv = d/dx ( G_uv[P] )` at FROZEN density `P`, where
+     `G[P] = fock_jk(P)`. Central difference:
+     `F^x_uv ~ (G_uv[P; R+he_x] - G_uv[P; R-he_x]) / (2h)`, `h ~ 1e-4` bohr,
+     `P` held fixed at the R-geometry converged density. This is the cleanest
+     check: no SCF iteration in the reference, so accuracy is truncation-limited
+     (expect ~1e-8..1e-9, scaling as h^2). Implemented in the `hess1_selftest`
+     style (the existing harness already FDs `fock_jk`-type builds).
+
+2. **`B^x` MO right-hand side.** Assemble
+   `B^x_{ia} = (C^T(dh/dx + F^x[P])C)_{ia} - e_i (C^T dS/dx C)_{ia}`; check that
+   each constituent (`dh/dx`, `dS/dx` already ~1e-14; `F^x` from step 1) is
+   validated before combination. No separate FD needed beyond steps 1 and the
+   existing 1e checks.
+
+3. **`U^x` / `dC/dx` (converged-SCF reference, quality proven by scaling).**
+   - The CPHF solution `U^x` gives the orbital response; the occupied MO
+     coefficient derivative is `dC_{mu i}/dx = sum_a U^x_{ai} C_{mu a}`
+     (occ-vir rotation; the occ-occ block is fixed by `dS/dx`).
+   - *Reference:* converge SCF at displaced geometries `R +- h e_x`, extract the
+     converged MO coefficients `C(R +- h)`, and form the central-difference
+     `dC/dx`. **Phase/degeneracy fix:** align each displaced `C` to the reference
+     by `sign`/Procrustes on the occupied block (MOs are defined up to sign and
+     occupied-subspace rotation), then compare the gauge-invariant
+     `dP/dx = sum_i (dC_i C_i^T + C_i dC_i^T)` density derivative rather than raw
+     `dC` to sidestep gauge ambiguity.
+   - *Primary comparison:* `dP/dx` from CPHF (`dP/dx = C U^x C^T + h.c.` on the
+     occ-vir block) vs central-difference of the converged AO density
+     `P(R +- h)`. This is gauge-free and the natural physical quantity.
+   - *Expected accuracy & the anti-self-deception step:* do NOT report a single
+     number. Run the FD at `h = 4e-3, 2e-3, 1e-3, 5e-4` and confirm the
+     CPHF-vs-FD difference **decreases ~4x per halving (O(h^2))** until it hits
+     the SCF-convergence floor. Tighten SCF (`scf.conv` to 1e-10/1e-11) so the
+     floor is below the truncation curve over at least two h values. A genuine
+     match shows the O(h^2) trend; a *reference-limited* comparison shows a flat
+     plateau -- reporting the trend is the proof of correctness.
+
+4. **Native-only.** All of steps 1-3 use only OpenQP (native Rys 2e, the SCF
+   driver for displaced geometries, `cphf_solve`). PySCF is an OPTIONAL
+   cross-check (`mf.Hessian()` includes the same CPHF response), never required.
+
+Final (after second-derivative integrals land): full HF Hessian (direct + CPHF)
+vs central FD of the analytic HF gradient on H2/H2O/formaldehyde, and optional
+PySCF `mf.Hessian()` cross-check.
 
 ### Task D — DFT exchange-correlation second derivatives
 - Add the XC-kernel grid second-derivative terms for RKS/UKS. Gate functional
