@@ -18,3 +18,5 @@ include/*
 lib64/*
 share/*
 examples/data_*
+__pycache__/
+*.py[cod]
