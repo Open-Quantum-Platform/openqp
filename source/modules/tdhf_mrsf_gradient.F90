@@ -399,7 +399,7 @@ contains
                    + o21v(l1,i1)*o21v(j1,k1) &
                    + o21v(k1,i1)*o21v(j1,l1)
 
-              df1 = df1 - sgnk*qfspcp2*db2
+              df1 = df1 + sgnk*qfspcp2*db2
             end if
 
             if (qfspcp3 /= 0.0_dp) then

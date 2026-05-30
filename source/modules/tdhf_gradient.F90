@@ -92,7 +92,7 @@ contains
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
-      dmat_a(:), mo_a(:,:), td_p(:,:), xpy(:), xmy(:)
+      dmat_a(:), mo_a(:,:), td_p(:,:), xpy(:,:), xmy(:,:)
     character(len=*), parameter :: tags_general(*) = [ character(len=80) :: &
       OQP_TD_XPY, OQP_TD_XMY, OQP_DM_A, OQP_VEC_MO_A, OQP_TD_P ]
 
@@ -146,12 +146,12 @@ contains
              wrk2(nbf,nbf), &
              source=0.0d0)
 
-    call iatogen(xpy, wrk1, nocc, nocc)
+    call iatogen(xpy(:,infos%tddft%target_state), wrk1, nocc, nocc)
     call symmetrize_matrix(wrk1, nbf)
     wrk1 = wrk1*0.5
     call orthogonal_transform('t', nbf, mo_a, wrk1, xpy2(:,:,1), wrk2)
 
-    call iatogen(xmy, wrk1, nocc, nocc)
+    call iatogen(xmy(:,infos%tddft%target_state), wrk1, nocc, nocc)
     call orthogonal_transform('t', nbf, mo_a, wrk1, xmy2(:,:,1), wrk2)
 
 
