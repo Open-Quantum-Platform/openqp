@@ -212,30 +212,93 @@ contains
 
   end subroutine tdhf_mrsf_ekt
 
+  !> @brief Solve the EKT generalized eigenproblem  op * C = metric * C * lambda
+  !> @details The EKT working equation (eq 1 of Park et al., JCTC 2024) is a
+  !>          symmetric generalized eigenproblem in which the metric is the
+  !>          relaxed one-particle density (IP) or its particle complement (EA).
+  !>          That metric is symmetric positive semidefinite but in general NOT
+  !>          diagonal: the MRSF Z-vector relaxation introduces off-diagonal
+  !>          occupation couplings in the ground-state MO basis.  We therefore
+  !>          reduce the problem by Loewdin (symmetric) orthogonalization built
+  !>          from the full eigendecomposition of the metric, discarding the
+  !>          null-space directions whose occupation eigenvalues fall below a
+  !>          tolerance.  This is the rigorous replacement for a diagonal-only
+  !>          metric scaling, which is exact only when the metric is diagonal.
   subroutine solve_symmetric_generalized(operator, metric, eigenvalues, eigenvectors, n, ierr)
     use precision, only: dp
     use eigen, only: diag_symm_full
+    use messages, only: show_message, with_abort
     implicit none
     integer, intent(in) :: n
     real(kind=dp), intent(inout) :: operator(n,n)
     real(kind=dp), intent(in) :: metric(n,n)
     real(kind=dp), intent(out) :: eigenvalues(n), eigenvectors(n,n)
     integer, intent(out) :: ierr
-    integer :: i, j
-    real(kind=dp), allocatable :: reduced(:,:)
+    integer :: i, j, m, ok
+    real(kind=dp), parameter :: metric_eval_tol = 1.0e-10_dp
+    real(kind=dp), allocatable :: smat(:,:), seval(:), xorth(:,:)
+    real(kind=dp), allocatable :: opsym(:,:), tmp(:,:), reduced(:,:)
+    real(kind=dp), allocatable :: vec(:,:), eval_red(:)
 
-    allocate(reduced(n,n))
-    reduced = operator
+    ierr = 0
+    eigenvalues = 0.0_dp
+    eigenvectors = 0.0_dp
+    if (n <= 0) return
+
+    ! Eigendecomposition of the (symmetrized) metric:  S = U diag(seval) U^T
+    allocate(smat(n,n), seval(n), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     do j = 1, n
       do i = 1, n
-        if (metric(i,i) > 1.0e-12_dp .and. metric(j,j) > 1.0e-12_dp) then
-          reduced(i,j) = reduced(i,j) / sqrt(metric(i,i)*metric(j,j))
-        end if
+        smat(i,j) = 0.5_dp*(metric(i,j) + metric(j,i))
       end do
     end do
+    call diag_symm_full(1, n, smat, n, seval, ierr)
+    if (ierr /= 0) return
+
+    ! Keep only directions with positive occupation (rank of the metric).
+    m = 0
+    do i = 1, n
+      if (seval(i) > metric_eval_tol) m = m + 1
+    end do
+    if (m == 0) then
+      ierr = -1
+      return
+    end if
+
+    ! Symmetric orthogonalizer  X = U_kept * diag(seval_kept)^(-1/2)   (n x m)
+    allocate(xorth(n,m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    j = 0
+    do i = 1, n
+      if (seval(i) > metric_eval_tol) then
+        j = j + 1
+        xorth(:,j) = smat(:,i) / sqrt(seval(i))
+      end if
+    end do
+
+    ! Reduced operator in the orthonormal metric basis:  reduced = X^T op X
+    allocate(opsym(n,n), tmp(n,m), reduced(m,m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    do j = 1, n
+      do i = 1, n
+        opsym(i,j) = 0.5_dp*(operator(i,j) + operator(j,i))
+      end do
+    end do
+    tmp = matmul(opsym, xorth)
+    reduced = matmul(transpose(xorth), tmp)
     reduced = 0.5_dp*(reduced + transpose(reduced))
-    call diag_symm_full(1, n, reduced, n, eigenvalues, ierr)
-    eigenvectors = reduced
+
+    ! Standard symmetric eigenproblem on the reduced operator.
+    allocate(vec(m,m), eval_red(m), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    vec = reduced
+    call diag_symm_full(1, m, vec, m, eval_red, ierr)
+    if (ierr /= 0) return
+
+    ! Map results back:  eigenvalues are lambda, eigenvectors C = X * vec.
+    eigenvalues(1:m) = eval_red(1:m)
+    eigenvectors(:,1:m) = matmul(xorth, vec)
   end subroutine solve_symmetric_generalized
 
 end module tdhf_mrsf_ekt_mod
