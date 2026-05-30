@@ -338,19 +338,27 @@ def _build_pyscf_hessian_mf(mol):
             "PySCF is required for the external HF/RHF analytic Hessian bridge; "
             "no numerical fallback will be used."
         )
-    if getattr(mol, "usempi", False):
+    # Only disable under *real* multi-rank MPI (mol.usempi is hard-coded True even
+    # in serial runs; the actual indicator is the MPI manager's use_mpi flag).
+    mpi_mgr = getattr(mol, "mpi_manager", None)
+    if mpi_mgr is not None and getattr(mpi_mgr, "use_mpi", 0):
         raise NotImplementedError(
             "PySCF external analytic Hessian bridge is disabled under MPI; no numerical fallback will be used."
         )
 
     scf_type = mol.config.get("scf", {}).get("type", "rhf").lower()
-    if scf_type != "rhf":
+    if scf_type not in ("rhf", "uhf"):
         raise NotImplementedError(
-            f"PySCF external analytic Hessian bridge currently supports only RHF, got scf.type={scf_type}."
+            "PySCF external analytic Hessian bridge supports RHF and UHF, got "
+            f"scf.type={scf_type} (ROHF analytic Hessian is not available in PySCF; "
+            "no numerical fallback will be used)."
         )
 
     atoms = []
-    coord = np.asarray(mol.get_system(), dtype=float).reshape((-1, 3)) * ANGSTROM_TO_BOHR
+    # get_system() already returns coordinates in Bohr; PySCF is built with
+    # unit='Bohr' below, so no conversion is applied (note ANGSTROM_TO_BOHR is
+    # actually the Bohr->Angstrom factor, 0.529177).
+    coord = np.asarray(mol.get_system(), dtype=float).reshape((-1, 3))
     for n, at in enumerate(mol.get_atoms()):
         atoms.append([ELEMENTS_NAME[SYMBOL_MAP[int(at)]], coord[n]])
 
@@ -365,14 +373,16 @@ def _build_pyscf_hessian_mf(mol):
     mole.build(cart=True)
 
     functional = mol.config.get("input", {}).get("functional", "hf").lower()
-    if functional in {"", "hf"}:
-        mf = scf.RHF(mole)
-    else:
-        if dft is None:
-            raise NotImplementedError(
-                "PySCF DFT support is required for external DFT analytic Hessians; no numerical fallback will be used."
-            )
-        mf = dft.RKS(mole)
+    is_hf = functional in {"", "hf"}
+    if not is_hf and dft is None:
+        raise NotImplementedError(
+            "PySCF DFT support is required for external DFT analytic Hessians; no numerical fallback will be used."
+        )
+    if scf_type == "rhf":
+        mf = scf.RHF(mole) if is_hf else dft.RKS(mole)
+    else:  # uhf
+        mf = scf.UHF(mole) if is_hf else dft.UKS(mole)
+    if not is_hf:
         mf.xc = pyscf_functional.get(functional, functional)
 
     try:

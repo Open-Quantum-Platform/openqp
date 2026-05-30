@@ -50,7 +50,16 @@ The native HF Hessian is being built term-by-term. Each term is validated in iso
     Assembly: `get_hcore` returns the basis-center blocks (`h1aa`=ipipnuc+ipipkin, `h1ab`=ipnucip+ipkinip); `hcore_generator(iatm,jatm)` adds the per-nucleus `rinv` blocks scaled by the nuclear charge, combining the basis-center and charge-center pieces with the translational-invariance structure (`hcore = -rinv2aa - rinv2ab` plus bra/ket add-backs). OpenQP needs the equivalents of `ipipnuc` / `ipnucip` / `ipiprinv` / `iprinvip` -- i.e. real second-derivative Rys integrals -- after which the `hess_en` driver's block bookkeeping can be reused.
 - **Deferred — two-electron `d2(uv|ls)` terms and the CPHF orbital-response term.** The two-electron second-derivative integrals require extending the Rys engine (`grd2_rys`) beyond its current first-derivative-only (`nder = 1`) form; the CPHF solve can reuse the `pcg` solver following the `tdhf_z_vector` pattern.
 
-Until the electronic terms above are implemented and validated, the native `hf_hessian` kernel remains an explicit guarded scaffold (it aborts rather than returning a partial matrix), and analytical HF Hessian requests are served by the clearly-labeled external PySCF bridge with no silent numerical fallback.
+Until the electronic terms above are implemented and validated, the native `hf_hessian` kernel remains an explicit guarded scaffold (it aborts rather than returning a partial matrix), and analytical HF/DFT Hessian requests are served by the clearly-labeled external PySCF bridge with no silent numerical fallback.
+
+## External PySCF bridge (supported delivery path)
+
+The external PySCF bridge (`pyoqp/oqp/library/external.py::analytic_hessian_from_pyscf`) is the supported way to obtain analytic HF and DFT Hessians today. It builds a guarded PySCF mean-field object from the OpenQP molecule, runs the PySCF analytic Hessian, and returns it in OpenQP `(3N, 3N)` atom-major convention; `[hess] type=analytical` dispatch routes ground-state HF/DFT here with no silent numerical fallback. Coverage: `scf.type` `rhf` and `uhf` (RKS/UKS for DFT). `rohf` raises explicitly because PySCF provides no ROHF analytic Hessian; TDDFT/SF/MRSF remain `NotImplementedError`.
+
+Three latent bugs that made this path non-functional were fixed and the result is validated element-wise against direct PySCF (`tests/test_pyscf_hessian_bridge.py`, RHF and UHF, `max|dH| < 1e-8`):
+- the bridge was gated off by `mol.usempi`, which is hard-coded `True` even in serial; the guard now checks the MPI manager's real `use_mpi` flag.
+- the geometry was double-converted -- `mol.get_system()` already returns Bohr, and the `ANGSTROM_TO_BOHR` constant is actually the Bohr->Angstrom factor (0.529177); the coordinates are now passed straight through to PySCF's `unit='Bohr'`.
+- the molden frequency writer crashed on a `(-1, 1)`-reshaped `freqs` (`moldenwriter.write_frequency`); it now flattens before formatting.
 
 ## DFT analytic Hessian
 
