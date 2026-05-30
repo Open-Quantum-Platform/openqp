@@ -112,6 +112,65 @@ contains
     sym_k = maxval(abs(hess_k_an - transpose(hess_k_an)))
     sym_v = maxval(abs(hess_v_an - transpose(hess_v_an)))
 
+    ! Separated finite-difference diagnostic (small systems only): FD the basis
+    ! (Pulay) and charge (Hellmann-Feynman) gradient pieces against the basis and
+    ! charge positions INDEPENDENTLY, since grad_en_* take coord separately from
+    ! basis%atoms%xyz. This isolates d2E/dbasis2, d2E/dbasis dcharge, d2E/dcharge2.
+    if (n3 <= 12) then
+      block
+        real(dp) :: fd_bb(n3,n3), fd_bc(n3,n3), fd_cb(n3,n3), fd_cc(n3,n3)
+        real(dp), allocatable :: coord0(:,:), cmov(:,:)
+        integer :: kk, aa, kak
+        allocate(coord0(3,natom), cmov(3,natom))
+        coord0 = basis%atoms%xyz   ! fixed reference positions
+        fd_bb = 0; fd_bc = 0; fd_cb = 0; fd_cc = 0
+        do kk = 1, natom
+          do aa = 1, 3
+            kak = 3*(kk-1) + aa
+            ! ---- move BASIS, hold charge=coord0 fixed ----
+            basis%atoms%xyz(aa,kk) = coord0(aa,kk) + h
+            gp = 0; gp2 = 0
+            call grad_en_pulay(basis, coord0, basis%atoms%zn, m_packed, gp2)
+            call grad_en_hellman_feynman(basis, coord0, basis%atoms%zn, m_packed, gp)
+            basis%atoms%xyz(aa,kk) = coord0(aa,kk) - h
+            gm = 0; gm2 = 0
+            call grad_en_pulay(basis, coord0, basis%atoms%zn, m_packed, gm2)
+            call grad_en_hellman_feynman(basis, coord0, basis%atoms%zn, m_packed, gm)
+            basis%atoms%xyz(aa,kk) = coord0(aa,kk)
+            fd_bb(:,kak) = reshape((gp2-gm2)/(2*h), [n3])   ! d(Pulay)/d(basis)
+            fd_cb(:,kak) = reshape((gp -gm )/(2*h), [n3])   ! d(HF)/d(basis)
+            ! ---- move CHARGE, hold basis fixed ----
+            cmov = coord0; cmov(aa,kk) = coord0(aa,kk) + h
+            gp = 0; gp2 = 0
+            call grad_en_pulay(basis, cmov, basis%atoms%zn, m_packed, gp2)
+            call grad_en_hellman_feynman(basis, cmov, basis%atoms%zn, m_packed, gp)
+            cmov(aa,kk) = coord0(aa,kk) - h
+            gm = 0; gm2 = 0
+            call grad_en_pulay(basis, cmov, basis%atoms%zn, m_packed, gm2)
+            call grad_en_hellman_feynman(basis, cmov, basis%atoms%zn, m_packed, gm)
+            fd_bc(:,kak) = reshape((gp2-gm2)/(2*h), [n3])   ! d(Pulay)/d(charge)
+            fd_cc(:,kak) = reshape((gp -gm )/(2*h), [n3])   ! d(HF)/d(charge)
+          end do
+        end do
+        block
+          integer :: u2
+          open(newunit=u2, file='/tmp/hess1_sep.out', status='replace', action='write')
+          write(u2,'(a,es12.4)') 'sum(fd_bb+fd_bc+fd_cb+fd_cc) vs total fd = ', &
+            maxval(abs((fd_bb+fd_bc+fd_cb+fd_cc) - hess_v_fd))
+          write(u2,'(a)') '--- fd_bb (d2E/dbasis dbasis) ---'
+          do p=1,n3; write(u2,'(12es12.4)') fd_bb(p,1:n3); end do
+          write(u2,'(a)') '--- fd_cb (d2E/dcharge dbasis) ---'
+          do p=1,n3; write(u2,'(12es12.4)') fd_cb(p,1:n3); end do
+          write(u2,'(a)') '--- fd_cc (d2E/dcharge dcharge) ---'
+          do p=1,n3; write(u2,'(12es12.4)') fd_cc(p,1:n3); end do
+          write(u2,'(a)') '--- hess_en analytic (total) ---'
+          do p=1,n3; write(u2,'(12es12.4)') hess_v_an(p,1:n3); end do
+          close(u2)
+        end block
+        deallocate(coord0, cmov)
+      end block
+    end if
+
     block
       integer :: u
       open(newunit=u, file='/tmp/hess1_selftest.out', status='replace', action='write')
