@@ -446,36 +446,73 @@ class SinglePoint(Calculator):
             converged = self.mol.mol_energy.SCF_converged
 
         # --- Stage 3: stability safeguard ---
-        if converged and self.stability and primary != 'trah':
+        # Applied to ground-state targets (method='hf'), where a non-lowest SCF
+        # solution would be the returned result.  Skipped for excited-state
+        # (tdhf) runs: there the SCF is an intermediate reference and the extra
+        # TRAH pass can energy-invariantly re-canonicalize orbitals, perturbing
+        # sensitive (e.g. range-separated MRSF) excited-state gradients.
+        if converged and self.stability and primary != 'trah' and self.method == 'hf':
             e_pre = self.mol.mol_energy.energy
+            # Snapshot the converged orbitals so the safeguard is a true no-op
+            # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
+            # energy-invariantly, which would otherwise perturb sensitive
+            # downstream quantities such as range-separated excited gradients).
+            snapshot = self._snapshot_scf_state()
             dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
             data.set_scf_converger_type('trah')
             data.set_trah_stability(True)
             data.set_sd_scf(False)
             self.scf()
-            if self.mol.mol_energy.SCF_converged:
-                e_post = self.mol.mol_energy.energy
-                if e_post < e_pre - 1.0e-7:
-                    dump_log(self.mol,
-                             title='PyOQP: SCF point was unstable; relaxed to a lower '
-                                   'solution (dE = %.3e Hartree)' % (e_post - e_pre),
-                             section='')
-            else:
-                # Verification did not converge: recover a converged solution
-                # with the primary converger (warm-started) and warn.
+            trah_ok = self.mol.mol_energy.SCF_converged
+            e_post = self.mol.mol_energy.energy
+
+            if trah_ok and e_post < e_pre - 1.0e-7:
+                # The converged point was unstable: keep the lower solution.
                 dump_log(self.mol,
-                         title='PyOQP: stability verification did not converge; '
-                               'reverting to %s' % primary,
+                         title='PyOQP: SCF point was unstable; relaxed to a lower '
+                               'solution (dE = %.3e Hartree)' % (e_post - e_pre),
                          section='')
-                data.set_scf_converger_type(primary)
-                self.scf()
-                converged = self.mol.mol_energy.SCF_converged
+            else:
+                # Stable (no lower solution found) or the verification did not
+                # converge: restore the original converged orbitals unchanged.
+                self._restore_scf_state(snapshot)
+                if not trah_ok:
+                    # Re-run the primary converger (warm-started) so mol_energy
+                    # is consistent with the restored orbitals.
+                    data.set_scf_converger_type(primary)
+                    self.scf()
+                    converged = self.mol.mol_energy.SCF_converged
+
             # restore the user-configured stability flag for later SCF calls
             data.set_trah_stability(trah_stab_default)
 
         # restore the primary converger for any subsequent reference() calls
         data.set_scf_converger_type(primary)
         return converged
+
+    # Wavefunction tags that define an SCF solution (alpha + beta channels).
+    _scf_state_tags = (
+        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+        'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
+    )
+
+    def _snapshot_scf_state(self):
+        """Deep-copy the tags that define the current converged SCF solution."""
+        snap = {}
+        for tag in self._scf_state_tags:
+            try:
+                snap[tag] = np.array(self.mol.data[tag]).copy()
+            except Exception:
+                pass
+        return snap
+
+    def _restore_scf_state(self, snap):
+        """Write a previously captured SCF solution back into the molecule."""
+        for tag, value in snap.items():
+            try:
+                self.mol.data[tag] = value
+            except Exception:
+                pass
 
     def excitation(self, ref_energy):
         self.tddft()
