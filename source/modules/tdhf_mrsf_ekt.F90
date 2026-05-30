@@ -47,9 +47,11 @@ contains
     type(basis_set), pointer :: basis
     integer :: nbf, nbf2, nroot, ok, i
     integer :: nactive
-    real(kind=dp), parameter :: ekt_occ_tol = 1.0e-8_dp
+    ! EKT natural-orbital deflation threshold, matching GAMESS EKT-MRSF
+    ! (thresh = 1.0d-2, sfgrad.src:3298).
+    real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
     real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
-    real(kind=dp), allocatable :: dens_pack(:), fock_pack(:), lag_pack(:)
+    real(kind=dp), allocatable :: dens_pack(:), fock_pack(:)
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
     real(kind=dp), allocatable :: density_alpha_mo(:,:), density_beta_mo(:,:)
     real(kind=dp), allocatable :: density_ip_mo(:,:), density_ea_mo(:,:)
@@ -94,7 +96,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_td_p, td_p)
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
 
-    allocate(dens_pack(nbf2), fock_pack(nbf2), lag_pack(nbf2), &
+    allocate(dens_pack(nbf2), fock_pack(nbf2), &
              density_alpha_ao(nbf2), density_beta_ao(nbf2), &
              density_alpha_mo(nbf,nbf), density_beta_mo(nbf,nbf), &
              density_ip_mo(nbf,nbf), density_ea_mo(nbf,nbf), &
@@ -133,9 +135,45 @@ contains
 
     call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, fock_pack)
     call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
-    call orthogonal_transform_sym(nbf, nbf, wao, mo_a, nbf, lag_pack)
-    call unpack_matrix(lag_pack, lagrangian_mo, nbf, 'U')
-    lagrangian_mo = 0.5_dp*(lagrangian_mo + transpose(lagrangian_mo))
+
+    ! ---------------------------------------------------------------------
+    ! EKT-MRSF state-specific Lagrangian W~, reproduced exactly from the
+    ! GAMESS-US reference implementation (sfgrad.src, the IF(MREKT) block;
+    ! Pomogaev et al., JPCL 2021, eq 5):
+    !
+    !   W~_MO = -1/2 ( WMO + Lambda_MO )
+    !
+    ! where, in the MO basis and using the density metric C^T S M S C
+    ! (a Lagrangian density is contravariant, like D):
+    !   * Lambda = energy-weighted density Sum_k eps_k C_k C_k^T  (= eijden /
+    !     GAMESS DAF record 36).  OpenQP's eijden halves the packed diagonal
+    !     (a gradient-consumer convention, grd1.src:624); the GAMESS EKT path
+    !     reads the raw record, so the half-diagonal is undone here.
+    !   * WMO = the MRSF response Lagrangian.  OpenQP stores
+    !     wao = 1/4 C WMO C^T (z-vector applies two halves), while GAMESS uses
+    !     the bare WMO (records 419/429 = 1/2 C WMO C^T).  Hence
+    !     WMO = 2 C^T S wao S C.
+    ! ---------------------------------------------------------------------
+    block
+      use grd1, only: eijden
+      real(kind=dp), allocatable :: lam_ao(:), lam_mo(:,:), wmo_mo(:,:)
+      integer :: gok, kk, ijd
+      allocate(lam_ao(nbf2), lam_mo(nbf,nbf), wmo_mo(nbf,nbf), &
+               source=0.0_dp, stat=gok)
+      if (gok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+      call eijden(lam_ao, nbf, infos)
+      ijd = 0
+      do kk = 1, nbf
+        ijd = ijd + kk                       ! packed-upper diagonal index
+        lam_ao(ijd) = 2.0_dp*lam_ao(ijd)     ! undo eijden's half-diagonal
+      end do
+      call density_ao_to_mo(nbf, nbf2, lam_ao, smat, mo_a, lam_mo)  ! C^T S Lambda S C
+      call density_ao_to_mo(nbf, nbf2, wao,    smat, mo_a, wmo_mo)  ! C^T S wao S C
+      wmo_mo = 2.0_dp*wmo_mo                  ! bare GAMESS WMO
+      lagrangian_mo = -0.5_dp*(wmo_mo + lam_mo)
+      lagrangian_mo = 0.5_dp*(lagrangian_mo + transpose(lagrangian_mo))
+      deallocate(lam_ao, lam_mo, wmo_mo)
+    end block
 
     if (electron_affinity) then
       ! EKT-EA: (F - W) * x = (I - P) * x * lambda
@@ -146,8 +184,10 @@ contains
       end do
       ekt_operator = fock_mo - lagrangian_mo
     else
-      ! EKT: W * x = P * x * lambda
-      density_mo = density_ip_mo
+      ! EKT: W * x = P * x * lambda.  Metric is the spin-summed relaxed
+      ! density P = 1/2 (Da_MO + Db_MO) (GAMESS sfgrad.src:3115); for H2O S0
+      ! this gives 5 occupied natural orbitals at occupation ~1.
+      density_mo = 0.5_dp*(density_ip_mo + density_ea_mo)
       ekt_metric = density_mo
       ekt_operator = lagrangian_mo
     end if
@@ -161,6 +201,9 @@ contains
     ! come out <= 1 by construction.
     allocate(eig(nroot), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    ! Deflation threshold matches GAMESS EKT (thresh = 1.0d-2, sfgrad.src:3298):
+    ! keep only natural orbitals with occupation > 1e-2, removing low-occupation
+    ! null/relaxation channels.
     call solve_ekt_no_deflation(nbf, nroot, ekt_operator, ekt_metric, &
          ekt_occ_tol, eig, orbitals, strengths, nactive, iw)
 
