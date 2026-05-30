@@ -37,7 +37,10 @@ contains
     use io_constants, only: iw
     use grd1, only: grad_ee_overlap, grad_ee_kinetic, &
                     hess_ee_overlap, hess_ee_kinetic, &
-                    grad_en_hellman_feynman, grad_en_pulay, hess_en
+                    grad_en_hellman_feynman, grad_en_pulay, hess_en, &
+                    der_overlap_matrix
+    use basis_tools, only: bas_norm_matrix
+    use mathlib, only: unpack_matrix
 
     implicit none
 
@@ -48,7 +51,7 @@ contains
     real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:)
     real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:), hess_v_fd(:,:)
     real(dp), allocatable :: gp(:,:), gm(:,:), gp2(:,:), gm2(:,:)
-    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v
+    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds
 
     associate(basis => infos%basis)
 
@@ -111,6 +114,31 @@ contains
     sym_o = maxval(abs(hess_o_an - transpose(hess_o_an)))
     sym_k = maxval(abs(hess_k_an - transpose(hess_k_an)))
     sym_v = maxval(abs(hess_v_an - transpose(hess_v_an)))
+
+    ! --- CPHF RHS building block: dS/dR matrix vs the validated overlap gradient.
+    !   sum_uv (bfnrm_u bfnrm_v M_uv) dS(u,v,c,A) must equal grad_ee_overlap(M).
+    block
+      real(dp), allocatable :: dSmat(:,:,:,:), mnorm(:,:), g_an(:,:), g_ref(:,:)
+      integer :: cc, kk, mu, nu
+      allocate(dSmat(nbf,nbf,3,natom), mnorm(nbf,nbf), g_an(3,natom), g_ref(3,natom))
+      call der_overlap_matrix(basis, dSmat)
+      call unpack_matrix(m_packed, mnorm)
+      call bas_norm_matrix(mnorm, basis%bfnrm, nbf)
+      g_an = 0.0_dp
+      do kk = 1, natom
+        do cc = 1, 3
+          do mu = 1, nbf
+            do nu = 1, nbf
+              g_an(cc,kk) = g_an(cc,kk) + mnorm(mu,nu)*dSmat(mu,nu,cc,kk)
+            end do
+          end do
+        end do
+      end do
+      g_ref = 0.0_dp
+      call grad_ee_overlap(basis, m_packed, g_ref)
+      err_ds = maxval(abs(g_an - g_ref))
+      deallocate(dSmat, mnorm, g_an, g_ref)
+    end block
 
     ! Separated finite-difference diagnostic (small systems only): FD the basis
     ! (Pulay) and charge (Hellmann-Feynman) gradient pieces against the basis and
@@ -181,6 +209,7 @@ contains
       ! Nuclear-attraction (hess_en) is WIP: reported but NOT part of PASS/FAIL.
       write(u,'(a,es12.4)') 'nucattr max|an-fd| (WIP) = ', err_v
       write(u,'(a,es12.4)') 'nucattr asymmetry  (WIP) = ', sym_v
+      write(u,'(a,es12.4)') 'dS/dR matrix vs grad     = ', err_ds
       if (max(err_o, err_k) < 1.0e-6_dp) then
         write(u,'(a)') 'HESS1E_SELFTEST PASS'
       else
