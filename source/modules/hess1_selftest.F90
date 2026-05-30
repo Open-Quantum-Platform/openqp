@@ -40,7 +40,8 @@ contains
                     grad_en_hellman_feynman, grad_en_pulay, hess_en, &
                     der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix
     use basis_tools, only: bas_norm_matrix
-    use mathlib, only: unpack_matrix
+    use mathlib, only: unpack_matrix, orthogonal_transform_sym
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_SM, OQP_VEC_MO_A, OQP_E_MO_A
 
     implicit none
 
@@ -51,7 +52,7 @@ contains
     real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:)
     real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:), hess_v_fd(:,:)
     real(dp), allocatable :: gp(:,:), gm(:,:), gp2(:,:), gm2(:,:)
-    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds, err_dt, err_dv
+    real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds, err_dt, err_dv, err_ortho
 
     associate(basis => infos%basis)
 
@@ -173,6 +174,29 @@ contains
       deallocate(dSmat, mnorm, g_an, g_ref)
     end block
 
+    ! CPHF prerequisite: MO data access + transform path. Verify C^T S C = I
+    ! (MO orthonormality) using the production overlap and MO coefficients.
+    err_ortho = -1.0_dp
+    block
+      real(dp), contiguous, pointer :: smat(:), mo_a(:,:)
+      real(dp), allocatable :: smo(:), ident(:)
+      integer :: p2, q2, ij
+      call tagarray_get_data(infos%dat, OQP_SM, smat)
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+      allocate(smo(nbf*(nbf+1)/2), ident(nbf*(nbf+1)/2))
+      call orthogonal_transform_sym(nbf, nbf, smat, mo_a, nbf, smo)
+      ident = 0.0_dp
+      ij = 0
+      do p2 = 1, nbf
+        do q2 = 1, p2
+          ij = ij + 1
+          if (p2 == q2) ident(ij) = 1.0_dp
+        end do
+      end do
+      err_ortho = maxval(abs(smo - ident))
+      deallocate(smo, ident)
+    end block
+
     ! Separated finite-difference diagnostic (small systems only): FD the basis
     ! (Pulay) and charge (Hellmann-Feynman) gradient pieces against the basis and
     ! charge positions INDEPENDENTLY, since grad_en_* take coord separately from
@@ -245,6 +269,7 @@ contains
       write(u,'(a,es12.4)') 'dS/dR matrix vs grad     = ', err_ds
       write(u,'(a,es12.4)') 'dT/dR matrix vs grad     = ', err_dt
       write(u,'(a,es12.4)') 'dV/dR matrix vs grad     = ', err_dv
+      write(u,'(a,es12.4)') 'MO orthonormality C^TSC-I = ', err_ortho
       if (max(err_o, err_k) < 1.0e-6_dp) then
         write(u,'(a)') 'HESS1E_SELFTEST PASS'
       else
