@@ -47,6 +47,8 @@ def compute_scf_prop(mol):
             oqp.lowdin(mol)
         elif prop == 'resp':
             oqp.resp_charges(mol)
+        elif prop == 'nmr':
+            oqp.nmr_shielding(mol)
         else:
             raise ValueError(f'Unknown property: {prop}')
 

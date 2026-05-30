@@ -21,6 +21,9 @@ module int1
         comp_ewaldlr_int1_prim, &
         comp_kin_ovl_int1_prim, &
         comp_lz_int1_prim, &
+        comp_amom_int1_prim, &
+        comp_nmr_dia_int1_prim, &
+        comp_pso_int1_prim, &
         MAX_EL_MOM, &
         comp_mult_int1_prim, &
         comp_allmult_int1_prim, &
@@ -46,6 +49,9 @@ module int1
     private
     public omp_hst
     public multipole_integrals
+    public angular_momentum_integrals
+    public nmr_dia_shielding
+    public pso_integrals
     public electrostatic_potential
     public basis_overlap
     public overlap
@@ -274,6 +280,178 @@ contains
          call print_sym_labeled(ints(:,i),nbf,basis)
        end do
     end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute the three angular-momentum 1e integral matrices about a
+!>        gauge origin `o`, in packed (lower-triangular) storage.
+!> @details The orbital angular momentum operator is anti-Hermitian, so in a
+!>  real AO basis the matrices A_x, A_y, A_z returned here are antisymmetric
+!>  (A_qp = -A_pq, zero diagonal). Only the unique lower triangle is stored;
+!>  the caller is responsible for applying the antisymmetry when expanding to a
+!>  full square matrix. The physical angular momentum is L = -i * A.
+!
+!> @param[in]       basis   basis set (without sp-shells)
+!> @param[in,out]   ints    packed integrals, dimension (nbf2, 3) for x,y,z
+!> @param[in]       o       gauge origin
+!> @param[in]       debug   optional flag for debug printout
+!> @param[in]       logtol  optional screening tolerance
+ subroutine angular_momentum_integrals(basis, ints, o, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), intent(in) :: o(:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Lx', 'Ly', 'Lz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for angular momentum integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0
+
+    call amom_ints(ints, o, basis, tol)
+
+!   Normalize 1-e integrals
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'Angular momentum integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Density-contracted NMR diamagnetic shielding integrals, all nuclei.
+!> @details Returns g_ab(N) = sum_{mu,nu} D_{mu,nu} <mu|(r-o)_a (r-c_N)_b/|r-c_N|^3|nu>
+!>  for every nucleus N. The caller assembles the diamagnetic shielding tensor as
+!>    sigma^dia_{ts}(N) = (alpha^2/2) [ delta_ts (g_xx+g_yy+g_zz) - g_{s,t} ].
+!> @param[in]   basis    basis set
+!> @param[in]   denab    total density matrix, packed (lower triangle)
+!> @param[in]   o        gauge origin
+!> @param[in]   coords   nuclear coordinates (3, nat)
+!> @param[in]   nat      number of nuclei
+!> @param[out]  gdia     contracted integrals (3, 3, nat)
+!> @param[in]   logtol   optional screening tolerance
+ subroutine nmr_dia_shielding(basis, denab, o, coords, nat, gdia, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), intent(in) :: o(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: gdia(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:)
+    real(real64) :: tol
+    integer :: ii, jj, ic, nbf
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    gdia = 0.0d0
+
+    call cntp%alloc(basis)
+
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      do jj = 1, basis%nshell
+        call shj%fetch_by_id(basis, jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        do ic = 1, nat
+          call comp_nmr_dia_int1_prim(cntp, coords(:,ic), o, &
+                 dens(basis%ao_offset(ii):, basis%ao_offset(jj):), gdia(:,:,ic))
+        end do
+      end do
+    end do
+
+    deallocate(dens)
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute PSO (paramagnetic spin-orbit) integral matrices for one nucleus.
+!> @details Returns the three antisymmetric matrices A_a = [(r-c) x grad]_a/|r-c|^3
+!>  in packed (lower-triangular) storage; the physical PSO operator is -i*A. Only
+!>  the unique lower triangle is stored (the caller applies the antisymmetry).
+!> @param[in]   basis    basis set
+!> @param[in]   c        nucleus coordinates
+!> @param[inout] ints    packed integrals, dimension (nbf2, 3)
+!> @param[in]   logtol   optional screening tolerance
+ subroutine pso_integrals(basis, c, ints, logtol)
+    use precision, only: dp
+    type(basis_set), intent(in) :: basis
+    real(real64), intent(in) :: c(:)
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64) :: tol
+    integer :: ii, jj, m, nbf
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+    real(real64), dimension(blocksize,3) :: blk
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call cntp%alloc(basis)
+
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      do jj = 1, ii
+        call shj%fetch_by_id(basis, jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        blk = 0.0d0
+        call comp_pso_int1_prim(cntp, c, blk)
+        do m = 1, 3
+          call update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+        end do
+      end do
+    end do
+
+    do m = 1, 3
+      call bas_norm_matrix(ints(:,m), basis%bfnrm, nbf)
+    end do
 
  end subroutine
 
@@ -1283,6 +1461,84 @@ contains
 
     do ig = 1, cntp%numpairs
         call comp_mult_int1_prim(cntp, ig, r, mom, blk)
+    end do
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute angular momentum integrals about gauge origin `o`
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE amom_ints(ints, o, basis, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    real(real64), contiguous, intent(in) :: o(:)
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+
+        CALL shi%fetch_by_id(basis,ii)
+
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+
+            CALL shj%fetch_by_id(basis,jj)
+
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+
+            blk = 0.0
+
+            CALL int1_amom(cntp, o, blk)
+
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of angular momentum 1e integrals
+!> @param[in]       cntp        shell pair data
+!> @param[in]       o           gauge origin
+!> @param[inout]    blk         block of 1e angular momentum integrals (:,1:3)
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE int1_amom(cntp, o, blk)
+!dir$ attributes inline :: int1_amom
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(in) :: o(:)
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+!dir$ assume_aligned blk : 64
+
+    do ig = 1, cntp%numpairs
+        call comp_amom_int1_prim(cntp, ig, o, blk)
     end do
 
  end subroutine
