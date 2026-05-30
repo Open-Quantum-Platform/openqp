@@ -496,15 +496,18 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     if enabled:
-        report.add(
-            "ERROR",
-            "pcm.enabled",
-            "PCM input parsing is scaffolded but runtime solvent coupling is not implemented yet.",
-            value=True,
-            expected="False until the backend Fock/energy coupling is implemented",
-            action="Leave pcm.enabled=false or continue development by adding the RHF/ROHF reference_scf backend.",
-            wiki=WIKI_HELP["pcm.enabled"],
-        )
+        # The reference_scf RHF/ROHF energy path is implemented for the ddX
+        # backend only. The pcmsolver backend remains a planned candidate.
+        if backend != "ddx":
+            report.add(
+                "ERROR",
+                "pcm.backend",
+                "Only the ddx PCM backend has an implemented runtime energy path.",
+                value=backend,
+                expected="ddx",
+                action="Use backend=ddx; the pcmsolver runtime coupling is not implemented yet.",
+                wiki=WIKI_HELP["pcm.backend"],
+            )
 
         if runtype != "energy":
             report.add(

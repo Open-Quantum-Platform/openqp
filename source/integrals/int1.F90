@@ -341,12 +341,13 @@ contains
 
     use precision, only: dp
     implicit none
-    type(basis_set), intent(inout)          :: basis
+    type(basis_set), intent(in)             :: basis
     real(real64), contiguous, intent(in)    :: x(:), y(:), z(:)
     real(real64), contiguous, intent(inout) :: d(:)
     real(real64), contiguous, intent(out)   :: pot(:)
     real(real64), optional, intent(in)      :: logtol
     real(real64) :: tol
+    real(real64), allocatable :: invnrm(:)
 
     call bas_norm_matrix(d, basis%bfnrm, basis%nbf)
 
@@ -355,7 +356,12 @@ contains
 
     call int1_el_pot(basis, x, y, z, d, pot, tol)
 
-    call bas_denorm_matrix(d, basis%bfnrm, basis%nbf)
+    ! Restore the input normalization of d. Use a local inverse of the basis
+    ! norms rather than bas_denorm_matrix, which would transiently mutate
+    ! basis%bfnrm and so force an intent(inout) basis on this otherwise
+    ! read-only routine (it is called from the intent(in) SCF Fock build).
+    invnrm = 1.0_real64 / basis%bfnrm
+    call bas_norm_matrix(d, invnrm, basis%nbf)
 
  end subroutine electrostatic_potential_unweighted
 
