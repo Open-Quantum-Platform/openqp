@@ -846,6 +846,7 @@ def dump_data(mol, data, title=None, fpath='.'):
 def write_xyz(atoms, coord, info):
     # coord in Bohr
     coord = coord.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     natom = len(coord)
     xyz = '%s\nGeom %s\n' % (natom, ' '.join([str(x) for x in info]))
     for n, line in enumerate(coord):
@@ -864,6 +865,7 @@ def write_xyz(atoms, coord, info):
 def write_grad(atoms, grad):
     # grad in Hartree/Bohr
     grad = grad.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     xyz = ''
     for n, line in enumerate(grad):
         a = atoms[n]

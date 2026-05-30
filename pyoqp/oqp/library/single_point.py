@@ -1,5 +1,6 @@
 """OQP single point class"""
 import os
+import sys
 import oqp
 import copy
 import time
@@ -798,6 +799,19 @@ class Hessian(Calculator):
         return hessian, flags
 
 
+def _run_oqp_external(inp):
+    # Run a calculation in a fresh process. Prefer the installed `openqp`
+    # console script; fall back to invoking the same entry point
+    # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
+    # is run from source without a pip install.
+    openqp_exe = shutil.which('openqp')
+    if openqp_exe:
+        cmd = [openqp_exe, inp, '--silent']
+    else:
+        cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
+    subprocess.run(cmd)
+
+
 def grad_wrapper(key_dict):
     start_time = time.time()
     rank = MPIManager().rank
@@ -850,7 +864,7 @@ def grad_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run grad calculation externally
-            subprocess.run(['openqp', inp, '--silent'])
+            _run_oqp_external(inp)
         else:
             # run grad calculation internally
             start_time = time.time()
@@ -1348,7 +1362,7 @@ def nacme_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run nac calculation externally
-            subprocess.run(['openqp', inp, '--silent'])
+            _run_oqp_external(inp)
         else:
             # run nac calculation internally
             start_time = time.time()
