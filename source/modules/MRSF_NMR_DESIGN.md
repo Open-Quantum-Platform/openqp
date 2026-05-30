@@ -439,6 +439,43 @@ capability (5b). **5a must pass before any excited-state (5b) development begins
 driver + reference numbers, in the spirit of `tests/test_nmr_shielding.py`) so the
 symmetry assumptions are regression-protected before MRSF work begins.
 
+### 9.1 Phase-0 gate outcomes — STATUS: PASSED (ground-state validation)
+
+The gates were implemented and **all pass** on the ground-state prototype
+(commit `Phase 0: coupled HF/hybrid ground-state NMR magnetic response`). Recorded
+here so the evidence need not be reconstructed from commit history. System:
+H2O / STO-3G, common gauge origin at the center of mass. Oracle:
+`tests/fixtures/nmr/pyscf_cgo_reference.json` (PySCF common-gauge, with generator);
+automated in `tests/test_nmr_coupled.py`. Derivation of gates 1–2 in
+`NMR_MAGNETIC_SYMMETRY_NOTE.md`.
+
+| Gate | Check | Result | Verdict |
+|------|-------|--------|---------|
+| 0 | `max\|P^B + (P^B)^T\|` | ~1.1e-16 (all functionals) | PASS — `P^B` antisymmetric |
+| 1 | `\|\|J(P^B)\|\|` | ~1e-16 (all) | PASS — Coulomb response vanishes |
+| 2 | `\|\|K(P^B)\|\|` (c_x=1) | 0.5417 | PASS — exact-exchange response nonzero |
+| 3 | PBE coupled − uncoupled | 0 (machine precision) | PASS — pure DFT coupled ≡ uncoupled |
+| 4 | HF coupled vs oracle | O −230.63 vs −230.63 (exact) | PASS — HF matches oracle exactly |
+| 4 | hybrid coupling Δ vs oracle | within ~0.03 ppm | PASS — Δ-metric (SCF-robust) |
+| 6 | `\|Δ\|` vs `c_x` (O para) | 117.0 → 85.3 → 54.7 → 0 (HF/BHHLYP/PBE0/PBE) | PASS — scales with `c_x` |
+
+Oxygen paramagnetic shielding (ppm), uncoupled → coupled (OQP / PySCF oracle):
+
+| Functional | c_x | uncoupled | coupled (OQP / PySCF) |
+|------------|-----|-----------|------------------------|
+| HF     | 1.00 | −113.63 | −230.63 / −230.63 (exact) |
+| BHHLYP | 0.50 | −156.76 | −242.11 / −242.06 |
+| PBE0   | 0.25 | −194.30 | −248.97 / −248.88 |
+| PBE    | 0.00 | −258.44 | −258.44 / −258.32 (≡ uncoupled) |
+
+Interpretation: HF (grid-free) matches the oracle to ~1e-4 ppm, validating the
+exact-exchange / A−B coupling machinery directly. The DFT absolute offsets
+(~0.1 ppm) are cross-code DFT-SCF/grid differences (diamagnetic part differs only
+~0.003 ppm); the coupling contribution `Δ = coupled − uncoupled` is the robust
+cross-code metric and matches to ~0.03 ppm. Collectively gates 0–4, 6 establish
+the physical foundation (Coulomb-zero, semi-local-fxc-zero, exact-exchange-only)
+on which the MRSF-NMR design rests, so gate 5 may proceed.
+
 ---
 
 ## 10. Implementation roadmap
