@@ -5,19 +5,30 @@ module cphf_dpdx_selftest_mod
 !>   it to a central finite difference of the converged SCF alpha density at
 !>   displaced geometries (the reference).
 !>
-!> @warning WORK IN PROGRESS, NOT YET VALIDATED. The assembled dP/dx currently
-!>   disagrees with the finite-difference reference by a CONSTANT (h-independent)
-!>   amount -- a flat plateau, i.e. a systematic formula error in this assembly,
-!>   not finite-difference noise (the underlying ingredients F^x, the M!=P
-!>   contraction, dS/dx, dT/dx, dV/dx, and cphf_solve are each independently
-!>   validated). The error is non-uniform (~1.6-2.2x where the analytic is large),
-!>   pointing to a convention bug in this end-to-end assembly: most likely the
-!>   CPHF RHS sign/scale relative to cphf_solve's operator, the closed-shell
-!>   density factor (alpha vs total), or the occ-occ overlap-response term. This
-!>   harness is committed to record the chain and the open issue; it is NOT wired
-!>   into any production path and hf_hessian stays guarded. Next: isolate by
-!>   validating U_ai against a finite difference of the (phase-aligned) MO
-!>   coefficients before the dC -> dP assembly.
+!> @warning WORK IN PROGRESS, NOT YET VALIDATED. The assembled dP/dx disagrees
+!>   with the finite-difference reference by a CONSTANT (h-independent) amount
+!>   (flat plateau, rel ~0.53), i.e. a systematic formula error in THIS assembly,
+!>   not finite-difference noise.
+!>
+!>   LOCALIZED (U_ai isolation): the bug is in the B^x construction / density
+!>   convention layer, NOT in F^x, dS/dx, dT/dx, dV/dx, or cphf_solve (each
+!>   independently validated). ROOT CAUSE: OQP::DM_A stores the TOTAL closed-shell
+!>   density (tr(P S) = nelec = 10 for H2O, and P S P = 2 P), but this assembly
+!>   treats it as the ALPHA density (P = sum_occ C C^T, idempotent, P S P = P) in
+!>   both the F^x probe contraction (pfull = DM_A) and the dC -> dP reconstruction
+!>   (dP = sum_occ (dC C + C dC), an alpha-density derivative). The resulting
+!>   factor-2 inconsistency enters the skeleton F0x and the occ-occ response Gd0
+!>   with DIFFERENT effective weights, which is why the error ratio is non-uniform
+!>   (~1.6-2.2x) rather than a clean 2.0. A direct FD check of U_ai was attempted
+!>   but the displaced-geometry MOs reorder/rotate within near-degenerate
+!>   subspaces (the C0^T S0 C(x) projection is far from identity, maxoff ~1.5-1.9,
+!>   FD U blows up as 1/h), so a gauge-clean U_ai reference needs proper subspace
+!>   alignment; the bug was instead localized via the gauge-invariant DM_A
+!>   normalization. FIX (next session): use the alpha density P_alpha = DM_A/2
+!>   consistently throughout (probe contraction, response densities, and the
+!>   dC -> dP reconstruction), or equivalently keep total density and remove the
+!>   compensating factors. NOT wired into any production path; hf_hessian stays
+!>   guarded.
 !>
 !>   Conventions (closed shell, OQP stores the alpha density P = sum_occ C C^T):
 !>     S^x_pq  = (C^T dS/dx C)_pq
@@ -152,6 +163,28 @@ contains
     end do
 
     call cphf_solve(infos, 1, bvec, uvec)
+
+    ! Diagnostic dump: analytic U_ai, RHS B_ai, Sx_ai (occ-vir), eps, for the
+    ! U_ai isolation harness. Indexing matches the occ-vir layout (a outer, i inner).
+    block
+      integer :: ud, aa, ii, iaa
+      open(newunit=ud, file='/tmp/cphf_uai.out', status='replace', action='write')
+      write(ud,'(2i6)') nocc, nvir
+      write(ud,'(a)') 'eps:'
+      do ii = 1, nbf
+        write(ud,'(i5,es20.10)') ii, eps(ii)
+      end do
+      write(ud,'(a)') 'a i  U_ai  B_ai  Sx_ai  F0x_ai  Gd0_ai:'
+      iaa = 0
+      do aa = 1, nvir
+        do ii = 1, nocc
+          iaa = iaa + 1
+          write(ud,'(2i5,5es20.10)') aa, ii, uvec(iaa,1), bvec(iaa,1), &
+            Sx(ii,nocc+aa), F0x(ii,nocc+aa), Gd0(ii,nocc+aa)
+        end do
+      end do
+      close(ud)
+    end block
 
     ! dC_ui = sum_a C_u,a+nocc U_ai - 1/2 sum_j C_uj Sx_ji
     allocate(dcx(nbf,nocc), source=0.0_dp)
