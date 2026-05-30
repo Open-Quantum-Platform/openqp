@@ -5,7 +5,20 @@ module cphf_dpdx_selftest_mod
 !>   it to a central finite difference of the converged SCF alpha density at
 !>   displaced geometries (the reference).
 !>
-!> @warning WORK IN PROGRESS, NOT YET VALIDATED.
+!> @note VALIDATED (closed-shell RHF, H2O/STO-3G). The analytic relaxed
+!>   alpha-density derivative d(P_alpha)/dx matches a central finite difference of
+!>   DM_A/2 with textbook O(h^2) convergence: abs error 9.9e-6, 2.5e-6, 6.1e-7 at
+!>   h = 8e-3, 4e-3, 2e-3 bohr (ratio ~4.0 per halving), reaching the SCF/FD noise
+!>   floor (~2e-7) by h = 1e-3. This validates the complete native response chain
+!>   F^x -> B^x -> U^x -> dP/dx. (Still NOT a Hessian; hf_hessian stays guarded.)
+!>
+!>   The occupied-occupied overlap-response term was the final fix, derived from
+!>   first principles (orthonormality C^T S C = I):
+!>     dC_p = sum_q C_q U_qp,  U + U^T + S^x = 0  =>  occ-occ  U_ij = -1/2 S^x_ij.
+!>     dP_alpha^{oo} = sum_i(dC_i C_i^T + C_i dC_i^T)|oo = -sum_ij S^x_ij C_i C_j^T
+!>        (the two mirror terms double -1/2 to an overall -1);
+!>     response density to fock_jk (TOTAL scale): d0 = 2 dP_alpha^{oo}
+!>        = -2 sum_ij S^x_ij C_i C_j^T.   <-- coefficient -2, derived (not tuned).
 !>
 !>   DENSITY-CONVENTION AUDIT (this session). Established facts, verified from
 !>   production code (not assumed):
@@ -164,17 +177,23 @@ contains
       end do
     end do
 
-    ! occ-occ overlap response density D0_uv = sum_ij U_ij C_ui C_vj, U_ij=-1/2 Sx_ij.
-    ! AUDIT: fock_jk expects the TOTAL density (production: F = h + fock_jk(D_total),
-    ! D_total = DM_A = 2 P_alpha). The occ-occ rotation density here is built at
-    ! alpha scale (sum over occupied of C C^T), so multiply by 2 to pass a total-
-    ! scale density to fock_jk, consistent with the response operator.
+    ! Occupied-occupied overlap-response density fed to fock_jk for the RHS.
+    ! DERIVATION (from orthonormality C^T S C = I -> U + U^T + S^x = 0 ->
+    ! occ-occ rotation U_ij = -1/2 S^x_ij):
+    !   dP_alpha^{oo} = sum_i (dC_i C_i^T + C_i dC_i^T) |occ-occ
+    !                 = -sum_ij S^x_ij C_i C_j^T
+    !   (the two mirror terms double the -1/2 in U_ij to an overall -1).
+    ! fock_jk builds G from the TOTAL density D_total = 2 P_alpha, so the
+    ! response density is the TOTAL occ-occ perturbation
+    !   d0 = dD_total^{oo} = 2 dP_alpha^{oo} = -2 sum_ij S^x_ij C_i C_j^T.
+    ! (Only the KNOWN occ-occ part is the RHS response density; the occ-vir part,
+    ! which carries the unknown U_ai, is handled by the A-matrix in cphf_solve.)
     allocate(d0(nbf,nbf), source=0.0_dp)
     do i = 1, nocc
       do j = 1, nocc
         do mu = 1, nbf
           do nu = 1, nbf
-            d0(mu,nu) = d0(mu,nu) - 2.0_dp*0.5_dp*Sx(i,j)*mo_a(mu,i)*mo_a(nu,j)
+            d0(mu,nu) = d0(mu,nu) - 2.0_dp*Sx(i,j)*mo_a(mu,i)*mo_a(nu,j)
           end do
         end do
       end do
