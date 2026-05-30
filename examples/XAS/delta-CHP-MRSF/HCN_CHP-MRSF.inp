@@ -9,6 +9,7 @@ method=tdhf
 runtype=energy
 
 [guess]
+type=huckel
 save_mol=False
 continue_geom=False
 swapmo=2,7
@@ -18,6 +19,7 @@ type=rohf
 multiplicity=3
 save_molden=True
 rstctmo=True
+conv=1e-9
 
 [dftgrid]
 rad_npts=96
@@ -28,4 +30,6 @@ type=mrsf
 multiplicity=1
 nstate=25
 ixcore=7
+conv=1e-9
+zvconv=1e-9
 
