@@ -52,18 +52,19 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
         self.assertIn("not yet implemented", text)
         self.assertNotIn("nmr_gauge=cgo for GIAO", text)
 
-    def test_run_openqp_requires_available_runtime(self):
+    def test_run_openqp_uses_pip_installed_runtime_without_explicit_openqp_root(self):
         env = dict(os.environ)
         env.pop("OPENQP_ROOT", None)
         proc = subprocess.run(
-            [sys.executable, str(DRIVER), "--run-openqp", "--outdir", "/tmp/openqp-giao-runtime-missing-test"],
+            [sys.executable, str(DRIVER), "--check-openqp-runtime"],
             cwd=ROOT,
             env=env,
             capture_output=True,
             text=True,
         )
-        self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("--run-openqp requested but OpenQP runtime is unavailable", proc.stderr + proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn("pip-installed OpenQP runtime is available", proc.stdout)
+        self.assertIn("OPENQP_ROOT=", proc.stdout)
 
     def test_benchmark_outputs_include_peak_memory_metric(self):
         text = DRIVER.read_text()

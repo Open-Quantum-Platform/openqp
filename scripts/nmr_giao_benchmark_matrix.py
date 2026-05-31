@@ -5,7 +5,7 @@ This is an integrated OpenQP benchmark driver, not a production GIAO
 implementation. It records the current validation state explicitly:
 
 * trusted-reference columns are generated with PySCF CGO/GIAO NMR;
-* OpenQP CGO may be run through the normal driver when OPENQP_ROOT is available;
+* OpenQP CGO may be run through the pip-installed OpenQP driver;
 * OpenQP GIAO is expected to remain gated until native London integral/response
   terms are connected. A gated/NotImplemented result is recorded as such, never
   converted to CGO numbers.
@@ -243,17 +243,21 @@ def _pyscf_shielding(mol, method: str, gauge: str, origin_bohr=(0.0, 0.0, 0.0)):
 
 
 def _openqp_runtime_error() -> str | None:
-    root = os.environ.get("OPENQP_ROOT")
+    try:
+        import oqp  # noqa: F401 - import initializes the installed package root
+    except Exception as exc:
+        return f"PyOpenQP is not importable from the active Python environment: {type(exc).__name__}: {exc}"
+
+    root = Path(os.environ.get("OPENQP_ROOT", ""))
     if not root:
-        return "OPENQP_ROOT is not set"
-    libdir = Path(root) / "lib"
+        return "Installed PyOpenQP did not initialize OPENQP_ROOT"
+    libdir = root / "lib"
     if not ((libdir / "liboqp.dylib").exists() or (libdir / "liboqp.so").exists()):
-        return f"OPENQP_ROOT={root} does not contain lib/liboqp.dylib or lib/liboqp.so"
+        return f"installed PyOpenQP root {root} does not contain lib/liboqp.dylib or lib/liboqp.so"
     return None
 
 
 def _run_openqp(name: str, basis: str, method: str, gauge: str):
-    root = os.environ.get("OPENQP_ROOT")
     runtime_error = _openqp_runtime_error()
     if runtime_error:
         raise RuntimeError(runtime_error)
@@ -273,8 +277,6 @@ def _run_openqp(name: str, basis: str, method: str, gauge: str):
         inp = Path(wd) / f"{name}_{method}_{gauge}.inp"
         inp.write_text(text)
         env = dict(os.environ)
-        env["OPENQP_ROOT"] = root or ""
-        env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
         t0 = time.perf_counter()
         if psutil is not None:
             proc_handle = psutil.Popen(
@@ -332,13 +334,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--all", action="store_true", help="run every matrix case; default runs a quick subset")
     parser.add_argument("--run-openqp", action="store_true", help="also run OpenQP CGO/GIAO through the normal driver")
+    parser.add_argument("--check-openqp-runtime", action="store_true", help="check the active pip-installed OpenQP runtime and exit")
     parser.add_argument("--outdir", default=str(OUTDIR))
     args = parser.parse_args()
 
-    if args.run_openqp:
+    if args.run_openqp or args.check_openqp_runtime:
         runtime_error = _openqp_runtime_error()
         if runtime_error:
-            raise SystemExit(f"--run-openqp requested but OpenQP runtime is unavailable: {runtime_error}")
+            requested = "--check-openqp-runtime" if args.check_openqp_runtime else "--run-openqp"
+            raise SystemExit(f"{requested} requested but pip-installed OpenQP runtime is unavailable: {runtime_error}")
+        if args.check_openqp_runtime:
+            print("pip-installed OpenQP runtime is available")
+            print(f"OPENQP_ROOT={os.environ.get('OPENQP_ROOT', '')}")
+            return
 
     _ensure_pyscf_imports()
 
