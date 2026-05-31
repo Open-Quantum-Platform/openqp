@@ -48,6 +48,33 @@ def _load_benchmarks():
     return data["benchmarks"]
 
 
+def _load_trusted_regressions():
+    data = json.loads(DATA.read_text(encoding="utf-8"))
+    return data.get("trusted_reference_regressions", [])
+
+
+def _find_ddx_adapter_smoke():
+    """Locate the ddX-enabled `oqp_ddx_adapter_smoke` CTest binary, if built.
+
+    The binary only exists in a `-DENABLE_DDX=ON` build, so this is the natural
+    skip guard for the Tier-1 ddX-adapter regression. A direct path may be given
+    via OQP_DDX_ADAPTER_SMOKE; otherwise OQP_DDX_BUILD_DIR is searched.
+    """
+    direct = os.environ.get("OQP_DDX_ADAPTER_SMOKE")
+    if direct and Path(direct).is_file() and os.access(direct, os.X_OK):
+        return Path(direct)
+    build_dir = os.environ.get("OQP_DDX_BUILD_DIR")
+    if build_dir:
+        for cand in (
+            Path(build_dir) / "oqp_ddx_adapter_smoke",
+            Path(build_dir) / "tests" / "oqp_ddx_adapter_smoke",
+            Path(build_dir) / "bin" / "oqp_ddx_adapter_smoke",
+        ):
+            if cand.is_file() and os.access(cand, os.X_OK):
+                return cand
+    return None
+
+
 def _input_text(bench, *, pcm_on: bool) -> str:
     system = "\n".join(bench["system"])
     pcm = ""
@@ -189,6 +216,58 @@ def _attach_tests():
 
 
 _attach_tests()
+
+
+class DdxAdapterRegressionGate(unittest.TestCase):
+    """Tier-1: ddX-generated trusted-reference regressions via the C adapter.
+
+    These run the Fortran/C `oqp_ddx_adapter_smoke` driver (real ddX) and compare
+    its printed energy to the verified `trusted_reference_regression` value in the
+    benchmark table. They validate the OpenQP<->ddX adapter numerics only; they do
+    NOT exercise the QM SCF coupling (electronic psi, q_cav-into-Fock,
+    phi_cav-from-density), which the Tier-2 QM benchmarks cover. Python only runs
+    the binary and parses its output.
+    """
+
+    def _run_point_charge(self, bench):
+        binary = _find_ddx_adapter_smoke()
+        if binary is None:
+            self.skipTest(
+                "ddX-enabled `oqp_ddx_adapter_smoke` not built; set "
+                "OQP_DDX_BUILD_DIR (or OQP_DDX_ADAPTER_SMOKE) to a "
+                "cmake -DENABLE_DDX=ON build to run this regression."
+            )
+        proc = subprocess.run([str(binary)], capture_output=True, text=True)
+        out = "\n".join([proc.stdout, proc.stderr])
+        self.assertEqual(proc.returncode, 0, out)
+        # The point-charge lifecycle prints `energy=<float>` (not the later
+        # `explicit_energy=`/`reaction_field_` lines); the lookbehind avoids them.
+        m = re.search(r"(?<![A-Za-z_])energy=(-?\d+\.\d+)", out)
+        self.assertIsNotNone(m, "adapter smoke did not print energy=:\n" + out)
+        energy = float(m.group(1))
+        ref = float(bench["reference_value"])
+        tol = float(bench["tolerance"])
+        self.assertLessEqual(
+            abs(energy - ref),
+            tol,
+            f"{bench['id']}: ddX esolv={energy} vs trusted reference={ref} "
+            f"exceeds tolerance {tol}\n{out}",
+        )
+
+
+def _attach_regression_tests():
+    for bench in _load_trusted_regressions():
+        if bench.get("reference_value") is None or bench.get("status") != "verified":
+            continue
+        bid = re.sub(r"[^0-9a-zA-Z_]", "_", bench["id"])
+
+        def test(self, bench=bench):
+            self._run_point_charge(bench)
+
+        setattr(DdxAdapterRegressionGate, f"test_regression_{bid}", test)
+
+
+_attach_regression_tests()
 
 
 if __name__ == "__main__":
