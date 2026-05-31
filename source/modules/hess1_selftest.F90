@@ -285,18 +285,26 @@ contains
         real(dp), allocatable :: PAA(:,:,:,:), PAB(:,:,:,:), blkAA(:,:,:,:), blkAB(:,:,:,:)
         real(dp), allocatable :: Sfull(:,:)
         real(dp), contiguous, pointer :: smat2(:)
-        integer, allocatable :: ao_atom(:), ao_lx(:), ao_ly(:), ao_lz(:)
+        integer, allocatable :: ao_lx(:), ao_ly(:), ao_lz(:)
+        real(dp), allocatable :: ao_cx(:), ao_cy(:), ao_cz(:)
         integer :: ic2, ii2, jj2, i2, j2, o_i, o_j, a2, b2, u3
 
-        allocate(ao_atom(nbf), ao_lx(nbf), ao_ly(nbf), ao_lz(nbf))
+        ! Per-AO Cartesian powers AND the AO center coordinate (eshi%r). The
+        ! center coordinate (not an atom index) is the ordering-independent key
+        ! the Python oracle uses to map OpenQP AOs onto PySCF AOs, since OpenQP's
+        ! internal atom indexing need not match basis%atoms(1:natom) ordering.
+        allocate(ao_lx(nbf), ao_ly(nbf), ao_lz(nbf))
+        allocate(ao_cx(nbf), ao_cy(nbf), ao_cz(nbf))
         do ii2 = 1, basis%nshell
           call eshi%fetch_by_id(basis, ii2)
           do i2 = 1, eshi%nao
             o_i = basis%ao_offset(ii2) + i2 - 1
-            ao_atom(o_i) = eshi%atid - 1            ! 0-based to match PySCF
             ao_lx(o_i) = CART_X(i2, eshi%ang)
             ao_ly(o_i) = CART_Y(i2, eshi%ang)
             ao_lz(o_i) = CART_Z(i2, eshi%ang)
+            ao_cx(o_i) = eshi%r(1)
+            ao_cy(o_i) = eshi%r(2)
+            ao_cz(o_i) = eshi%r(3)
           end do
         end do
 
@@ -308,10 +316,13 @@ contains
         call ecab%alloc(basis)
         open(newunit=u3, file='/tmp/hess_nuc_blocks.txt', status='replace', action='write')
         write(u3,'(2i6)') nbf, natom
+        ! per AO: lx ly lz  cx cy cz  (powers, then center coordinate in bohr)
         do o_i = 1, nbf
-          write(u3,'(4i5)') ao_atom(o_i), ao_lx(o_i), ao_ly(o_i), ao_lz(o_i)
+          write(u3,'(3i5,3es24.16)') ao_lx(o_i), ao_ly(o_i), ao_lz(o_i), &
+                                     ao_cx(o_i), ao_cy(o_i), ao_cz(o_i)
         end do
-        ! atoms: nuclear charge (integer) and coordinates in bohr
+        ! charge centers: nuclear charge (integer) and coordinates in bohr; the
+        ! per-nucleus blocks below use rinv center = basis%atoms%xyz(:,ic2).
         do ic2 = 1, natom
           write(u3,'(i5,3es24.16)') nint(basis%atoms%zn(ic2)), basis%atoms%xyz(1:3,ic2)
         end do
@@ -324,7 +335,7 @@ contains
             call eshi%fetch_by_id(basis, ii2)
             do jj2 = 1, basis%nshell
               call eshj%fetch_by_id(basis, jj2)
-              call ecab%shell_pair(basis, eshi, eshj)
+              call ecab%shell_pair(basis, eshi, eshj, 1.0e-30_dp)
               if (ecab%numpairs == 0) cycle
               allocate(blkAA(3,3,ecab%inao,ecab%jnao), blkAB(3,3,ecab%inao,ecab%jnao))
               call comp_coulomb_der2_blocks(ecab, basis%atoms%xyz(:,ic2), 1.0_dp, blkAA, blkAB)
@@ -355,7 +366,7 @@ contains
           end do
         end do
         close(u3)
-        deallocate(PAA, PAB, Sfull, ao_atom, ao_lx, ao_ly, ao_lz)
+        deallocate(PAA, PAB, Sfull, ao_lx, ao_ly, ao_lz, ao_cx, ao_cy, ao_cz)
       end block
     end if
 

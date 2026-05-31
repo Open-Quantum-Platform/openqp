@@ -1236,35 +1236,47 @@ END SUBROUTINE
     END DO
  END SUBROUTINE
 
-!> @brief Bra-bra and bra-charge second derivatives of the nuclear-attraction
-!>   integral for a single charge center c, accumulated into (3x3) blocks.
-!> @details Computes p_XX = d2/dX^2 (bra-bra) via polynomial-shift-twice at
-!>   nroots_der2 = (iang+jang+2)/2+1, and p_AB = d2/dX dY (bra-ket mixed) via
-!>   the analogous ket-index shift. Then returns p_XC = -(p_XX+p_AB) by
-!>   translational invariance d/dc = -(d/dX+d/dY), so no root-weight derivatives
-!>   are needed. Only s/p/d/f shells (nroots_der2 <= 5) are supported; larger
-!>   shells trigger error stop. Gate 2 implementation; replaces the WIP DQGaussRys
-!>   approach that used the wrong nroots and an incorrect HF term.
- SUBROUTINE comp_coulomb_der2_braC(cp, c, znuc, dij, p_XX, p_XC)
+!> @brief Uncontracted per-AO basis-center second-derivative blocks of the
+!>   nuclear-attraction integral for one charge center c (Gate 2 shared kernel).
+!> @details For a shell pair (bra X on atom A, ket Y on atom B) and charge centre
+!>   c this returns, for every cartesian AO pair (i in bra, j in ket):
+!>     pAA(a,b,i,j) = d2/dA_a dA_b <i| znuc/|r-c| |j>   (bra-bra, symmetric in a,b)
+!>     pAB(a,b,i,j) = d2/dA_a dB_b <i| znuc/|r-c| |j>   (bra-ket mixed, NOT symmetric)
+!>
+!>   The production basis-basis second derivative uses angular-momentum (AM) shift
+!>   identities and therefore does NOT differentiate the Rys roots/weights: the
+!>   bra second derivative is der2_coul_xyz (the bra raise/lower recursion applied
+!>   twice), the ket first derivative and the mixed bra-ket second derivative are
+!>   the analogous explicit index recurrences. The roots/weights are merely
+!>   recomputed for the shifted integral class at the corrected second-derivative
+!>   count nroots_der2 = floor((Li+Lj+2)/2)+1 (set here; NOT inherited from
+!>   cp%nroots). The validated rys_deriv.F90 layer is not used on this path.
+!>
+!>   Blocks are returned in the unnormalized cartesian convention (apply the
+!>   bfnrm shell normalization at contraction time, exactly as comp_coulomb_der1
+!>   does for the gradient). Only s/p/d/f shells (nroots_der2 <= 5, i.e. the
+!>   closed-form rys_rt1..rys_rt5 regime) are supported; larger shells abort.
+ SUBROUTINE comp_coulomb_der2_blocks(cp, c, znuc, pAA, pAB)
     TYPE(shpair_t), INTENT(IN) :: cp
     REAL(REAL64), INTENT(IN) :: c(3), znuc
-    REAL(REAL64), INTENT(IN) :: dij(:,:)
-    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: p_XX(:,:), p_XC(:,:)
+    REAL(REAL64), INTENT(OUT) :: pAA(:,:,:,:), pAB(:,:,:,:)   ! (3,3,inao,jnao)
 
     INTEGER :: id, i, j, nr, ix, iy, iz, jx, jy, jz
     INTEGER :: nroots_der2
-    REAL(REAL64) :: xx, fac, aj, w
+    REAL(REAL64) :: xx, fac, aj
     type(rys_root_t) :: ryscomp
     real(real64) :: xyzin(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
     real(real64) :: gDA (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
     real(real64) :: gDAA(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
     real(real64) :: dket(3, max_nroots)   ! per-root ket (B-center) 1D first derivatives
     real(real64) :: d2ab(3, max_nroots)   ! per-root mixed bra-ket 1D second derivatives
-    REAL(REAL64) :: bAA(3,3), bAB(3,3)
 
     nroots_der2 = (cp%iang + cp%jang + 2)/2 + 1
     if (nroots_der2 > 5) &
-        error stop 'comp_coulomb_der2_braC: shell L>=4 not supported (nroots_der2>5)'
+        error stop 'comp_coulomb_der2_blocks: shell L>=4 not supported (nroots_der2>5)'
+
+    pAA = 0.0_real64
+    pAB = 0.0_real64
 
     DO id = 1, cp%numpairs
         ASSOCIATE (pp => cp%p(id), &
@@ -1284,14 +1296,10 @@ END SUBROUTINE
         aj = pp%aj
         nr = nroots_der2
 
-        bAA = 0.0_real64
-        bAB = 0.0_real64
-
         DO i = 1, inao
             ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
             DO j = 1, jnao
                 jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
-                w = dij(i,j) * fac
 
                 ! Ket (B-center) first derivative per root: d/dB_q = 2*aj*[j+1,...] - j*[j-1,...]
                 dket(1,1:nr) = 2*aj*xyzin(jx+1,ix,1,1:nr)
@@ -1318,39 +1326,71 @@ END SUBROUTINE
                 if (iz > 0)          d2ab(3,1:nr) = d2ab(3,1:nr) - iz*2*aj*xyzin(jz+1,iz-1,3,1:nr)
                 if (iz > 0 .and. jz > 0) d2ab(3,1:nr) = d2ab(3,1:nr) + iz*jz*xyzin(jz-1,iz-1,3,1:nr)
 
-                ! p_AA = d2/dA^2 (symmetric, lower triangle, correct per-root product)
-                bAA(1,1) = bAA(1,1) + w*sum(gDAA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAA(2,2) = bAA(2,2) + w*sum(xyzin(jx,ix,1,1:nr)*gDAA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAA(3,3) = bAA(3,3) + w*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDAA(jz,iz,3,1:nr))
-                bAA(2,1) = bAA(2,1) + w*sum(gDA(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAA(3,1) = bAA(3,1) + w*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
-                bAA(3,2) = bAA(3,2) + w*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                ! p_AA = d2/dA^2 (symmetric; fill then mirror a<->b)
+                pAA(1,1,i,j) = fac*sum(gDAA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(2,2,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*gDAA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(3,3,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDAA(jz,iz,3,1:nr))
+                pAA(2,1,i,j) = fac*sum(gDA(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(3,1,i,j) = fac*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAA(3,2,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAA(1,2,i,j) = pAA(2,1,i,j)
+                pAA(1,3,i,j) = pAA(3,1,i,j)
+                pAA(2,3,i,j) = pAA(3,2,i,j)
 
-                ! p_AB = d2/dA_a dB_b (NOT symmetric; bAB(a,b) = d2/dA_a dB_b)
-                bAB(1,1) = bAB(1,1) + w*sum(d2ab(1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAB(2,2) = bAB(2,2) + w*sum(xyzin(jx,ix,1,1:nr)*d2ab(2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAB(3,3) = bAB(3,3) + w*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*d2ab(3,1:nr))
-                bAB(1,2) = bAB(1,2) + w*sum(gDA(jx,ix,1,1:nr)*dket(2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAB(2,1) = bAB(2,1) + w*sum(dket(1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
-                bAB(1,3) = bAB(1,3) + w*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*dket(3,1:nr))
-                bAB(3,1) = bAB(3,1) + w*sum(dket(1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
-                bAB(2,3) = bAB(2,3) + w*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*dket(3,1:nr))
-                bAB(3,2) = bAB(3,2) + w*sum(xyzin(jx,ix,1,1:nr)*dket(2,1:nr)*gDA(jz,iz,3,1:nr))
+                ! p_AB = d2/dA_a dB_b (NOT symmetric; pAB(a,b) = d2/dA_a dB_b)
+                pAB(1,1,i,j) = fac*sum(d2ab(1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(2,2,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*d2ab(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(3,3,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*d2ab(3,1:nr))
+                pAB(1,2,i,j) = fac*sum(gDA(jx,ix,1,1:nr)*dket(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(2,1,i,j) = fac*sum(dket(1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(1,3,i,j) = fac*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*dket(3,1:nr))
+                pAB(3,1,i,j) = fac*sum(dket(1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAB(2,3,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*dket(3,1:nr))
+                pAB(3,2,i,j) = fac*sum(xyzin(jx,ix,1,1:nr)*dket(2,1:nr)*gDA(jz,iz,3,1:nr))
 
             END DO
         END DO
-
-        ! Symmetrize p_AA
-        bAA(1,2) = bAA(2,1); bAA(1,3) = bAA(3,1); bAA(2,3) = bAA(3,2)
-
-        p_XX = p_XX + bAA
-        ! p_XC = d2/dA dC = -(d2/dA^2 + d2/dA dB) by translational invariance
-        p_XC = p_XC - (bAA + bAB)
-
         END ASSOCIATE
     END DO
 
- END SUBROUTINE
+  END SUBROUTINE
+
+!> @brief Bra-bra and bra-charge second derivatives of the nuclear-attraction
+!>   integral for a single charge center c, contracted with a density block.
+!> @details Thin contraction wrapper over comp_coulomb_der2_blocks (the shared
+!>   production AM-shift kernel). On output:
+!>     p_XX += sum_ij dij(i,j) * d2/dX^2 <i|znuc/|r-c||j>        (bra-bra)
+!>     p_XC += -sum_ij dij(i,j) * (d2/dX^2 + d2/dX dY) <i|...|j> (bra-charge)
+!>   The bra-charge block uses single-center translational invariance
+!>   d/dc = -(d/dX + d/dY); no Rys root/weight differentiation is involved
+!>   (see comp_coulomb_der2_blocks). The caller (hess_en) obtains p_YY, p_YC by
+!>   calling again with the shell pair swapped, then assembles the 9 atom blocks.
+ SUBROUTINE comp_coulomb_der2_braC(cp, c, znuc, dij, p_XX, p_XC)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: p_XX(:,:), p_XC(:,:)
+
+    REAL(REAL64) :: pAA(3,3,cp%inao,cp%jnao), pAB(3,3,cp%inao,cp%jnao)
+    REAL(REAL64) :: bAA(3,3), bAB(3,3)
+    INTEGER :: i, j
+
+    CALL comp_coulomb_der2_blocks(cp, c, znuc, pAA, pAB)
+
+    bAA = 0.0_real64
+    bAB = 0.0_real64
+    DO i = 1, cp%inao
+        DO j = 1, cp%jnao
+            bAA = bAA + dij(i,j)*pAA(:,:,i,j)
+            bAB = bAB + dij(i,j)*pAB(:,:,i,j)
+        END DO
+    END DO
+
+    p_XX = p_XX + bAA
+    ! p_XC = d2/dA dC = -(d2/dA^2 + d2/dA dB) by translational invariance
+    p_XC = p_XC - (bAA + bAB)
+
+  END SUBROUTINE
 
 !> @brief Compute 1e Ewald long-range contribution to the gradient (v.r.t. shifts of
 !>  shell's centers)

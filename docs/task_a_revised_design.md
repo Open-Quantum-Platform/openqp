@@ -1,8 +1,13 @@
 # Task A — Native Rys single-center Coulomb second derivative (l <= 3)
 
-Status: **Gate 2 implemented and validated** (see Section 9). The production
-basis-basis second derivative uses **angular-momentum (AM) shift identities** and
-therefore does **not** differentiate the Rys roots/weights. The Gate-1
+Status: **Gate 2 in progress — NOT yet validated** (see Section 9). The intended
+production basis-basis second derivative uses **angular-momentum (AM) shift
+identities** and therefore does **not** differentiate the Rys roots/weights.
+As of this commit the build and the PySCF per-nucleus oracle harness are
+repaired and run for real (no silent skip), but the integral blocks do **not**
+yet match the oracle: the contracted nuclear-attraction FD is O(1) rather than
+O(1e-10), so the AM-shift recurrence in `comp_coulomb_der2_blocks` is still
+incorrect and is being debugged. Do not treat Gate 2 as done. The Gate-1
 `rys_deriv.F90` root/weight X-derivative layer is retained as a validated
 auxiliary/diagnostic layer (and as the basis for any future *direct*
 charge-center differentiated-quadrature formulation), but it is **not** on the
@@ -368,6 +373,20 @@ parity with the validated overlap/kinetic second-derivative FD errors; (b) a
 *independent* FD of the HF charge gradient w.r.t. the charge position (`fd_cc`),
 which never uses TI.
 
-**Status:** integral oracle + both secondary confirmations pass; Gate-1
-`rys_deriv` regression and the H2O overlap/kinetic selftest remain green. The
-`hf_hessian` kernel stays guarded (final assembly is a later, separate step).
+**Status (current commit): RED / in progress.**
+- Build: clean (`comp_coulomb_der2_blocks` + wrapper compile; Gate-1 `rys_deriv`
+  selftest still PASS).
+- Oracle harness: runs for real on the C1 HCNO case; `tests/run_gate2_oracle.sh`
+  reports build_rc / oracle_rc / skipped / failed / errored and treats a skipped
+  primary oracle as RED (`OQP_ORACLE_REQUIRED=1`).
+- AO map: permutation proven structurally; residual overlap-correlation diff is
+  ~4e-7, a basis-definition difference between OpenQP's and PySCF's 6-31G*. To
+  reach the mandated element-wise < 1e-9 the oracle must build PySCF from
+  OpenQP's exact primitives (basis export) — a defined next step.
+- Integral blocks: **do NOT yet match**; contracted nucattr FD is O(1). The
+  AM-shift recurrence in `comp_coulomb_der2_blocks` is being re-derived/fixed.
+- `hf_hessian` stays guarded.
+
+Remaining ordered work: (3) emitter row accounting [done], (4) base
+single-center Coulomb vs PySCF, (5) p_AA, (6) p_AB, (7) p_BB swapped, (8)
+contracted FD O(h^2), then (9) commit the corrected implementation.
