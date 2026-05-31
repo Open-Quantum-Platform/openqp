@@ -1,5 +1,6 @@
 """OQP single point class"""
 import os
+import json
 import oqp
 import copy
 import time
@@ -565,6 +566,8 @@ class Hessian(Calculator):
 
         if self.hess_type == 'analytical':
             self.hess_func = self.analytical_hess
+        elif self.hess_type == 'mrsf_numerical_oracle':
+            self.hess_func = self.mrsf_numerical_oracle_hess
         else:
             self.hess_func = self.numerical_hess
 
@@ -715,6 +718,42 @@ class Hessian(Calculator):
                 'UMRSF numerical Hessian is not implemented; UMRSF gradient/Z-vector support is incomplete for a Hessian oracle.'
             )
 
+        return self._finite_difference_hess(root_tracking=False)
+
+    def mrsf_numerical_oracle_hess(self):
+        method = self.mol.config['input']['method']
+        td_type = self.mol.config['tdhf']['type']
+        if method != 'tdhf' or td_type != 'mrsf':
+            raise NotImplementedError(
+                f'MRSF numerical oracle Hessian requires method=tdhf and tdhf.type=mrsf, got method={method}, tdhf.type={td_type}.'
+            )
+        return self._finite_difference_hess(root_tracking=True)
+
+    def _mrsf_reference_root_record(self):
+        mrsf_hessian = importlib.import_module('oqp.library.mrsf_hessian')
+        nstate = self.mol.config['tdhf']['nstate']
+        reference_json = self.mol.log.replace('.log', '.json')
+        if os.path.exists(reference_json):
+            with open(reference_json) as inp:
+                record = json.load(inp)
+        else:
+            record = self.mol.data
+        return (
+            mrsf_hessian.extract_mrsf_root_vectors(record, nstate=nstate),
+            mrsf_hessian.extract_mrsf_root_energies(record, nstate=nstate),
+        )
+
+    def _load_mrsf_worker_root_record(self, json_path):
+        mrsf_hessian = importlib.import_module('oqp.library.mrsf_hessian')
+        nstate = self.mol.config['tdhf']['nstate']
+        with open(json_path) as inp:
+            record = json.load(inp)
+        return (
+            mrsf_hessian.extract_mrsf_root_vectors(record, nstate=nstate),
+            mrsf_hessian.extract_mrsf_root_energies(record, nstate=nstate),
+        )
+
+    def _finite_difference_hess(self, *, root_tracking=False):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
         nproc = self.mol.config['hess']['nproc']
         dx = self.mol.config['hess']['dx']
@@ -745,6 +784,7 @@ class Hessian(Calculator):
                 'guess_file': guess_file,
                 'state': self.state,
                 'restart': self.restart,
+                'root_tracking': root_tracking,
             }
             for idx, coord in enumerate(shifted_coord)
         ]
@@ -765,13 +805,15 @@ class Hessian(Calculator):
 
         ## start multiprocessing
         grads = [[] for _ in range(ndim)]
+        worker_json = [None for _ in range(ndim)]
         flags = []
         n = 0
         for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
             if self.mpi_manager.rank == 0:
                 n += 1
-                idx, grad, flag, timing = val
+                idx, grad, flag, timing, json_path = val
                 grads[idx] = grad
+                worker_json[idx] = json_path
                 flags.append(flag)
                 dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
                 dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
@@ -779,13 +821,43 @@ class Hessian(Calculator):
         pool.close()
 
         grads = self.mpi_manager.bcast(grads)
-        # compute hessian
+        worker_json = self.mpi_manager.bcast(worker_json)
+        flags = self.mpi_manager.bcast(flags)
         forward = np.array(grads[0:ncoord])
         backward = np.array(grads[ncoord:])
-        hessian = (forward - backward) / (2 * dx)
 
-        # symmetrize hessian
-        hessian = (hessian + hessian.T) / 2
+        if root_tracking:
+            reference_vectors, reference_energies = self._mrsf_reference_root_record()
+            displaced_vectors = []
+            displaced_energies = []
+            for path in worker_json:
+                if not path or not os.path.exists(path):
+                    flags.append('failed')
+                    raise FileNotFoundError(f'MRSF Hessian oracle root-tracking JSON was not produced: {path}')
+                vectors, energies = self._load_mrsf_worker_root_record(path)
+                displaced_vectors.append(vectors)
+                displaced_energies.append(energies)
+            mrsf_hessian = importlib.import_module('oqp.library.mrsf_hessian')
+            hessian, diagnostics = mrsf_hessian.assemble_root_tracked_central_fd_hessian(
+                requested_state=self.state,
+                reference_vectors=reference_vectors,
+                reference_energies=reference_energies,
+                gradients_plus=forward,
+                gradients_minus=backward,
+                displaced_vectors=displaced_vectors,
+                displaced_energies=displaced_energies,
+                dx=dx,
+            )
+            self.mol.hessian_metadata = {
+                'backend': 'mrsf_root_tracked_gradient_fd_oracle',
+                'dx': dx,
+                'state': self.state,
+                'root_tracking': [item.__dict__ for item in diagnostics],
+                'symmetrized': True,
+            }
+        else:
+            hessian = (forward - backward) / (2 * dx)
+            hessian = (hessian + hessian.T) / 2
 
         # delete scratch folder
         if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
@@ -809,6 +881,7 @@ def grad_wrapper(key_dict):
     guess_file = key_dict['guess_file']
     state = key_dict['state']
     restart = key_dict['restart']
+    root_tracking = key_dict.get('root_tracking', False)
 
     # prepare log files
     inp = f'{dir_hess}/{project_name}.{idx}.tmp.inp'
@@ -831,6 +904,8 @@ def grad_wrapper(key_dict):
         config['properties']['grad'] = config['hess']['state']
         config['properties']['export'] = 'True'
         config['properties']['title'] = f'{project_name}.{idx}'
+        if root_tracking:
+            config['guess']['save_mol'] = 'True'
         config['hess']['temperature'] = ','.join([str(x) for x in config['hess']['temperature']])
         config['tests']['exception'] = 'false'
 
@@ -870,8 +945,9 @@ def grad_wrapper(key_dict):
         status = 'failed'
 
     end_time = time.time()
+    json_path = log.replace('.log', '.json') if root_tracking else None
 
-    return idx, grad, status, (start_time, end_time, rank, threads, host)
+    return idx, grad, status, (start_time, end_time, rank, threads, host), json_path
 
 
 class BasisOverlap(Calculator):

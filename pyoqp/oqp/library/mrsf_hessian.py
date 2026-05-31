@@ -9,6 +9,7 @@ used in a Hessian assembly.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -28,6 +29,17 @@ class MRSFRootTrackingDiagnostic:
     ok: bool
 
 
+@dataclass(frozen=True)
+class MRSFHessianStabilityDiagnostic:
+    dx: float
+    reference_dx: float
+    shape: list[int]
+    max_abs_delta: float
+    rms_delta: float
+    max_asymmetry: float
+    ok: bool
+
+
 def physical_root_label(state: int) -> str:
     """Return the OpenQP/MRSF physical root label for a state index."""
 
@@ -44,6 +56,56 @@ def _as_2d_vectors(vectors: np.ndarray | list[list[float]], *, name: str) -> np.
     if np.any(norms <= 0.0):
         raise ValueError(f"{name} contains a zero-norm state vector")
     return array / norms[:, None]
+
+
+def _record_value(record: Mapping[str, Any], keys: tuple[str, ...], *, missing: str) -> Any:
+    for key in keys:
+        try:
+            if hasattr(record, "get"):
+                value = record.get(key)
+                if value is not None:
+                    return value
+            else:
+                return record[key]
+        except (KeyError, TypeError):
+            pass
+    raise KeyError(missing)
+
+
+def extract_mrsf_root_vectors(record: Mapping[str, Any], *, nstate: int | None = None) -> np.ndarray:
+    """Extract flattened TD/MRSF state vectors from an OpenQP data record."""
+
+    array = np.asarray(
+        _record_value(
+            record,
+            ("OQP::td_bvec_mo", "td_bvec_mo", "OQP::td_abxc", "td_abxc"),
+            missing="OpenQP MRSF root-vector data not found; expected OQP::td_bvec_mo or OQP::td_abxc",
+        ),
+        dtype=float,
+    )
+
+    if array.ndim < 2:
+        raise ValueError(f"MRSF root-vector data must have at least 2 dimensions, got {array.shape}")
+    vectors = array.reshape((array.shape[0], -1))
+    if nstate is not None:
+        vectors = vectors[:nstate]
+    return _as_2d_vectors(vectors, name="mrsf_root_vectors")
+
+
+def extract_mrsf_root_energies(record: Mapping[str, Any], *, nstate: int | None = None) -> np.ndarray:
+    """Extract TD/MRSF root energies from an OpenQP data record."""
+
+    energies = np.asarray(
+        _record_value(
+            record,
+            ("OQP::td_energies", "td_energies"),
+            missing="OpenQP MRSF root energies not found; expected OQP::td_energies",
+        ),
+        dtype=float,
+    ).reshape(-1)
+    if nstate is not None:
+        energies = energies[:nstate]
+    return energies
 
 
 def assess_root_tracking(
@@ -79,11 +141,15 @@ def assess_root_tracking(
         )
 
     overlaps = np.abs(disp_vec[:nstate] @ ref_vec[requested_state])
-    order = np.argsort(overlaps)[::-1]
+    candidate_states = np.arange(1, nstate, dtype=int)
+    if candidate_states.size == 0:
+        raise ValueError("MRSF Hessian root tracking requires at least one physical MRSF root")
+    candidate_overlaps = overlaps[candidate_states]
+    order = candidate_states[np.argsort(candidate_overlaps)[::-1]]
     matched_state = int(order[0])
     best_overlap = float(overlaps[matched_state])
-    second_overlap = float(overlaps[order[1]]) if nstate > 1 else 0.0
-    overlap_gap = best_overlap - second_overlap
+    second_overlap = float(overlaps[order[1]]) if order.size > 1 else 0.0
+    overlap_gap = best_overlap - second_overlap if order.size > 1 else float("inf")
 
     assigned_energy_gaps = np.abs(disp_e[:nstate] - disp_e[matched_state])
     nonzero_gaps = assigned_energy_gaps[assigned_energy_gaps > 0.0]
@@ -117,3 +183,104 @@ def assess_root_tracking(
         )
 
     return diagnostic
+
+
+def _as_gradient_block(values, *, name: str) -> np.ndarray:
+    array = np.asarray(values, dtype=float)
+    if array.ndim != 2:
+        raise ValueError(f"{name} must be a 2D gradient block")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} contains non-finite values")
+    return array
+
+
+def assemble_root_tracked_central_fd_hessian(
+    *,
+    requested_state: int,
+    reference_vectors: np.ndarray | list[list[float]],
+    reference_energies: list[float] | np.ndarray,
+    gradients_plus,
+    gradients_minus,
+    displaced_vectors,
+    displaced_energies,
+    dx: float,
+    min_overlap: float = 0.85,
+    min_overlap_gap: float = 0.05,
+    min_energy_gap: float = 1.0e-4,
+) -> tuple[np.ndarray, list[MRSFRootTrackingDiagnostic]]:
+    """Assemble a central-FD Hessian only after all displaced roots pass tracking.
+
+    ``gradients_plus`` and ``gradients_minus`` are ordered as one flattened
+    gradient vector per Cartesian coordinate. ``displaced_vectors`` and
+    ``displaced_energies`` must contain the matching plus records followed by
+    the matching minus records, mirroring OpenQP's numerical-Hessian worker
+    ordering.
+    """
+
+    if dx <= 0.0:
+        raise ValueError("dx must be positive for central finite differences")
+
+    forward = _as_gradient_block(gradients_plus, name="gradients_plus")
+    backward = _as_gradient_block(gradients_minus, name="gradients_minus")
+    if forward.shape != backward.shape:
+        raise ValueError(
+            f"plus/minus gradient blocks must have the same shape, got {forward.shape} and {backward.shape}"
+        )
+
+    ncoord = forward.shape[0]
+    if len(displaced_vectors) != 2 * ncoord or len(displaced_energies) != 2 * ncoord:
+        raise ValueError("displaced root diagnostics must contain plus and minus records for every coordinate")
+
+    diagnostics: list[MRSFRootTrackingDiagnostic] = []
+    for vectors, energies in zip(displaced_vectors, displaced_energies):
+        diagnostics.append(
+            assess_root_tracking(
+                requested_state=requested_state,
+                reference_vectors=reference_vectors,
+                displaced_vectors=vectors,
+                reference_energies=reference_energies,
+                displaced_energies=energies,
+                min_overlap=min_overlap,
+                min_overlap_gap=min_overlap_gap,
+                min_energy_gap=min_energy_gap,
+            )
+        )
+
+    hessian = (forward - backward) / (2.0 * dx)
+    return (hessian + hessian.T) / 2.0, diagnostics
+
+
+def compare_fd_step_hessians(
+    *,
+    dx: float,
+    hessian,
+    reference_dx: float,
+    reference_hessian,
+    max_step_delta: float = 5.0e-4,
+    max_asymmetry: float = 5.0e-5,
+) -> MRSFHessianStabilityDiagnostic:
+    """Compare one FD-step Hessian to a reference-step Hessian."""
+
+    matrix = np.asarray(hessian, dtype=float)
+    reference = np.asarray(reference_hessian, dtype=float)
+    if matrix.shape != reference.shape:
+        raise ValueError(f"Hessian step comparison shape mismatch: {matrix.shape} vs {reference.shape}")
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError(f"Hessian must be a square 2D matrix, got {matrix.shape}")
+    if not np.all(np.isfinite(matrix)) or not np.all(np.isfinite(reference)):
+        raise ValueError("Hessian step comparison contains non-finite values")
+
+    delta = matrix - reference
+    max_delta = float(np.max(np.abs(delta))) if delta.size else 0.0
+    rms_delta = float(np.sqrt(np.mean(delta * delta))) if delta.size else 0.0
+    asym = matrix - matrix.T
+    asymmetry = float(np.max(np.abs(asym))) if asym.size else 0.0
+    return MRSFHessianStabilityDiagnostic(
+        dx=float(dx),
+        reference_dx=float(reference_dx),
+        shape=list(matrix.shape),
+        max_abs_delta=max_delta,
+        rms_delta=rms_delta,
+        max_asymmetry=asymmetry,
+        ok=(max_delta <= max_step_delta and asymmetry <= max_asymmetry),
+    )
