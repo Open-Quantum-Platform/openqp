@@ -22,38 +22,12 @@ except ModuleNotFoundError:
     dftd_installed = 'not installed'
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.nac_utils import (
+    stable_nac_from_overlap,
+    symmetrize_derivative_coupling,
+    verify_nac_conventions,
+)
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
-
-
-def verify_nac_conventions(dc, nac, atol=1.0e-6, label=''):
-    """Guard the standard NAC conventions at a storage site.
-
-    With the canonical derivative coupling ``d_ij = <Psi_i|grad Psi_j>`` stored
-    in ``dc`` and the interstate coupling ``h_ij = (E_j - E_i)*d_ij`` derived in
-    ``nac``, the following must hold (real adiabatic states):
-
-      * ``d`` is antisymmetric in the state indices: ``d_ij = -d_ji`` (``d_ii=0``)
-        because ``grad<Psi_i|Psi_j> = 0``.
-      * ``h`` is symmetric in the state indices: ``h_ij = h_ji`` because
-        ``(E_j-E_i)*d_ij`` is invariant under ``i<->j`` when ``d`` is antisym.
-
-    Both hold by construction once the energy gap uses the ``E_j - E_i``
-    orientation, so this acts as a regression guard (e.g. against a
-    re-introduced gap-sign flip). The state-pair indices are the first two
-    axes; trailing axes (Cartesian components) are ignored by the swap.
-
-    Returns the (antisym, sym) relative residual norms.
-    """
-    dc = np.asarray(dc, dtype=float)
-    nac = np.asarray(nac, dtype=float)
-    d_res = np.linalg.norm(dc + np.swapaxes(dc, 0, 1)) / (np.linalg.norm(dc) + 1.0e-30)
-    h_res = np.linalg.norm(nac - np.swapaxes(nac, 0, 1)) / (np.linalg.norm(nac) + 1.0e-30)
-    tag = f' ({label})' if label else ''
-    assert d_res < atol, \
-        f'NAC convention{tag}: derivative coupling d not antisymmetric, ||d+d^T||/||d||={d_res:.2e}'
-    assert h_res < atol, \
-        f'NAC convention{tag}: interstate coupling h not symmetric, ||h-h^T||/||h||={h_res:.2e}'
-    return d_res, h_res
 
 
 class Calculator:
@@ -1006,16 +980,24 @@ class NACME(BasisOverlap):
         oqp.get_states_overlap(self.mol)
         state_overlap = self.mol.data["OQP::td_states_overlap"]
 
-        # compute time-derivative nac
-        # Canonical quantity: the derivative coupling d_ij = <Psi_i|grad Psi_j>
-        # (antisymmetric, d_ij = -d_ji, d_ii = 0). The Fortran get_dcv returns
-        # the raw antisymmetrized overlap (S - S^T) ~ +/- 2*dt*d_ij, so the
-        # Hammes-Schiffer-Tully convention requires the 2*dt denominator
-        # (get_states_overlap.F90 get_dcv: "denominator MUST be provided ...
-        # can be 2*a for second-order numerical differentiation").
-        dc_matrix = (state_overlap - state_overlap.T) / (2.0 * self.dt)
+        # compute time-derivative nac from a gauge-stabilized state overlap.
+        # Raw electronic states can change sign, permute, or rotate inside a
+        # near-degenerate subspace between NAMD frames.  Before forming the HST
+        # antisymmetric derivative coupling, first reorder/sign-align the state
+        # overlap and project it to the nearest orthogonal matrix (Procrustes /
+        # polar alignment).  This leaves the small-step factor-2 convention from
+        # PR #160 intact while suppressing phase/root-tracking spikes.
+        dc_matrix, aligned_overlap, nac_overlap_used, nac_diag = stable_nac_from_overlap(
+            state_overlap,
+            self.dt,
+            method='polar',
+            min_match=0.5,
+        )
+        self.mol.data["OQP::td_states_overlap_aligned"] = aligned_overlap
+        self.mol.data["OQP::td_states_overlap_nac"] = nac_overlap_used
+        self.mol.data["OQP::nac_phase_diagnostics"] = nac_diag
         # Energy gap, standard orientation gap[i,j] = E_j - E_i
-        # (row = bra state i, column = ket state j).
+
         e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
         e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
         gap = e_j - e_i
@@ -1028,8 +1010,11 @@ class NACME(BasisOverlap):
         self.mol.data["OQP::nac_matrix"] = nac_matrix
 
         dump_log(self.mol, title='PyOQP: Non-Adiabatic Coupling Matrix Calculation', section='nacme')
-        dump_log(self.mol, title='PyOQP: phase corrected state overlap (s_ij)', section='nacm', info=state_overlap)
-        dump_log(self.mol, title='PyOQP: phase corrected derivative coupling (d_ij)', section='nacm', info=dc_matrix)
+        dump_log(self.mol, title='PyOQP: raw state overlap (s_ij)', section='nacm', info=state_overlap)
+        dump_log(self.mol, title='PyOQP: gauge-aligned state overlap (s_ij)', section='nacm', info=aligned_overlap)
+        dump_log(self.mol, title='PyOQP: polar state overlap used for NAC (s_ij)', section='nacm', info=nac_overlap_used)
+        dump_log(self.mol, title='PyOQP: NAC phase/root diagnostics', section='nacm', info=nac_diag)
+        dump_log(self.mol, title='PyOQP: phase stable derivative coupling (d_ij)', section='nacm', info=dc_matrix)
         dump_log(self.mol, title='PyOQP: state energy gap (e_ji)', section='nacm', info=gap)
         dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm',
                  info=nac_matrix)
@@ -1232,13 +1217,17 @@ class NAC(Calculator):
         e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
         gap = e_j - e_i
         np.fill_diagonal(gap, 1)  # guard; diagonal d/h are zero regardless
-        gap = gap.reshape((1, -1))
-        # Interstate coupling h_ij = (E_j - E_i)*d_ij, derived from canonical d.
-        nacm = dcm * gap
 
         # reshape matrix -> (nstate x nstate, natom x 3) -> (nstate, nstate, natom, 3)
         dcv = dcm.T.reshape((self.nstate, self.nstate, self.natom, 3))
-        nacv = nacm.T.reshape((self.nstate, self.nstate, self.natom, 3))
+        # Full numerical NAC-vector cleanup: after collecting all displaced
+        # NACME workers, explicitly project tiny root/phase numerical noise out
+        # of the derivative-coupling tensor before deriving h. This preserves
+        # the canonical d_ij=-d_ji convention for every Cartesian component and
+        # makes h_ij=(E_j-E_i)d_ij symmetric by construction.
+        dcv = symmetrize_derivative_coupling(dcv)
+        gap = gap.reshape((self.nstate, self.nstate, 1, 1))
+        nacv = dcv * gap
 
         # convention guard: d antisymmetric, h symmetric over the state pair
         verify_nac_conventions(dcv, nacv, label='numerical_nac')
