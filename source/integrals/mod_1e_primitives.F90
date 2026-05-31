@@ -57,6 +57,7 @@ MODULE mod_1e_primitives
  PUBLIC der_coul_xyz
  PUBLIC der2_coul_xyz
  PUBLIC comp_coulomb_der2_braC
+ PUBLIC comp_coulomb_der2_blocks
  PUBLIC comp_ewaldlr_der1
  PUBLIC comp_ewaldlr_helfeyder1
 
@@ -1235,99 +1236,117 @@ END SUBROUTINE
     END DO
  END SUBROUTINE
 
-!> @brief Bra-center and bra-charge second derivatives of the nuclear-attraction
-!>   integral, used to assemble the nuclear-attraction Hessian on a fully
-!>   bra-validated derivative path (no ket-index raising).
-!> @details For a shell pair (bra X, ket Y) and charge c, accumulates the two
-!>   3x3 blocks contracted with the density block dij:
-!>     p_XX(a,b) = d2/dX_a dX_b   (bra second derivative; standard Rys build)
-!>     p_XC(a,b) = d2/dX_a dc_b   (bra derivative of the Hellmann-Feynman charge
-!>                                 derivative; DQ Rys build + der_helfey + der_coul)
-!>   The caller (hess_en) obtains the remaining blocks for each ordered pair by
-!>   also calling this routine with the shells swapped (giving p_YY, p_YC) and
-!>   then using translational invariance d/dc = -(d/dX + d/dY):
-!>     p_XY = -(p_XX + p_XC),  p_cc = p_XX + p_XY + p_XY^T + p_YY.
+!> @brief Bra-bra and bra-charge second derivatives of the nuclear-attraction
+!>   integral for a single charge center c, accumulated into (3x3) blocks.
+!> @details Computes p_XX = d2/dX^2 (bra-bra) via polynomial-shift-twice at
+!>   nroots_der2 = (iang+jang+2)/2+1, and p_AB = d2/dX dY (bra-ket mixed) via
+!>   the analogous ket-index shift. Then returns p_XC = -(p_XX+p_AB) by
+!>   translational invariance d/dc = -(d/dX+d/dY), so no root-weight derivatives
+!>   are needed. Only s/p/d/f shells (nroots_der2 <= 5) are supported; larger
+!>   shells trigger error stop. Gate 2 implementation; replaces the WIP DQGaussRys
+!>   approach that used the wrong nroots and an incorrect HF term.
  SUBROUTINE comp_coulomb_der2_braC(cp, c, znuc, dij, p_XX, p_XC)
     TYPE(shpair_t), INTENT(IN) :: cp
     REAL(REAL64), INTENT(IN) :: c(3), znuc
     REAL(REAL64), INTENT(IN) :: dij(:,:)
     REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: p_XX(:,:), p_XC(:,:)
 
-    REAL(REAL64) :: xx, facq, fachf, w, ric(3)
+    INTEGER :: id, i, j, nr, ix, iy, iz, jx, jy, jz
+    INTEGER :: nroots_der2
+    REAL(REAL64) :: xx, fac, aj, w
     type(rys_root_t) :: ryscomp
-    INTEGER :: id, i, j, k, a, b, o
-    INTEGER :: ix, iy, iz, jx, jy, jz, ci(3), cj(3)
-    REAL(REAL64) :: bXX(3,3), bXC(3,3)
-    REAL(REAL64) :: s(3), da(3), daa(3), qs(3), hc(3), dxa(3), dxc(3)
-    real(real64) :: xyzinQ(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: xyzin(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
     real(real64) :: gDA (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
     real(real64) :: gDAA(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
-    real(real64) :: xyzinDQ(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
-    real(real64) :: gHC (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
-    real(real64) :: gDXa(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
-    real(real64) :: gDXC(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: dket(3, max_nroots)   ! per-root ket (B-center) 1D first derivatives
+    real(real64) :: d2ab(3, max_nroots)   ! per-root mixed bra-ket 1D second derivatives
+    REAL(REAL64) :: bAA(3,3), bAB(3,3)
 
-    ric = cp%ri(:3) - c(:3)
+    nroots_der2 = (cp%iang + cp%jang + 2)/2 + 1
+    if (nroots_der2 > 5) &
+        error stop 'comp_coulomb_der2_braC: shell L>=4 not supported (nroots_der2>5)'
 
     DO id = 1, cp%numpairs
         ASSOCIATE (pp => cp%p(id), &
                    iang => cp%iang, jang => cp%jang, &
                    inao => cp%inao, jnao => cp%jnao)
 
-        xx = pp%aa*sum((pp%r-c)**2)
-        ryscomp%nroots = cp%nroots
+        xx = pp%aa * sum((pp%r - c)**2)
+        ryscomp%nroots = nroots_der2
         ryscomp%x = xx
+        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 2)
 
-        ! --- p_XX : bra second derivative on the standard nuclear-attraction build
-        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzinQ, 2)
-        CALL der_coul_xyz (gDA,  xyzinQ, iang, jang, pp%ai, cp%nroots)
-        CALL der2_coul_xyz(gDAA, xyzinQ, iang, jang, pp%ai, cp%nroots)
-        facq = pp%expfac*TWOPI*pp%aa1
+        ! Bra first and second derivatives at the correct quadrature order
+        CALL der_coul_xyz (gDA,  xyzin, iang, jang, pp%ai, nroots_der2)
+        CALL der2_coul_xyz(gDAA, xyzin, iang, jang, pp%ai, nroots_der2)
 
-        ! --- p_XC : bra derivative of the Hellmann-Feynman charge derivative
-        ryscomp%x = xx
-        CALL DQGaussRys(ryscomp, cp, id, c, znuc, xyzinDQ, 2)
-        CALL der_helfey_xyz(gHC, xyzinDQ, iang+1, jang, ric, cp%nroots)
-        CALL der_coul_xyz  (gDXa, xyzinDQ, iang, jang, pp%ai, cp%nroots)
-        CALL der_coul_xyz  (gDXC, gHC,     iang, jang, pp%ai, cp%nroots)
-        fachf = pp%expfac*TWOPI*2
+        fac = pp%expfac * TWOPI * pp%aa1
+        aj = pp%aj
+        nr = nroots_der2
 
-        bXX = 0.0_real64; bXC = 0.0_real64
+        bAA = 0.0_real64
+        bAB = 0.0_real64
+
         DO i = 1, inao
             ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
-            ci = [ix, iy, iz]
             DO j = 1, jnao
                 jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
-                cj = [jx, jy, jz]
-                w = dij(i,j)
-                DO k = 1, cp%nroots
-                    DO o = 1, 3
-                        s(o)   = xyzinQ (cj(o),ci(o),o,k)
-                        da(o)  = gDA   (cj(o),ci(o),o,k)
-                        daa(o) = gDAA  (cj(o),ci(o),o,k)
-                        qs(o)  = xyzinDQ(cj(o),ci(o),o,k)
-                        hc(o)  = gHC   (cj(o),ci(o),o,k)
-                        dxa(o) = gDXa  (cj(o),ci(o),o,k)
-                        dxc(o) = gDXC  (cj(o),ci(o),o,k)
-                    END DO
-                    DO a = 1, 3
-                        DO b = 1, 3
-                            o = 6 - a - b
-                            if (a == b) then
-                                bXX(a,b) = bXX(a,b) + w*facq*daa(a)*s(mod(a,3)+1)*s(mod(a+1,3)+1)
-                                bXC(a,b) = bXC(a,b) + w*fachf*dxc(a)*qs(mod(a,3)+1)*qs(mod(a+1,3)+1)
-                            else
-                                bXX(a,b) = bXX(a,b) + w*facq*da(a)*da(b)*s(o)
-                                bXC(a,b) = bXC(a,b) + w*fachf*dxa(a)*hc(b)*qs(o)
-                            end if
-                        END DO
-                    END DO
-                END DO
+                w = dij(i,j) * fac
+
+                ! Ket (B-center) first derivative per root: d/dB_q = 2*aj*[j+1,...] - j*[j-1,...]
+                dket(1,1:nr) = 2*aj*xyzin(jx+1,ix,1,1:nr)
+                if (jx > 0) dket(1,1:nr) = dket(1,1:nr) - jx*xyzin(jx-1,ix,1,1:nr)
+                dket(2,1:nr) = 2*aj*xyzin(jy+1,iy,2,1:nr)
+                if (jy > 0) dket(2,1:nr) = dket(2,1:nr) - jy*xyzin(jy-1,iy,2,1:nr)
+                dket(3,1:nr) = 2*aj*xyzin(jz+1,iz,3,1:nr)
+                if (jz > 0) dket(3,1:nr) = dket(3,1:nr) - jz*xyzin(jz-1,iz,3,1:nr)
+
+                ! Mixed bra-ket second derivative per root:
+                ! d2/dA_q dB_q = 2*ai*(2*aj*f(j+1,i+1)-j*f(j-1,i+1)) - i*(2*aj*f(j+1,i-1)-j*f(j-1,i-1))
+                d2ab(1,1:nr) = 2*pp%ai * 2*aj * xyzin(jx+1,ix+1,1,1:nr)
+                if (jx > 0)          d2ab(1,1:nr) = d2ab(1,1:nr) - 2*pp%ai*jx*xyzin(jx-1,ix+1,1,1:nr)
+                if (ix > 0)          d2ab(1,1:nr) = d2ab(1,1:nr) - ix*2*aj*xyzin(jx+1,ix-1,1,1:nr)
+                if (ix > 0 .and. jx > 0) d2ab(1,1:nr) = d2ab(1,1:nr) + ix*jx*xyzin(jx-1,ix-1,1,1:nr)
+
+                d2ab(2,1:nr) = 2*pp%ai * 2*aj * xyzin(jy+1,iy+1,2,1:nr)
+                if (jy > 0)          d2ab(2,1:nr) = d2ab(2,1:nr) - 2*pp%ai*jy*xyzin(jy-1,iy+1,2,1:nr)
+                if (iy > 0)          d2ab(2,1:nr) = d2ab(2,1:nr) - iy*2*aj*xyzin(jy+1,iy-1,2,1:nr)
+                if (iy > 0 .and. jy > 0) d2ab(2,1:nr) = d2ab(2,1:nr) + iy*jy*xyzin(jy-1,iy-1,2,1:nr)
+
+                d2ab(3,1:nr) = 2*pp%ai * 2*aj * xyzin(jz+1,iz+1,3,1:nr)
+                if (jz > 0)          d2ab(3,1:nr) = d2ab(3,1:nr) - 2*pp%ai*jz*xyzin(jz-1,iz+1,3,1:nr)
+                if (iz > 0)          d2ab(3,1:nr) = d2ab(3,1:nr) - iz*2*aj*xyzin(jz+1,iz-1,3,1:nr)
+                if (iz > 0 .and. jz > 0) d2ab(3,1:nr) = d2ab(3,1:nr) + iz*jz*xyzin(jz-1,iz-1,3,1:nr)
+
+                ! p_AA = d2/dA^2 (symmetric, lower triangle, correct per-root product)
+                bAA(1,1) = bAA(1,1) + w*sum(gDAA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAA(2,2) = bAA(2,2) + w*sum(xyzin(jx,ix,1,1:nr)*gDAA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAA(3,3) = bAA(3,3) + w*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDAA(jz,iz,3,1:nr))
+                bAA(2,1) = bAA(2,1) + w*sum(gDA(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAA(3,1) = bAA(3,1) + w*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                bAA(3,2) = bAA(3,2) + w*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+
+                ! p_AB = d2/dA_a dB_b (NOT symmetric; bAB(a,b) = d2/dA_a dB_b)
+                bAB(1,1) = bAB(1,1) + w*sum(d2ab(1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAB(2,2) = bAB(2,2) + w*sum(xyzin(jx,ix,1,1:nr)*d2ab(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAB(3,3) = bAB(3,3) + w*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*d2ab(3,1:nr))
+                bAB(1,2) = bAB(1,2) + w*sum(gDA(jx,ix,1,1:nr)*dket(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAB(2,1) = bAB(2,1) + w*sum(dket(1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                bAB(1,3) = bAB(1,3) + w*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*dket(3,1:nr))
+                bAB(3,1) = bAB(3,1) + w*sum(dket(1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                bAB(2,3) = bAB(2,3) + w*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*dket(3,1:nr))
+                bAB(3,2) = bAB(3,2) + w*sum(xyzin(jx,ix,1,1:nr)*dket(2,1:nr)*gDA(jz,iz,3,1:nr))
+
             END DO
         END DO
 
-        p_XX = p_XX + bXX
-        p_XC = p_XC + bXC
+        ! Symmetrize p_AA
+        bAA(1,2) = bAA(2,1); bAA(1,3) = bAA(3,1); bAA(2,3) = bAA(3,2)
+
+        p_XX = p_XX + bAA
+        ! p_XC = d2/dA dC = -(d2/dA^2 + d2/dA dB) by translational invariance
+        p_XC = p_XC - (bAA + bAB)
+
         END ASSOCIATE
     END DO
 

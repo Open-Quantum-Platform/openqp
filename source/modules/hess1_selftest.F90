@@ -49,7 +49,7 @@ contains
 
     integer :: nbf, nbf_tri, natom, n3, p, k, a, ka
     real(dp), allocatable :: m_packed(:)
-    real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:)
+    real(dp), allocatable :: hess_o_an(:,:), hess_k_an(:,:), hess_v_an(:,:), hess_v_an_b9(:,:)
     real(dp), allocatable :: hess_o_fd(:,:), hess_k_fd(:,:), hess_v_fd(:,:)
     real(dp), allocatable :: gp(:,:), gm(:,:), gp2(:,:), gm2(:,:)
     real(dp) :: h, err_o, err_k, err_v, sym_o, sym_k, sym_v, err_ds, err_dt, err_dv, err_ortho
@@ -67,14 +67,15 @@ contains
       m_packed(p) = 1.0_dp / real(p+1, dp)
     end do
 
-    allocate(hess_o_an(n3,n3), hess_k_an(n3,n3), hess_v_an(n3,n3), source=0.0_dp)
+    allocate(hess_o_an(n3,n3), hess_k_an(n3,n3), hess_v_an(n3,n3), hess_v_an_b9(n3,n3), source=0.0_dp)
     allocate(hess_o_fd(n3,n3), hess_k_fd(n3,n3), hess_v_fd(n3,n3), source=0.0_dp)
     allocate(gp(3,natom), gm(3,natom), gp2(3,natom), gm2(3,natom))
 
     ! analytic second-derivative contributions
     call hess_ee_overlap(basis, m_packed, hess_o_an)
     call hess_ee_kinetic(basis, m_packed, hess_k_an)
-    call hess_en(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, hess_v_an)
+    call hess_en(basis, basis%atoms%xyz, basis%atoms%zn, m_packed, hess_v_an, &
+                 hess_cc=hess_v_an_b9)
 
     ! central finite difference of the analytic gradient routines
     h = 1.0e-4_dp
@@ -250,9 +251,111 @@ contains
           do p=1,n3; write(u2,'(12es12.4)') fd_cc(p,1:n3); end do
           write(u2,'(a)') '--- hess_en analytic (total) ---'
           do p=1,n3; write(u2,'(12es12.4)') hess_v_an(p,1:n3); end do
+          write(u2,'(a)') '--- hess_en FD (total) ---'
+          do p=1,n3; write(u2,'(12es12.4)') hess_v_fd(p,1:n3); end do
+          write(u2,'(a)') '--- analytic - FD ---'
+          do p=1,n3; write(u2,'(12es12.4)') hess_v_an(p,1:n3)-hess_v_fd(p,1:n3); end do
+          write(u2,'(a)') '--- analytic block9 (p_CC only) ---'
+          do p=1,n3; write(u2,'(12es12.4)') hess_v_an_b9(p,1:n3); end do
+          write(u2,'(a)') '--- block9 - fd_cc ---'
+          do p=1,n3; write(u2,'(12es12.4)') hess_v_an_b9(p,1:n3)-fd_cc(p,1:n3); end do
           close(u2)
         end block
         deallocate(coord0, cmov)
+      end block
+    end if
+
+    ! ---- Gate 2 PRIMARY oracle data ------------------------------------------
+    ! Emit per-nucleus uncontracted basis-basis second-derivative blocks
+    !   PAA(a,b,mu,nu) = d2/dA_a dA_b <mu| 1/|r-C| |nu>   (bra-bra)
+    !   PAB(a,b,mu,nu) = d2/dA_a dB_b <mu| 1/|r-C| |nu>   (bra-ket mixed)
+    ! for each nucleus C, chargeless (znuc=1) and bfnrm-normalized to match the
+    ! stored overlap OQP_SM. The Python oracle (tests/test_hess_nuc_oracle.py)
+    ! applies -Z_C and the explicit AO permutation/scale map, then compares
+    ! element-wise to PySCF int1e_ipiprinv / int1e_iprinvip evaluated with
+    ! with_rinv_at_nucleus(C). This is the primary correctness gate for the
+    ! native Rys nuclear-attraction Hessian integrals (AM-shift formulation).
+    if (nbf <= 64) then
+      block
+        use mod_1e_primitives, only: comp_coulomb_der2_blocks
+        use mod_shell_tools, only: shell_t, shpair_t
+        use constants, only: CART_X, CART_Y, CART_Z
+        type(shell_t) :: eshi, eshj
+        type(shpair_t) :: ecab
+        real(dp), allocatable :: PAA(:,:,:,:), PAB(:,:,:,:), blkAA(:,:,:,:), blkAB(:,:,:,:)
+        real(dp), allocatable :: Sfull(:,:)
+        real(dp), contiguous, pointer :: smat2(:)
+        integer, allocatable :: ao_atom(:), ao_lx(:), ao_ly(:), ao_lz(:)
+        integer :: ic2, ii2, jj2, i2, j2, o_i, o_j, a2, b2, u3
+
+        allocate(ao_atom(nbf), ao_lx(nbf), ao_ly(nbf), ao_lz(nbf))
+        do ii2 = 1, basis%nshell
+          call eshi%fetch_by_id(basis, ii2)
+          do i2 = 1, eshi%nao
+            o_i = basis%ao_offset(ii2) + i2 - 1
+            ao_atom(o_i) = eshi%atid - 1            ! 0-based to match PySCF
+            ao_lx(o_i) = CART_X(i2, eshi%ang)
+            ao_ly(o_i) = CART_Y(i2, eshi%ang)
+            ao_lz(o_i) = CART_Z(i2, eshi%ang)
+          end do
+        end do
+
+        allocate(Sfull(nbf,nbf))
+        call tagarray_get_data(infos%dat, OQP_SM, smat2)
+        call unpack_matrix(smat2, Sfull)
+
+        allocate(PAA(3,3,nbf,nbf), PAB(3,3,nbf,nbf))
+        call ecab%alloc(basis)
+        open(newunit=u3, file='/tmp/hess_nuc_blocks.txt', status='replace', action='write')
+        write(u3,'(2i6)') nbf, natom
+        do o_i = 1, nbf
+          write(u3,'(4i5)') ao_atom(o_i), ao_lx(o_i), ao_ly(o_i), ao_lz(o_i)
+        end do
+        ! atoms: nuclear charge (integer) and coordinates in bohr
+        do ic2 = 1, natom
+          write(u3,'(i5,3es24.16)') nint(basis%atoms%zn(ic2)), basis%atoms%xyz(1:3,ic2)
+        end do
+        do i2 = 1, nbf
+          write(u3,'(*(es24.16))') Sfull(i2,1:nbf)
+        end do
+        do ic2 = 1, natom
+          PAA = 0.0_dp; PAB = 0.0_dp
+          do ii2 = 1, basis%nshell
+            call eshi%fetch_by_id(basis, ii2)
+            do jj2 = 1, basis%nshell
+              call eshj%fetch_by_id(basis, jj2)
+              call ecab%shell_pair(basis, eshi, eshj)
+              if (ecab%numpairs == 0) cycle
+              allocate(blkAA(3,3,ecab%inao,ecab%jnao), blkAB(3,3,ecab%inao,ecab%jnao))
+              call comp_coulomb_der2_blocks(ecab, basis%atoms%xyz(:,ic2), 1.0_dp, blkAA, blkAB)
+              do i2 = 1, ecab%inao
+                o_i = basis%ao_offset(ii2) + i2 - 1
+                do j2 = 1, ecab%jnao
+                  o_j = basis%ao_offset(jj2) + j2 - 1
+                  PAA(:,:,o_i,o_j) = blkAA(:,:,i2,j2)*basis%bfnrm(o_i)*basis%bfnrm(o_j)
+                  PAB(:,:,o_i,o_j) = blkAB(:,:,i2,j2)*basis%bfnrm(o_i)*basis%bfnrm(o_j)
+                end do
+              end do
+              deallocate(blkAA, blkAB)
+            end do
+          end do
+          do a2 = 1, 3
+            do b2 = 1, 3
+              do i2 = 1, nbf
+                write(u3,'(*(es24.16))') PAA(a2,b2,i2,1:nbf)
+              end do
+            end do
+          end do
+          do a2 = 1, 3
+            do b2 = 1, 3
+              do i2 = 1, nbf
+                write(u3,'(*(es24.16))') PAB(a2,b2,i2,1:nbf)
+              end do
+            end do
+          end do
+        end do
+        close(u3)
+        deallocate(PAA, PAB, Sfull, ao_atom, ao_lx, ao_ly, ao_lz)
       end block
     end if
 
@@ -278,7 +381,7 @@ contains
       close(u)
     end block
 
-    deallocate(m_packed, hess_o_an, hess_k_an, hess_v_an, &
+    deallocate(m_packed, hess_o_an, hess_k_an, hess_v_an, hess_v_an_b9, &
                hess_o_fd, hess_k_fd, hess_v_fd, gp, gm, gp2, gm2)
     end associate
   end subroutine hess1_selftest

@@ -549,13 +549,14 @@ contains
 !>     p_AB = -(p_AA + p_AC),  p_CC = p_AA + p_AB + p_AB^T + p_BB,
 !>   and all nine atom blocks are scattered into the (3N,3N) Hessian. Summing
 !>   over ordered pairs reproduces the true d2E/dRdR (no extra symmetry factor).
- SUBROUTINE hess_en(basis, coord, zq, denab, hess, logtol)
+ SUBROUTINE hess_en(basis, coord, zq, denab, hess, logtol, hess_cc)
     implicit none
     type(basis_set), intent(inout) :: basis
     real(kind=dp), contiguous, intent(in) :: coord(:,:), zq(:)
     REAL(kind=dp), INTENT(INOUT) :: denab(:)
     real(kind=dp), intent(inout) :: hess(:,:)
     real(kind=dp), optional :: logtol
+    real(kind=dp), optional, intent(inout) :: hess_cc(:,:)
 
     INTEGER :: ii, jj, ic, a, b, n, nat, pat, qat
     REAL(kind=dp) :: tol
@@ -633,6 +634,35 @@ contains
 
     hess = hess + hess_priv
     DEALLOCATE(hess_priv)
+    if (present(hess_cc)) then
+        call cab%alloc(basis)
+        call cba%alloc(basis)
+        do ii = 1, basis%nshell
+            call shi%fetch_by_id(basis, ii)
+            do jj = 1, basis%nshell
+                call shj%fetch_by_id(basis, jj)
+                call cab%shell_pair(basis, shi, shj, tol)
+                if (cab%numpairs == 0) cycle
+                call cba%shell_pair(basis, shj, shi, tol)
+                do ic = 1, nat
+                    p_AA = 0.0d0; p_AC = 0.0d0; p_BB = 0.0d0; p_BC = 0.0d0
+                    call comp_coulomb_der2_braC(cab, coord(:,ic), -zq(ic), &
+                        dens(basis%ao_offset(ii):, basis%ao_offset(jj):), p_AA, p_AC)
+                    call comp_coulomb_der2_braC(cba, coord(:,ic), -zq(ic), &
+                        dens(basis%ao_offset(jj):, basis%ao_offset(ii):), p_BB, p_BC)
+                    bAB = -(p_AA + p_AC)
+                    do a = 1, 3
+                        do b = 1, 3
+                            hess_cc(3*(ic-1)+a, 3*(ic-1)+b) = &
+                                hess_cc(3*(ic-1)+a, 3*(ic-1)+b) + &
+                                p_AA(a,b) + bAB(a,b) + bAB(b,a) + p_BB(a,b)
+                        end do
+                    end do
+                end do
+            end do
+        end do
+    end if
+    DEALLOCATE(dens)
  END SUBROUTINE
 
 !-------------------------------------------------------------------------------

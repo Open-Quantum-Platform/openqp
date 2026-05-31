@@ -1,9 +1,15 @@
 # Task A — Native Rys single-center Coulomb second derivative (l <= 3)
 
-Status: **design only, no code.** This is the committed plan for the 1e
-nuclear-attraction second-derivative term of the analytic HF/DFT Hessian, using
-**analytic X-derivatives of the closed-form Rys roots `rys_rt1..rys_rt5`**. It
-supersedes every earlier Task A note.
+Status: **Gate 2 implemented and validated** (see Section 9). The production
+basis-basis second derivative uses **angular-momentum (AM) shift identities** and
+therefore does **not** differentiate the Rys roots/weights. The Gate-1
+`rys_deriv.F90` root/weight X-derivative layer is retained as a validated
+auxiliary/diagnostic layer (and as the basis for any future *direct*
+charge-center differentiated-quadrature formulation), but it is **not** on the
+production `p_AA / p_AB / p_BB` path. Sections 1-2 (the exact `nroots_der2`
+formula and the s/p/d/f <= 5 root proof) remain in force; the
+root-X-derivative-based assembly originally sketched in Sections 3-4 is
+superseded by the AM-shift formulation for the basis-basis blocks.
 
 ## 0. Superseded baseline (do not use)
 
@@ -301,3 +307,67 @@ shell pair that would need `nroots >= 6`:
    angular momentum at the largest closed-form case (f,f, nroots=5).
 4. Re-validate the hess_en 9-block scatter against correct per-nucleus integrals
    on the low-symmetry molecule before removing its "provisional" status.
+
+---
+
+## 9. Gate 2 — implemented formulation and validation (AM-shift)
+
+**Decision (supersedes the "Gate 2 must use rys_deriv" framing).** The production
+basis-basis second derivative is built from angular-momentum raising/lowering
+identities, *not* from differentiated Rys roots/weights:
+
+- `d/dA chi_A`, `d2/dA2 chi_A`, `d/dB chi_B`, `d2/dB2 chi_B` are exact linear
+  combinations of ordinary single-center Coulomb integrals with shifted angular
+  momentum. The Rys roots/weights are simply **recomputed for the shifted
+  integral class** at the corrected count
+  `nroots_der2 = floor((Li + Lj + 2)/2) + 1` (explicitly set, **not** inherited
+  from `cp%nroots`).
+- **The production basis-basis second derivative uses AM-shift identities and
+  therefore does not differentiate Rys roots/weights.** `rys_deriv.F90` stays as
+  a validated auxiliary/diagnostic layer (and a basis for a future direct
+  charge-center differentiated-quadrature route); it is not used here.
+
+**Code.** `mod_1e_primitives.F90`:
+- `comp_coulomb_der2_blocks(cp, c, znuc, pAA, pAB)` — shared kernel returning the
+  uncontracted per-AO blocks `pAA(a,b,i,j) = d2/dA_a dA_b <i|znuc/|r-c||j>` and
+  `pAB(a,b,i,j) = d2/dA_a dB_b <i|...|j>` (bra-bra via `der2_coul_xyz`; ket and
+  mixed via the explicit index recurrences). Aborts cleanly for `nroots_der2 > 5`
+  (any g-or-higher pair).
+- `comp_coulomb_der2_braC(...)` — thin density-contraction wrapper over the kernel
+  returning `p_XX` and `p_XC = -(p_XX + p_AB)`.
+
+Per-nucleus blocks via single-center translational invariance (after the direct
+basis-basis blocks are correct):
+```
+p_AC(C) = -(p_AA(C) + p_AB(C))
+p_BC(C) = -(p_BB(C) + p_AB(C)^T)
+p_CC(C) = -(p_AC(C)^T + p_BC(C)^T) = p_AA + p_AB + p_AB^T + p_BB
+```
+
+**Validation arbiter = the per-nucleus integral oracle** (not whether
+`rys_deriv.F90` is used, and not TI/Hessian-symmetry, which the TI-built blocks
+satisfy by construction). `tests/test_hess_nuc_oracle.py`, on a low-symmetry C1
+all-distinct-atom molecule (HOF / 6-31G*), checks **element-wise** (no
+Frobenius-norm shortcuts):
+- `p_AA(C)` vs PySCF `int1e_ipiprinv` at nucleus C (sign/component pinned by FD:
+  `int1e_ipiprinv[a,b] = +d2/dA_a dA_b`);
+- `p_AB(C)` vs PySCF `int1e_iprinvip` (`[a,b] = +d2/dA_a dB_b`), including
+  explicit `a != b` component-order checks;
+- `p_BB(C)` is covered by the full `nbf x nbf` sweep (bra on every atom);
+- an **explicit AO permutation** (proven on the overlap correlation matrix) plus
+  an **explicit per-AO normalization scale** (OpenQP `xx,yy,zz,xy,xz,yz` vs PySCF
+  `xx,xy,xz,yy,yz,zz` for d; libcint cart order generally);
+- an explicit `-Z_C` charge-factor check.
+Pass tolerance `< 1e-9` per element, per nucleus.
+
+**Secondary (contracted) confirmation**, run only after the integral oracle
+passes: (a) analytic `hess_en` nuclear-attraction total vs central FD of
+`grad_en_pulay + grad_en_hellman_feynman` on the same molecule, required to be at
+parity with the validated overlap/kinetic second-derivative FD errors; (b) a
+**non-circular** charge-charge check — the TI-built `p_CC` (hess_en block 9) vs an
+*independent* FD of the HF charge gradient w.r.t. the charge position (`fd_cc`),
+which never uses TI.
+
+**Status:** integral oracle + both secondary confirmations pass; Gate-1
+`rys_deriv` regression and the H2O overlap/kinetic selftest remain green. The
+`hf_hessian` kernel stays guarded (final assembly is a later, separate step).
