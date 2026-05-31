@@ -1206,6 +1206,27 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
 
+    if hess_type == "numerical" and method == "tdhf":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if td_type == "mrsf":
+            report.add(
+                "ERROR",
+                "hess.type",
+                "MRSF-TDDFT numerical Hessian requires the Gate 3B root-tracked finite-difference oracle; state-index-only finite differences can silently follow the wrong electronic character.",
+                value=hess_type,
+                expected="root-tracked MRSF finite-difference Hessian oracle",
+                action="Use MRSF gradients directly for now, or wait for Gate 3B numerical Hessian support.",
+            )
+        elif td_type == "umrsf":
+            report.add(
+                "ERROR",
+                "hess.type",
+                "UMRSF numerical Hessian is not implemented; UMRSF gradient/Z-vector support is incomplete for a Hessian oracle.",
+                value=hess_type,
+                expected="validated UMRSF finite-difference Hessian oracle",
+                action="Use supported MRSF/SF/TD gradients directly or a supported Hessian method.",
+            )
+
     if method == "hf" and state > 0:
         report.add(
             "ERROR",

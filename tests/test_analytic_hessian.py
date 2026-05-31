@@ -259,6 +259,29 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         ):
             hessian.analytical_hess()
 
+    def test_mrsf_numerical_hessian_runtime_guard_requires_root_tracking_oracle(self):
+        class Mol:
+            project_name = "h2o_mrsf"
+            log_path = "/tmp"
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "numerical", "state": 2, "read": False, "restart": False, "temperature": [298.15], "clean": True, "nproc": 1, "dx": 1.0e-3},
+                "input": {"method": "tdhf"},
+                "scf": {"multiplicity": 3},
+                "tdhf": {"type": "mrsf", "multiplicity": 1, "nstate": 3},
+            }
+            data = {"natom": 3}
+
+        hessian = self.single_point.Hessian(Mol())
+
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            r"MRSF-TDDFT numerical Hessian requires the Gate 3B root-tracked finite-difference oracle.*state-index-only",
+        ):
+            hessian.numerical_hess()
+
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
@@ -316,6 +339,21 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+
+    def test_mrsf_numerical_hessian_is_rejected_until_root_tracking_oracle_exists(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "nstate": 3, "multiplicity": 1},
+            "hess": {"type": "numerical", "state": 2, "nproc": 1, "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
+
+        self.assertFalse(report.ok)
+        text = report.to_text()
+        self.assertIn("MRSF-TDDFT numerical Hessian requires the Gate 3B root-tracked finite-difference oracle", text)
+        self.assertIn("state-index-only finite differences", text)
 
     def test_sf_analytical_hessian_has_sf_specific_rejection_message(self):
         config = {

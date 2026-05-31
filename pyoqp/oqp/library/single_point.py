@@ -703,6 +703,18 @@ class Hessian(Calculator):
         )
 
     def numerical_hess(self):
+        method = self.mol.config['input']['method']
+        td_type = self.mol.config['tdhf']['type']
+        if method == 'tdhf' and td_type == 'mrsf':
+            raise NotImplementedError(
+                'MRSF-TDDFT numerical Hessian requires the Gate 3B root-tracked finite-difference oracle; '
+                'the generic state-index-only finite-difference Hessian path is disabled to avoid silently following the wrong electronic character.'
+            )
+        if method == 'tdhf' and td_type == 'umrsf':
+            raise NotImplementedError(
+                'UMRSF numerical Hessian is not implemented; UMRSF gradient/Z-vector support is incomplete for a Hessian oracle.'
+            )
+
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
         nproc = self.mol.config['hess']['nproc']
         dx = self.mol.config['hess']['dx']
