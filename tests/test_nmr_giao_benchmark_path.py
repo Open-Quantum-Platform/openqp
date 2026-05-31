@@ -9,6 +9,9 @@ claim boundary remains intact.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -49,6 +52,25 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
         self.assertIn("not yet implemented", text)
         self.assertNotIn("nmr_gauge=cgo for GIAO", text)
 
+    def test_run_openqp_requires_available_runtime(self):
+        env = dict(os.environ)
+        env.pop("OPENQP_ROOT", None)
+        proc = subprocess.run(
+            [sys.executable, str(DRIVER), "--run-openqp", "--outdir", "/tmp/openqp-giao-runtime-missing-test"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("--run-openqp requested but OpenQP runtime is unavailable", proc.stderr + proc.stdout)
+
+    def test_benchmark_outputs_include_peak_memory_metric(self):
+        text = DRIVER.read_text()
+        self.assertIn("PeakMemorySampler", text)
+        self.assertIn("peak_memory_mb", text)
+        self.assertIn("Peak memory/MiB", text)
+
     def test_benchmark_results_capture_reference_and_gated_status(self):
         path = ROOT / "tests" / "fixtures" / "nmr" / "benchmark_results" / "nmr_giao_benchmark_results.json"
         self.assertTrue(path.exists(), "Run scripts/nmr_giao_benchmark_matrix.py before reporting benchmarks")
@@ -60,6 +82,7 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
         self.assertIn(("openqp", "giao"), gauges)
         self.assertTrue(any(row["backend"] == "pyscf" and row["gauge"] == "giao" and row["status"] == "ok" for row in data["rows"]))
         self.assertTrue(any(row["backend"] == "openqp" and row["gauge"] == "giao" and row["status"] in {"gated", "skipped"} for row in data["rows"]))
+        self.assertTrue(all("peak_memory_mb" in row for row in data["rows"]))
 
 
 if __name__ == "__main__":

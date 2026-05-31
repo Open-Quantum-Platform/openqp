@@ -21,22 +21,115 @@ import argparse
 import csv
 import json
 import os
+import resource
 import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
-import numpy as np
-from pyscf import dft, gto, scf
-from pyscf.data import nist
-from pyscf.prop.nmr import rhf as nmr_rhf, rks as nmr_rks
+try:
+    import psutil
+except ImportError:  # pragma: no cover - exercised on minimal environments
+    psutil = None
+
+np = None
+dft = None
+gto = None
+scf = None
+nmr_rhf = None
+nmr_rks = None
+UNIT = None
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "tests" / "fixtures" / "nmr" / "giao_benchmark_matrix.json"
 OUTDIR = ROOT / "tests" / "fixtures" / "nmr" / "benchmark_results"
-UNIT = nist.ALPHA ** 2 * 1e6
+
+
+def _ensure_pyscf_imports():
+    """Import PySCF lazily after early OpenQP runtime checks."""
+    global np, dft, gto, scf, nmr_rhf, nmr_rks, UNIT
+    if np is not None:
+        return
+    import numpy as _np
+    from pyscf import dft as _dft, gto as _gto, scf as _scf
+    from pyscf.data import nist
+    from pyscf.prop.nmr import rhf as _nmr_rhf, rks as _nmr_rks
+
+    np = _np
+    dft = _dft
+    gto = _gto
+    scf = _scf
+    nmr_rhf = _nmr_rhf
+    nmr_rks = _nmr_rks
+    UNIT = nist.ALPHA ** 2 * 1e6
+
+
+def _ru_maxrss_mb(who=resource.RUSAGE_SELF) -> float:
+    """Return ru_maxrss in MiB with macOS/Linux unit normalization."""
+    value = float(resource.getrusage(who).ru_maxrss)
+    # macOS reports bytes; Linux reports KiB.
+    return value / (1024.0 * 1024.0) if sys.platform == "darwin" else value / 1024.0
+
+
+class PeakMemorySampler:
+    """Poll RSS while a benchmark block runs and report peak MiB.
+
+    If psutil is unavailable, fall back to ru_maxrss. The fallback is a process
+    high-water mark, so it is conservative rather than a clean per-block peak.
+    """
+
+    def __init__(self, pid: int | None = None, interval: float = 0.01):
+        self.pid = pid or os.getpid()
+        self.interval = interval
+        self.peak_mb = 0.0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._proc = psutil.Process(self.pid) if psutil is not None else None
+
+    def __enter__(self):
+        if self._proc is None:
+            self.peak_mb = _ru_maxrss_mb()
+            return self
+        self.peak_mb = self._rss_mb()
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._proc is None:
+            self.peak_mb = max(self.peak_mb, _ru_maxrss_mb())
+            return False
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+        self.peak_mb = max(self.peak_mb, self._rss_mb())
+        return False
+
+    def _rss_mb(self) -> float:
+        try:
+            return float(self._proc.memory_info().rss) / (1024.0 * 1024.0)
+        except Exception:
+            return self.peak_mb
+
+    def _poll(self):
+        while not self._stop.is_set():
+            self.peak_mb = max(self.peak_mb, self._rss_mb())
+            self._stop.wait(self.interval)
+
+
+@contextmanager
+def _child_memory_delta():
+    """Fallback peak-memory context for subprocesses without psutil."""
+    before = _ru_maxrss_mb(resource.RUSAGE_CHILDREN)
+    result = {"peak_memory_mb": 0.0}
+    yield result
+    after = _ru_maxrss_mb(resource.RUSAGE_CHILDREN)
+    result["peak_memory_mb"] = max(0.0, after - before)
+
 
 GEOMS_ANG = {
     "h2o": """O  0.000000000  0.000000000 -0.041061554
@@ -119,38 +212,51 @@ def _coupled_mo1(mf, h1, s1, max_cycle=100, conv_tol=1e-10):
 def _pyscf_shielding(mol, method: str, gauge: str, origin_bohr=(0.0, 0.0, 0.0)):
     xc, cx = METHODS[method]
     t0 = time.perf_counter()
-    if xc is None:
-        mf = scf.RHF(mol).run(verbose=0)
-        cls = nmr_rhf.NMR
-    else:
-        mf = dft.RKS(mol)
-        mf.xc = xc
-        mf.run(verbose=0)
-        cls = nmr_rks.NMR
-    nmrobj = cls(mf)
-    gauge_orig = None if gauge == "giao" else np.asarray(origin_bohr, dtype=float)
-    coeff = mf.mo_coeff
-    occ_mask = mf.mo_occ > 0
-    h1ao = nmr_rhf.make_h10(nmrobj.mol, mf.make_rdm1(), gauge_orig=gauge_orig)
-    s1ao = nmr_rhf.make_s10(nmrobj.mol, gauge_orig=gauge_orig)
-    h1 = np.einsum("pi,xpq,qj->xij", coeff, h1ao, coeff[:, occ_mask])
-    s1 = np.einsum("pi,xpq,qj->xij", coeff, s1ao, coeff[:, occ_mask])
-    mo_coupled = _coupled_mo1(mf, h1, s1)
-    tensor = (nmrobj.dia(gauge_orig=gauge_orig) + nmrobj.para(mo10=mo_coupled)[0]) * UNIT
+    with PeakMemorySampler() as mem:
+        if xc is None:
+            mf = scf.RHF(mol).run(verbose=0)
+            cls = nmr_rhf.NMR
+        else:
+            mf = dft.RKS(mol)
+            mf.xc = xc
+            mf.run(verbose=0)
+            cls = nmr_rks.NMR
+        nmrobj = cls(mf)
+        gauge_orig = None if gauge == "giao" else np.asarray(origin_bohr, dtype=float)
+        coeff = mf.mo_coeff
+        occ_mask = mf.mo_occ > 0
+        h1ao = nmr_rhf.make_h10(nmrobj.mol, mf.make_rdm1(), gauge_orig=gauge_orig)
+        s1ao = nmr_rhf.make_s10(nmrobj.mol, gauge_orig=gauge_orig)
+        h1 = np.einsum("pi,xpq,qj->xij", coeff, h1ao, coeff[:, occ_mask])
+        s1 = np.einsum("pi,xpq,qj->xij", coeff, s1ao, coeff[:, occ_mask])
+        mo_coupled = _coupled_mo1(mf, h1, s1)
+        tensor = (nmrobj.dia(gauge_orig=gauge_orig) + nmrobj.para(mo10=mo_coupled)[0]) * UNIT
     wall = time.perf_counter() - t0
     iso = np.asarray([float(np.trace(tensor[i]) / 3.0) for i in range(mol.natm)])
     return {
         "tensor_components_ppm": tensor.tolist(),
         "isotropic_shielding_ppm": iso.tolist(),
         "wall_time_seconds": wall,
+        "peak_memory_mb": mem.peak_mb,
         "exact_exchange_fraction": cx,
     }
 
 
+def _openqp_runtime_error() -> str | None:
+    root = os.environ.get("OPENQP_ROOT")
+    if not root:
+        return "OPENQP_ROOT is not set"
+    libdir = Path(root) / "lib"
+    if not ((libdir / "liboqp.dylib").exists() or (libdir / "liboqp.so").exists()):
+        return f"OPENQP_ROOT={root} does not contain lib/liboqp.dylib or lib/liboqp.so"
+    return None
+
+
 def _run_openqp(name: str, basis: str, method: str, gauge: str):
     root = os.environ.get("OPENQP_ROOT")
-    if not root or not ((Path(root) / "lib" / "liboqp.dylib").exists() or (Path(root) / "lib" / "liboqp.so").exists()):
-        return {"status": "skipped", "reason": "OPENQP_ROOT does not point to a built OpenQP package"}
+    runtime_error = _openqp_runtime_error()
+    if runtime_error:
+        raise RuntimeError(runtime_error)
     xc, _ = METHODS[method]
     functional = f"functional={method}\n" if xc else ""
     dftgrid = "[dftgrid]\nrad_type=becke\n\n" if xc else ""
@@ -167,24 +273,40 @@ def _run_openqp(name: str, basis: str, method: str, gauge: str):
         inp = Path(wd) / f"{name}_{method}_{gauge}.inp"
         inp.write_text(text)
         env = dict(os.environ)
-        env["OPENQP_ROOT"] = root
+        env["OPENQP_ROOT"] = root or ""
         env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
         t0 = time.perf_counter()
-        proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=wd, env=env, capture_output=True, text=True)
+        if psutil is not None:
+            proc_handle = psutil.Popen(
+                [sys.executable, "-m", "oqp.pyoqp", str(inp)],
+                cwd=wd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            with PeakMemorySampler(proc_handle.pid) as mem:
+                stdout, stderr = proc_handle.communicate()
+            proc = subprocess.CompletedProcess(proc_handle.args, proc_handle.returncode, stdout, stderr)
+            peak_memory_mb = mem.peak_mb
+        else:
+            with _child_memory_delta() as mem:
+                proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=wd, env=env, capture_output=True, text=True)
+            peak_memory_mb = mem["peak_memory_mb"]
         wall = time.perf_counter() - t0
         log = inp.with_suffix(".log")
         stdout_stderr = proc.stdout + proc.stderr + (log.read_text() if log.exists() else "")
         if "NotImplementedError" in stdout_stderr or "not yet implemented" in stdout_stderr:
-            return {"status": "gated", "reason": "OpenQP native GIAO path is still NotImplemented", "wall_time_seconds": wall}
+            return {"status": "gated", "reason": "OpenQP native GIAO path is still NotImplemented", "wall_time_seconds": wall, "peak_memory_mb": peak_memory_mb}
         if proc.returncode != 0:
-            return {"status": "failed", "returncode": proc.returncode, "tail": stdout_stderr[-2000:], "wall_time_seconds": wall}
+            return {"status": "failed", "returncode": proc.returncode, "tail": stdout_stderr[-2000:], "wall_time_seconds": wall, "peak_memory_mb": peak_memory_mb}
         rows = []
         for line in stdout_stderr.splitlines():
             m = re.match(r"\s*(\d+)\s+[\d.]+" + r"\s+(-?\d+\.\d+)" * 5 + r"\s*$", line)
             if m:
                 vals = [float(m.group(j)) for j in range(2, 7)]
                 rows.append(vals[4])
-        return {"status": "ok", "isotropic_shielding_ppm": rows, "wall_time_seconds": wall}
+        return {"status": "ok", "isotropic_shielding_ppm": rows, "wall_time_seconds": wall, "peak_memory_mb": peak_memory_mb}
 
 
 def _write_outputs(records, outdir: Path):
@@ -193,15 +315,15 @@ def _write_outputs(records, outdir: Path):
     csv_path = outdir / "nmr_giao_benchmark_results.csv"
     md_path = outdir / "nmr_giao_benchmark_results.md"
     json_path.write_text(json.dumps(records, indent=2) + "\n")
-    fields = ["system", "basis", "method", "backend", "gauge", "status", "max_origin_delta_ppm", "wall_time_seconds", "reference_delta_ppm", "notes"]
+    fields = ["system", "basis", "method", "backend", "gauge", "status", "max_origin_delta_ppm", "wall_time_seconds", "peak_memory_mb", "reference_delta_ppm", "notes"]
     with csv_path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for r in records["rows"]:
             writer.writerow({k: r.get(k, "") for k in fields})
-    lines = ["# NMR CGO/GIAO benchmark matrix", "", f"Status: {records['status']}", "", "|System|Basis|Method|Backend|Gauge|Status|Max origin delta/ppm|Reference delta/ppm|Wall/s|Notes|", "|---|---:|---|---|---|---|---:|---:|---:|---|"]
+    lines = ["# NMR CGO/GIAO benchmark matrix", "", f"Status: {records['status']}", "", "|System|Basis|Method|Backend|Gauge|Status|Max origin delta/ppm|Reference delta/ppm|Wall/s|Peak memory/MiB|Notes|", "|---|---:|---|---|---|---|---:|---:|---:|---:|---|"]
     for r in records["rows"]:
-        lines.append("|{system}|{basis}|{method}|{backend}|{gauge}|{status}|{max_origin_delta_ppm}|{reference_delta_ppm}|{wall_time_seconds}|{notes}|".format(**{k: r.get(k, "") for k in ["system","basis","method","backend","gauge","status","max_origin_delta_ppm","reference_delta_ppm","wall_time_seconds","notes"]}))
+        lines.append("|{system}|{basis}|{method}|{backend}|{gauge}|{status}|{max_origin_delta_ppm}|{reference_delta_ppm}|{wall_time_seconds}|{peak_memory_mb}|{notes}|".format(**{k: r.get(k, "") for k in ["system","basis","method","backend","gauge","status","max_origin_delta_ppm","reference_delta_ppm","wall_time_seconds","peak_memory_mb","notes"]}))
     md_path.write_text("\n".join(lines) + "\n")
     return json_path, csv_path, md_path
 
@@ -212,6 +334,13 @@ def main():
     parser.add_argument("--run-openqp", action="store_true", help="also run OpenQP CGO/GIAO through the normal driver")
     parser.add_argument("--outdir", default=str(OUTDIR))
     args = parser.parse_args()
+
+    if args.run_openqp:
+        runtime_error = _openqp_runtime_error()
+        if runtime_error:
+            raise SystemExit(f"--run-openqp requested but OpenQP runtime is unavailable: {runtime_error}")
+
+    _ensure_pyscf_imports()
 
     matrix = json.loads(MATRIX.read_text())
     translations = matrix["gauge_origin_translations_bohr"]
@@ -232,6 +361,7 @@ def main():
             vals = []
             tensors = None
             wall = 0.0
+            peak_memory_mb = 0.0
             status = "ok"
             notes = "PySCF trusted reference"
             for trans in translations:
@@ -241,6 +371,7 @@ def main():
                     vals.append(np.asarray(result["isotropic_shielding_ppm"]))
                     tensors = result["tensor_components_ppm"]
                     wall += result["wall_time_seconds"]
+                    peak_memory_mb = max(peak_memory_mb, float(result.get("peak_memory_mb", 0.0)))
                 except Exception as exc:
                     status = "failed"
                     notes = type(exc).__name__ + ": " + str(exc)[:160]
@@ -257,7 +388,7 @@ def main():
             rows.append({
                 "system": name, "basis": basis, "method": method, "backend": "pyscf", "gauge": gauge,
                 "status": status, "max_origin_delta_ppm": f"{max_delta:.6f}" if isinstance(max_delta, float) else max_delta,
-                "reference_delta_ppm": ref_delta, "wall_time_seconds": f"{wall:.3f}", "notes": notes,
+                "reference_delta_ppm": ref_delta, "wall_time_seconds": f"{wall:.3f}", "peak_memory_mb": f"{peak_memory_mb:.1f}", "notes": notes,
                 "tensor_components_ppm": tensors,
             })
         if args.run_openqp:
@@ -266,7 +397,7 @@ def main():
                 rows.append({
                     "system": name, "basis": basis, "method": method, "backend": "openqp", "gauge": gauge,
                     "status": r["status"], "max_origin_delta_ppm": "pending" if gauge == "giao" else "not_sampled",
-                    "reference_delta_ppm": "pending", "wall_time_seconds": f"{r.get('wall_time_seconds', 0.0):.3f}",
+                    "reference_delta_ppm": "pending", "wall_time_seconds": f"{r.get('wall_time_seconds', 0.0):.3f}", "peak_memory_mb": f"{r.get('peak_memory_mb', 0.0):.1f}",
                     "notes": r.get("reason", r.get("tail", ""))[:160],
                 })
     records = {

@@ -47,6 +47,7 @@
       "max_origin_delta_ppm": "343.193360",
       "reference_delta_ppm": "0.000000",
       "wall_time_seconds": "0.140",
+      "peak_memory_mb": "115.2",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -111,7 +112,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "0.000253",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "0.114",
+      "wall_time_seconds": "0.115",
+      "peak_memory_mb": "115.5",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -173,11 +175,12 @@
       "method": "hf",
       "backend": "openqp",
       "gauge": "cgo",
-      "status": "skipped",
+      "status": "ok",
       "max_origin_delta_ppm": "not_sampled",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.880",
+      "peak_memory_mb": "147.4",
+      "notes": ""
     },
     {
       "system": "h2o",
@@ -185,11 +188,12 @@
       "method": "hf",
       "backend": "openqp",
       "gauge": "giao",
-      "status": "skipped",
+      "status": "gated",
       "max_origin_delta_ppm": "pending",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.788",
+      "peak_memory_mb": "136.3",
+      "notes": "OpenQP native GIAO path is still NotImplemented"
     },
     {
       "system": "h2o",
@@ -200,7 +204,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "338.191722",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "0.514",
+      "wall_time_seconds": "0.524",
+      "peak_memory_mb": "185.4",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -265,7 +270,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "9.756080",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "0.519",
+      "wall_time_seconds": "0.516",
+      "peak_memory_mb": "192.6",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -327,11 +333,12 @@
       "method": "pbe",
       "backend": "openqp",
       "gauge": "cgo",
-      "status": "skipped",
+      "status": "ok",
       "max_origin_delta_ppm": "not_sampled",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.811",
+      "peak_memory_mb": "152.7",
+      "notes": ""
     },
     {
       "system": "h2o",
@@ -339,11 +346,12 @@
       "method": "pbe",
       "backend": "openqp",
       "gauge": "giao",
-      "status": "skipped",
+      "status": "gated",
       "max_origin_delta_ppm": "pending",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.802",
+      "peak_memory_mb": "152.1",
+      "notes": "OpenQP native GIAO path is still NotImplemented"
     },
     {
       "system": "formaldehyde",
@@ -354,7 +362,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "108.921635",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "0.805",
+      "wall_time_seconds": "0.818",
+      "peak_memory_mb": "193.2",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -436,7 +445,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "0.000004",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "1.080",
+      "wall_time_seconds": "1.054",
+      "peak_memory_mb": "193.5",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -515,11 +525,12 @@
       "method": "hf",
       "backend": "openqp",
       "gauge": "cgo",
-      "status": "skipped",
+      "status": "ok",
       "max_origin_delta_ppm": "not_sampled",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.915",
+      "peak_memory_mb": "194.5",
+      "notes": ""
     },
     {
       "system": "formaldehyde",
@@ -527,11 +538,12 @@
       "method": "hf",
       "backend": "openqp",
       "gauge": "giao",
-      "status": "skipped",
+      "status": "gated",
       "max_origin_delta_ppm": "pending",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.773",
+      "peak_memory_mb": "149.4",
+      "notes": "OpenQP native GIAO path is still NotImplemented"
     },
     {
       "system": "formaldehyde",
@@ -542,7 +554,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "104.750288",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "1.801",
+      "wall_time_seconds": "1.781",
+      "peak_memory_mb": "305.6",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -624,7 +637,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "8.497257",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "2.045",
+      "wall_time_seconds": "2.008",
+      "peak_memory_mb": "307.4",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -703,11 +717,12 @@
       "method": "pbe0",
       "backend": "openqp",
       "gauge": "cgo",
-      "status": "skipped",
+      "status": "ok",
       "max_origin_delta_ppm": "not_sampled",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.822",
+      "peak_memory_mb": "204.9",
+      "notes": ""
     },
     {
       "system": "formaldehyde",
@@ -715,11 +730,12 @@
       "method": "pbe0",
       "backend": "openqp",
       "gauge": "giao",
-      "status": "skipped",
+      "status": "gated",
       "max_origin_delta_ppm": "pending",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.770",
+      "peak_memory_mb": "189.8",
+      "notes": "OpenQP native GIAO path is still NotImplemented"
     },
     {
       "system": "formaldehyde",
@@ -730,7 +746,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "102.945576",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "1.513",
+      "wall_time_seconds": "1.488",
+      "peak_memory_mb": "307.5",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -812,7 +829,8 @@
       "status": "ok",
       "max_origin_delta_ppm": "10.296883",
       "reference_delta_ppm": "0.000000",
-      "wall_time_seconds": "1.798",
+      "wall_time_seconds": "1.728",
+      "peak_memory_mb": "307.7",
       "notes": "PySCF trusted reference",
       "tensor_components_ppm": [
         [
@@ -891,11 +909,12 @@
       "method": "pbe",
       "backend": "openqp",
       "gauge": "cgo",
-      "status": "skipped",
+      "status": "ok",
       "max_origin_delta_ppm": "not_sampled",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.786",
+      "peak_memory_mb": "195.4",
+      "notes": ""
     },
     {
       "system": "formaldehyde",
@@ -903,11 +922,12 @@
       "method": "pbe",
       "backend": "openqp",
       "gauge": "giao",
-      "status": "skipped",
+      "status": "gated",
       "max_origin_delta_ppm": "pending",
       "reference_delta_ppm": "pending",
-      "wall_time_seconds": "0.000",
-      "notes": "OPENQP_ROOT does not point to a built OpenQP package"
+      "wall_time_seconds": "0.766",
+      "peak_memory_mb": "193.8",
+      "notes": "OpenQP native GIAO path is still NotImplemented"
     }
   ]
 }

@@ -22,6 +22,7 @@ module int1
         comp_kin_ovl_int1_prim, &
         comp_lz_int1_prim, &
         comp_amom_int1_prim, &
+        comp_giao_overlap_deriv_prim, &
         comp_nmr_dia_int1_prim, &
         comp_pso_int1_prim, &
         MAX_EL_MOM, &
@@ -50,6 +51,7 @@ module int1
     public omp_hst
     public multipole_integrals
     public angular_momentum_integrals
+    public giao_overlap_derivative
     public nmr_dia_shielding
     public pso_integrals
     public electrostatic_potential
@@ -339,6 +341,58 @@ contains
     if (dbug) then
        do i = 1, 3
          write(iw,*) 'Angular momentum integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute the GIAO/London AO overlap magnetic derivative S10.
+!> @details Returns the real coefficient of the imaginary first magnetic-field
+!>  derivative of the overlap matrix for the three Cartesian magnetic-field
+!>  components.  This is a native one-electron GIAO building block and remains
+!>  disconnected from production NMR shielding until h10, two-electron derivative
+!>  contractions, and GIAO CPHF/CPKS terms are implemented and benchmarked.
+ subroutine giao_overlap_derivative(basis, ints, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Sx', 'Sy', 'Sz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for GIAO overlap derivative integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call giao_overlap_deriv_ints(ints, basis, tol)
+
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'GIAO overlap derivative integrals ('//trim(labels(i))//'), lower triangle'
          call print_sym_labeled(ints(:,i),nbf,basis)
        end do
     end if
@@ -1559,6 +1613,65 @@ contains
 
     do ig = 1, cntp%numpairs
         call comp_amom_int1_prim(cntp, ig, o, blk)
+    end do
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute GIAO/London overlap magnetic derivative integrals.
+ SUBROUTINE giao_overlap_deriv_ints(ints, basis, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis,ii)
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+            CALL shj%fetch_by_id(basis,jj)
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            blk = 0.0d0
+            CALL int1_giao_overlap_deriv(cntp, blk)
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of GIAO/London overlap derivative integrals.
+ SUBROUTINE int1_giao_overlap_deriv(cntp, blk)
+!dir$ attributes inline :: int1_giao_overlap_deriv
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+!dir$ assume_aligned blk : 64
+
+    do ig = 1, cntp%numpairs
+        call comp_giao_overlap_deriv_prim(cntp, ig, blk)
     end do
 
  end subroutine

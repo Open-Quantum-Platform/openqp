@@ -38,6 +38,7 @@ MODULE mod_1e_primitives
  PUBLIC comp_kin_ovl_int1_prim
  PUBLIC comp_lz_int1_prim
  PUBLIC comp_amom_int1_prim
+ PUBLIC comp_giao_overlap_deriv_prim
  PUBLIC comp_nmr_dia_int1_prim
  PUBLIC comp_pso_int1_prim
  public comp_mult_int1_prim
@@ -534,6 +535,66 @@ END SUBROUTINE
         blk(ij,Y__) = blk(ij,Y__) + pp%expfac * sy0 * (mz1*dx - mx1*dz)
         ! A_z = (x-o_x) d_y - (y-o_y) d_x
         blk(ij,Z__) = blk(ij,Z__) + pp%expfac * sz0 * (mx1*dy - my1*dx)
+      END DO
+    END DO
+
+    END ASSOCIATE
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO/London overlap magnetic derivative block.
+!> @details Accumulates the real coefficient of the imaginary first magnetic
+!>  derivative of the AO overlap matrix, omitting the common factor i.  For a
+!>  bra function centered at R_mu and ket function centered at R_nu,
+!>    S10_a(mu,nu) = 0.5 * [(R_mu - R_nu) x <mu|r|nu>]_a.
+!>  This is the first native GIAO one-electron building block; it is not wired
+!>  into the NMR shielding dispatch until h10/two-electron/CPHF terms pass the
+!>  benchmark matrix.
+ SUBROUTINE comp_giao_overlap_deriv_prim(cp, id, blk)
+!dir$ attributes inline :: comp_giao_overlap_deriv_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    INTEGER :: i, j, nx, ny, nz, mx, my, mz, ij, jmax
+    REAL(REAL64) :: sx0, sy0, sz0, mx1, my1, mz1, mu_x, mu_y, mu_z
+    REAL(REAL64) :: dr(3), zero(3)
+    real(real64) :: xyzmom(3,0:1,0:max_ang,0:max_ang)
+
+    zero = 0.0_real64
+    dr = cp%ri(:3) - cp%rj(:3)
+
+    ASSOCIATE (pp => cp%p(id))
+    CALL multipole_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang, cp%jang, zero, 1, xyzmom)
+
+    ij = 0
+    jmax = cp%jnao
+    DO i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      IF (cp%iandj) jmax = i
+      DO j = 1, jmax
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij+1
+
+        sx0 = xyzmom(X__,0,mx,nx)
+        sy0 = xyzmom(Y__,0,my,ny)
+        sz0 = xyzmom(Z__,0,mz,nz)
+        mx1 = xyzmom(X__,1,mx,nx)
+        my1 = xyzmom(Y__,1,my,ny)
+        mz1 = xyzmom(Z__,1,mz,nz)
+        mu_x = mx1*sy0*sz0
+        mu_y = sx0*my1*sz0
+        mu_z = sx0*sy0*mz1
+
+        blk(ij,X__) = blk(ij,X__) + 0.5_real64*pp%expfac*(dr(Y__)*mu_z - dr(Z__)*mu_y)
+        blk(ij,Y__) = blk(ij,Y__) + 0.5_real64*pp%expfac*(dr(Z__)*mu_x - dr(X__)*mu_z)
+        blk(ij,Z__) = blk(ij,Z__) + 0.5_real64*pp%expfac*(dr(X__)*mu_y - dr(Y__)*mu_x)
       END DO
     END DO
 
