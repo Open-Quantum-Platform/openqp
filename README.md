@@ -10,7 +10,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
 - **Ground State Properties** by HF and DFT theories
-- **Geometry Optimization, Transition State Search, and Conical Intersection Search** by SciPy and geomeTRIC
 - [geomeTRIC](https://github.com/leeping/geomeTRIC) optimizer backend for state-specific optimization, MECI, MECP, transition-state searches, constrained optimizations, and IRC paths
 - [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
 - [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
