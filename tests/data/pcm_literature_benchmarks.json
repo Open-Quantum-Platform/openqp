@@ -1,0 +1,84 @@
+{
+  "_about": "Reference targets for ddX-enabled PCM validation. PRODUCTION PCM PHYSICS IS FORTRAN-SIDE; these values are comparison targets only and never feed the SCF. See docs/solvent_pcm_literature_benchmarks.md. A row is only a real pass/fail gate when reference_value is non-null and status is 'verified'; 'pending_reference' rows are skipped by the test even when ddX is available.",
+  "protocol_defaults": {
+    "backend": "ddx",
+    "mode": "reference_scf",
+    "model": "ddpcm",
+    "lmax": 8,
+    "n_lebedev": 302,
+    "eta": 0.1,
+    "fmm": true,
+    "radii": "bondi_builtin_provisional"
+  },
+  "benchmarks": [
+    {
+      "id": "h2o_rhf_631gs_water",
+      "molecule": "H2O",
+      "geometry_source": "repo examples/HF/H2O geometry (Angstrom)",
+      "system": [
+        "8   0.000000000   0.000000000  -0.041061554",
+        "1  -0.533194329   0.533194329  -0.614469223",
+        "1   0.533194329  -0.533194329  -0.614469223"
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "scf_type": "rhf",
+      "method": "hf",
+      "basis": "6-31g*",
+      "epsilon": 78.3553,
+      "vacuum_total_energy": -76.01074651512697,
+      "quantity": "e_pcm",
+      "reference_value": null,
+      "tolerance": 1e-05,
+      "reference_kind": "pyddx_cross_check_same_protocol",
+      "reference_source": "pending: generate via pyddx with identical geometry/radii/discretization",
+      "status": "pending_reference"
+    },
+    {
+      "id": "nh3_rhf_631gs_water",
+      "molecule": "NH3",
+      "geometry_source": "standard C3v equilibrium (Angstrom), recorded here",
+      "system": [
+        "7   0.000000000   0.000000000   0.116489000",
+        "1   0.000000000   0.939731000  -0.271808000",
+        "1   0.813831000  -0.469865000  -0.271808000",
+        "1  -0.813831000  -0.469865000  -0.271808000"
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "scf_type": "rhf",
+      "method": "hf",
+      "basis": "6-31g*",
+      "epsilon": 78.3553,
+      "vacuum_total_energy": null,
+      "quantity": "e_pcm",
+      "reference_value": null,
+      "tolerance": 1e-05,
+      "reference_kind": "pyddx_cross_check_same_protocol",
+      "reference_source": "pending: generate via pyddx with identical geometry/radii/discretization",
+      "status": "pending_reference"
+    },
+    {
+      "id": "hf_rhf_631gs_water",
+      "molecule": "HF",
+      "geometry_source": "r(HF)=0.917 Angstrom along z",
+      "system": [
+        "9   0.000000000   0.000000000   0.000000000",
+        "1   0.000000000   0.000000000   0.917000000"
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "scf_type": "rhf",
+      "method": "hf",
+      "basis": "6-31g*",
+      "epsilon": 78.3553,
+      "vacuum_total_energy": null,
+      "quantity": "e_pcm",
+      "reference_value": null,
+      "tolerance": 1e-05,
+      "reference_kind": "pyddx_cross_check_same_protocol",
+      "reference_source": "pending: low-polarity check, generate via pyddx with identical protocol",
+      "status": "pending_reference"
+    }
+  ]
+}
