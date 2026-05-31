@@ -1075,3 +1075,125 @@ cleanup:
 #endif
 }
 
+int oqp_ddx_pcm_solve_multipole_source_with_phi(
+    int natom, const double* xyz_bohr, const double* cavity_charges,
+    int nmultipoles, const double* source_multipoles, double epsilon, int ncav,
+    const double* phi_cav, double* q_cav_out, double* esolv_out,
+    char* message, int message_len) {
+  if (esolv_out != NULL) {
+    *esolv_out = 0.0;
+  }
+#ifndef OQP_ENABLE_DDX
+  (void)natom;
+  (void)xyz_bohr;
+  (void)cavity_charges;
+  (void)nmultipoles;
+  (void)source_multipoles;
+  (void)epsilon;
+  (void)ncav;
+  (void)phi_cav;
+  (void)q_cav_out;
+  set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
+  return 2;
+#else
+  if (natom <= 0 || xyz_bohr == NULL || cavity_charges == NULL ||
+      nmultipoles <= 0 || source_multipoles == NULL || ncav <= 0 ||
+      phi_cav == NULL || q_cav_out == NULL) {
+    set_message(message, message_len,
+                "Invalid arguments to oqp_ddx_pcm_solve_multipole_source_with_phi");
+    return 1;
+  }
+  int mmax = 0;
+  while ((mmax + 1) * (mmax + 1) < nmultipoles) ++mmax;
+  if ((mmax + 1) * (mmax + 1) != nmultipoles) {
+    set_message(message, message_len,
+                "nmultipoles must be a perfect square for ddX multipoles");
+    return 1;
+  }
+
+  int status = 1;
+  void* error = NULL;
+  void* model = NULL;
+  void* state = NULL;
+  double* solute_multipoles = NULL;
+  double* psi = NULL;
+  double* phi_cav_copy = NULL;
+  double* xi = NULL;
+
+  error = ddx_allocate_error();
+  if (error == NULL) {
+    set_message(message, message_len, "Failed to allocate ddX error object");
+    return 1;
+  }
+
+  model = build_pcm_model(natom, xyz_bohr, cavity_charges, epsilon, error,
+                          message, message_len);
+  if (model == NULL) goto cleanup;
+
+  const int nbasis = ddx_get_n_basis(model);
+  const int model_ncav = ddx_get_n_cav(model);
+  if (nbasis <= 0 || model_ncav != ncav) {
+    set_message(message, message_len,
+                "Invalid ddX dimensions in multipole-source phi solve");
+    goto cleanup;
+  }
+
+  const int nsph = natom;
+  solute_multipoles =
+      (double*)calloc((size_t)nmultipoles * (size_t)nsph, sizeof(double));
+  psi = (double*)calloc((size_t)nbasis * (size_t)nsph, sizeof(double));
+  phi_cav_copy = (double*)calloc((size_t)ncav, sizeof(double));
+  xi = (double*)calloc((size_t)ncav, sizeof(double));
+  if (!solute_multipoles || !psi || !phi_cav_copy || !xi) {
+    set_message(message, message_len,
+                "Allocation failure in oqp_ddx_pcm_solve_multipole_source_with_phi");
+    goto cleanup;
+  }
+  memcpy(solute_multipoles, source_multipoles,
+         (size_t)nmultipoles * (size_t)nsph * sizeof(double));
+  memcpy(phi_cav_copy, phi_cav, (size_t)ncav * sizeof(double));
+
+  ddx_multipole_psi(model, nbasis, nsph, nmultipoles, solute_multipoles, psi,
+                    error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  state = ddx_allocate_state(model, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  const double tol = 1.0e-9;
+  ddx_pcm_setup(model, state, ncav, nbasis, nsph, psi, phi_cav_copy, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  const double energy = ddx_pcm_energy(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess_adjoint(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve_adjoint(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_get_xi(state, model, ncav, xi);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  for (int i = 0; i < ncav; ++i) {
+    q_cav_out[i] = xi[i];
+  }
+  if (esolv_out != NULL) {
+    *esolv_out = energy;
+  }
+  set_message(message, message_len,
+              "ddX PCM multipole-source fixed-phi solve complete");
+  status = 0;
+
+cleanup:
+  if (state != NULL && error != NULL) ddx_deallocate_state(state, error);
+  if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
+  free(solute_multipoles);
+  free(psi);
+  free(phi_cav_copy);
+  free(xi);
+  return status;
+#endif
+}
+

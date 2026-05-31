@@ -92,6 +92,10 @@ def parse_pcm_diag(log_text: str) -> dict[str, float | int | str]:
         "half_tr_dv",
         "q_cav_sum",
         "q_cav_absnorm",
+        "fock_q_scale",
+        "fd_fock_scale_mean",
+        "fd_fock_scale_rms",
+        "fd_fock_scale_maxerr",
         "source_charge_sum",
         "phi_source_vs_exact_rms",
         "phi_source_vs_exact_max",
@@ -105,6 +109,9 @@ def parse_pcm_diag(log_text: str) -> dict[str, float | int | str]:
     m = re.findall(r"PCM diag ncav=\s*(\d+)", log_text)
     if m:
         out["ncav"] = int(m[-1])
+    m = re.findall(r"PCM diag fd_fock_samples=\s*(\d+)", log_text)
+    if m:
+        out["fd_fock_samples"] = int(m[-1])
     m = re.findall(r"PCM diag psi_source=(\S+)", log_text)
     if m:
         out["psi_source"] = m[-1]

@@ -104,6 +104,12 @@ int oqp_ddx_pcm_solve_multipole_source(
     double* phi_source_out, double* q_cav_out, double* esolv_out, char* message,
     int message_len);
 
+int oqp_ddx_pcm_solve_multipole_source_with_phi(
+    int natom, const double* xyz_bohr, const double* cavity_charges,
+    int nmultipoles, const double* source_multipoles, double epsilon, int ncav,
+    const double* phi_cav, double* q_cav_out, double* esolv_out,
+    char* message, int message_len);
+
 #ifdef __cplusplus
 }
 #endif

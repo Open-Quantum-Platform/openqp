@@ -163,6 +163,10 @@ def _pcm_diag(log: str) -> dict:
         "half_tr_dv",
         "q_cav_sum",
         "q_cav_absnorm",
+        "fock_q_scale",
+        "fd_fock_scale_mean",
+        "fd_fock_scale_rms",
+        "fd_fock_scale_maxerr",
         "source_charge_sum",
         "phi_source_vs_exact_rms",
         "phi_source_vs_exact_max",
@@ -176,6 +180,9 @@ def _pcm_diag(log: str) -> dict:
     m = re.findall(r"PCM diag ncav=\s*(\d+)", log)
     if m:
         out["ncav"] = int(m[-1])
+    m = re.findall(r"PCM diag fd_fock_samples=\s*(\d+)", log)
+    if m:
+        out["fd_fock_samples"] = int(m[-1])
     m = re.findall(r"PCM diag psi_source=(\S+)", log)
     if m:
         out["psi_source"] = m[-1]
@@ -244,6 +251,10 @@ def _make_pcm_diagnostics_test(bench):
             "half_tr_dv",
             "q_cav_sum",
             "q_cav_absnorm",
+            "fock_q_scale",
+            "fd_fock_scale_mean",
+            "fd_fock_scale_rms",
+            "fd_fock_scale_maxerr",
             "source_charge_sum",
             "phi_source_vs_exact_rms",
             "phi_source_vs_exact_max",
@@ -261,6 +272,11 @@ def _make_pcm_diagnostics_test(bench):
         self.assertLess(abs(diag["q_cav_sum"]), 1.0, log)
         self.assertGreater(abs(diag["q_cav_absnorm"]), 0.0, log)
         self.assertLess(abs(diag["e_pcm"]), 1.0, log)
+        self.assertAlmostEqual(diag["fock_q_scale"], -0.5, places=12, msg=log)
+        self.assertAlmostEqual(diag["fd_fock_scale_mean"], -0.5, places=3, msg=log)
+        self.assertLess(abs(diag["fd_fock_scale_rms"] - 0.5), 1.0e-3, log)
+        self.assertLess(diag["fd_fock_scale_maxerr"], 1.0e-5, log)
+        self.assertGreaterEqual(diag.get("fd_fock_samples", 0), 1, log)
         self.assertLess(diag["phi_source_vs_exact_rms"], 0.05, log)
         self.assertLess(diag["phi_source_vs_exact_max"], 0.10, log)
 
@@ -382,6 +398,11 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag half_tr_dv=-2.00000000000000E-02\n"
         " PCM diag q_cav_sum= 3.00000000000000E-03\n"
         " PCM diag q_cav_absnorm= 4.00000000000000E-02\n"
+        " PCM diag fock_q_scale=-5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_mean=-5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_rms= 5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_maxerr= 1.00000000000000E-08\n"
+        " PCM diag fd_fock_samples=3\n"
         " PCM diag source_charge_sum= 1.00000000000000E-03\n"
         " PCM diag phi_source_vs_exact_rms= 6.00000000000000E-02\n"
         " PCM diag phi_source_vs_exact_max= 7.00000000000000E-02\n"
@@ -397,6 +418,11 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag half_tr_dv=-2.46913578000000E-02\n"
         " PCM diag q_cav_sum= 3.30000000000000E-03\n"
         " PCM diag q_cav_absnorm= 4.40000000000000E-02\n"
+        " PCM diag fock_q_scale=-5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_mean=-5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_rms= 5.00000000000000E-01\n"
+        " PCM diag fd_fock_scale_maxerr= 2.00000000000000E-08\n"
+        " PCM diag fd_fock_samples=3\n"
         " PCM diag source_charge_sum= 1.10000000000000E-03\n"
         " PCM diag phi_source_vs_exact_rms= 6.60000000000000E-02\n"
         " PCM diag phi_source_vs_exact_max= 7.70000000000000E-02\n"
@@ -414,6 +440,10 @@ class DiagnosticParsingUnit(unittest.TestCase):
         self.assertAlmostEqual(diag["e_pcm"], -0.0123456789)
         self.assertAlmostEqual(diag["half_tr_dv"], -0.0246913578)
         self.assertAlmostEqual(diag["q_cav_sum"], 0.0033)
+        self.assertAlmostEqual(diag["fock_q_scale"], -0.5)
+        self.assertAlmostEqual(diag["fd_fock_scale_mean"], -0.5)
+        self.assertAlmostEqual(diag["fd_fock_scale_maxerr"], 2.0e-8)
+        self.assertEqual(diag["fd_fock_samples"], 3)
         self.assertAlmostEqual(diag["source_charge_sum"], 0.0011)
         self.assertAlmostEqual(diag["phi_source_vs_exact_rms"], 0.066)
         self.assertAlmostEqual(diag["phi_cav_min"], -0.91)
