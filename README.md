@@ -88,7 +88,7 @@ pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- OpenQP requires ILP64 BLAS/LAPACK after removal of the legacy defined/defind optimizer path. `-DLINALG_LIB_INT64=OFF` is rejected at configure time.
+- OpenQP requires ILP64 BLAS/LAPACK. The compile examples above pass `-DLINALG_LIB_INT64=ON`; this is also the default, and `-DLINALG_LIB_INT64=OFF` is rejected at configure time. Ensure the selected BLAS/LAPACK library uses 8-byte integers, for example MKL ILP64 or an ILP64 OpenBLAS/LAPACK build.
 
 #### Runtime environment
 
