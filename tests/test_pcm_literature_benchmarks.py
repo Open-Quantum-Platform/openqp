@@ -97,6 +97,7 @@ def _input_text(bench, *, pcm_on: bool) -> str:
         f"{system}\n"
         f"charge={bench['charge']}\n"
         "runtype=energy\n"
+        f"{('functional=' + bench['functional'] + chr(10)) if bench.get('functional') else ''}"
         f"basis={bench['basis']}\n"
         f"method={bench['method']}\n"
         "\n"
