@@ -288,6 +288,7 @@ contains
         integer, allocatable :: ao_lx(:), ao_ly(:), ao_lz(:)
         real(dp), allocatable :: ao_cx(:), ao_cy(:), ao_cz(:)
         integer :: ic2, ii2, jj2, i2, j2, o_i, o_j, a2, b2, u3
+        integer :: kg, kg1, kg2
 
         ! Per-AO Cartesian powers AND the AO center coordinate (eshi%r). The
         ! center coordinate (not an atom index) is the ordering-independent key
@@ -316,6 +317,20 @@ contains
         call ecab%alloc(basis)
         open(newunit=u3, file='/tmp/hess_nuc_blocks.txt', status='replace', action='write')
         write(u3,'(2i6)') nbf, natom
+        ! Shell-basis export so the oracle can build PySCF from OpenQP's EXACT
+        ! basis (exponents + contraction coefficients), making the radial AOs
+        ! identical and leaving only the cartesian-component normalization bridge.
+        ! Per shell: atom_index(0-based)  L  nprim ; then nprim lines: exp  cc
+        ! (cc are OpenQP's final stored contraction coefficients).
+        write(u3,'(i6)') basis%nshell
+        do ii2 = 1, basis%nshell
+          kg1 = basis%g_offset(ii2)
+          kg2 = basis%g_offset(ii2) + basis%ncontr(ii2) - 1
+          write(u3,'(3i6)') basis%origin(ii2)-1, basis%am(ii2), basis%ncontr(ii2)
+          do kg = kg1, kg2
+            write(u3,'(2es24.16)') basis%ex(kg), basis%cc(kg)
+          end do
+        end do
         ! per AO: lx ly lz  cx cy cz  (powers, then center coordinate in bohr)
         do o_i = 1, nbf
           write(u3,'(3i5,3es24.16)') ao_lx(o_i), ao_ly(o_i), ao_lz(o_i), &
