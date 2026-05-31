@@ -67,8 +67,14 @@
       "reference_value": null,
       "tolerance": 1e-05,
       "reference_kind": "pyddx_cross_check_same_protocol",
-      "reference_source": "pending: no exact-protocol H2O ddPCM literature_value available to transcribe; generate a trusted_reference_regression via pyddx with identical geometry/radii/discretization once ddX is built",
-      "doi_or_url": "pending",
+      "reference_source": "pending: no exact-protocol H2O ddPCM literature_value could be transcribed (see literature_search); generate a trusted_reference_regression via pyddx with identical geometry/radii/discretization once ddX is built",
+      "literature_search": {
+        "methodological_paper": "Nottoli, Stamm, Scalmani, Lipparini, 'Quantum Calculations in Solution of Energies, Structures, and Properties with a Domain Decomposition Polarizable Continuum Model', J. Chem. Theory Comput. 2019, 15(11), 6061-6073",
+        "doi": "10.1021/acs.jctc.9b00640",
+        "url": "https://pubs.acs.org/doi/abs/10.1021/acs.jctc.9b00640",
+        "outcome": "paper located and confirmed as the correct QM ddPCM methodological reference, but no per-molecule electrostatic solvation energy with a protocol matching this path (6-31G*, Bondi-by-Z radii, lmax=8/nleb=302/eta=0.1) could be transcribed/verified (paywalled; protocol mismatch). Not used as a literature_value to avoid an unverified number."
+      },
+      "doi_or_url": "10.1021/acs.jctc.9b00640 (methodological reference only; not a transcribed value)",
       "status": "pending_reference"
     },
     {

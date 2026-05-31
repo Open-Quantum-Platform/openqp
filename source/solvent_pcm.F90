@@ -24,6 +24,8 @@ module solvent_pcm
   use types, only: information
   use basis_tools, only: basis_set
   use messages, only: show_message, with_abort
+  use io_constants, only: iw
+  use mathlib, only: traceprod_sym_packed
   use int1, only: electrostatic_potential_unweighted, external_charge_potential
 
   implicit none
@@ -90,6 +92,7 @@ contains
     integer(c_int) :: natom, ncav, max_cav
     integer :: nbf_tri, ii, iat, icav, rc
     real(dp) :: eps, esolv, phin, dx, dy, dz, r
+    real(dp) :: half_tr_dv, q_cav_sum, q_cav_absnorm, phi_cav_sum, phi_cav_min, phi_cav_max
     real(dp), allocatable :: xyz(:,:), charges(:)
     real(dp), allocatable :: cav_xyz(:), cx(:), cy(:), cz(:)
     real(dp), allocatable :: phi_elec(:), phi_cav(:), q_cav(:)
@@ -167,6 +170,31 @@ contains
 
     ! Provisional PCM energy term reported to the SCF total energy.
     e_pcm = esolv
+
+    ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --
+    ! Exposes, in Fortran, the quantities needed to validate the QM SCF PCM
+    ! conventions against a reference (see docs/solvent_pcm_literature_benchmarks.md
+    ! and tests/test_pcm_literature_benchmarks.py). These prints are read-only
+    ! summaries of arrays already computed above; the energy and Fock are
+    ! unchanged. The host-side polarization energy 0.5*Tr[D.V_pcm] is reported
+    ! alongside the ddX esolv so the e_pcm-vs-(1/2)Tr[D.V] bookkeeping question
+    ! can be measured rather than assumed. psi_source records that ddX psi is
+    ! currently built from nuclear monopoles only (an open gate item).
+    half_tr_dv  = 0.5_dp * traceprod_sym_packed(dtot, vpcm, basis%nbf)
+    q_cav_sum   = sum(q_cav)
+    q_cav_absnorm = sqrt(sum(q_cav*q_cav))
+    phi_cav_sum = sum(phi_cav)
+    phi_cav_min = minval(phi_cav)
+    phi_cav_max = maxval(phi_cav)
+    write(iw,'(1x,"PCM diag e_pcm=",ES22.14)') esolv
+    write(iw,'(1x,"PCM diag half_tr_dv=",ES22.14)') half_tr_dv
+    write(iw,'(1x,"PCM diag q_cav_sum=",ES22.14)') q_cav_sum
+    write(iw,'(1x,"PCM diag q_cav_absnorm=",ES22.14)') q_cav_absnorm
+    write(iw,'(1x,"PCM diag phi_cav_sum=",ES22.14)') phi_cav_sum
+    write(iw,'(1x,"PCM diag phi_cav_min=",ES22.14)') phi_cav_min
+    write(iw,'(1x,"PCM diag phi_cav_max=",ES22.14)') phi_cav_max
+    write(iw,'(1x,"PCM diag ncav=",I0)') int(ncav)
+    write(iw,'(1x,"PCM diag psi_source=nuclear_monopoles_only")')
 
   end subroutine add_pcm_reaction_field
 
