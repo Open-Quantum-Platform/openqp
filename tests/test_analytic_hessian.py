@@ -134,8 +134,6 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
         def hf_hessian(mol):
             self.native_calls.append(mol)
-            raw_hess = np.arange(36, dtype=float).reshape(6, 6)
-            mol.set_hessian_result(raw_hess)
 
         setattr(oqp_stub, "hf_hessian", hf_hessian)
         sys.modules["oqp"] = oqp_stub
@@ -178,7 +176,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
         restore_modules(self._module_snapshot)
 
-    def test_hf_analytical_hessian_uses_guarded_external_pyscf_bridge_not_native_scaffold(self):
+    def test_hf_analytical_hessian_runs_native_fortran_cphf_prepass_before_pyscf_oracle(self):
         external_calls = []
         external_mod = types.ModuleType("oqp.library.external")
 
@@ -214,12 +212,15 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
         result, flags = hessian.analytical_ground_state_hess()
 
+        self.assertEqual(self.native_calls, [mol])
         self.assertEqual(external_calls, [mol])
-        self.assertEqual(self.native_calls, [])
-        self.assertEqual(flags, ["computed", "external_pyscf"])
+        self.assertEqual(flags, ["computed", "native_openqp_cphf", "external_pyscf_oracle"])
         self.assertEqual(result.shape, (6, 6))
-        self.assertEqual(mol.hessian_metadata["backend"], "external_pyscf")
-        self.assertFalse(mol.hessian_metadata["native_openqp_kernel"])
+        self.assertEqual(mol.hessian_metadata["backend"], "native_openqp_cphf_pyscf_oracle")
+        self.assertTrue(mol.hessian_metadata["native_openqp_cphf"])
+        self.assertTrue(mol.hessian_metadata["native_openqp_cphf_solver_exercised"])
+        self.assertFalse(mol.hessian_metadata["native_openqp_final_assembly"])
+        self.assertEqual(mol.hessian_metadata["oracle_backend"], "external_pyscf")
 
     def test_sf_analytical_hessian_routes_separately_from_mrsf_private_path(self):
         class Mol:

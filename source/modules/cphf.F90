@@ -26,6 +26,7 @@ module cphf_mod
   use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
+  use io_constants, only: iw
 
   implicit none
 
@@ -87,9 +88,11 @@ contains
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_energy_a(:)
     real(kind=dp), allocatable, target :: wrk1(:,:), pa(:,:,:), xm(:), xminv(:)
     real(kind=dp), pointer :: pxm(:,:)
-    integer :: nbf, nocc, nvir, lexc, i, j, irhs, iter, ok, mxit
+    integer :: nbf, nocc, nvir, lexc, i, j, irhs, iter, mxit
+    integer :: clock_rate, clock_start, clock_stop, rhs_clock_start, rhs_clock_stop
     logical :: dft
     real(kind=dp) :: cnv, scale_exch
+    real(kind=dp) :: cpu_start, cpu_stop, rhs_cpu_start, rhs_cpu_stop, rhs_wall
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -141,16 +144,48 @@ contains
     cgdata%nocc = nocc
     cgdata%dft = dft
 
+    call system_clock(count_rate=clock_rate)
+    call system_clock(clock_start)
+    call cpu_time(cpu_start)
+    write(iw,'(/3x,60("-"))')
+    write(iw,'(6x,"CPHF/CPKS iterative solver")')
+    write(iw,'(6x,"right-hand sides =",I5,3x,"nocc =",I5,3x,"nvir =",I5)') &
+            nrhs, nocc, nvir
+    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+    write(iw,'(3x,60("-"))')
+
     do irhs = 1, nrhs
+      call system_clock(rhs_clock_start)
+      call cpu_time(rhs_cpu_start)
       call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
                     dat=cgdata, tol=sqrt(abs(cnv)))
+      write(iw,'(" INITIAL CPHF ERROR RHS",I5," =",3X,' // &
+               '1P,E10.3,1X,"/",1P,E10.3)') &
+              irhs, pcg%error**2, cnv
       do iter = 1, mxit
         if (pcg%errcode /= PCG_OK) exit
         call pcg%step()
+        write(iw,'(" CPHF ITER RHS",I5," ITER#",I4," ERROR =",3X,' // &
+                 '1P,E10.3,1X,"/",1P,E10.3)') &
+                irhs, iter, pcg%error**2, cnv
+        call flush(iw)
       end do
+      call system_clock(rhs_clock_stop)
+      call cpu_time(rhs_cpu_stop)
+      rhs_wall = real(rhs_clock_stop - rhs_clock_start, kind=dp) / real(clock_rate, kind=dp)
+      write(iw,'(" CPHF RHS",I5," completed in",I5," iterations;",' // &
+               '" CPU time =",F10.3," s; wall time =",F10.3," s")') &
+              irhs, iter - 1, rhs_cpu_stop - rhs_cpu_start, rhs_wall
+      call flush(iw)
       uvec(:,irhs) = pcg%x
       call pcg%clean()
     end do
+
+    call system_clock(clock_stop)
+    call cpu_time(cpu_stop)
+    write(iw,'(6x,"CPHF wall time =",F10.3," s; CPU time =",F10.3," s"/)') &
+            real(clock_stop - clock_start, kind=dp) / real(clock_rate, kind=dp), cpu_stop - cpu_start
+    call flush(iw)
 
     call int2_driver%clean()
     deallocate(wrk1, pa, xm, xminv)

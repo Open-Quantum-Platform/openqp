@@ -617,6 +617,12 @@ class Hessian(Calculator):
                     self.mol.save_data()
 
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
+        dump_log(
+            self.mol,
+            title='PyOQP: Frequency Normal Mode Eigenvectors',
+            section='freq_modes',
+            info=(self.mol.get_atoms(), freqs, modes),
+        )
 
         for t in self.temperature:
             thermal_data = thermal_analysis(
@@ -754,16 +760,44 @@ class Hessian(Calculator):
         )
 
     def analytical_ground_state_hess(self):
-        """Run the guarded external PySCF HF/RHF Hessian bridge.
+        """Run native OpenQP CPHF prepass plus external PySCF final Hessian oracle.
 
-        The native OpenQP HF Hessian ABI is still an aborting scaffold. Until a
-        real native kernel is implemented and validated, analytical HF Hessian
-        requests use the explicitly labeled PySCF bridge and never fall back to
-        numerical Hessians.
+        The native OpenQP CPHF/CPKS solver is exercised first for all nuclear
+        perturbations in the HF/DFT analytic Hessian response problem. The final
+        Cartesian Hessian assembly is not yet promoted, so the matrix returned to
+        frequency analysis still comes from the explicitly labeled external PySCF
+        final Hessian oracle. This is no numerical fallback: if either native
+        CPHF prepass or the oracle Hessian fails, the analytic request fails.
         """
 
+        native_hess_func = self.native_hess_func['hf']
+        if native_hess_func is None:
+            raise NotImplementedError('Native OpenQP CPHF prepass entry point oqp.hf_hessian is not available.')
+        native_hess_func(self.mol)
+        native_cphf_log = os.path.join(getattr(self.mol, 'log_path', os.getcwd()), 'fort.6')
+        if os.path.exists(native_cphf_log) and hasattr(self.mol, 'log'):
+            with open(native_cphf_log, 'r', encoding='utf-8', errors='replace') as source:
+                native_text = source.read()
+            if native_text.strip():
+                with open(self.mol.log, 'a', encoding='utf-8') as target:
+                    target.write('\n\n')
+                    target.write('PyOQP: Native Fortran CPHF Hessian response log\n')
+                    target.write(native_text)
+                    target.write('\n')
+
         external = importlib.import_module('oqp.library.external')
-        return external.analytic_hessian_from_pyscf(self.mol)
+        hessian, _flags = external.analytic_hessian_from_pyscf(self.mol)
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp_cphf_pyscf_oracle',
+            'native_openqp_cphf': True,
+            'native_openqp_cphf_solver_exercised': True,
+            'native_openqp_final_assembly': False,
+            'oracle_backend': 'external_pyscf',
+            'no_numerical_fallback': True,
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp_cphf', 'external_pyscf_oracle']
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']

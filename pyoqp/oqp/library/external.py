@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -11,12 +12,18 @@ from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 
 try:
     from pyscf import gto, scf, dft, lib
+    from pyscf.scf import cphf as pyscf_cphf
+    from pyscf.scf import ucphf as pyscf_ucphf
+    from pyscf.lib import logger as pyscf_logger
 
 except ModuleNotFoundError:
     gto = None
     scf = None
     dft = None
     lib = None
+    pyscf_cphf = None
+    pyscf_ucphf = None
+    pyscf_logger = None
 
 pyscf_functional = {
     "pbe0": "pbe0",
@@ -372,7 +379,7 @@ def _build_pyscf_hessian_mf(mol, coord_bohr=None):
     mole.charge = mol.config["input"].get("charge", 0)
     mole.spin = mol.config["scf"].get("multiplicity", 1) - 1
     mole.output = '%s.analytic_hess.pyscf' % mol.project_name
-    mole.verbose = 4
+    mole.verbose = 5
     mole.build(cart=True)
 
     functional = mol.config.get("input", {}).get("functional", "hf").lower()
@@ -399,6 +406,39 @@ def _build_pyscf_hessian_mf(mol, coord_bohr=None):
     return mf
 
 
+def _enable_pyscf_cphf_iteration_logging(mf):
+    """Make PySCF Hessian CPHF/UCPHF Krylov iterations visible in the backend log."""
+
+    logger_mod = pyscf_logger
+    if logger_mod is None:
+        return []
+    patches = []
+    cphf_log = logger_mod.Logger(getattr(mf, "stdout", sys.stdout), logger_mod.DEBUG)
+
+    def _patch_solver(module, label):
+        if module is None or not hasattr(module, "solve"):
+            return
+        original_solve = module.solve
+
+        def logged_solve(*args, **kwargs):
+            kwargs.setdefault("verbose", cphf_log)
+            max_cycle = kwargs.get("max_cycle", 50)
+            tol = kwargs.get("tol", 1e-9)
+            cphf_log.info("PyOQP: %s solver iterations begin; max_cycle=%s tol=%s", label, max_cycle, tol)
+            t0 = (logger_mod.process_clock(), logger_mod.perf_counter())
+            try:
+                return original_solve(*args, **kwargs)
+            finally:
+                cphf_log.timer(f"PyOQP: {label} solver total", *t0)
+
+        module.solve = logged_solve
+        patches.append((module, original_solve))
+
+    _patch_solver(pyscf_cphf, "CPHF")
+    _patch_solver(pyscf_ucphf, "UCPHF")
+    return patches
+
+
 def analytic_hessian_from_pyscf(mol, mf_factory=None):
     """Return a conservative PySCF-backed analytic Hessian for HF/DFT only.
 
@@ -421,14 +461,35 @@ def analytic_hessian_from_pyscf(mol, mf_factory=None):
     if mf_factory is None:
         mf_factory = _build_pyscf_hessian_mf
     mf = mf_factory(mol)
+    scf_wall_start = time.perf_counter()
+    scf_cpu_start = time.process_time()
     mf.kernel()
-    hessian, compact_summary = _flatten_pyscf_hessian(mf.Hessian().kernel(), return_metadata=True)
+    scf_wall_seconds = time.perf_counter() - scf_wall_start
+    scf_cpu_seconds = time.process_time() - scf_cpu_start
+    hess_obj = mf.Hessian()
+    hess_obj.verbose = max(getattr(hess_obj, "verbose", 0), 5)
+    hess_wall_start = time.perf_counter()
+    hess_cpu_start = time.process_time()
+    cphf_patches = _enable_pyscf_cphf_iteration_logging(mf)
+    try:
+        hessian, compact_summary = _flatten_pyscf_hessian(hess_obj.kernel(), return_metadata=True)
+    finally:
+        for module, original_solve in cphf_patches:
+            module.solve = original_solve
+    hess_wall_seconds = time.perf_counter() - hess_wall_start
+    hess_cpu_seconds = time.process_time() - hess_cpu_start
     metadata = {
         "backend": "external_pyscf",
         "native_openqp_kernel": False,
         "no_numerical_fallback": True,
         "shape": list(hessian.shape),
         "max_asymmetry_before_symmetrization": compact_summary["max_asymmetry_before_symmetrization"],
+        "timing_seconds": {
+            "pyscf_scf_wall": scf_wall_seconds,
+            "pyscf_scf_cpu": scf_cpu_seconds,
+            "pyscf_hessian_wall": hess_wall_seconds,
+            "pyscf_hessian_cpu": hess_cpu_seconds,
+        },
         "compact_validation_summary": compact_summary,
     }
     setattr(mol, "hessian_metadata", metadata)

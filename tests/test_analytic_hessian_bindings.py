@@ -31,14 +31,17 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         ]:
             self.assertIn(symbol, source)
 
-    def test_hf_dispatch_uses_external_pyscf_bridge_without_numerical_fallback(self):
+    def test_hf_dispatch_runs_native_cphf_prepass_before_pyscf_oracle_without_numerical_fallback(self):
         source = read("pyoqp/oqp/library/single_point.py")
 
         self.assertIn("native_hess_func", source)
         self.assertIn("no numerical fallback", source.lower())
-        self.assertIn("external PySCF HF/RHF Hessian bridge", source)
+        self.assertIn("native OpenQP CPHF prepass", source)
+        self.assertIn("external PySCF final Hessian oracle", source)
         self.assertIn("analytic_hessian_from_pyscf", source)
-        self.assertNotIn("native_hess(self.mol)", source)
+        self.assertIn("native_hess_func = self.native_hess_func['hf']", source)
+        self.assertIn("native_hess_func(self.mol)", source)
+        self.assertIn("Native Fortran CPHF Hessian response log", source)
 
     def test_public_sf_dispatch_is_separate_from_private_mrsf_path(self):
         source = read("pyoqp/oqp/library/single_point.py")
@@ -47,15 +50,18 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("td_type == 'sf'", source)
         self.assertIn("return self.analytical_sf_hess()", source)
 
-    def test_hf_hessian_fortran_scaffold_exports_c_abi_without_claiming_support(self):
+    def test_hf_hessian_fortran_runs_native_cphf_solver_diagnostic_without_claiming_final_assembly(self):
         source = read("source/modules/hf_hessian.F90")
 
         self.assertIn("module hf_hessian_mod", source)
         self.assertIn('bind(C, name="hf_hessian")', source)
         self.assertIn("subroutine hf_hessian_C", source)
         self.assertIn("subroutine hf_hessian", source)
-        self.assertIn("Analytic HF/DFT Hessian kernel scaffold reached", source)
-        self.assertIn("WITH_ABORT", source)
+        self.assertIn("use cphf_mod, only: cphf_solve", source)
+        self.assertIn("Native OpenQP HF/DFT Hessian CPHF response prepass", source)
+        self.assertIn("call cphf_solve", source)
+        self.assertIn("Final analytic Hessian assembly remains guarded", source)
+        self.assertNotIn("implementation is not available yet", source)
 
     def test_tdhf_hessian_fortran_scaffolds_export_c_abi_without_claiming_support(self):
         expected = {
@@ -99,6 +105,14 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("'inertia': self.inertia.tolist()", source)
         self.assertNotIn("'inertia': self.modes.tolist()", source)
 
+    def test_saved_hessian_json_has_labeled_frequency_mode_vectors(self):
+        source = read("pyoqp/oqp/molecule/molecule.py")
+
+        self.assertIn("'frequency_modes'", source)
+        self.assertIn("'frequencies_cm-1'", source)
+        self.assertIn("'normal_mode_eigenvectors'", source)
+        self.assertIn("'normal_mode_eigenvectors_units'", source)
+
     def test_read_hessian_json_restores_hessian_metadata(self):
         source = read("pyoqp/oqp/molecule/molecule.py")
 
@@ -130,6 +144,36 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertNotIn("vibrational_intensities_from_pyscf", single_point)
         self.assertNotIn("external_pyscf_finite_difference", single_point)
         self.assertNotIn("def vibrational_intensities_from_pyscf", external)
+
+    def test_hessian_frequency_log_prints_normal_mode_eigenvectors(self):
+        single_point = read("pyoqp/oqp/library/single_point.py")
+        file_utils = read("pyoqp/oqp/utils/file_utils.py")
+
+        self.assertIn("section='freq_modes'", single_point)
+        self.assertIn("Normal mode eigenvectors", file_utils)
+        self.assertIn("Frequencies --", file_utils)
+        self.assertIn("Atom AN", file_utils)
+        self.assertNotIn("for mode in block", file_utils)
+
+    def test_cphf_solver_logs_iteration_residuals_and_timing(self):
+        source = read("source/modules/cphf.F90")
+
+        self.assertIn("use io_constants, only: iw", source)
+        self.assertIn("CPHF/CPKS iterative solver", source)
+        self.assertIn("INITIAL CPHF ERROR", source)
+        self.assertIn("CPHF ITER", source)
+        self.assertIn("CPHF wall time", source)
+        self.assertIn("call cpu_time", source)
+
+    def test_pyscf_bridge_enables_cphf_iteration_logging(self):
+        source = read("pyoqp/oqp/library/external.py")
+
+        self.assertIn("from pyscf.scf import cphf as pyscf_cphf", source)
+        self.assertIn("_enable_pyscf_cphf_iteration_logging", source)
+        self.assertIn("PyOQP: %s solver iterations begin", source)
+        self.assertIn("kwargs.setdefault(\"verbose\", cphf_log)", source)
+        self.assertIn("cphf_log.timer(f\"PyOQP: {label} solver total\"", source)
+        self.assertIn("module.solve = original_solve", source)
 
 
 if __name__ == "__main__":

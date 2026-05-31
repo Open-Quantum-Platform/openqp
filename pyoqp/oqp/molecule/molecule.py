@@ -508,6 +508,11 @@ class Molecule:
             'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
+            'frequency_modes': {
+                'frequencies_cm-1': self.freqs.tolist(),
+                'normal_mode_eigenvectors': self.modes.tolist(),
+                'normal_mode_eigenvectors_units': 'Cartesian displacement, mass-unweighted, row-major by vibrational mode',
+            },
             'inertia': self.inertia.tolist(),
             'infrared_intensities': self.infrared_intensities.tolist(),
             'raman_activities': self.raman_activities.tolist(),
