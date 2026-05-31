@@ -6,6 +6,8 @@ from pyoqp.oqp.library.mrsf_hessian import (
     MRSFRootTrackingError,
     assemble_root_tracked_central_fd_hessian,
     compare_fd_step_hessians,
+    mrsf_nuclear_repulsion_hessian,
+    nuclear_repulsion_energy,
     physical_root_label,
     assess_root_tracking,
 )
@@ -152,6 +154,47 @@ class MRSFHessianRootTrackingTests(unittest.TestCase):
         self.assertFalse(diagnostic.ok)
         self.assertGreater(diagnostic.max_asymmetry, 1.0e-3)
         self.assertGreater(diagnostic.max_abs_delta, 1.0e-3)
+    def test_mrsf_analytical_nuclear_repulsion_hessian_matches_energy_finite_difference(self):
+        coords = np.array([
+            [0.0000000, 0.0000000, -0.0410615540],
+            [-0.5331943, 0.5331943, -0.6144692230],
+            [0.5331943, -0.5331943, -0.6144692230],
+        ])
+        charges = np.array([8.0, 1.0, 1.0])
+        analytic = mrsf_nuclear_repulsion_hessian(coords, charges)
+
+        dx = 1.0e-4
+        flat = coords.reshape(-1)
+        numerical = np.zeros_like(analytic)
+        for i in range(flat.size):
+            for j in range(flat.size):
+                disp = np.zeros_like(flat)
+                disp[i] += dx
+                disp[j] += dx
+                epp = nuclear_repulsion_energy((flat + disp).reshape(coords.shape), charges)
+                disp[j] -= 2.0 * dx
+                epm = nuclear_repulsion_energy((flat + disp).reshape(coords.shape), charges)
+                disp[i] -= 2.0 * dx
+                emm = nuclear_repulsion_energy((flat + disp).reshape(coords.shape), charges)
+                disp[j] += 2.0 * dx
+                emp = nuclear_repulsion_energy((flat + disp).reshape(coords.shape), charges)
+                numerical[i, j] = (epp - epm - emp + emm) / (4.0 * dx * dx)
+
+        self.assertEqual(analytic.shape, (9, 9))
+        self.assertLess(np.max(np.abs(analytic - analytic.T)), 1.0e-14)
+        self.assertLess(np.max(np.abs(analytic - numerical)), 1.0e-6)
+
+    def test_mrsf_analytical_nuclear_repulsion_hessian_has_translation_invariance(self):
+        coords = np.array([
+            [0.0, 0.0, 0.0],
+            [1.4, 0.2, -0.1],
+            [-0.3, 1.1, 0.4],
+        ])
+        charges = np.array([6.0, 1.0, 8.0])
+        hessian = mrsf_nuclear_repulsion_hessian(coords, charges)
+
+        self.assertLess(np.max(np.abs(hessian.sum(axis=0))), 1.0e-12)
+        self.assertLess(np.max(np.abs(hessian.sum(axis=1))), 1.0e-12)
 
 
 if __name__ == "__main__":

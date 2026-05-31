@@ -194,6 +194,71 @@ def _as_gradient_block(values, *, name: str) -> np.ndarray:
     return array
 
 
+def _as_nuclear_geometry(coords, charges) -> tuple[np.ndarray, np.ndarray]:
+    geometry = np.asarray(coords, dtype=float)
+    nuclear_charges = np.asarray(charges, dtype=float).reshape(-1)
+    if geometry.ndim == 1 and geometry.size % 3 == 0:
+        geometry = geometry.reshape((-1, 3))
+    if geometry.ndim != 2 or geometry.shape[1] != 3:
+        raise ValueError(f"coords must be an (nat, 3) Cartesian array, got {geometry.shape}")
+    if nuclear_charges.size != geometry.shape[0]:
+        raise ValueError(
+            f"charges length {nuclear_charges.size} does not match nat {geometry.shape[0]}"
+        )
+    if not np.all(np.isfinite(geometry)) or not np.all(np.isfinite(nuclear_charges)):
+        raise ValueError("nuclear geometry contains non-finite values")
+    return geometry, nuclear_charges
+
+
+def nuclear_repulsion_energy(coords, charges) -> float:
+    """State-independent nuclear repulsion energy for analytical Hessian checks."""
+
+    geometry, nuclear_charges = _as_nuclear_geometry(coords, charges)
+    energy = 0.0
+    for atom_b in range(1, geometry.shape[0]):
+        for atom_a in range(atom_b):
+            displacement = geometry[atom_a] - geometry[atom_b]
+            distance = float(np.linalg.norm(displacement))
+            if distance <= 1.0e-12:
+                raise ValueError("nuclear repulsion is singular for coincident atoms")
+            energy += nuclear_charges[atom_a] * nuclear_charges[atom_b] / distance
+    return float(energy)
+
+
+def mrsf_nuclear_repulsion_hessian(coords, charges) -> np.ndarray:
+    """Analytical nuclear-repulsion Hessian term for MRSF/TDDFT Hessian assembly.
+
+    This term is state independent and is the first safe analytical increment:
+    it does not include electronic one-electron, two-electron, XC, or response
+    terms and must not be reported as a complete MRSF Hessian.
+    """
+
+    geometry, nuclear_charges = _as_nuclear_geometry(coords, charges)
+    natom = geometry.shape[0]
+    hessian = np.zeros((3 * natom, 3 * natom), dtype=float)
+    identity = np.eye(3)
+
+    for atom_b in range(1, natom):
+        for atom_a in range(atom_b):
+            displacement = geometry[atom_a] - geometry[atom_b]
+            distance = float(np.linalg.norm(displacement))
+            if distance <= 1.0e-12:
+                raise ValueError("nuclear repulsion Hessian is singular for coincident atoms")
+            charge_product = nuclear_charges[atom_a] * nuclear_charges[atom_b]
+            block = charge_product * (
+                3.0 * np.outer(displacement, displacement) / distance**5
+                - identity / distance**3
+            )
+            a_slice = slice(3 * atom_a, 3 * atom_a + 3)
+            b_slice = slice(3 * atom_b, 3 * atom_b + 3)
+            hessian[a_slice, a_slice] += block
+            hessian[b_slice, b_slice] += block
+            hessian[a_slice, b_slice] -= block
+            hessian[b_slice, a_slice] -= block
+
+    return 0.5 * (hessian + hessian.T)
+
+
 def assemble_root_tracked_central_fd_hessian(
     *,
     requested_state: int,

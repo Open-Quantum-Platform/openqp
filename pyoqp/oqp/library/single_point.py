@@ -690,16 +690,48 @@ class Hessian(Calculator):
         except (IndexError, TypeError, ValueError):
             return '<S^2>=unavailable'
 
+    def _mrsf_record_analytical_partial_terms(self):
+        """Compute completed analytical MRSF Hessian terms without claiming full support."""
+        try:
+            mrsf_hessian = importlib.import_module('oqp.library.mrsf_hessian')
+        except ModuleNotFoundError:
+            mrsf_hessian = importlib.import_module('pyoqp.oqp.library.mrsf_hessian')
+        nuclear_hessian = mrsf_hessian.mrsf_nuclear_repulsion_hessian(
+            self.mol.get_system(),
+            self.mol.get_atoms(),
+        )
+        self.mol.hessian_metadata = {
+            'backend': 'native_mrsf_analytical_partial',
+            'complete': False,
+            'no_numerical_fallback': True,
+            'completed_terms': ['nuclear_repulsion'],
+            'completed_term_shapes': {
+                'nuclear_repulsion': list(nuclear_hessian.shape),
+            },
+            'missing_terms': [
+                'one_electron_integral_derivatives',
+                'two_electron_integral_derivatives',
+                'exchange_correlation_kernel_derivatives',
+                'orbital_response',
+                'mrsf_z_vector_response',
+                'state_vector_response',
+                'electronic_response',
+            ],
+        }
+        return nuclear_hessian
+
     def analytical_mrsf_hess(self):
         td_type = self.mol.config['tdhf']['type']
         label = 'MRSF-TDDFT' if td_type == 'mrsf' else td_type.upper()
         if td_type == 'mrsf':
             root_label = self._mrsf_physical_root_label()
             spin_text = self._mrsf_spin_expectation_text()
+            self._mrsf_record_analytical_partial_terms()
             raise NotImplementedError(
                 f'{label} analytic Hessian is not implemented yet for OpenQP root {self.state} '
                 f'(root {self.state} maps to {root_label}, {spin_text}); '
-                'no numerical fallback will be used.'
+                'completed analytical terms: nuclear_repulsion; '
+                'missing electronic response terms; no numerical fallback will be used.'
             )
         raise NotImplementedError(
             f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'

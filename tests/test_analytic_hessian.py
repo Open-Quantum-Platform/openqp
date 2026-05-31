@@ -249,15 +249,34 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
                 "scf": {"multiplicity": 3},
                 "tdhf": {"type": "mrsf", "multiplicity": 1},
             }
-            data = {"OQP::td_s2": np.array([2.0, 0.02, 1.04])}
+            data = {"OQP::td_s2": np.array([2.0, 0.02, 1.04]), "natom": 3}
+            hessian_metadata = {}
 
-        hessian = self.single_point.Hessian(Mol())
+            @staticmethod
+            def get_system():
+                return np.array([
+                    [0.0000000, 0.0000000, -0.0410615540],
+                    [-0.5331943, 0.5331943, -0.6144692230],
+                    [0.5331943, -0.5331943, -0.6144692230],
+                ])
+
+            @staticmethod
+            def get_atoms():
+                return np.array([8.0, 1.0, 1.0])
+
+        mol = Mol()
+        hessian = self.single_point.Hessian(mol)
 
         with self.assertRaisesRegex(
             NotImplementedError,
             r"MRSF-TDDFT analytic Hessian.*root 2 maps to physical S1.*<S\^2>=1\.04",
         ):
             hessian.analytical_hess()
+
+        self.assertEqual(mol.hessian_metadata["backend"], "native_mrsf_analytical_partial")
+        self.assertIn("nuclear_repulsion", mol.hessian_metadata["completed_terms"])
+        self.assertIn("electronic_response", mol.hessian_metadata["missing_terms"])
+        self.assertEqual(mol.hessian_metadata["completed_term_shapes"]["nuclear_repulsion"], [9, 9])
 
     def test_mrsf_numerical_hessian_runtime_guard_requires_root_tracking_oracle(self):
         class Mol:
@@ -346,7 +365,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("TDDFT analytic Hessian is not implemented", report.to_text())
 
-    def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
+    def test_mrsf_analytical_hessian_partial_scaffold_is_allowed_for_term_validation(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rohf", "multiplicity": 3},
@@ -356,8 +375,20 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_mrsf_analytical_hessian_rejects_high_spin_reference_root(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "nstate": 3, "multiplicity": 3},
+            "hess": {"type": "analytical", "state": 0, "nproc": 1, "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
+
         self.assertFalse(report.ok)
-        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertIn("requires a positive physical root state", report.to_text())
 
     def test_mrsf_numerical_hessian_is_rejected_until_root_tracking_oracle_exists(self):
         config = {

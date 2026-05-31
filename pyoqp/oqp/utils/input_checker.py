@@ -1105,7 +1105,9 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     if method == "tdhf":
         if td_type == "mrsf":
-            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+            if state <= 0:
+                return "unsupported_feature", "MRSF-TDDFT analytic Hessian requires a positive physical root state; root 0 is the high-spin reference."
+            return "supported", "MRSF-TDDFT analytic Hessian partial scaffold is enabled for term-by-term validation; currently completed terms are guarded and incomplete electronic response terms still fail at runtime without numerical fallback."
         if td_type == "umrsf":
             return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
