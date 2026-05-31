@@ -1117,6 +1117,64 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
 
 
+def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
+    """Return max L in the configured basis, or None if it cannot be inspected."""
+    try:
+        import basis_set_exchange as bse
+    except Exception:
+        return None
+
+    basis = _get(config, "input", "basis", "")
+    system = _get(config, "input", "system", "")
+    library = _get(config, "input", "library", "")
+    inline_lines, xyz_path = _iter_coordinate_lines(system)
+    lines = inline_lines
+    if xyz_path and os.path.exists(os.path.abspath(xyz_path)):
+        with open(os.path.abspath(xyz_path), "r", encoding="utf-8") as handle:
+            xyz_lines = handle.read().splitlines()
+        try:
+            num_atoms = int(xyz_lines[0])
+            lines = xyz_lines[2:2 + num_atoms]
+        except (IndexError, ValueError):
+            lines = xyz_lines
+
+    if not lines:
+        return None
+
+    per_atom_basis: list[str] = []
+    if basis == "library":
+        mapping: dict[str, str] = {}
+        for raw in library.splitlines():
+            parts = raw.split()
+            if len(parts) >= 2:
+                mapping[parts[0]] = " ".join(parts[1:])
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 5 and parts[4] in mapping:
+                per_atom_basis.append(mapping[parts[4]])
+    else:
+        names = [item.strip() for item in str(basis).split(";") if item.strip()]
+        if len(names) == 1:
+            per_atom_basis = names * len(lines)
+        else:
+            per_atom_basis = names
+
+    if len(per_atom_basis) != len(lines):
+        return None
+
+    max_l = 0
+    for line, basis_name in zip(lines, per_atom_basis):
+        parts = line.split()
+        if not parts:
+            continue
+        element = parts[0]
+        data = bse.get_basis(basis_name, elements=[element])
+        for item in data.get("elements", {}).values():
+            for shell in item.get("electron_shells", []):
+                max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
+    return max_l
+
+
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
@@ -1136,6 +1194,16 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 value=hess_type,
                 expected="supported analytical Hessian capability",
                 action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
+            )
+        max_l = _basis_max_angular_momentum(config)
+        if max_l is not None and max_l >= 4:
+            report.add(
+                "ERROR",
+                "input.basis",
+                "Analytical Hessian native Rys nuclear-attraction second derivatives support basis angular momentum only up to L=3.",
+                value=f"max L={max_l}",
+                expected="max L <= 3",
+                action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
 
     if method == "hf" and state > 0:

@@ -595,9 +595,9 @@ contains
         CALL shi%fetch_by_id(basis, ii)
         DO jj = 1, basis%nshell
             CALL shj%fetch_by_id(basis, jj)
-            CALL cab%shell_pair(basis, shi, shj, tol)
+            CALL cab%shell_pair(basis, shi, shj, tol, dup=.false.)
             IF (cab%numpairs==0) CYCLE
-            CALL cba%shell_pair(basis, shj, shi, tol)
+            CALL cba%shell_pair(basis, shj, shi, tol, dup=.false.)
             DO ic = 1, nat
                 p_AA = 0.0d0; p_AC = 0.0d0; p_BB = 0.0d0; p_BC = 0.0d0
                 CALL comp_coulomb_der2_braC(cab, coord(:,ic), -zq(ic), &
@@ -641,9 +641,9 @@ contains
             call shi%fetch_by_id(basis, ii)
             do jj = 1, basis%nshell
                 call shj%fetch_by_id(basis, jj)
-                call cab%shell_pair(basis, shi, shj, tol)
+                call cab%shell_pair(basis, shi, shj, tol, dup=.false.)
                 if (cab%numpairs == 0) cycle
-                call cba%shell_pair(basis, shj, shi, tol)
+                call cba%shell_pair(basis, shj, shi, tol, dup=.false.)
                 do ic = 1, nat
                     p_AA = 0.0d0; p_AC = 0.0d0; p_BB = 0.0d0; p_BC = 0.0d0
                     call comp_coulomb_der2_braC(cab, coord(:,ic), -zq(ic), &

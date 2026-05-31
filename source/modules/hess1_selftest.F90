@@ -78,7 +78,7 @@ contains
                  hess_cc=hess_v_an_b9)
 
     ! central finite difference of the analytic gradient routines
-    h = 1.0e-4_dp
+    h = 1.0e-6_dp
     do k = 1, natom
       do a = 1, 3
         ka = 3*(k-1) + a
@@ -328,21 +328,21 @@ contains
           kg2 = basis%g_offset(ii2) + basis%ncontr(ii2) - 1
           write(u3,'(3i6)') basis%origin(ii2)-1, basis%am(ii2), basis%ncontr(ii2)
           do kg = kg1, kg2
-            write(u3,'(2es24.16)') basis%ex(kg), basis%cc(kg)
+            write(u3,'(2es26.18)') basis%ex(kg), basis%cc(kg)
           end do
         end do
         ! per AO: lx ly lz  cx cy cz  (powers, then center coordinate in bohr)
         do o_i = 1, nbf
-          write(u3,'(3i5,3es24.16)') ao_lx(o_i), ao_ly(o_i), ao_lz(o_i), &
+          write(u3,'(3i5,3es26.18)') ao_lx(o_i), ao_ly(o_i), ao_lz(o_i), &
                                      ao_cx(o_i), ao_cy(o_i), ao_cz(o_i)
         end do
         ! charge centers: nuclear charge (integer) and coordinates in bohr; the
         ! per-nucleus blocks below use rinv center = basis%atoms%xyz(:,ic2).
         do ic2 = 1, natom
-          write(u3,'(i5,3es24.16)') nint(basis%atoms%zn(ic2)), basis%atoms%xyz(1:3,ic2)
+          write(u3,'(i5,3es26.18)') nint(basis%atoms%zn(ic2)), basis%atoms%xyz(1:3,ic2)
         end do
         do i2 = 1, nbf
-          write(u3,'(*(es24.16))') Sfull(i2,1:nbf)
+          write(u3,'(*(es26.18))') Sfull(i2,1:nbf)
         end do
         do ic2 = 1, natom
           PAA = 0.0_dp; PAB = 0.0_dp
@@ -350,7 +350,7 @@ contains
             call eshi%fetch_by_id(basis, ii2)
             do jj2 = 1, basis%nshell
               call eshj%fetch_by_id(basis, jj2)
-              call ecab%shell_pair(basis, eshi, eshj, 1.0e-30_dp)
+              call ecab%shell_pair(basis, eshi, eshj, log(10.0_dp)*20.0_dp, dup=.false.)
               if (ecab%numpairs == 0) cycle
               allocate(blkAA(3,3,ecab%inao,ecab%jnao), blkAB(3,3,ecab%inao,ecab%jnao))
               call comp_coulomb_der2_blocks(ecab, basis%atoms%xyz(:,ic2), 1.0_dp, blkAA, blkAB)
@@ -368,14 +368,14 @@ contains
           do a2 = 1, 3
             do b2 = 1, 3
               do i2 = 1, nbf
-                write(u3,'(*(es24.16))') PAA(a2,b2,i2,1:nbf)
+                write(u3,'(*(es26.18))') PAA(a2,b2,i2,1:nbf)
               end do
             end do
           end do
           do a2 = 1, 3
             do b2 = 1, 3
               do i2 = 1, nbf
-                write(u3,'(*(es24.16))') PAB(a2,b2,i2,1:nbf)
+                write(u3,'(*(es26.18))') PAB(a2,b2,i2,1:nbf)
               end do
             end do
           end do
