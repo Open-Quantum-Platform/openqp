@@ -133,6 +133,7 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
         'tlf': {'type': int, 'default': '2'},
@@ -320,6 +321,7 @@ class OQPData:
         "tdhf": {
             "type": "set_tdhf_type",
             "nstate": "set_tdhf_nstate",
+            "target": "set_tdhf_target",
             "multiplicity": "set_tdhf_multiplicity",
             "maxit": "set_tdhf_maxit",
             "maxit_zv": "set_tdhf_maxit_zv",

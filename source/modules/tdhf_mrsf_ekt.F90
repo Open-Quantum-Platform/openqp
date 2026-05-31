@@ -47,6 +47,7 @@ contains
     type(basis_set), pointer :: basis
     integer :: nbf, nbf2, nroot, ok, i
     integer :: nactive
+    integer, allocatable :: dom_mo_idx(:), dom_no_idx(:)
     ! EKT natural-orbital deflation threshold, matching GAMESS EKT-MRSF
     ! (thresh = 1.0d-2, sfgrad.src:3298).
     real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
@@ -59,7 +60,8 @@ contains
     real(kind=dp), allocatable :: density_mo(:,:), fock_mo(:,:), lagrangian_mo(:,:)
     real(kind=dp), allocatable :: ekt_metric(:,:), ekt_operator(:,:)
     real(kind=dp), allocatable :: eig(:)
-    real(kind=dp), allocatable :: orbitals(:,:), strengths(:)
+    real(kind=dp), allocatable :: orbitals(:,:), strengths(:), metric_norms(:)
+    real(kind=dp), allocatable :: dom_mo_coeff(:), dom_no_coeff(:), dom_no_occ(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
     real(kind=dp), contiguous, pointer :: density_store(:,:), lagrangian_store(:,:)
     real(kind=dp), contiguous, pointer :: fock_store(:,:), orbital_store(:,:), strength_store(:)
@@ -199,13 +201,17 @@ contains
     ! the retained NO subspace, solve the generalized eigenproblem there,
     ! metric-normalize, and back-transform the Dyson orbitals.  Pole strengths
     ! come out <= 1 by construction.
-    allocate(eig(nroot), source=0.0_dp, stat=ok)
+    allocate(eig(nroot), metric_norms(nroot), dom_mo_coeff(nroot), dom_no_coeff(nroot), &
+             dom_no_occ(nroot), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    allocate(dom_mo_idx(nroot), dom_no_idx(nroot), source=0, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     ! Deflation threshold matches GAMESS EKT (thresh = 1.0d-2, sfgrad.src:3298):
     ! keep only natural orbitals with occupation > 1e-2, removing low-occupation
     ! null/relaxation channels.
     call solve_ekt_no_deflation(nbf, nroot, ekt_operator, ekt_metric, &
-         ekt_occ_tol, eig, orbitals, strengths, nactive, iw)
+         ekt_occ_tol, eig, orbitals, strengths, metric_norms, dom_mo_idx, &
+         dom_mo_coeff, dom_no_idx, dom_no_coeff, dom_no_occ, nactive, iw)
 
     call infos%dat%remove_records(tags_alloc)
     call infos%dat%reserve_data(OQP_mrsf_ekt_density_mo, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), &
@@ -239,11 +245,20 @@ contains
     ! electron binding energy (IP) of a detachment is -epsilon; print both
     ! the eigenvalue and the eBE in hartree and eV with the Dyson pole
     ! strength (norm of the Dyson vector, <= 1 for a physical root).
-    write(iw,'(2x,"state",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"strength")')
+    write(iw,'(2x,"state",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"metric",7x,"strength")')
     do i = 1, min(nroot, nactive)
-      write(iw,'(2x,I5,2x,F14.6,2x,F14.6,2x,F12.4,2x,F12.6)') &
-            i, eig(i), -eig(i), -eig(i)*hartree_to_ev, strengths(i)
+      write(iw,'(2x,I5,2x,F14.6,2x,F14.6,2x,F12.4,2x,F12.6,2x,F12.6)') &
+            i, eig(i), -eig(i), -eig(i)*hartree_to_ev, metric_norms(i), strengths(i)
     end do
+    write(iw,'(/,2x,"--- EKT root-character diagnostics ---")')
+    write(iw,'(2x,"state",2x,"dom_mo",2x,"mo_coeff",2x,"dom_no",2x,"no_coeff",2x,"no_occ",2x,"character",2x,"spurious")')
+    do i = 1, min(nroot, nactive)
+      write(iw,'(2x,I5,2x,I6,2x,F10.6,2x,I6,2x,F10.6,2x,F10.6,2x,A12,2x,L1)') &
+            i, dom_mo_idx(i), dom_mo_coeff(i), dom_no_idx(i), dom_no_coeff(i), &
+            dom_no_occ(i), ekt_root_character(dom_no_occ(i), electron_affinity), &
+            ekt_is_spurious(-eig(i)*hartree_to_ev, metric_norms(i), strengths(i))
+    end do
+    write(iw,'(2x,"--------------------------------------")')
     call flush(iw)
 
     call measure_time(print_total=1, log_unit=iw)
@@ -365,7 +380,8 @@ contains
   !>            7. back-transform Dyson orbitals  C = U_keep X
   !>            8. pole strength = X^T D_NO X  (<= 1 physical)
   subroutine solve_ekt_no_deflation(nbf, nroot, wmat, dmat, occ_tol, &
-       eig, dyson_mo, strengths, nkeep, iw)
+       eig, dyson_mo, strengths, metric_norms, dom_mo_idx, dom_mo_coeff, &
+       dom_no_idx, dom_no_coeff, dom_no_occ, nkeep, iw)
     use precision, only: dp
     use eigen, only: diag_symm_full
     use messages, only: show_message, with_abort
@@ -375,12 +391,16 @@ contains
     real(kind=dp), intent(out) :: eig(nroot)
     real(kind=dp), intent(out) :: dyson_mo(nbf,nroot)
     real(kind=dp), intent(out) :: strengths(nroot)
+    real(kind=dp), intent(out) :: metric_norms(nroot)
+    integer, intent(out) :: dom_mo_idx(nroot), dom_no_idx(nroot)
+    real(kind=dp), intent(out) :: dom_mo_coeff(nroot), dom_no_coeff(nroot), dom_no_occ(nroot)
     integer, intent(out) :: nkeep
     real(kind=dp), allocatable :: dsym(:,:), nocc(:), uno(:,:), ukeep(:,:)
+    integer, allocatable :: kept_idx(:)
     real(kind=dp), allocatable :: d_no(:,:), w_no(:,:), tmp(:,:)
     real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:)
-    real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str
-    integer :: i, j, m, ierr, ok, nout
+    real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str, coeff_abs, best_abs
+    integer :: i, j, m, ierr, ok, nout, best_idx
 
     ! (1) symmetrize the metric
     allocate(dsym(nbf,nbf), nocc(nbf), uno(nbf,nbf), source=0.0_dp, stat=ok)
@@ -411,12 +431,15 @@ contains
 
     allocate(ukeep(nbf,m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+    allocate(kept_idx(m), source=0, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     j = 0
     occ_min = 1.0d30; occ_max = -1.0d30
     do i = 1, nbf
       if (nocc(i) > occ_tol) then
         j = j + 1
         ukeep(:,j) = uno(:,i)
+        kept_idx(j) = i
         occ_min = min(occ_min, nocc(i))
         occ_max = max(occ_max, nocc(i))
       end if
@@ -465,6 +488,12 @@ contains
     eig = 0.0_dp
     dyson_mo = 0.0_dp
     strengths = 0.0_dp
+    metric_norms = 0.0_dp
+    dom_mo_idx = 0
+    dom_no_idx = 0
+    dom_mo_coeff = 0.0_dp
+    dom_no_coeff = 0.0_dp
+    dom_no_occ = 0.0_dp
     do j = 1, nout
       eig(j) = eps(j)
       dyson_mo(:,j) = cdys(:,j)
@@ -472,11 +501,73 @@ contains
       do i = 1, m
         str = str + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
       end do
+      metric_norms(j) = str
       strengths(j) = str
+
+      best_abs = -1.0_dp
+      best_idx = 0
+      do i = 1, nbf
+        coeff_abs = abs(cdys(i,j))
+        if (coeff_abs > best_abs) then
+          best_abs = coeff_abs
+          best_idx = i
+        end if
+      end do
+      dom_mo_idx(j) = best_idx
+      if (best_idx > 0) dom_mo_coeff(j) = cdys(best_idx,j)
+
+      best_abs = -1.0_dp
+      best_idx = 0
+      do i = 1, m
+        coeff_abs = abs(xvec(i,j))
+        if (coeff_abs > best_abs) then
+          best_abs = coeff_abs
+          best_idx = i
+        end if
+      end do
+      if (best_idx > 0) then
+        dom_no_idx(j) = kept_idx(best_idx)
+        dom_no_coeff(j) = xvec(best_idx,j)
+        dom_no_occ(j) = nocc(kept_idx(best_idx))
+      end if
     end do
 
-    deallocate(dsym, nocc, uno, ukeep, d_no, w_no, tmp, xvec, eps, cdys)
+    deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys)
   end subroutine solve_ekt_no_deflation
+
+  pure logical function ekt_is_spurious(ebe_ev, metric_norm, pole_strength) result(flag)
+    use precision, only: dp
+    implicit none
+    real(kind=dp), intent(in) :: ebe_ev, metric_norm, pole_strength
+    flag = (abs(ebe_ev) > 1.0e4_dp) .or. (metric_norm < 0.0_dp) .or. &
+           (metric_norm > 1.05_dp) .or. (pole_strength < 0.0_dp) .or. &
+           (pole_strength > 1.05_dp)
+  end function ekt_is_spurious
+
+  pure function ekt_root_character(no_occ, electron_affinity) result(label)
+    use precision, only: dp
+    implicit none
+    real(kind=dp), intent(in) :: no_occ
+    logical, intent(in) :: electron_affinity
+    character(len=12) :: label
+    if (electron_affinity) then
+      if (no_occ < 0.20_dp) then
+        label = 'virtual'
+      else if (no_occ > 0.80_dp) then
+        label = 'occupied'
+      else
+        label = 'mixed'
+      end if
+    else
+      if (no_occ > 0.80_dp) then
+        label = 'occupied'
+      else if (no_occ < 0.20_dp) then
+        label = 'virtual'
+      else
+        label = 'mixed'
+      end if
+    end if
+  end function ekt_root_character
 
   !> @brief Solve the EKT generalized eigenproblem  op * C = metric * C * lambda
   !> @details The EKT working equation (eq 1 of Park et al., JCTC 2024) is a
