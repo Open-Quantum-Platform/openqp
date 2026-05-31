@@ -15,7 +15,13 @@ on:
 jobs:
   claude-pr-review:
     name: Claude automatic PR review
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    # GitHub does not expose OIDC token request env vars to pull_request
+    # jobs from forks, so skip the automatic Claude review there. Mention-based
+    # review can still be requested explicitly by maintainers.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
