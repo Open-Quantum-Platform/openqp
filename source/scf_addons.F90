@@ -276,6 +276,7 @@ module scf_addons
     real(kind=dp) :: epcm     ! PCM reaction-field energy
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
+    real(kind=dp) :: e_pcm = 0.0_dp ! PCM solvent reaction-field energy (provisional)
   contains
     procedure :: print_e => print_scf_energy
   end type scf_energy_t
@@ -326,6 +327,9 @@ contains
      write(IW,"('                Two electron energy =',F19.10)") this%vee
      write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
      write(IW,"('        PCM reaction-field energy =',F19.10)") this%epcm
+     if (this%e_pcm /= 0.0_dp) then
+        write(IW,"('           PCM solvent energy (prov) =',F19.10)") this%e_pcm
+     end if
      write(IW,"(38X,18('-'))")
      write(IW,"('                       TOTAL energy =',F19.10)") this%etot
      write(IW,*)
@@ -1372,6 +1376,7 @@ contains
     use types,           only : information
     use mod_dft_molgrid, only : dft_grid_t
     use mathlib,          only : traceprod_sym_packed
+    use solvent_pcm,      only : add_pcm_reaction_field
     implicit none
 
     type(basis_set),   intent(in)    :: basis
@@ -1436,6 +1441,18 @@ contains
 
     E%ehf = 0.5_dp * (E%ehf + E%ehf1)
     E%etot = E%ehf + E%nenergy
+
+    ! PCM solvent reaction field (provisional energy-only seam; ddX backend).
+    ! Mirrors the XC pattern below: the V_pcm operator is added to the Fock
+    ! blocks used for the next density update, and a distinct E_pcm term is
+    ! added to the total energy. It is applied AFTER the vacuum HF energy is
+    ! formed so the reaction field is not double-counted in E%ehf. Gated on
+    ! pcm_enabled; aborts at runtime if built without ddX (OQP_ENABLE_DDX).
+    E%e_pcm = 0.0_dp
+    if (infos%control%pcm_enabled) then
+      call add_pcm_reaction_field(basis, infos, d, nfocks, f, E%e_pcm)
+      E%etot = E%etot + E%e_pcm
+    end if
 
     if (.not. is_dft) return
 

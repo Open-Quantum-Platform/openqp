@@ -667,3 +667,282 @@ cleanup:
 #endif
 }
 
+#ifdef OQP_ENABLE_DDX
+/*
+ * Bondi-style van der Waals radii (Angstrom) for the common main-group
+ * elements, indexed by nuclear charge Z. Used only to construct the ddPCM
+ * cavity. These are provisional defaults, not an OpenQP-curated radius set, and
+ * carry the same "unvalidated convention" caveat as q_cav.
+ */
+static double vdw_radius_angstrom(int z) {
+  static const double table[] = {
+      1.50,                               /* 0: dummy */
+      1.20, 1.40,                         /* H  He */
+      1.82, 1.53, 1.92, 1.70, 1.55, 1.52, 1.47, 1.54, /* Li..Ne */
+      2.27, 1.73, 1.84, 2.10, 1.80, 1.80, 1.75, 1.88  /* Na..Ar */
+  };
+  const int n = (int)(sizeof(table) / sizeof(table[0]));
+  if (z < 0) z = 0;
+  if (z >= n) return 1.80; /* provisional fallback for heavier elements */
+  return table[z];
+}
+
+/*
+ * Allocate a ddPCM model for the given solute geometry. Centres are supplied in
+ * Bohr; per-atom cavity radii are derived from the integer nuclear charges.
+ * Returns the model (caller deallocates) or NULL on error with message set.
+ * The model is a deterministic function of (geometry, radii, discretization),
+ * so oqp_ddx_pcm_cavity and oqp_ddx_pcm_solve agree on ncav and point order.
+ */
+static void* build_pcm_model(int natom, const double* xyz_bohr,
+                             const double* charges, double epsilon, void* error,
+                             char* message, int message_len) {
+  const double bohr_per_angstrom = 1.0 / 0.5291772109;
+  const int model_pcm = 2;
+  const int enable_forces = 0;
+  const double kappa = 0.0;
+  const double eta = 0.1;
+  const double shift = 0.0;
+  const int lmax = 8;
+  const int n_lebedev = 302;
+  const int incore = 0;
+  const int maxiter = 100;
+  const int jacobi_n_diis = 20;
+  const int enable_fmm = 1;
+  const int fmm_multipole_lmax = 7;
+  const int fmm_local_lmax = 6;
+  const int n_proc = 1;
+  const int length_logfile = 0;
+  char logfile[1] = {'\0'};
+
+  double* centres = (double*)calloc((size_t)3 * natom, sizeof(double));
+  double* radii = (double*)calloc((size_t)natom, sizeof(double));
+  if (!centres || !radii) {
+    set_message(message, message_len, "Allocation failure building ddX cavity");
+    free(centres);
+    free(radii);
+    return NULL;
+  }
+  for (int i = 0; i < natom; ++i) {
+    centres[3 * i + 0] = xyz_bohr[3 * i + 0];
+    centres[3 * i + 1] = xyz_bohr[3 * i + 1];
+    centres[3 * i + 2] = xyz_bohr[3 * i + 2];
+    const int z = (int)(charges[i] + 0.5);
+    radii[i] = vdw_radius_angstrom(z) * bohr_per_angstrom;
+  }
+
+  void* model = ddx_allocate_model(
+      model_pcm, enable_forces, epsilon, kappa, eta, shift, lmax, n_lebedev,
+      incore, maxiter, jacobi_n_diis, enable_fmm, fmm_multipole_lmax,
+      fmm_local_lmax, n_proc, natom, centres, radii, length_logfile, logfile,
+      error);
+  free(centres);
+  free(radii);
+  if (ddx_get_error_flag(error) != 0) {
+    fail_with_ddx_error(error, message, message_len);
+    if (model != NULL) ddx_deallocate_model(model, error);
+    return NULL;
+  }
+  return model;
+}
+#endif
+
+int oqp_ddx_pcm_cavity(int natom, const double* xyz_bohr, const double* charges,
+                       double epsilon, int max_cav, int* ncav_out,
+                       double* cav_xyz_out, char* message, int message_len) {
+  if (ncav_out != NULL) {
+    *ncav_out = 0;
+  }
+#ifndef OQP_ENABLE_DDX
+  (void)natom;
+  (void)xyz_bohr;
+  (void)charges;
+  (void)epsilon;
+  (void)max_cav;
+  (void)cav_xyz_out;
+  set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
+  return 2;
+#else
+  if (natom <= 0 || xyz_bohr == NULL || charges == NULL || ncav_out == NULL ||
+      cav_xyz_out == NULL || max_cav <= 0) {
+    set_message(message, message_len, "Invalid arguments to oqp_ddx_pcm_cavity");
+    return 1;
+  }
+
+  int status = 1;
+  void* error = NULL;
+  void* model = NULL;
+  double* cavity = NULL;
+
+  error = ddx_allocate_error();
+  if (error == NULL) {
+    set_message(message, message_len, "Failed to allocate ddX error object");
+    return 1;
+  }
+
+  model = build_pcm_model(natom, xyz_bohr, charges, epsilon, error, message,
+                          message_len);
+  if (model == NULL) goto cleanup;
+
+  const int ncav = ddx_get_n_cav(model);
+  if (ncav <= 0) {
+    set_message(message, message_len, "Invalid ddX cavity size");
+    goto cleanup;
+  }
+  if (ncav > max_cav) {
+    set_message(message, message_len,
+                "ddX cavity larger than caller-provided buffer");
+    goto cleanup;
+  }
+
+  cavity = (double*)calloc((size_t)3 * ncav, sizeof(double));
+  if (cavity == NULL) {
+    set_message(message, message_len, "Allocation failure in oqp_ddx_pcm_cavity");
+    goto cleanup;
+  }
+  ddx_get_cavity(model, ncav, cavity);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  for (int i = 0; i < 3 * ncav; ++i) {
+    cav_xyz_out[i] = cavity[i];
+  }
+  *ncav_out = ncav;
+  set_message(message, message_len, "ddX PCM cavity built");
+  status = 0;
+
+cleanup:
+  if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
+  free(cavity);
+  return status;
+#endif
+}
+
+int oqp_ddx_pcm_solve(int natom, const double* xyz_bohr, const double* charges,
+                      double epsilon, int ncav, const double* phi_cav,
+                      double* q_cav_out, double* esolv_out, char* message,
+                      int message_len) {
+  if (esolv_out != NULL) {
+    *esolv_out = 0.0;
+  }
+#ifndef OQP_ENABLE_DDX
+  (void)natom;
+  (void)xyz_bohr;
+  (void)charges;
+  (void)epsilon;
+  (void)ncav;
+  (void)phi_cav;
+  (void)q_cav_out;
+  set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
+  return 2;
+#else
+  if (natom <= 0 || xyz_bohr == NULL || charges == NULL || ncav <= 0 ||
+      phi_cav == NULL || q_cav_out == NULL) {
+    set_message(message, message_len, "Invalid arguments to oqp_ddx_pcm_solve");
+    return 1;
+  }
+
+  int status = 1;
+  void* error = NULL;
+  void* model = NULL;
+  void* state = NULL;
+  double* solute_multipoles = NULL;
+  double* psi = NULL;
+  double* phi_cav_copy = NULL;
+  double* xi = NULL;
+
+  error = ddx_allocate_error();
+  if (error == NULL) {
+    set_message(message, message_len, "Failed to allocate ddX error object");
+    return 1;
+  }
+
+  model = build_pcm_model(natom, xyz_bohr, charges, epsilon, error, message,
+                          message_len);
+  if (model == NULL) goto cleanup;
+
+  const int nbasis = ddx_get_n_basis(model);
+  const int model_ncav = ddx_get_n_cav(model);
+  if (nbasis <= 0 || model_ncav <= 0) {
+    set_message(message, message_len, "Invalid ddX dimensions in pcm_solve");
+    goto cleanup;
+  }
+  if (model_ncav != ncav) {
+    set_message(message, message_len,
+                "ddX cavity size disagrees with caller phi_cav length");
+    goto cleanup;
+  }
+
+  const int nsph = natom;
+  const int nmultipoles = 1;
+  solute_multipoles =
+      (double*)calloc((size_t)nmultipoles * nsph, sizeof(double));
+  psi = (double*)calloc((size_t)nbasis * nsph, sizeof(double));
+  phi_cav_copy = (double*)calloc((size_t)ncav, sizeof(double));
+  xi = (double*)calloc((size_t)ncav, sizeof(double));
+  if (!solute_multipoles || !psi || !phi_cav_copy || !xi) {
+    set_message(message, message_len, "Allocation failure in oqp_ddx_pcm_solve");
+    goto cleanup;
+  }
+
+  /*
+   * psi is the solute source in spherical harmonics. For this first energy
+   * gate it is built from nuclear monopoles only (charges as Z), matching the
+   * branch's explicit-PCM smoke. Folding the electronic density into psi is a
+   * deferred refinement; see docs/solvent_ddx_scf_integration_seam.md.
+   */
+  for (int i = 0; i < nsph; ++i) {
+    solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
+  }
+  ddx_multipole_psi(model, nbasis, nsph, nmultipoles, solute_multipoles, psi,
+                    error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  for (int i = 0; i < ncav; ++i) {
+    phi_cav_copy[i] = phi_cav[i];
+  }
+
+  state = ddx_allocate_state(model, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  const double tol = 1.0e-9;
+  ddx_pcm_setup(model, state, ncav, nbasis, nsph, psi, phi_cav_copy, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess_adjoint(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve_adjoint(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  const double energy = ddx_pcm_energy(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  /*
+   * q_cav is the cavity-projected ddPCM adjoint charge (state%q via
+   * ddx_get_xi). Its sign/scale relative to OpenQP's external_charge_potential
+   * seam is PROVISIONAL: the branch only finite-difference-validated
+   * dE/dphi_cav ~= -0.5*q_cav for the energy, not the Fock-operator charge.
+   */
+  ddx_get_xi(state, model, ncav, xi);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  for (int i = 0; i < ncav; ++i) {
+    q_cav_out[i] = xi[i];
+  }
+  if (esolv_out != NULL) {
+    *esolv_out = energy;
+  }
+  set_message(message, message_len, "ddX PCM solve complete");
+  status = 0;
+
+cleanup:
+  if (state != NULL && error != NULL) ddx_deallocate_state(state, error);
+  if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
+  free(solute_multipoles);
+  free(psi);
+  free(phi_cav_copy);
+  free(xi);
+  return status;
+#endif
+}
+

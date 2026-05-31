@@ -57,6 +57,39 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
     char* message,
     int message_len);
 
+/*
+ * Production PCM reaction-field seam for the SCF loop (real ddX only).
+ *
+ * Two-phase, stateless handshake so the OpenQP Fortran SCF can supply phi_cav
+ * built from the AO density:
+ *
+ *   1. oqp_ddx_pcm_cavity(): build the ddPCM cavity from solute geometry and
+ *      return the cavity-point Cartesian coordinates (Bohr, 3*ncav) and count.
+ *   2. The caller evaluates phi_cav (electronic + nuclear) at those points.
+ *   3. oqp_ddx_pcm_solve(): rebuild the identical model, run the ddPCM
+ *      forward/adjoint solve for the supplied phi_cav, and return the
+ *      cavity-projected adjoint charge q_cav (ddx_get_xi) plus the ddX
+ *      solvation energy in esolv.
+ *
+ * The cavity is a deterministic function of (geometry, radii, discretization),
+ * so the two calls agree on ncav and cavity-point ordering. Both return 0 on
+ * success, 2 when OpenQP was built without OQP_ENABLE_DDX, and 1 on a
+ * ddX/runtime error (with a human-readable message). Atomic cavity radii are
+ * derived from the nuclear charges via a small built-in van der Waals table.
+ *
+ * NOTE: the sign/scale convention of q_cav relative to OpenQP's
+ * external_charge_potential seam is PROVISIONAL and not yet validated against a
+ * trusted PCM reference. See docs/solvent_ddx_scf_integration_seam.md.
+ */
+int oqp_ddx_pcm_cavity(int natom, const double* xyz_bohr, const double* charges,
+                       double epsilon, int max_cav, int* ncav_out,
+                       double* cav_xyz_out, char* message, int message_len);
+
+int oqp_ddx_pcm_solve(int natom, const double* xyz_bohr, const double* charges,
+                      double epsilon, int ncav, const double* phi_cav,
+                      double* q_cav_out, double* esolv_out, char* message,
+                      int message_len);
+
 #ifdef __cplusplus
 }
 #endif

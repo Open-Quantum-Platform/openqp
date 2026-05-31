@@ -103,7 +103,9 @@ epsilon=78.3553
         self.assertEqual(config["pcm"]["mode"], "reference_scf")
         self.assertAlmostEqual(config["pcm"]["epsilon"], 78.3553)
 
-    def test_checker_blocks_enabled_pcm_until_runtime_exists(self):
+    def test_checker_accepts_enabled_pcm_in_first_scope(self):
+        # The reference_scf RHF/ddX/energy path is now implemented, so an
+        # in-scope enabled PCM input must pass the checker without error.
         input_checker = load_module(
             "input_checker_pcm_under_test",
             "pyoqp/oqp/utils/input_checker.py",
@@ -129,8 +131,38 @@ epsilon=78.3553
 
         report = input_checker.check_input_values(config, raise_error=False, emit=False)
         errors = {item.path: item.message for item in report.errors}
-        self.assertIn("pcm.enabled", errors)
-        self.assertIn("runtime solvent coupling is not implemented", errors["pcm.enabled"])
+        self.assertNotIn("pcm.enabled", errors)
+        self.assertNotIn("pcm.backend", errors)
+
+    def test_checker_blocks_enabled_pcm_on_unimplemented_backend(self):
+        # Only the ddX backend has a runtime energy path; pcmsolver stays blocked.
+        input_checker = load_module(
+            "input_checker_pcm_pcmsolver_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "energy",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": True,
+                "backend": "pcmsolver",
+                "mode": "reference_scf",
+                "model": "iefpcm",
+                "epsilon": 78.3553,
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("pcm.backend", errors)
+        self.assertIn("implemented runtime energy path", errors["pcm.backend"])
 
     def test_checker_rejects_pcm_gradients_for_first_scope(self):
         input_checker = load_module(

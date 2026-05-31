@@ -874,7 +874,12 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         )[0]
         self.assertIn("call int1_el_pot", wrapper)
         self.assertNotIn("pot = pot*wt", wrapper)
-        self.assertIn("call bas_denorm_matrix", wrapper)
+        # The wrapper restores the input normalization of d via a local inverse
+        # of the basis norms (not bas_denorm_matrix, which would transiently
+        # mutate basis%bfnrm and force an intent(inout) basis); this keeps it
+        # callable from the intent(in) SCF Fock build.
+        self.assertIn("invnrm = 1.0_real64 / basis%bfnrm", wrapper)
+        self.assertIn("call bas_norm_matrix(d, invnrm", wrapper)
 
     def test_external_charge_potential_is_public(self):
         text = (ROOT / "source" / "integrals" / "int1.F90").read_text(encoding="utf-8")
