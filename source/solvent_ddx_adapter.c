@@ -948,8 +948,9 @@ cleanup:
 
 int oqp_ddx_pcm_solve_multipole_source(
     int natom, const double* xyz_bohr, const double* cavity_charges,
-    const double* source_charges, double epsilon, int ncav, double* q_cav_out,
-    double* esolv_out, char* message, int message_len) {
+    int nmultipoles, const double* source_multipoles, double epsilon, int ncav,
+    double* phi_source_out, double* q_cav_out, double* esolv_out, char* message,
+    int message_len) {
   if (esolv_out != NULL) {
     *esolv_out = 0.0;
   }
@@ -957,17 +958,27 @@ int oqp_ddx_pcm_solve_multipole_source(
   (void)natom;
   (void)xyz_bohr;
   (void)cavity_charges;
-  (void)source_charges;
+  (void)nmultipoles;
+  (void)source_multipoles;
   (void)epsilon;
   (void)ncav;
+  (void)phi_source_out;
   (void)q_cav_out;
   set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
   return 2;
 #else
   if (natom <= 0 || xyz_bohr == NULL || cavity_charges == NULL ||
-      source_charges == NULL || ncav <= 0 || q_cav_out == NULL) {
+      nmultipoles <= 0 || source_multipoles == NULL || ncav <= 0 ||
+      phi_source_out == NULL || q_cav_out == NULL) {
     set_message(message, message_len,
                 "Invalid arguments to oqp_ddx_pcm_solve_multipole_source");
+    return 1;
+  }
+  int mmax = 0;
+  while ((mmax + 1) * (mmax + 1) < nmultipoles) ++mmax;
+  if ((mmax + 1) * (mmax + 1) != nmultipoles) {
+    set_message(message, message_len,
+                "nmultipoles must be a perfect square for ddX multipoles");
     return 1;
   }
 
@@ -1005,7 +1016,6 @@ int oqp_ddx_pcm_solve_multipole_source(
   }
 
   const int nsph = natom;
-  const int nmultipoles = 1;
   solute_multipoles =
       (double*)calloc((size_t)nmultipoles * nsph, sizeof(double));
   psi = (double*)calloc((size_t)nbasis * nsph, sizeof(double));
@@ -1017,10 +1027,12 @@ int oqp_ddx_pcm_solve_multipole_source(
     goto cleanup;
   }
 
-  /* ddX l=0 real-solid-harmonic monopole normalization. */
-  for (int i = 0; i < nsph; ++i) {
-    solute_multipoles[i] = source_charges[i] / sqrt(4.0 * M_PI);
-  }
+  memcpy(solute_multipoles, source_multipoles,
+         (size_t)nmultipoles * (size_t)nsph * sizeof(double));
+
+  ddx_multipole_electrostatics_0(model, nsph, ncav, nmultipoles,
+                                 solute_multipoles, phi_source_out, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
 
   electrostatics = ddx_allocate_electrostatics(model, error);
   if (check_ddx_error(error, message, message_len)) goto cleanup;

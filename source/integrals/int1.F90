@@ -354,6 +354,7 @@ contains
     tol = log(10.0_dp)*20
     if (present(logtol)) tol = logtol
 
+    pot = 0.0_real64
     call int1_el_pot(basis, x, y, z, d, pot, tol)
 
     ! Restore the input normalization of d. Use a local inverse of the basis

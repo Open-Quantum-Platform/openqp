@@ -12,7 +12,7 @@
 !> rather than silently producing a vacuum result.
 !>
 !> PROVISIONAL CONVENTIONS (not yet validated against a trusted PCM reference):
-!>   * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| - phi_elec
+!>   * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| + phi_elec
 !>   * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
 !>     directly as the external-charge vector for external_charge_potential.
 !>   * E_pcm: the ddX solvation energy is reported as the PCM energy term.
@@ -29,7 +29,8 @@ module solvent_pcm
   use mathlib, only: traceprod_sym_packed
   use constants, only: NUM_CART_BF
   use oqp_tagarray_driver, only: OQP_SM, data_has_tags, tagarray_get_data
-  use int1, only: electrostatic_potential_unweighted, external_charge_potential
+  use int1, only: electrostatic_potential_unweighted, external_charge_potential, &
+       multipole_integrals
 
   implicit none
   private
@@ -74,16 +75,18 @@ module solvent_pcm
     end function oqp_ddx_pcm_solve
 
     integer(c_int) function oqp_ddx_pcm_solve_multipole_source(natom, &
-        xyz_bohr, cavity_charges, source_charges, eps, ncav, q_cav_out, &
-        esolv_out, message, message_len) &
+        xyz_bohr, cavity_charges, nmultipoles, source_multipoles, eps, ncav, &
+        phi_source_out, q_cav_out, esolv_out, message, message_len) &
         bind(C, name="oqp_ddx_pcm_solve_multipole_source")
       import :: c_int, c_double, c_char
       integer(c_int), value :: natom
       real(c_double), intent(in) :: xyz_bohr(*)
       real(c_double), intent(in) :: cavity_charges(*)
-      real(c_double), intent(in) :: source_charges(*)
+      integer(c_int), value :: nmultipoles
+      real(c_double), intent(in) :: source_multipoles(*)
       real(c_double), value :: eps
       integer(c_int), value :: ncav
+      real(c_double), intent(out) :: phi_source_out(*)
       real(c_double), intent(out) :: q_cav_out(*)
       real(c_double), intent(out) :: esolv_out
       character(kind=c_char), intent(out) :: message(*)
@@ -109,7 +112,7 @@ contains
     real(dp),          intent(inout) :: f(:,:)
     real(dp),          intent(out)   :: e_pcm
 
-    integer(c_int) :: natom, ncav, max_cav
+    integer(c_int) :: natom, ncav, max_cav, nmultipoles
     integer :: nbf_tri, ii, iat, icav, rc, ndelta
     real(dp) :: eps, esolv, phin, dx, dy, dz, r
     real(dp) :: half_tr_dv, q_cav_sum, q_cav_absnorm, phi_cav_sum, phi_cav_min, phi_cav_max
@@ -119,6 +122,8 @@ contains
     real(dp), allocatable :: phi_elec(:), phi_cav(:), phi_source(:), q_cav(:)
     real(dp), allocatable :: dtot(:), vpcm(:)
     real(dp), allocatable :: ao_pop(:), atom_pop(:), source_charges(:)
+    real(dp), allocatable :: ao_dip(:,:), atom_dip(:,:), ao_quad(:,:), atom_quad(:,:)
+    real(dp), allocatable :: source_multipoles(:,:)
     real(dp), contiguous, pointer :: smat(:)
     character(kind=c_char) :: cmsg(256)
     character(len=256) :: fmsg
@@ -163,7 +168,9 @@ contains
     allocate(phi_elec(ncav), phi_cav(ncav))
     call electrostatic_potential_unweighted(basis, cx, cy, cz, dtot, phi_elec)
 
-    ! phi_total = sum_k Z_k/|r-R_k| - phi_elec   (PROVISIONAL sign convention)
+    ! phi_total = sum_k Z_k/|r-R_k| + phi_elec, where the OpenQP
+    ! Coulomb-potential primitive returns the electronic contribution with the
+    ! electron-charge sign already included.
     do icav = 1, ncav
       phin = 0.0_dp
       do iat = 1, natom
@@ -173,38 +180,34 @@ contains
         r = sqrt(dx*dx + dy*dy + dz*dz)
         if (r > 1.0e-12_dp) phin = phin + charges(iat) / r
       end do
-      phi_cav(icav) = phin - phi_elec(icav)
+      phi_cav(icav) = phin + phi_elec(icav)
     end do
 
     ! ---- Phase 3: consistent QM source -> ddX q_cav ------------------------
-    ! Approach A from docs/solvent_pcm_source_term_handoff.md: build one
-    ! per-atom net-charge source (Z_j - Mulliken population_j), then feed that
-    ! same l=0 real-solid-harmonic monopole source to ddX for both phi and psi.
+    ! Approach B from docs/solvent_pcm_source_term_handoff.md: build one
+    ! per-atom real-solid-harmonic source through quadrupoles, then feed exactly
+    ! that same multipole array to ddX for both phi and psi.  The atom-centered
+    ! moments use a Mulliken row partition of the AO density.
     allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
-             source=0.0_dp)
+             ao_dip(3, basis%nbf), atom_dip(3, natom), &
+             ao_quad(6, basis%nbf), atom_quad(6, natom), source=0.0_dp)
     call data_has_tags(infos%dat, tags_overlap, &
                        'solvent_pcm:add_pcm_reaction_field', with_abort)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
     call mulliken_atomic_population_from_density(basis, smat, dtot, &
                                                  ao_pop, atom_pop)
+    call mulliken_atomic_multipoles_from_density(basis, dtot, atom_pop, &
+                                                 ao_dip, atom_dip, ao_quad, atom_quad)
     source_charges(:) = charges(:) - atom_pop(:)
 
-    allocate(phi_source(ncav))
-    do icav = 1, ncav
-      phin = 0.0_dp
-      do iat = 1, natom
-        dx = cx(icav) - xyz(1, iat)
-        dy = cy(icav) - xyz(2, iat)
-        dz = cz(icav) - xyz(3, iat)
-        r = sqrt(dx*dx + dy*dy + dz*dz)
-        if (r > 1.0e-12_dp) phin = phin + source_charges(iat) / r
-      end do
-      phi_source(icav) = phin
-    end do
+    nmultipoles = 9_c_int
+    allocate(source_multipoles(nmultipoles, natom), source=0.0_dp)
+    call pack_ddx_l2_multipoles(source_charges, atom_dip, atom_quad, source_multipoles)
 
-    allocate(q_cav(ncav))
+    allocate(phi_source(ncav), q_cav(ncav))
     rc = oqp_ddx_pcm_solve_multipole_source(natom, xyz, charges, &
-         source_charges, eps, ncav, q_cav, esolv, cmsg, int(size(cmsg), c_int))
+         nmultipoles, source_multipoles, eps, ncav, phi_source, q_cav, esolv, &
+         cmsg, int(size(cmsg), c_int))
     if (rc /= 0) then
       call c_message_to_fortran(cmsg, fmsg)
       call show_message('PCM (ddX) solve failed: '//trim(fmsg), with_abort)
@@ -232,9 +235,9 @@ contains
     half_tr_dv  = 0.5_dp * traceprod_sym_packed(dtot, vpcm, basis%nbf)
     q_cav_sum   = sum(q_cav)
     q_cav_absnorm = sqrt(sum(q_cav*q_cav))
-    phi_cav_sum = sum(phi_source)
-    phi_cav_min = minval(phi_source)
-    phi_cav_max = maxval(phi_source)
+    phi_cav_sum = sum(phi_cav)
+    phi_cav_min = minval(phi_cav)
+    phi_cav_max = maxval(phi_cav)
     source_charge_sum = sum(source_charges)
     phi_source_delta_rms = 0.0_dp
     phi_source_delta_max = 0.0_dp
@@ -265,7 +268,7 @@ contains
     write(iw,'(1x,"PCM diag phi_cav_min=",ES22.14)') phi_cav_min
     write(iw,'(1x,"PCM diag phi_cav_max=",ES22.14)') phi_cav_max
     write(iw,'(1x,"PCM diag ncav=",I0)') int(ncav)
-    write(iw,'(1x,"PCM diag psi_source=total_qm_net_atomic_monopoles")')
+    write(iw,'(1x,"PCM diag psi_source=total_qm_atom_multipoles_l2")')
 
   end subroutine add_pcm_reaction_field
 
@@ -292,6 +295,84 @@ contains
       atom_pop(iatom) = atom_pop(iatom) + sum(ao_pop(i0:i1))
     end do
   end subroutine mulliken_atomic_population_from_density
+
+  subroutine mulliken_atomic_multipoles_from_density(basis, density, atom_pop, ao_dip, atom_dip, ao_quad, atom_quad)
+    type(basis_set), intent(in) :: basis
+    real(dp),        intent(in) :: density(:)
+    real(dp),        intent(in) :: atom_pop(:)
+    real(dp),        intent(out) :: ao_dip(:,:), atom_dip(:,:)
+    real(dp),        intent(out) :: ao_quad(:,:), atom_quad(:,:)
+
+    integer :: iat, mu, nu, ish, i0, i1, idx
+    integer, allocatable :: ao_atom(:)
+    real(dp), allocatable :: moment_ints(:,:)
+
+    atom_dip(:,:) = 0.0_dp
+    atom_quad(:,:) = 0.0_dp
+    allocate(ao_atom(basis%nbf), moment_ints(size(density), 9))
+    moment_ints(:,:) = 0.0_dp
+    ao_atom(:) = 0
+    do ish = 1, basis%nshell
+      iat = basis%origin(ish)
+      i0 = basis%ao_offset(ish)
+      i1 = basis%ao_offset(ish) + NUM_CART_BF(basis%am(ish)) - 1
+      ao_atom(i0:i1) = iat
+    end do
+
+    do iat = 1, size(atom_pop)
+      ao_dip(:,:) = 0.0_dp
+      ao_quad(:,:) = 0.0_dp
+      moment_ints(:,:) = 0.0_dp
+      call multipole_integrals(basis, moment_ints, basis%atoms%xyz(:, iat), 2)
+      do mu = 1, basis%nbf
+        if (ao_atom(mu) /= iat) cycle
+        do nu = 1, basis%nbf
+          idx = packed_index(mu, nu)
+          ao_dip(1, mu) = ao_dip(1, mu) + density(idx) * moment_ints(idx, 1)
+          ao_dip(2, mu) = ao_dip(2, mu) + density(idx) * moment_ints(idx, 2)
+          ao_dip(3, mu) = ao_dip(3, mu) + density(idx) * moment_ints(idx, 3)
+          ao_quad(1, mu) = ao_quad(1, mu) + density(idx) * moment_ints(idx, 4)
+          ao_quad(2, mu) = ao_quad(2, mu) + density(idx) * moment_ints(idx, 5)
+          ao_quad(3, mu) = ao_quad(3, mu) + density(idx) * moment_ints(idx, 6)
+          ao_quad(4, mu) = ao_quad(4, mu) + density(idx) * moment_ints(idx, 7)
+          ao_quad(5, mu) = ao_quad(5, mu) + density(idx) * moment_ints(idx, 8)
+          ao_quad(6, mu) = ao_quad(6, mu) + density(idx) * moment_ints(idx, 9)
+        end do
+      end do
+      atom_dip(:, iat) = -sum(ao_dip(:, :), dim=2)
+      atom_quad(:, iat) = -sum(ao_quad(:, :), dim=2)
+    end do
+  end subroutine mulliken_atomic_multipoles_from_density
+
+  subroutine pack_ddx_l2_multipoles(source_charges, atom_dip, atom_quad, multipoles)
+    real(dp), intent(in)  :: source_charges(:), atom_dip(:,:), atom_quad(:,:)
+    real(dp), intent(out) :: multipoles(:,:)
+
+    integer :: iat
+    real(dp) :: sqrt4pi, sqrt4pi_over3
+    real(dp), parameter :: q_xy = 1.0925484305920792_dp
+    real(dp), parameter :: q_z2 = 0.31539156525252005_dp
+    real(dp), parameter :: q_x2y2 = 0.5462742152960396_dp
+
+    sqrt4pi = sqrt(4.0_dp * acos(-1.0_dp))
+    sqrt4pi_over3 = sqrt(4.0_dp * acos(-1.0_dp) / 3.0_dp)
+    multipoles(:,:) = 0.0_dp
+    do iat = 1, size(source_charges)
+      ! ddX real-solid-harmonic order for l<=2 is:
+      !   1: charge; 2: y dipole; 3: z dipole; 4: x dipole;
+      !   5: xy; 6: yz; 7: z^2; 8: xz; 9: x^2-y^2.
+      multipoles(1, iat) = source_charges(iat) / sqrt4pi
+      multipoles(2, iat) = -atom_dip(2, iat) / sqrt4pi_over3
+      multipoles(3, iat) =  atom_dip(3, iat) / sqrt4pi_over3
+      multipoles(4, iat) = -atom_dip(1, iat) / sqrt4pi_over3
+      multipoles(5, iat) = q_xy * atom_quad(4, iat)
+      multipoles(6, iat) = q_xy * atom_quad(6, iat)
+      multipoles(7, iat) = q_z2 * (-atom_quad(1, iat) - atom_quad(2, iat) + &
+                                   2.0_dp * atom_quad(3, iat))
+      multipoles(8, iat) = q_xy * atom_quad(5, iat)
+      multipoles(9, iat) = q_x2y2 * (atom_quad(1, iat) - atom_quad(2, iat))
+    end do
+  end subroutine pack_ddx_l2_multipoles
 
   pure integer function packed_index(i, j) result(idx)
     integer, intent(in) :: i, j
