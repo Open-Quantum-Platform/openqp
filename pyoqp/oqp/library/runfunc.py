@@ -48,7 +48,21 @@ def compute_scf_prop(mol):
         elif prop == 'resp':
             oqp.resp_charges(mol)
         elif prop == 'nmr':
-            oqp.nmr_shielding(mol)
+            nmr_gauge = mol.config.get("properties", {}).get("nmr_gauge", "cgo")
+            if isinstance(nmr_gauge, str):
+                nmr_gauge = nmr_gauge.lower()
+            if nmr_gauge == "cgo":
+                oqp.nmr_shielding(mol)
+            elif nmr_gauge == "giao":
+                raise NotImplementedError(
+                    "GIAO NMR shielding requested with properties.nmr_gauge=giao, "
+                    "but the GIAO integral/response path is not yet validated. "
+                    "Use properties.nmr_gauge=cgo for the validated CGO baseline."
+                )
+            else:
+                raise ValueError(
+                    f"Unknown NMR gauge formulation {nmr_gauge!r}; expected 'cgo' or 'giao'"
+                )
         else:
             raise ValueError(f'Unknown property: {prop}')
 

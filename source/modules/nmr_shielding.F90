@@ -18,8 +18,11 @@ contains
     call nmr_shielding(inf)
   end subroutine nmr_shielding_C
 
-!> @brief NMR nuclear magnetic shielding tensors (common gauge origin).
-!> @details v1 scope: RHF and closed-shell DFT, common gauge origin (CGO). Both
+!> @brief NMR nuclear magnetic shielding tensors.
+!> @details Current validated scope: RHF and closed-shell DFT, common gauge
+!>  origin (CGO). The user-facing Python layer recognizes `properties.nmr_gauge`
+!>  with CGO as the default and GIAO as a gated development option; GIAO NMR
+!>  shielding is not yet validated and does not enter this Fortran CGO pathway.
 !>  the uncoupled and the coupled (CPHF/CPKS) paramagnetic responses are reported.
 !>  The coupled response includes the exact-exchange response of the imaginary
 !>  antisymmetric first-order magnetic density (Phase 0); the Coulomb and
@@ -105,6 +108,7 @@ contains
     write(iw,'(4x,a)') '======================================'
     write(iw,'(4x,a)') 'NMR nuclear magnetic shielding (CGO)'
     write(iw,'(4x,a)') '======================================'
+    write(iw,'(4x,a)') 'Gauge formulation: CGO validated baseline; GIAO is gated until validated.'
     call flush(iw)
 
     if (urohf) then

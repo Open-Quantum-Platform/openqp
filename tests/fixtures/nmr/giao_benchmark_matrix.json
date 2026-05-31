@@ -1,0 +1,36 @@
+{
+  "status": "planned_gated",
+  "baseline": "cgo",
+  "candidate": "giao",
+  "metrics": [
+    "isotropic_shielding_ppm",
+    "tensor_components_ppm",
+    "gauge_origin_translation_delta_ppm",
+    "wall_time_seconds",
+    "peak_memory_mb",
+    "trusted_reference_delta_ppm"
+  ],
+  "small_regression_systems": [
+    {"name": "h2o", "basis": "sto-3g", "methods": ["hf", "pbe"], "purpose": "existing CGO oracle and fast regression"},
+    {"name": "hf", "basis": "sto-3g", "methods": ["hf", "pbe"], "purpose": "two-atom compact smoke test"},
+    {"name": "ch4", "basis": "sto-3g", "methods": ["hf", "pbe"], "purpose": "compact tetrahedral tensor regression"}
+  ],
+  "origin_dependence_systems": [
+    {"name": "formaldehyde", "basis": "6-31g*", "methods": ["hf", "pbe0", "pbe"], "purpose": "moderate polar molecule"},
+    {"name": "benzene", "basis": "6-31g*", "methods": ["hf", "pbe0", "pbe"], "purpose": "larger spatial extent and anisotropic tensors"},
+    {"name": "glycine", "basis": "6-31g*", "methods": ["pbe0", "pbe"], "purpose": "heteroatom-rich larger molecule"}
+  ],
+  "gauge_origin_translations_bohr": [
+    [0.0, 0.0, 0.0],
+    [5.0, 0.0, 0.0],
+    [0.0, 5.0, 0.0],
+    [0.0, 0.0, 5.0],
+    [5.0, -3.0, 2.0]
+  ],
+  "acceptance_notes": [
+    "CGO remains the validated default until GIAO benchmarks pass.",
+    "For compact systems, CGO and GIAO should agree when the gauge origin is chosen appropriately.",
+    "For larger or more spatially extended systems, GIAO should reduce shielding changes under gauge-origin translation.",
+    "Reference comparisons should use PySCF or another trusted NMR implementation where available."
+  ]
+}
