@@ -278,8 +278,16 @@ def _make_pcm_diagnostics_test(bench):
         self.assertLess(abs(diag["fd_fock_scale_rms"] - 0.5), 1.0e-3, log)
         self.assertLess(diag["fd_fock_scale_maxerr"], 1.0e-5, log)
         self.assertGreaterEqual(diag.get("fd_fock_samples", 0), 1, log)
-        self.assertLess(diag["phi_source_vs_exact_rms"], 0.05, log)
-        self.assertLess(diag["phi_source_vs_exact_max"], 0.10, log)
+        self.assertLess(
+            diag["phi_source_vs_exact_rms"],
+            bench.get("phi_source_vs_exact_rms_threshold", 0.05),
+            log,
+        )
+        self.assertLess(
+            diag["phi_source_vs_exact_max"],
+            bench.get("phi_source_vs_exact_max_threshold", 0.10),
+            log,
+        )
 
     return test
 

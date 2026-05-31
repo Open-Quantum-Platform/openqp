@@ -70,9 +70,9 @@ def main() -> int:
             "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"),
         },
         "status_note": (
-            "Identical OpenQP/ddX protocol diagnostic snapshot only; do not treat "
-            "pcm_solvent_energy_hartree as a verified literature/reference value "
-            "until an independent same-protocol ddX/pyddx or paper reference exists."
+            "Identical OpenQP/ddX protocol diagnostic snapshot for the closed-shell "
+            "trusted-regression benchmark table. pcm_solvent_energy_hartree is a "
+            "same-branch regression reference, not an independent literature value."
         ),
         "records": records,
     }

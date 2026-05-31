@@ -90,17 +90,27 @@ The snapshot records HF and DFT smoke rows but is not a literature benchmark and
 must not be promoted to `reference_value` until an independent same-protocol
 reference exists.
 
-Current smoke coverage:
+Current benchmark coverage:
 
-- H2O RHF/HF/6-31g* ddPCM water,
-- NH3 RHF/HF/6-31g* ddPCM water,
-- HF RHF/HF/6-31g* ddPCM water,
-- H2O RHF/BHHLYP/6-31g* ddPCM water,
-- H2O RHF/PBE/6-31g* ddPCM water.
+- 10 neutral closed-shell molecules: H2O, NH3, HF, CH4, CO, CO2, HCN,
+  H2CO, CH3OH, and CH3CN.
+- 3 methods for each geometry: RHF/HF, RHF/BHHLYP, and RHF/PBE with
+  `6-31g*` and ddPCM water.
+
+The benchmark table now stores OpenQP/ddX closed-shell trusted-regression
+reference values for all 30 rows. These references are hard pass/fail regression
+targets for the stabilized diagnostic convention; they are still not literature
+benchmarks or independent physical references.
+
+The PySCF vacuum validation snapshot is stored in
+`tests/data/pcm_vacuum_pyscf_validation.json`. HF rows are the strict cross-code
+gate. DFT rows are protocol-near because OpenQP's LibXC+SG1/MHL grid path is not
+bit-identical to the PySCF grid used by the validation script.
 
 ## Deferred before production status
 
-- independent same-protocol ddX/pyddx trusted reference for absolute `e_pcm`,
+- independent same-protocol ddX/pyddx or literature reference for absolute
+  `e_pcm`,
 - broader charge/spin/basis smoke matrix,
 - gradients,
 - TDDFT/MRSF/excited-state and nonequilibrium formulations,
