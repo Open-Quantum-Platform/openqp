@@ -24,15 +24,10 @@ GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
-OPT_LIBS = {"scipy", "dlfind", "geometric"}
+OPT_LIBS = {"scipy", "geometric"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken"}
-DLFIND_SINGLE_ICOORD = {0, 1, 2, 3, 4}
-DLFIND_LN_ICOORD = {10, 11, 12, 13, 14}
-DLFIND_MIN_IOPT = {0, 1, 2, 3}
-DLFIND_TS_IOPT = {9}
-DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
@@ -44,8 +39,7 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
-    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, and IRC. scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
-    "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
+    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
 
@@ -763,7 +757,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy, dlfind, or geometric.",
+            action="Use scipy or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -837,27 +831,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose different multiplicities for the two crossing states.",
         )
 
-    if lib == "dlfind":
-        _check_dlfind(config, report)
-
     if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(
             "ERROR",
             "optimize.lib",
             "This runtype is not wired to the SciPy optimizer map.",
             value=f"{lib}/{runtype}",
-            expected="geometric" if runtype == "irc" else "dlfind or geometric",
-            action="Use [optimize] lib=geometric for runtype=irc or lib=dlfind/geometric for runtype=ts.",
-        )
-
-    if lib == "dlfind" and runtype not in {"optimize", "meci", "ts"}:
-        report.add(
-            "ERROR",
-            "optimize.lib",
-            "DL-FIND is not connected to this runtype.",
-            value=f"{lib}/{runtype}",
-            expected="optimize, meci, or ts",
-            action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
+            expected="geometric",
+            action="Use [optimize] lib=geometric for runtype=ts or runtype=irc.",
         )
 
     if runtype == "neb" and lib != "geometric":
@@ -877,7 +858,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, IRC, and NEB.",
             value=f"{lib}/{runtype}",
             expected="optimize, meci, mecp, ts, irc, or neb",
-            action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy/dlfind for this runtype.",
+            action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
 
@@ -933,101 +914,6 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             expected=">= 3",
             action="Set [neb] nimage=3 or larger.",
         )
-
-
-def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
-    runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
-    icoord = _get(config, "dlfind", "icoord", 3)
-    iopt = _get(config, "dlfind", "iopt", 3)
-    ims = _get(config, "dlfind", "ims", 0)
-
-    if runtype == "optimize":
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Single-state DL-FIND optimization only supports icoord 0-4.",
-                value=icoord,
-                action="Use icoord in 0,1,2,3,4.",
-            )
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Single-state DL-FIND optimization only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Single-state optimization requires ims=0.",
-                value=ims,
-                action="Set ims=0.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-
-    if runtype == "meci":
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "DL-FIND MECI only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims not in DLFIND_MECI_IMS:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "DL-FIND MECI requires ims=1, 2, or 3.",
-                value=ims,
-                action="Set ims to a MECI mode.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-        if ims == 3 and icoord not in DLFIND_LN_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Lagrange-Newton MECI requires icoord 10-14.",
-                value=icoord,
-                action="Use icoord 10-14 with ims=3.",
-            )
-        if ims in {1, 2} and icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Penalty/gradient-projection MECI requires icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 with ims=1 or ims=2.",
-            )
-
-    if runtype == "ts":
-        if iopt not in DLFIND_TS_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Transition-state DL-FIND uses P-RFO (iopt=9).",
-                value=iopt,
-                action="Set [dlfind] iopt=9 for runtype=ts.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Transition-state search is not a MECI mode and requires ims=0.",
-                value=ims,
-                action="Set [dlfind] ims=0 for runtype=ts.",
-            )
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Transition-state DL-FIND search expects icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 for TS optimization.",
-            )
 
 
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:

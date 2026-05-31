@@ -183,12 +183,6 @@ OQP_CONFIG_SCHEMA = {
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
     },
-    'dlfind': {
-        'printl': {'type': int, 'default': '2'},
-        'icoord': {'type': int, 'default': '3'},
-        'iopt': {'type': int, 'default': '3'},
-        'ims': {'type': int, 'default': '0'},
-    },
     'geometric': {
         'coordsys': {'type': str, 'default': 'tric'},
         'trust': {'type': float, 'default': '0.1'},
