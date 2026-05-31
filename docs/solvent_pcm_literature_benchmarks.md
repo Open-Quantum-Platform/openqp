@@ -155,6 +155,58 @@ build; the Python test only parses them. The `e_pcm` vs `half_tr_dv` relationshi
 is **reported, not asserted** — its resolution is exactly open item (1) and must
 be settled against a reference, not assumed equal.
 
+## Empirical ddX-enabled run (this session)
+
+A real ddX-enabled build and run was performed (not a stub):
+
+- **Toolchain:** gfortran/gcc 13.3, OpenBLAS+LAPACK, cmake/ninja.
+- **ddX:** `ddsolvation/ddX` v0.8.0, built as a shared `libddx.so`.
+- **OpenQP:** `cmake -DUSE_LIBINT=OFF -DLINALG_LIB_INT64=OFF -DENABLE_OPENMP=ON
+  -DENABLE_DDX=ON -DDDX_ROOT=<ddx-install>`; `liboqp.so` links `DDX::ddx`.
+- **Fortran diagnostic compiled:** yes — `source/solvent_pcm.F90` (with the
+  `PCM diag` block) compiled and linked cleanly with gfortran 13.3.
+
+### Tier-1 (ddX adapter regression) — PASSES
+
+`oqp_ddx_adapter_smoke` (real ddX) reports `energy = -0.0001789226359760` Eh for
+the 12-site point-charge model. This is within the `1e-6` gate tolerance of the
+pinned `trusted_reference_regression` `-0.00017974013712832552` (|Δ| ≈ 8.2e-7;
+the small difference is ddX-version sensitivity — still a pass). The
+finite-difference check gives `|dE/dphi0 − (−0.5·q_cav0)| ≈ 9.5e-11` while
+`|dE/dphi0 − q_cav0| ≈ 9.7e-5`, confirming the `chg = −0.5·q_cav` relation and
+that **direct `q_cav` has the wrong sign/scale** for the Fock charge.
+
+### Tier-2 (H₂O QM-SCF PCM) — BLOCKED, conventions exposed
+
+- **Vacuum (PCM off):** reproduces the established H₂O RHF/6-31G* energy
+  `-76.0107465` to 7 places. The build is sane.
+- **PCM on, committed defaults (FMM on):** the ddX **ddPCM Jacobi solver does
+  not converge** for the H₂O cavity (`ddpcm_solve: solver for ddPCM system did
+  not converge`). Raising `maxiter` 100→2000 does **not** help — this is not an
+  iteration-cap issue.
+- **PCM on, exploratory FMM off (not committed):** the solve converges, but the
+  numbers are physically wrong, which is exactly what the gate must expose:
+
+  | Diagnostic | Value (Eh) | Reading |
+  | --- | --- | --- |
+  | `e_pcm` (ddX esolv) | `-3.2192e+01` | absurd; water electrostatic solvation is ~`-1e-2` |
+  | `half_tr_dv` = ½Tr[D·V] | `-1.6146e+01` | `e_pcm ≈ 2 × half_tr_dv` → **factor-of-2 bookkeeping** |
+  | `q_cav_sum` | `+9.87` | ≈ total nuclear charge (10) → `q_cav` scale/sign unvalidated |
+  | `phi_cav_min/max` | `+4.8 … +8.2` | all-positive and large → `phi_cav` sign/scale wrong |
+  | `psi_source` | `nuclear_monopoles_only` | electronic density not in `psi` (Q8) |
+
+### What this resolves vs. exposes
+
+- **Resolves (measured):** the `e_pcm` vs `½Tr[D·V]` relation is **not** equal and
+  not the simple ½ — empirically `e_pcm ≈ Tr[D·V]` (factor ~2), *on top of* a
+  gross overall scale error. So both the factor and the scale are wrong today.
+- **Exposes (still open):** ddPCM **non-convergence with FMM on for small
+  molecules**; `phi_cav` sign/scale; `q_cav` sign/scale; `psi` missing the
+  electronic contribution; provisional radii/model. No `e_pcm` value is
+  admissible as a reference, so the H₂O Tier-2 row stays `pending_reference`.
+
+These are next-step (convention/solver) fixes, intentionally **not** made here.
+
 ## How a reference value is made admissible
 
 A row may carry a numeric `reference_value` **only** when all of the following

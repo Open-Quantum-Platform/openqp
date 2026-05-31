@@ -40,6 +40,13 @@
       "execution": "Fortran/C CTest 'oqp_ddx_adapter_smoke' (requires cmake -DENABLE_DDX=ON -DDDX_ROOT=...)",
       "parse_regex": "energy=(-?\\d+\\.\\d+)",
       "status": "verified",
+      "empirical_verification": {
+        "ddx_version": "0.8.0 (ddsolvation/ddX)",
+        "observed_energy": -0.0001789226359760,
+        "abs_diff_to_reference": 8.18e-07,
+        "within_tolerance": true,
+        "note": "Verified via real ddX build through oqp_ddx_adapter_smoke; the ~8e-7 difference from the pinned value is ddX-version sensitivity, still inside 1e-6. FD check: |dE/dphi0-(-0.5 q_cav0)|~9.5e-11 vs |dE/dphi0-q_cav0|~9.7e-5, confirming chg=-0.5*q_cav."
+      },
       "validates": "ddX model allocation, electrostatics, forward/adjoint solve, and esolv numerics through the OpenQP-owned C adapter",
       "does_not_validate": "QM SCF coupling -- electronic contribution to psi, q_cav sign/scale into the Fock operator, phi_cav-from-density convention, and e_pcm vs 0.5*Tr[D.V] bookkeeping all remain open and require the Tier-2 QM benchmarks below"
     }
@@ -75,6 +82,23 @@
         "outcome": "paper located and confirmed as the correct QM ddPCM methodological reference, but no per-molecule electrostatic solvation energy with a protocol matching this path (6-31G*, Bondi-by-Z radii, lmax=8/nleb=302/eta=0.1) could be transcribed/verified (paywalled; protocol mismatch). Not used as a literature_value to avoid an unverified number."
       },
       "doi_or_url": "10.1021/acs.jctc.9b00640 (methodological reference only; not a transcribed value)",
+      "empirical_ddx_run": {
+        "ddx_version": "0.8.0 (ddsolvation/ddX)",
+        "vacuum_pcm_off_hartree": -76.0107465,
+        "vacuum_pcm_off_status": "PASS (reproduces established RHF/6-31G* value to 7 places via real OpenQP build)",
+        "pcm_on_committed_defaults": "BLOCKED: ddX ddPCM Jacobi solver does not converge (FMM on); maxiter 100->2000 does not help",
+        "pcm_on_exploratory_fmm_off_unvalidated": {
+          "note": "Exploratory only (FMM disabled, NOT committed). Numbers are physically wrong and are NOT a reference; recorded to expose the open conventions.",
+          "e_pcm_hartree": -32.1915783204,
+          "half_tr_dv_hartree": -16.1458519053,
+          "e_pcm_over_half_tr_dv": 1.994,
+          "q_cav_sum": 9.8667647203,
+          "phi_cav_min": 4.7963094686,
+          "phi_cav_max": 8.2024575958,
+          "psi_source": "nuclear_monopoles_only",
+          "exposes": "e_pcm vs 0.5*Tr[D.V] differ by ~2x AND overall scale is grossly wrong; phi_cav all-positive/large; q_cav_sum ~ total nuclear charge"
+        }
+      },
       "status": "pending_reference"
     },
     {
