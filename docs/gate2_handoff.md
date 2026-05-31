@@ -95,13 +95,28 @@ The exported exponents/coeffs are **float32-origin** (e.g. `5484.671875` is an
 exact float32; the `cc` are not float64-exact). So a PySCF mol built from the
 dump differs from OpenQP's internal double math at the ~1e-7 level. The overlap
 fingerprint bottoms out at **7.5e-8**, and that floor is OpenQP's stored-basis
-precision, not the bridge. Options for hermes (pick one, document it):
-- (a) accept a `1e-6` overlap-fingerprint gate, justified by the float32 basis
-  provenance, and keep derivative thresholds tight relative to that; or
-- (b) export the basis in full float64 from OpenQP's source-of-truth (basis
-  library before single-precision storage) and keep the strict `1e-10` gate.
-Do NOT silently loosen the derivative tolerance to mask a real error — only the
-overlap-fingerprint floor is provenance-limited.
+precision, not the bridge.
+
+**DECISION (from project owner): take the float64 path and keep the strict
+`1e-10` gate.** Do NOT accept a loosened overlap gate.
+
+Lead for the fix (already narrowed — do not re-investigate from scratch):
+- The shipped basis file is FULL precision:
+  `basis_sets/6-31g(d).basis` has O 1s exponent `0.5484671660E+04` (= 5484.67166).
+- OpenQP storage is `real64`: `atom_basis_t%ex/%cc` and `basis_set%ex/%cc` are
+  all `real(real64)`; the file read at `basis_library.F90:146` is list-directed
+  into real64; the Python ingest (`set_basis.py:239-243`) casts float64.
+- YET the value seen in the running molecule (and thus the emitter dump) is the
+  **float32 round** `5484.671875`. So a single-precision truncation is happening
+  somewhere on the *runtime* basis path actually used for `basis=6-31g*`
+  (candidates to check, in order: the basis source actually selected at runtime
+  vs. the shipped `.basis` file; any `np.float32` in the molecule/data plumbing —
+  note `pyoqp/oqp/molecule/oqpdata.py:359` references `np.float32`; and the MPI
+  bcast / oqpdata storage of the basis arrays). Fix the truncation so the
+  in-memory `basis%ex/%cc` retain full double precision, re-run the emitter, and
+  the exported-basis overlap fingerprint should then meet `< 1e-10`.
+- Only the overlap-fingerprint floor is provenance-limited; never loosen the
+  derivative tolerance to mask a real error.
 
 ## PySCF derivative conventions (verified by finite difference, sign +, order [a,b])
 
@@ -114,6 +129,13 @@ overlap-fingerprint floor is provenance-limited.
 
 ## Remaining work (ordered)
 
+**Scope decision (from project owner): hermes finishes ALL coding + validation
+below, commits, and pushes; the owner then does benchmarks/manuscript on the
+validated result.**
+
+0. **Fix the float32 basis truncation first** (see Precision note) so the strict
+   `1e-10` overlap gate is achievable. This is the gating prerequisite for a
+   meaningful oracle.
 1. Fold `/tmp/stage1_raw2.py` logic into `tests/test_hess_nuc_oracle.py`:
    build PySCF from exported basis (raw cc), prove overlap fingerprint FIRST
    (gate; skip→fail), then compare per nucleus:
