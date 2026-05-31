@@ -69,7 +69,6 @@ class Molecule:
         }
         self.start_time = None
         self.back_door = None
-        self.pcm_runtime_payload = {}
 
         for tag in self.tag:
             name = tag.replace('OQP::', '').lower()
@@ -251,47 +250,6 @@ class Molecule:
                 continue
 
         return data
-
-    def set_pcm_runtime_payload(self, payload):
-        """
-        Store reviewed reference-SCF PCM runtime payload outside Fortran tags.
-
-        The provisional PCM reaction-field payload is produced by Python seam
-        helpers before any native runtime PCM storage exists. Keep it separate
-        from ``self.tag`` so JSON round trips do not try to read/write unknown
-        C/Fortran tagarray entries.
-        """
-        if not isinstance(payload, dict):
-            raise ValueError("PCM runtime payload must be a mapping")
-
-        allowed_keys = [
-            'OQP::pcm_reaction_potential',
-            'OQP::pcm_epcm',
-            'nbf',
-            'packed_ao_length',
-            'expected_packed_ao_length',
-            'packed_ao_shape_formula',
-            'pcm_runtime_payload_version',
-            'pcm_scope',
-            'reference_target',
-            'response_solvent_coupling',
-            'gradient_support',
-            'runtime_pcm_enabled',
-            'backend_validation_status',
-        ]
-        self.pcm_runtime_payload = {
-            key: copy.deepcopy(payload[key])
-            for key in allowed_keys
-            if key in payload
-        }
-
-    def get_pcm_runtime_payload(self):
-        """Return reviewed PCM runtime payload fields for JSON save_data()."""
-        return copy.deepcopy(self.pcm_runtime_payload)
-
-    def _restore_pcm_runtime_payload(self, data):
-        """Restore PCM runtime payload fields from JSON load_data()/put_data()."""
-        self.set_pcm_runtime_payload(data)
 
     def get_data_from_back_door(self):
         """
@@ -492,7 +450,6 @@ class Molecule:
         data = self.get_data()
         data.update(self.get_results())
         data.update(self.set_config_json())
-        data.update(self.get_pcm_runtime_payload())
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
@@ -569,7 +526,6 @@ class Molecule:
                     print(f"Warning: Key {key} not found in data")
                 except Exception as e:
                     print(f"Error: {e}")
-        self._restore_pcm_runtime_payload(data)
 
     def read_freqs(self):
         jsonfile = self.log.replace('.log', '.hess.json')

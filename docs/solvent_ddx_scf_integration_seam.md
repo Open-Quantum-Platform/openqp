@@ -166,20 +166,26 @@ The branch now includes two ddX adapter smoke paths:
 
 The explicit path is still a smoke/proof-of-seam, not production OpenQP SCF coupling. It verifies that OpenQP can drive the lower-level ddPCM setup/forward/adjoint API that will be needed after `psi` and `phi_cav` come from AO density and nuclear potentials.
 
-### Reviewed payload and calc_fock handoff chain
+### Canonical runtime path (after dual-path reconciliation)
 
-The branch also has a dependency-light Python handoff chain for carrying a reviewed reference-SCF reaction field toward the SCF Fock builder without enabling runtime PCM:
+The reaction field is constructed, inserted into the Fock blocks, and booked
+entirely in Fortran. There is one gate and one hook:
 
-1. `reference_scf_pcm_runtime_payload(density_blocks, reaction_potential)` validates the RHF/ROHF reference density and packed AO reaction potential, then stores only `OQP::pcm_reaction_potential`, matched `OQP::pcm_epcm`, `nbf`, `packed_ao_length`, `expected_packed_ao_length`, `packed_ao_shape_formula`, payload version, first-scope metadata, and `backend_validation_status="pending PySCF/ddX/reference cross-check"`.
-2. `Molecule.set_pcm_runtime_payload()` provides JSON round-trip persistence for that reviewed payload outside the Fortran tagarray. It uses an explicit allowlist for `OQP::pcm_reaction_potential`, `OQP::pcm_epcm`, shape metadata, first-scope labels, and `backend_validation_status`; those fields must not be stripped during save/load because the reviewed consumer requires them before exposing `pcm_reaction_potential_in`.
-3. `reference_scf_pcm_reaction_potential_from_payload(payload)` is the consumer gate. It rejects non-mapping inputs with `PCM runtime payload must be a mapping` before field-level validation. For mapping payloads, the shape metadata (`nbf`, `packed_ao_length`, `expected_packed_ao_length`, and `packed_ao_shape_formula`) is required, not optional defaults; the consumer recomputes the packed AO length and rejects stale shape metadata, missing `backend_validation_status`, and boolean numeric payload values before exposing `pcm_reaction_potential_in`.
-4. `reference_scf_pcm_calc_fock_handoff(payload)` exposes only `calc_fock_kwargs={"pcm_reaction_potential_in": ...}` plus compact metadata for a future opt-in prototype `calc_fock(..., pcm_reaction_potential_in=...)` call.
-5. `reference_scf_pcm_calc_fock_handoff_from_molecule(mol)` is the molecule-level no-runtime gate: an empty/restored payload returns empty `calc_fock_kwargs`, while a present payload must pass the reviewed consumer before any packed reaction potential is exposed.
-6. `reference_scf_pcm_calc_fock_request(mol, incremental_fock=...)` is the first caller-facing request guard. It forwards reviewed payloads only to the non-incremental Fock path, returns a labeled disabled request when no payload is present, and fails fast with `reference PCM incremental Fock is not validated` if a restored reference-PCM payload would otherwise enter OpenQP's existing incremental-Fock shortcut.
-7. `reference_scf_pcm_calc_fock_request_from_scf_state(mol, dens_old=..., f_old=...)` is the SCF-state shim for a future call site. It derives the incremental-Fock flag from actual old-buffer state (`dens_old is not None or f_old is not None`) before delegating to the request guard, so reviewed reference-PCM payloads are blocked whenever either old density or old Fock state is present, while no-payload molecules still return an explicit disabled request. Blocked reviewed payload diagnostics preserve the old-buffer provenance before exposing `pcm_reaction_potential_in`: `dens_old_present=true/false`, `f_old_present=true/false`, and ordered trigger labels such as `incremental_trigger_fields=dens_old,f_old`, `incremental_trigger_fields=dens_old`, or `incremental_trigger_fields=f_old`.
-8. `reference_scf_pcm_calc_fock_call_site_bridge()` is the final dependency-light SCF call-site staging helper before native wiring. It preserves the same disabled/no-payload behavior for empty molecule payloads, forwards a reviewed payload only as `pcm_reaction_potential_in` on the non-incremental path, and records `forward_pcm_reaction_potential` so downstream prototype callers can audit whether a packed reaction field would be sent to `calc_fock` without enabling runtime PCM. For forwarded payloads, the bridge must keep the compact shape-audit metadata (`expected_packed_ao_length` and `packed_ao_shape_formula`) and set `call_site_shape_validated` only after checking `len(pcm_reaction_potential_in) == expected_packed_ao_length`; disabled/no-payload requests remain explicit no-ops without pretending that a packed AO reaction field was shape-validated.
+* gate: `infos%control%pcm_enabled` (set from the `[pcm]` input by Python),
+* hook: `add_pcm_reaction_field` in `source/solvent_pcm.F90`,
+* energy field: `E%e_pcm` (the ddX `esolv`), added once to `E%etot`,
+* backend: Fortran → C adapter (`source/solvent_ddx_adapter.c`) → ddX.
 
-This is intentionally not a production solvent switch: runtime PCM remains disabled, with no state-specific or nonequilibrium MRSF solvent response, no MRSF-kernel solvent response, no analytic PCM gradients, and no solution-phase optimization claim.
+The earlier reference-supplied-potential prototype (an optional
+`pcm_reaction_potential`/`pcm_reaction_potential_in` argument fed from a Python
+`solvent.py` reviewed-payload chain, with a separate `epcm` field and the
+`add_reference_pcm_reaction_field` hook) has been **removed** so that no second
+runtime PCM path can coexist or double-count. The retired Python helpers that
+remain in `pyoqp/oqp/library/solvent.py` are validation/cross-check helpers
+only and are not imported by the runtime SCF. This collapse is purely
+structural; it does **not** claim the canonical PCM energy convention is
+validated — that remains a ddX-validation-gate item
+(see `docs/solvent_pcm_validation_gate.md`).
 
 ## Consequence for the next implementation step
 

@@ -226,7 +226,6 @@ module scf_addons
   public :: get_solver_name
   public :: compute_energy
   public :: calc_jk_xc
-  public :: add_reference_pcm_reaction_field
   public :: get_response_packed
   public :: get_scf_name
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
@@ -273,10 +272,9 @@ module scf_addons
     real(kind=dp) :: virial   ! Virial ratio (V/T)
     real(kind=dp) :: tkin     ! Kinetic energy
     real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
-    real(kind=dp) :: epcm     ! PCM reaction-field energy
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
-    real(kind=dp) :: e_pcm = 0.0_dp ! PCM solvent reaction-field energy (provisional)
+    real(kind=dp) :: e_pcm = 0.0_dp ! PCM solvent reaction-field energy (provisional; ddX path)
   contains
     procedure :: print_e => print_scf_energy
   end type scf_energy_t
@@ -326,7 +324,6 @@ contains
      write(IW,"('                One electron energy =',F19.10)") this%ehf1
      write(IW,"('                Two electron energy =',F19.10)") this%vee
      write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
-     write(IW,"('        PCM reaction-field energy =',F19.10)") this%epcm
      if (this%e_pcm /= 0.0_dp) then
         write(IW,"('           PCM solvent energy (prov) =',F19.10)") this%e_pcm
      end if
@@ -1310,37 +1307,6 @@ contains
 
   end subroutine calc_dft_xc
 
-  !> @brief Add a validated reference-SCF PCM reaction-field matrix to Fock blocks.
-  !> @detail This helper is the guarded source-level handoff for the planned
-  !>         energy-only PCM seam.  The caller must supply a packed AO
-  !>         reaction_potential already validated against the RHF/ROHF reference
-  !>         density.  Runtime PCM remains disabled until backend sign/scale and
-  !>         energy bookkeeping are validated.
-  subroutine add_reference_pcm_reaction_field(f, reaction_potential, nfocks)
-    use precision, only : dp
-    implicit none
-
-    real(dp), intent(inout) :: f(:,:)
-    real(dp), intent(in)    :: reaction_potential(:)
-    integer, intent(in)     :: nfocks
-
-    integer :: ii
-
-    if (size(f,1) /= size(reaction_potential)) then
-      error stop 'add_reference_pcm_reaction_field: packed AO reaction field size mismatch'
-    end if
-    if (nfocks < 1) then
-      error stop 'add_reference_pcm_reaction_field: nfocks must be positive for reference PCM'
-    end if
-    if (size(f,2) < nfocks) then
-      error stop 'add_reference_pcm_reaction_field: insufficient Fock blocks for reference PCM'
-    end if
-
-    do ii = 1, nfocks
-      f(:,ii) = f(:,ii) + reaction_potential
-    end do
-  end subroutine add_reference_pcm_reaction_field
-
   !> @brief Builds J/K (and optional DFT XC) Fock contribution(s) and energies.
   !> @detail Forms two-electron Fock using `fock_jk`, adds the one-electron core
   !>         Hamiltonian, and accumulates SCF energy components:
@@ -1362,15 +1328,15 @@ contains
   !> @param[inout]  nschwz   (Output) number of Schwarz-screened quartets (from ERI driver).
   !> @param[inout,opt] f_old Previously accumulated packed Fock(ces) for incremental build.
   !> @param[inout,opt] d_old Previous packed density(ies) for incremental build.
-  !> @param[in,opt]    pcm_reaction_potential Validated packed AO reference-PCM
-  !>                   reaction-field matrix. Prototype opt-in only; runtime PCM
-  !>                   input remains disabled until backend validation lands.
   !> @note For DFT hybrids, exchange scaling is taken from infos%dft%HFscale.
+  !> @note Continuum solvent (PCM) is the single canonical runtime path: gated on
+  !>       infos%control%pcm_enabled, applied via add_pcm_reaction_field, and
+  !>       reported in E%e_pcm. There is no second reaction-field hook.
   !> @throws error stop if DFT is requested but molgrid/mo_a are not provided.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
-                               molgrid, mo_a, mo_b, nschwz, f_old, d_old, pcm_reaction_potential)
+                               molgrid, mo_a, mo_b, nschwz, f_old, d_old)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
@@ -1389,7 +1355,6 @@ contains
     real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
     real(dp), intent(inout), optional        :: d_old(:,:), f_old(:,:)
-    real(dp),          intent(in),   optional :: pcm_reaction_potential(:)
     integer,  intent(inout)    :: nschwz
     integer, intent(in) :: nfocks
 
@@ -1420,29 +1385,22 @@ contains
     do ii = 1, nfocks
       f(:,ii) =  f(:,ii) + hcore
     end do
-    if (present(pcm_reaction_potential)) then
-      call add_reference_pcm_reaction_field(f, pcm_reaction_potential, nfocks)
-    end if
     !----------------------------------------------------------------------------
     ! Compute HF Energy Components
     !----------------------------------------------------------------------------
     E%ehf = 0.0_dp
     E%ehf1 = 0.0_dp
-    E%epcm = 0.0_dp
 
     ! compute one and two-electron energies
     do ii = 1, nfocks
       E%ehf1 = E%ehf1 + traceprod_sym_packed(d(:,ii), hcore, nbf)
       E%ehf = E%ehf + traceprod_sym_packed(d(:,ii), f(:,ii), nbf)
-      if (present(pcm_reaction_potential)) then
-        E%epcm = E%epcm + 0.5_dp * traceprod_sym_packed(d(:,ii), pcm_reaction_potential, nbf)
-      end if
     end do
 
     E%ehf = 0.5_dp * (E%ehf + E%ehf1)
     E%etot = E%ehf + E%nenergy
 
-    ! PCM solvent reaction field (provisional energy-only seam; ddX backend).
+    ! PCM solvent reaction field (provisional energy-only path; ddX backend).
     ! Mirrors the XC pattern below: the V_pcm operator is added to the Fock
     ! blocks used for the next density update, and a distinct E_pcm term is
     ! added to the total energy. It is applied AFTER the vacuum HF energy is
@@ -1491,14 +1449,11 @@ contains
   !> @param[inout,opt] dens_old Previous packed density(ies) for incremental build.
   !> @param[inout,opt] f_old    Previous packed Fock(ces) for incremental build.
   !> @param[inout,opt] nschwz   (Output) count of Schwarz-screened quartets.
-  !> @param[in,opt]    pcm_reaction_potential_in Validated packed AO
-  !>                   reference-PCM reaction-field matrix. Prototype opt-in
-  !>                   only; runtime PCM input remains disabled until backend
-  !>                   validation lands.
+  !> @note Continuum solvent (PCM) is driven entirely inside calc_jk_xc via the
+  !>       single infos%control%pcm_enabled gate; calc_fock takes no PCM argument.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old, &
-                       pcm_reaction_potential_in)
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
     use precision,       only : dp
     use oqp_tagarray_driver
     use types,           only : information
@@ -1520,7 +1475,6 @@ contains
     real(dp), intent(inout), optional        :: dens_in(:,:)
     real(dp), intent(inout), optional        :: dens_old(:,:)
     real(dp), intent(inout), optional        :: f_old(:,:)
-    real(dp), intent(in),    optional        :: pcm_reaction_potential_in(:)
     integer,  intent(inout), optional        :: nschwz
 
     ! locals
@@ -1563,30 +1517,12 @@ contains
     E%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     fock_ao = 0.0_dp
-    if (present(pcm_reaction_potential_in)) then
-      if (size(pcm_reaction_potential_in) /= nbf_tri) then
-        error stop 'calc_fock: reference PCM reaction potential length must match packed AO dimension'
-      end if
-      if (present(dens_old) .and. present(f_old)) then
-        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=true f_old_present=true incremental_trigger_fields=dens_old,f_old'
-      else if (present(dens_old)) then
-        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=true f_old_present=false incremental_trigger_fields=dens_old'
-      else if (present(f_old)) then
-        error stop 'calc_fock: reference PCM incremental Fock is not validated for dens_old/f_old old-buffer state; dens_old_present=false f_old_present=true incremental_trigger_fields=f_old'
-      end if
-    end if
     if (present(dens_old)) then
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
                     fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
     else
-      if (present(pcm_reaction_potential_in)) then
-        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                      fock_ao, E, molgrid, mo_a, mo_b, nschwz, &
-                      pcm_reaction_potential=pcm_reaction_potential_in)
-      else
-        call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                      fock_ao, E, molgrid, mo_a, mo_b, nschwz)
-      end if
+      call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz)
     end if
 
     E%psinrm    = 0.0_dp

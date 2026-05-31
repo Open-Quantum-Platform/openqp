@@ -364,58 +364,16 @@ epsilon=water
         self.assertIn("analytic PCM gradients", text)
         self.assertIn("ddX q_cav sign/scale is provisional", text)
 
-    def test_validation_matrix_documents_incremental_fock_blocker(self):
+    def test_validation_matrix_documents_single_canonical_runtime_path(self):
         matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
         text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("incremental Fock", text)
-        self.assertIn("dens_old", text)
-        self.assertIn("f_old", text)
-        self.assertIn("reference PCM incremental Fock is not validated", text)
-
-    def test_validation_matrix_documents_call_site_bridge_shape_contract(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("reference_scf_pcm_calc_fock_call_site_bridge", text)
-        self.assertIn("disabled/no-payload", text)
-        self.assertIn("pcm_reaction_potential_in", text)
-        self.assertIn("packed AO length", text)
-        self.assertIn("size(pcm_reaction_potential_in) == nbf * (nbf + 1) / 2", text)
-
-    def test_validation_matrix_documents_required_payload_shape_metadata(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("nbf", text)
-        self.assertIn("required", text)
-        self.assertIn("missing `nbf`", text)
-        self.assertIn("missing `packed_ao_length`", text)
-        self.assertIn("missing `expected_packed_ao_length`", text)
-        self.assertIn("missing `packed_ao_shape_formula`", text)
-        self.assertIn("boolean numeric", text)
-
-    def test_validation_matrix_documents_non_mapping_payload_guard(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("non-mapping", text)
-        self.assertIn("PCM runtime payload must be a mapping", text)
-        self.assertIn("before field-level checks", text)
-        self.assertIn("before exposing `pcm_reaction_potential_in`", text)
-
-    def test_validation_matrix_documents_molecule_payload_roundtrip_allowlist(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("Molecule.set_pcm_runtime_payload()", text)
-        self.assertIn("JSON round-trip", text)
-        self.assertIn("explicit allowlist", text)
-        self.assertIn("backend_validation_status", text)
-        self.assertIn("must not be stripped", text)
-
-    def test_validation_matrix_documents_native_calc_fock_shape_guard(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("native `calc_fock(..., pcm_reaction_potential_in=...)`", text)
-        self.assertIn("nbf_tri", text)
-        self.assertIn("reference PCM reaction potential length must match packed AO dimension", text)
-        self.assertIn("before `calc_jk_xc`", text)
+        self.assertIn("Canonical runtime path", text)
+        self.assertIn("infos%control%pcm_enabled", text)
+        self.assertIn("add_pcm_reaction_field", text)
+        self.assertIn("E%e_pcm", text)
+        # The retired second path and its plumbing are documented as removed.
+        self.assertIn("removed during reconciliation", text)
+        self.assertIn("no second runtime PCM path", text)
 
 
 if __name__ == "__main__":
