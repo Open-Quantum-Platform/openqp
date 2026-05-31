@@ -668,9 +668,36 @@ class Hessian(Calculator):
             'SF-TDDFT analytic Hessian is not implemented yet; no numerical fallback will be used.'
         )
 
+    def _mrsf_physical_root_label(self):
+        """Return the OpenQP/MRSF physical-state label for the Hessian target."""
+        if self.state <= 0:
+            return 'high-spin reference'
+        return f'physical S{self.state - 1}'
+
+    def _mrsf_spin_expectation_text(self):
+        """Return compact <S^2> text for the target root when available."""
+        try:
+            s2_values = self.mol.data.get('OQP::td_s2')
+        except AttributeError:
+            s2_values = None
+        if s2_values is None:
+            return '<S^2>=unavailable'
+        try:
+            return f'<S^2>={float(np.asarray(s2_values)[self.state]):.2f}'
+        except (IndexError, TypeError, ValueError):
+            return '<S^2>=unavailable'
+
     def analytical_mrsf_hess(self):
         td_type = self.mol.config['tdhf']['type']
         label = 'MRSF-TDDFT' if td_type == 'mrsf' else td_type.upper()
+        if td_type == 'mrsf':
+            root_label = self._mrsf_physical_root_label()
+            spin_text = self._mrsf_spin_expectation_text()
+            raise NotImplementedError(
+                f'{label} analytic Hessian is not implemented yet for OpenQP root {self.state} '
+                f'(root {self.state} maps to {root_label}, {spin_text}); '
+                'no numerical fallback will be used.'
+            )
         raise NotImplementedError(
             f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
         )

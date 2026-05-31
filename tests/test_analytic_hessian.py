@@ -238,6 +238,27 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
         self.assertEqual(hessian.analytical_hess(), ("sf-route", ["stubbed"]))
 
+    def test_mrsf_analytical_hessian_guard_reports_root_mapping_and_spin(self):
+        class Mol:
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "analytical", "state": 2, "read": False, "restart": False, "temperature": [298.15], "clean": True},
+                "input": {"method": "tdhf"},
+                "scf": {"multiplicity": 3},
+                "tdhf": {"type": "mrsf", "multiplicity": 1},
+            }
+            data = {"OQP::td_s2": np.array([2.0, 0.02, 1.04])}
+
+        hessian = self.single_point.Hessian(Mol())
+
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            r"MRSF-TDDFT analytic Hessian.*root 2 maps to physical S1.*<S\^2>=1\.04",
+        ):
+            hessian.analytical_hess()
+
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
