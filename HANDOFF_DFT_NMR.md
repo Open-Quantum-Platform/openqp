@@ -87,13 +87,20 @@ export OPENQP_ROOT=$(pwd) PYTHONPATH=$(pwd)/pyoqp
 - Docs: `source/modules/NMR_SHIELDING_STATUS.md`,
   `source/modules/NMR_MAGNETIC_SYMMETRY_NOTE.md` (why J=0, fxc=0, exchange-only),
   `source/modules/MRSF_NMR_DESIGN.md` (MRSF design draft, gates 0–5).
+- Derivation handoff: `source/modules/NMR_GATE_2B_A_DERIVATION.md` (Gate 2b-A —
+  formal amplitude-coupled MRSF paramagnetic derivation; design-only, no code).
 
 ## 5. Lineage & next
 
 - **`feat/mrsf-nmr-gate5a`** (descendant, private, worktree `../nmr-wt`) carries the
   MRSF-TDDFT work: gates G1–G4, 5a-1 reduction, 5a-2 diamagnetic (active), 2a
   orbital-only paramagnetic (experimental). Next there is **Gate 2b-A** (formal
-  amplitude-coupled derivation, design-only).
+  amplitude-coupled derivation, design-only) — now written up in
+  `source/modules/NMR_GATE_2B_A_DERIVATION.md`: derives the amplitude response
+  `X^B`, the Z-vector response `z^B`, the assembly of `γ^{B}_I`, the spin-flip
+  selection rules, the single-reference reduction to the validated Phase-0 coupled
+  CPHF/CPKS, and the Gate 2b-B implementation handoff (files, oracles, risks,
+  acceptance criteria).
 - Possible future on *this* base branch: GIAO (gauge-including atomic orbitals) to
   remove the CGO origin dependence.
 
