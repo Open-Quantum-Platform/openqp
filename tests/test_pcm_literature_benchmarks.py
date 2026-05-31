@@ -163,6 +163,9 @@ def _pcm_diag(log: str) -> dict:
         "half_tr_dv",
         "q_cav_sum",
         "q_cav_absnorm",
+        "source_charge_sum",
+        "phi_source_vs_exact_rms",
+        "phi_source_vs_exact_max",
         "phi_cav_sum",
         "phi_cav_min",
         "phi_cav_max",
@@ -236,7 +239,16 @@ def _make_pcm_diagnostics_test(bench):
 
         # #3,#6,#7,#8 convention diagnostics, computed in Fortran, parsed here.
         diag = _pcm_diag(log)
-        for key in ("e_pcm", "half_tr_dv", "q_cav_sum", "phi_cav_sum"):
+        for key in (
+            "e_pcm",
+            "half_tr_dv",
+            "q_cav_sum",
+            "q_cav_absnorm",
+            "source_charge_sum",
+            "phi_source_vs_exact_rms",
+            "phi_source_vs_exact_max",
+            "phi_cav_sum",
+        ):
             self.assertIn(key, diag, f"missing PCM diag '{key}':\n" + log)
             self.assertTrue(
                 diag[key] == diag[key] and abs(diag[key]) != float("inf"),
@@ -244,13 +256,11 @@ def _make_pcm_diagnostics_test(bench):
             )
         # ddX esolv reported by the diag block must match the printed e_pcm.
         self.assertAlmostEqual(diag["e_pcm"], e_pcm, places=6, msg=log)
-        # #8: the known, still-open limitation must be visible (flips when fixed).
-        self.assertEqual(
-            diag.get("psi_source"),
-            "nuclear_monopoles_only",
-            "psi_source diagnostic changed; update the gate and references "
-            "(open issue #8: electronic contribution to ddX psi):\n" + log,
-        )
+        self.assertEqual(diag.get("psi_source"), "total_qm_net_atomic_monopoles", log)
+        self.assertLess(abs(diag["source_charge_sum"]), 1.0, log)
+        self.assertLess(abs(diag["q_cav_sum"]), 1.0, log)
+        self.assertGreater(abs(diag["q_cav_absnorm"]), 0.0, log)
+        self.assertLess(abs(diag["e_pcm"]), 1.0, log)
 
     return test
 
@@ -370,11 +380,14 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag half_tr_dv=-2.00000000000000E-02\n"
         " PCM diag q_cav_sum= 3.00000000000000E-03\n"
         " PCM diag q_cav_absnorm= 4.00000000000000E-02\n"
+        " PCM diag source_charge_sum= 1.00000000000000E-03\n"
+        " PCM diag phi_source_vs_exact_rms= 6.00000000000000E-02\n"
+        " PCM diag phi_source_vs_exact_max= 7.00000000000000E-02\n"
         " PCM diag phi_cav_sum=-5.00000000000000E-01\n"
         " PCM diag phi_cav_min=-9.00000000000000E-01\n"
         " PCM diag phi_cav_max= 1.00000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=nuclear_monopoles_only\n"
+        " PCM diag psi_source=total_qm_net_atomic_monopoles\n"
         "           PCM solvent energy (prov) =     -0.0099000000\n"
         "                       TOTAL energy =     -76.0200000000\n"
         # converged iteration (last wins):
@@ -382,11 +395,14 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag half_tr_dv=-2.46913578000000E-02\n"
         " PCM diag q_cav_sum= 3.30000000000000E-03\n"
         " PCM diag q_cav_absnorm= 4.40000000000000E-02\n"
+        " PCM diag source_charge_sum= 1.10000000000000E-03\n"
+        " PCM diag phi_source_vs_exact_rms= 6.60000000000000E-02\n"
+        " PCM diag phi_source_vs_exact_max= 7.70000000000000E-02\n"
         " PCM diag phi_cav_sum=-5.50000000000000E-01\n"
         " PCM diag phi_cav_min=-9.10000000000000E-01\n"
         " PCM diag phi_cav_max= 1.10000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=nuclear_monopoles_only\n"
+        " PCM diag psi_source=total_qm_net_atomic_monopoles\n"
         "           PCM solvent energy (prov) =     -0.0123456789\n"
         "                       TOTAL energy =     -76.0230456789\n"
     )
@@ -396,9 +412,11 @@ class DiagnosticParsingUnit(unittest.TestCase):
         self.assertAlmostEqual(diag["e_pcm"], -0.0123456789)
         self.assertAlmostEqual(diag["half_tr_dv"], -0.0246913578)
         self.assertAlmostEqual(diag["q_cav_sum"], 0.0033)
+        self.assertAlmostEqual(diag["source_charge_sum"], 0.0011)
+        self.assertAlmostEqual(diag["phi_source_vs_exact_rms"], 0.066)
         self.assertAlmostEqual(diag["phi_cav_min"], -0.91)
         self.assertEqual(diag["ncav"], 1452)
-        self.assertEqual(diag["psi_source"], "nuclear_monopoles_only")
+        self.assertEqual(diag["psi_source"], "total_qm_net_atomic_monopoles")
         # The separately-printed e_pcm and the diag e_pcm must agree.
         self.assertAlmostEqual(_pcm_energy(self.SAMPLE), diag["e_pcm"], places=6)
         self.assertAlmostEqual(_total_energy(self.SAMPLE), -76.0230456789)

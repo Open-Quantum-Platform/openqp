@@ -90,6 +90,19 @@ int oqp_ddx_pcm_solve(int natom, const double* xyz_bohr, const double* charges,
                       double* q_cav_out, double* esolv_out, char* message,
                       int message_len);
 
+/*
+ * Production QM-SCF PCM solve for a caller-provided monopole source. The
+ * source_charges array contains one net solute charge per ddX sphere/atom; the
+ * adapter converts it to ddX l=0 real-solid-harmonic multipoles and uses that
+ * same source for both ddx_multipole_electrostatics (phi) and
+ * ddx_multipole_psi (psi). The nuclear-charge-only source is intentionally
+ * retained only by the Tier-1 point-charge smoke paths above.
+ */
+int oqp_ddx_pcm_solve_multipole_source(
+    int natom, const double* xyz_bohr, const double* cavity_charges,
+    const double* source_charges, double epsilon, int ncav, double* q_cav_out,
+    double* esolv_out, char* message, int message_len);
+
 #ifdef __cplusplus
 }
 #endif

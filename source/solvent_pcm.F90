@@ -20,12 +20,15 @@
 module solvent_pcm
 
   use precision, only: dp
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use iso_c_binding, only: c_int, c_double, c_char, c_null_char
   use types, only: information
   use basis_tools, only: basis_set
   use messages, only: show_message, with_abort
   use io_constants, only: iw
   use mathlib, only: traceprod_sym_packed
+  use constants, only: NUM_CART_BF
+  use oqp_tagarray_driver, only: OQP_SM, data_has_tags, tagarray_get_data
   use int1, only: electrostatic_potential_unweighted, external_charge_potential
 
   implicit none
@@ -69,6 +72,23 @@ module solvent_pcm
       character(kind=c_char), intent(out) :: message(*)
       integer(c_int), value :: message_len
     end function oqp_ddx_pcm_solve
+
+    integer(c_int) function oqp_ddx_pcm_solve_multipole_source(natom, &
+        xyz_bohr, cavity_charges, source_charges, eps, ncav, q_cav_out, &
+        esolv_out, message, message_len) &
+        bind(C, name="oqp_ddx_pcm_solve_multipole_source")
+      import :: c_int, c_double, c_char
+      integer(c_int), value :: natom
+      real(c_double), intent(in) :: xyz_bohr(*)
+      real(c_double), intent(in) :: cavity_charges(*)
+      real(c_double), intent(in) :: source_charges(*)
+      real(c_double), value :: eps
+      integer(c_int), value :: ncav
+      real(c_double), intent(out) :: q_cav_out(*)
+      real(c_double), intent(out) :: esolv_out
+      character(kind=c_char), intent(out) :: message(*)
+      integer(c_int), value :: message_len
+    end function oqp_ddx_pcm_solve_multipole_source
   end interface
 
 contains
@@ -83,22 +103,26 @@ contains
   !> @param[out]   e_pcm   PCM energy contribution (provisional)
   subroutine add_pcm_reaction_field(basis, infos, d, nfocks, f, e_pcm)
     type(basis_set),   intent(in)    :: basis
-    type(information), intent(in)    :: infos
+    type(information), intent(inout) :: infos
     real(dp),          intent(in)    :: d(:,:)
     integer,           intent(in)    :: nfocks
     real(dp),          intent(inout) :: f(:,:)
     real(dp),          intent(out)   :: e_pcm
 
     integer(c_int) :: natom, ncav, max_cav
-    integer :: nbf_tri, ii, iat, icav, rc
+    integer :: nbf_tri, ii, iat, icav, rc, ndelta
     real(dp) :: eps, esolv, phin, dx, dy, dz, r
     real(dp) :: half_tr_dv, q_cav_sum, q_cav_absnorm, phi_cav_sum, phi_cav_min, phi_cav_max
+    real(dp) :: source_charge_sum, phi_source_delta_rms, phi_source_delta_max
     real(dp), allocatable :: xyz(:,:), charges(:)
     real(dp), allocatable :: cav_xyz(:), cx(:), cy(:), cz(:)
-    real(dp), allocatable :: phi_elec(:), phi_cav(:), q_cav(:)
+    real(dp), allocatable :: phi_elec(:), phi_cav(:), phi_source(:), q_cav(:)
     real(dp), allocatable :: dtot(:), vpcm(:)
+    real(dp), allocatable :: ao_pop(:), atom_pop(:), source_charges(:)
+    real(dp), contiguous, pointer :: smat(:)
     character(kind=c_char) :: cmsg(256)
     character(len=256) :: fmsg
+    character(len=*), parameter :: tags_overlap(1) = (/ character(len=80) :: OQP_SM /)
 
     e_pcm = 0.0_dp
 
@@ -152,10 +176,35 @@ contains
       phi_cav(icav) = phin - phi_elec(icav)
     end do
 
-    ! ---- Phase 3: ddX solve -> cavity-projected adjoint charge q_cav -------
+    ! ---- Phase 3: consistent QM source -> ddX q_cav ------------------------
+    ! Approach A from docs/solvent_pcm_source_term_handoff.md: build one
+    ! per-atom net-charge source (Z_j - Mulliken population_j), then feed that
+    ! same l=0 real-solid-harmonic monopole source to ddX for both phi and psi.
+    allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
+             source=0.0_dp)
+    call data_has_tags(infos%dat, tags_overlap, &
+                       'solvent_pcm:add_pcm_reaction_field', with_abort)
+    call tagarray_get_data(infos%dat, OQP_SM, smat)
+    call mulliken_atomic_population_from_density(basis, smat, dtot, &
+                                                 ao_pop, atom_pop)
+    source_charges(:) = charges(:) - atom_pop(:)
+
+    allocate(phi_source(ncav))
+    do icav = 1, ncav
+      phin = 0.0_dp
+      do iat = 1, natom
+        dx = cx(icav) - xyz(1, iat)
+        dy = cy(icav) - xyz(2, iat)
+        dz = cz(icav) - xyz(3, iat)
+        r = sqrt(dx*dx + dy*dy + dz*dz)
+        if (r > 1.0e-12_dp) phin = phin + source_charges(iat) / r
+      end do
+      phi_source(icav) = phin
+    end do
+
     allocate(q_cav(ncav))
-    rc = oqp_ddx_pcm_solve(natom, xyz, charges, eps, ncav, phi_cav, q_cav, &
-                           esolv, cmsg, int(size(cmsg), c_int))
+    rc = oqp_ddx_pcm_solve_multipole_source(natom, xyz, charges, &
+         source_charges, eps, ncav, q_cav, esolv, cmsg, int(size(cmsg), c_int))
     if (rc /= 0) then
       call c_message_to_fortran(cmsg, fmsg)
       call show_message('PCM (ddX) solve failed: '//trim(fmsg), with_abort)
@@ -178,25 +227,80 @@ contains
     ! summaries of arrays already computed above; the energy and Fock are
     ! unchanged. The host-side polarization energy 0.5*Tr[D.V_pcm] is reported
     ! alongside the ddX esolv so the e_pcm-vs-(1/2)Tr[D.V] bookkeeping question
-    ! can be measured rather than assumed. psi_source records that ddX psi is
-    ! currently built from nuclear monopoles only (an open gate item).
+    ! can be measured rather than assumed. psi_source records the QM source now
+    ! used consistently for ddX phi and psi.
     half_tr_dv  = 0.5_dp * traceprod_sym_packed(dtot, vpcm, basis%nbf)
     q_cav_sum   = sum(q_cav)
     q_cav_absnorm = sqrt(sum(q_cav*q_cav))
-    phi_cav_sum = sum(phi_cav)
-    phi_cav_min = minval(phi_cav)
-    phi_cav_max = maxval(phi_cav)
+    phi_cav_sum = sum(phi_source)
+    phi_cav_min = minval(phi_source)
+    phi_cav_max = maxval(phi_source)
+    source_charge_sum = sum(source_charges)
+    phi_source_delta_rms = 0.0_dp
+    phi_source_delta_max = 0.0_dp
+    ndelta = 0
+    do icav = 1, ncav
+      if (ieee_is_finite(phi_source(icav)) .and. ieee_is_finite(phi_cav(icav))) then
+        phi_source_delta_rms = phi_source_delta_rms + &
+             (phi_source(icav) - phi_cav(icav))**2
+        phi_source_delta_max = max(phi_source_delta_max, &
+             abs(phi_source(icav) - phi_cav(icav)))
+        ndelta = ndelta + 1
+      end if
+    end do
+    if (ndelta > 0) then
+      phi_source_delta_rms = sqrt(phi_source_delta_rms / real(ndelta, dp))
+    else
+      phi_source_delta_rms = huge(1.0_dp)
+      phi_source_delta_max = huge(1.0_dp)
+    end if
     write(iw,'(1x,"PCM diag e_pcm=",ES22.14)') esolv
     write(iw,'(1x,"PCM diag half_tr_dv=",ES22.14)') half_tr_dv
     write(iw,'(1x,"PCM diag q_cav_sum=",ES22.14)') q_cav_sum
     write(iw,'(1x,"PCM diag q_cav_absnorm=",ES22.14)') q_cav_absnorm
+    write(iw,'(1x,"PCM diag source_charge_sum=",ES22.14)') source_charge_sum
+    write(iw,'(1x,"PCM diag phi_source_vs_exact_rms=",ES22.14)') phi_source_delta_rms
+    write(iw,'(1x,"PCM diag phi_source_vs_exact_max=",ES22.14)') phi_source_delta_max
     write(iw,'(1x,"PCM diag phi_cav_sum=",ES22.14)') phi_cav_sum
     write(iw,'(1x,"PCM diag phi_cav_min=",ES22.14)') phi_cav_min
     write(iw,'(1x,"PCM diag phi_cav_max=",ES22.14)') phi_cav_max
     write(iw,'(1x,"PCM diag ncav=",I0)') int(ncav)
-    write(iw,'(1x,"PCM diag psi_source=nuclear_monopoles_only")')
+    write(iw,'(1x,"PCM diag psi_source=total_qm_net_atomic_monopoles")')
 
   end subroutine add_pcm_reaction_field
+
+  subroutine mulliken_atomic_population_from_density(basis, smat, density, ao_pop, atom_pop)
+    type(basis_set), intent(in) :: basis
+    real(dp),        intent(in) :: smat(:), density(:)
+    real(dp),        intent(out) :: ao_pop(:), atom_pop(:)
+
+    integer :: mu, nu, ish, iatom, i0, i1, idx
+
+    ao_pop(:) = 0.0_dp
+    atom_pop(:) = 0.0_dp
+    do mu = 1, basis%nbf
+      do nu = 1, basis%nbf
+        idx = packed_index(mu, nu)
+        ao_pop(mu) = ao_pop(mu) + density(idx) * smat(idx)
+      end do
+    end do
+
+    do ish = 1, basis%nshell
+      iatom = basis%origin(ish)
+      i0 = basis%ao_offset(ish)
+      i1 = basis%ao_offset(ish) + NUM_CART_BF(basis%am(ish)) - 1
+      atom_pop(iatom) = atom_pop(iatom) + sum(ao_pop(i0:i1))
+    end do
+  end subroutine mulliken_atomic_population_from_density
+
+  pure integer function packed_index(i, j) result(idx)
+    integer, intent(in) :: i, j
+    if (i >= j) then
+      idx = i * (i - 1) / 2 + j
+    else
+      idx = j * (j - 1) / 2 + i
+    end if
+  end function packed_index
 
   !> @brief Copy a NUL-terminated C character buffer into a Fortran string.
   subroutine c_message_to_fortran(cmsg, fmsg)
