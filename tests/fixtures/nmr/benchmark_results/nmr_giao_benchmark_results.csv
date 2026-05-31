@@ -1,0 +1,21 @@
+system,basis,method,backend,gauge,status,max_origin_delta_ppm,wall_time_seconds,reference_delta_ppm,notes
+h2o,sto-3g,hf,pyscf,cgo,ok,343.193360,0.140,0.000000,PySCF trusted reference
+h2o,sto-3g,hf,pyscf,giao,ok,0.000253,0.114,0.000000,PySCF trusted reference
+h2o,sto-3g,hf,openqp,cgo,skipped,not_sampled,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+h2o,sto-3g,hf,openqp,giao,skipped,pending,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+h2o,sto-3g,pbe,pyscf,cgo,ok,338.191722,0.514,0.000000,PySCF trusted reference
+h2o,sto-3g,pbe,pyscf,giao,ok,9.756080,0.519,0.000000,PySCF trusted reference
+h2o,sto-3g,pbe,openqp,cgo,skipped,not_sampled,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+h2o,sto-3g,pbe,openqp,giao,skipped,pending,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,hf,pyscf,cgo,ok,108.921635,0.805,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,hf,pyscf,giao,ok,0.000004,1.080,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,hf,openqp,cgo,skipped,not_sampled,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,hf,openqp,giao,skipped,pending,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,pbe0,pyscf,cgo,ok,104.750288,1.801,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,pbe0,pyscf,giao,ok,8.497257,2.045,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,pbe0,openqp,cgo,skipped,not_sampled,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,pbe0,openqp,giao,skipped,pending,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,pbe,pyscf,cgo,ok,102.945576,1.513,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,pbe,pyscf,giao,ok,10.296883,1.798,0.000000,PySCF trusted reference
+formaldehyde,6-31g*,pbe,openqp,cgo,skipped,not_sampled,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
+formaldehyde,6-31g*,pbe,openqp,giao,skipped,pending,0.000,pending,OPENQP_ROOT does not point to a built OpenQP package
