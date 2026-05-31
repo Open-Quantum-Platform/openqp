@@ -275,8 +275,11 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
         self.assertEqual(mol.hessian_metadata["backend"], "native_mrsf_analytical_partial")
         self.assertIn("nuclear_repulsion", mol.hessian_metadata["completed_terms"])
+        self.assertIn("one_electron_second_derivative_contraction", mol.hessian_metadata["completed_terms"])
+        self.assertIn("one_electron_integral_derivative_backend", mol.hessian_metadata["missing_terms"])
         self.assertIn("electronic_response", mol.hessian_metadata["missing_terms"])
         self.assertEqual(mol.hessian_metadata["completed_term_shapes"]["nuclear_repulsion"], [9, 9])
+        self.assertEqual(mol.hessian_metadata["completed_term_status"]["one_electron_second_derivative_contraction"], "assembly_kernel_validated_requires_integral_tensor")
 
     def test_mrsf_numerical_hessian_runtime_guard_requires_root_tracking_oracle(self):
         class Mol:

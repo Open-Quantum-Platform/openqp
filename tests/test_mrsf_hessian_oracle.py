@@ -7,6 +7,7 @@ from pyoqp.oqp.library.mrsf_hessian import (
     assemble_root_tracked_central_fd_hessian,
     compare_fd_step_hessians,
     mrsf_nuclear_repulsion_hessian,
+    mrsf_one_electron_second_derivative_contribution,
     nuclear_repulsion_energy,
     physical_root_label,
     assess_root_tracking,
@@ -154,6 +155,7 @@ class MRSFHessianRootTrackingTests(unittest.TestCase):
         self.assertFalse(diagnostic.ok)
         self.assertGreater(diagnostic.max_asymmetry, 1.0e-3)
         self.assertGreater(diagnostic.max_abs_delta, 1.0e-3)
+
     def test_mrsf_analytical_nuclear_repulsion_hessian_matches_energy_finite_difference(self):
         coords = np.array([
             [0.0000000, 0.0000000, -0.0410615540],
@@ -195,6 +197,39 @@ class MRSFHessianRootTrackingTests(unittest.TestCase):
 
         self.assertLess(np.max(np.abs(hessian.sum(axis=0))), 1.0e-12)
         self.assertLess(np.max(np.abs(hessian.sum(axis=1))), 1.0e-12)
+
+    def test_mrsf_one_electron_second_derivative_contraction_uses_relaxed_density(self):
+        density = np.array([
+            [1.0, 0.2],
+            [0.2, 0.7],
+        ])
+        hcore_second = np.zeros((2, 2, 3, 3), dtype=float)
+        hcore_second[:, :, 0, 0] = np.array([[2.0, 0.5], [0.5, 3.0]])
+        hcore_second[:, :, 1, 2] = np.array([[0.0, 1.0], [1.0, 0.0]])
+        hcore_second[:, :, 2, 1] = hcore_second[:, :, 1, 2]
+
+        contribution = mrsf_one_electron_second_derivative_contribution(
+            density,
+            hcore_second,
+        )
+
+        self.assertEqual(contribution.shape, (3, 3))
+        self.assertAlmostEqual(contribution[0, 0], 1.0 * 2.0 + 2.0 * 0.2 * 0.5 + 0.7 * 3.0)
+        self.assertAlmostEqual(contribution[1, 2], 2.0 * 0.2)
+        np.testing.assert_allclose(contribution, contribution.T)
+
+    def test_mrsf_one_electron_second_derivative_contraction_validates_shapes(self):
+        with self.assertRaisesRegex(ValueError, "density matrix must be square"):
+            mrsf_one_electron_second_derivative_contribution(
+                np.ones((2, 3)),
+                np.zeros((2, 3, 1, 1)),
+            )
+
+        with self.assertRaisesRegex(ValueError, "one-electron second derivative tensor"):
+            mrsf_one_electron_second_derivative_contribution(
+                np.eye(2),
+                np.zeros((3, 3, 1, 1)),
+            )
 
 
 if __name__ == "__main__":

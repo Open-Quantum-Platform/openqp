@@ -259,6 +259,41 @@ def mrsf_nuclear_repulsion_hessian(coords, charges) -> np.ndarray:
     return 0.5 * (hessian + hessian.T)
 
 
+def mrsf_one_electron_second_derivative_contribution(density, hcore_second_derivatives) -> np.ndarray:
+    """Contract relaxed density with one-electron second-derivative integrals.
+
+    This is an analytical MRSF Hessian assembly term only. It assumes the caller
+    has already supplied the appropriate state-relaxed MRSF density and an AO/MO
+    one-electron second-derivative tensor; it does not finite-difference
+    gradients and does not make the MRSF Hessian complete.
+    """
+
+    density_matrix = np.asarray(density, dtype=float)
+    if density_matrix.ndim != 2 or density_matrix.shape[0] != density_matrix.shape[1]:
+        raise ValueError(f"density matrix must be square, got {density_matrix.shape}")
+    if not np.all(np.isfinite(density_matrix)):
+        raise ValueError("density matrix contains non-finite values")
+    density_matrix = 0.5 * (density_matrix + density_matrix.T)
+
+    second_derivatives = np.asarray(hcore_second_derivatives, dtype=float)
+    if second_derivatives.ndim != 4 or second_derivatives.shape[:2] != density_matrix.shape:
+        raise ValueError(
+            "one-electron second derivative tensor must have shape "
+            f"(nbf, nbf, ncoord, ncoord), got {second_derivatives.shape} "
+            f"for density shape {density_matrix.shape}"
+        )
+    if second_derivatives.shape[2] != second_derivatives.shape[3]:
+        raise ValueError(
+            "one-electron second derivative tensor must be square in Cartesian coordinates, "
+            f"got {second_derivatives.shape[2:]}"
+        )
+    if not np.all(np.isfinite(second_derivatives)):
+        raise ValueError("one-electron second derivative tensor contains non-finite values")
+
+    contribution = np.einsum("pq,pqxy->xy", density_matrix, second_derivatives, optimize=True)
+    return 0.5 * (contribution + contribution.T)
+
+
 def assemble_root_tracked_central_fd_hessian(
     *,
     requested_state: int,

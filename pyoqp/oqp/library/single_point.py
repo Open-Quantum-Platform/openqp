@@ -7,6 +7,8 @@ import time
 import shutil
 import platform
 import importlib
+import importlib.util
+import sys
 import subprocess
 import multiprocessing
 import numpy as np
@@ -690,12 +692,23 @@ class Hessian(Calculator):
         except (IndexError, TypeError, ValueError):
             return '<S^2>=unavailable'
 
+    def _mrsf_hessian_helpers(self):
+        try:
+            return importlib.import_module('oqp.library.mrsf_hessian')
+        except ModuleNotFoundError:
+            module_name = '_openqp_mrsf_hessian_local'
+            module_path = os.path.join(os.path.dirname(__file__), 'mrsf_hessian.py')
+            spec = importlib.util.spec_from_file_location(module_name, module_path)
+            if spec is None or spec.loader is None:
+                raise
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+            return module
+
     def _mrsf_record_analytical_partial_terms(self):
         """Compute completed analytical MRSF Hessian terms without claiming full support."""
-        try:
-            mrsf_hessian = importlib.import_module('oqp.library.mrsf_hessian')
-        except ModuleNotFoundError:
-            mrsf_hessian = importlib.import_module('pyoqp.oqp.library.mrsf_hessian')
+        mrsf_hessian = self._mrsf_hessian_helpers()
         nuclear_hessian = mrsf_hessian.mrsf_nuclear_repulsion_hessian(
             self.mol.get_system(),
             self.mol.get_atoms(),
@@ -704,11 +717,18 @@ class Hessian(Calculator):
             'backend': 'native_mrsf_analytical_partial',
             'complete': False,
             'no_numerical_fallback': True,
-            'completed_terms': ['nuclear_repulsion'],
+            'completed_terms': [
+                'nuclear_repulsion',
+                'one_electron_second_derivative_contraction',
+            ],
             'completed_term_shapes': {
                 'nuclear_repulsion': list(nuclear_hessian.shape),
             },
+            'completed_term_status': {
+                'one_electron_second_derivative_contraction': 'assembly_kernel_validated_requires_integral_tensor',
+            },
             'missing_terms': [
+                'one_electron_integral_derivative_backend',
                 'one_electron_integral_derivatives',
                 'two_electron_integral_derivatives',
                 'exchange_correlation_kernel_derivatives',
@@ -730,7 +750,7 @@ class Hessian(Calculator):
             raise NotImplementedError(
                 f'{label} analytic Hessian is not implemented yet for OpenQP root {self.state} '
                 f'(root {self.state} maps to {root_label}, {spin_text}); '
-                'completed analytical terms: nuclear_repulsion; '
+                'completed analytical terms: nuclear_repulsion, one_electron_second_derivative_contraction; '
                 'missing electronic response terms; no numerical fallback will be used.'
             )
         raise NotImplementedError(
