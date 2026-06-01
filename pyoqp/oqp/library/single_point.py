@@ -607,6 +607,7 @@ class Hessian(Calculator):
                 self.mol.hessian = hessian
                 self.mol.modes = modes
                 self.mol.inertia = inertia
+                self._compute_vibrational_intensities(modes)
 
                 self.mol.save_freqs(self.state)
                 dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
@@ -628,6 +629,38 @@ class Hessian(Calculator):
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
+
+    def _compute_vibrational_intensities(self, modes):
+        """Compute IR/Raman intensities when the active Hessian backend supports them."""
+
+        metadata = getattr(self.mol, 'hessian_metadata', {}) or {}
+        if metadata.get('backend') != 'external_pyscf':
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'unavailable',
+                'reason': 'IR/Raman intensities currently require the external PySCF HF/DFT Hessian backend.',
+            }
+            return
+
+        try:
+            external = importlib.import_module('oqp.library.external')
+            vib = external.vibrational_intensities_from_pyscf(self.mol, modes)
+        except Exception as exc:
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'failed',
+                'reason': str(exc),
+            }
+            return
+
+        self.mol.infrared_intensities = np.asarray(vib['infrared_intensities'], dtype=float)
+        self.mol.raman_activities = np.asarray(vib['raman_activities'], dtype=float)
+        self.mol.infrared_mode_dipole_derivatives = np.asarray(
+            vib['infrared_mode_dipole_derivatives'], dtype=float
+        )
+        self.mol.raman_mode_polarizability_derivatives = np.asarray(
+            vib['raman_mode_polarizability_derivatives'], dtype=float
+        )
+        self.mol.vibrational_intensity_metadata = dict(vib.get('metadata', {}))
+        self.mol.vibrational_intensity_metadata['status'] = 'computed'
 
     def analytical_hess(self):
         method = self.mol.config['input']['method']

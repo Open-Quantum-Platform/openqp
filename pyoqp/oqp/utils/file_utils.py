@@ -485,8 +485,15 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
-        for n, f in enumerate(info):
-            loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
+        ir = np.asarray(getattr(mol, 'infrared_intensities', []), dtype=float)
+        raman = np.asarray(getattr(mol, 'raman_activities', []), dtype=float)
+        if ir.size == len(info) and raman.size == len(info):
+            loginfo += '   Mode       Frequency(cm-1)      IR(km/mol)        Raman(activity)\n'
+            for n, f in enumerate(info):
+                loginfo += f'   {n + 1:4d} {f:20.2f} {ir[n]:16.6f} {raman[n]:20.6f}\n'
+        else:
+            for n, f in enumerate(info):
+                loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
 
     if section == 'thermo':
         temp = info['temp']

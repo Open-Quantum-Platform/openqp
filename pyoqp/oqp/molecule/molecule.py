@@ -51,6 +51,11 @@ class Molecule:
         self.hessian_metadata = {}
         self.modes = np.zeros(0)  # 3Natom-6, 3Natom
         self.inertia = np.zeros(0)  # 3
+        self.infrared_intensities = np.zeros(0)
+        self.raman_activities = np.zeros(0)
+        self.vibrational_intensity_metadata = {}
+        self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+        self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -504,6 +509,11 @@ class Molecule:
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
             'inertia': self.inertia.tolist(),
+            'infrared_intensities': self.infrared_intensities.tolist(),
+            'raman_activities': self.raman_activities.tolist(),
+            'vibrational_intensity_metadata': self.vibrational_intensity_metadata,
+            'infrared_mode_dipole_derivatives': self.infrared_mode_dipole_derivatives.tolist(),
+            'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
         }
 
         with open(jsonfile, 'w') as outdata:
@@ -580,6 +590,15 @@ class Molecule:
         freqs = data['freqs']
         modes = data['modes']
         inertia = data['inertia']
+        self.infrared_intensities = np.array(data.get('infrared_intensities', []), dtype=float)
+        self.raman_activities = np.array(data.get('raman_activities', []), dtype=float)
+        self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
+        self.infrared_mode_dipole_derivatives = np.array(
+            data.get('infrared_mode_dipole_derivatives', []), dtype=float
+        )
+        self.raman_mode_polarizability_derivatives = np.array(
+            data.get('raman_mode_polarizability_derivatives', []), dtype=float
+        )
 
         return energy, hessian, freqs, modes, inertia
 

@@ -104,6 +104,14 @@ class TestAnalyticHessianBindings(unittest.TestCase):
 
         self.assertIn("self.hessian_metadata = data.get('hessian_metadata', {})", source)
 
+    def test_native_cphf_exposes_reusable_static_polarizability_kernel(self):
+        source = read("source/modules/cphf.F90")
+
+        self.assertIn("public :: cphf_static_polarizability", source)
+        self.assertIn("subroutine cphf_static_polarizability(infos, alpha)", source)
+        self.assertIn("call cphf_static_polarizability(infos, alpha)", source)
+        self.assertIn("cphf_polarizability_selftest", source)
+
 
 if __name__ == "__main__":
     unittest.main()

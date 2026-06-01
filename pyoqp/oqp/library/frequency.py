@@ -5,6 +5,76 @@ from oqp.utils.constants import SPEED_OF_LIGHT, ATMOS, BOHR
 from oqp.utils.constants import FREQ_TO_INV_CM, AMU_to_KG, J_TO_AU
 from oqp.utils.constants import GAS_CONSTANT, PLANCK_CONSTANT, BOLTZMANN_CONSTANT, AVOGADRO_CONSTANT
 
+# Common atomic-unit IR conversion used by quantum-chemistry frequency analyses:
+# (d dipole / d normal coordinate)^2 -> km/mol.  Dipole derivatives are in
+# e*Bohr and normal coordinates use amu-normalized Cartesian modes.
+IR_INTENSITY_CONVERSION_KM_MOL = 42.255
+
+
+def infrared_intensities(dipole_derivatives, modes):
+    """Project Cartesian dipole derivatives onto normal modes.
+
+    Parameters
+    ----------
+    dipole_derivatives
+        Array with shape ``(3, 3N)`` containing d(mu_x,mu_y,mu_z)/dR in
+        atomic units.
+    modes
+        Normal modes with shape ``(nmode, 3N)`` as returned by ``normal_mode``.
+
+    Returns
+    -------
+    intensities, mode_dipoles
+        IR intensities in km/mol and the mode-projected dipole derivatives.
+    """
+
+    dipole_derivatives = np.asarray(dipole_derivatives, dtype=float)
+    modes = np.asarray(modes, dtype=float)
+    if dipole_derivatives.ndim != 2 or dipole_derivatives.shape[0] != 3:
+        raise ValueError("dipole_derivatives must have shape (3, 3N)")
+    if modes.ndim != 2 or modes.shape[1] != dipole_derivatives.shape[1]:
+        raise ValueError(
+            f"modes must have shape (nmode, {dipole_derivatives.shape[1]}), got {modes.shape}"
+        )
+
+    mode_dipoles = modes @ dipole_derivatives.T
+    intensities = IR_INTENSITY_CONVERSION_KM_MOL * np.einsum('ij,ij->i', mode_dipoles, mode_dipoles)
+    return intensities, mode_dipoles
+
+
+def raman_activities(polarizability_derivatives, modes):
+    """Project Cartesian polarizability derivatives and compute Raman activities.
+
+    ``polarizability_derivatives`` has shape ``(3, 3, 3N)`` in atomic units.
+    The returned activities follow the standard non-resonant expression
+    ``45 * alpha_bar'^2 + 7 * gamma'^2`` for each normal mode.
+    """
+
+    polarizability_derivatives = np.asarray(polarizability_derivatives, dtype=float)
+    modes = np.asarray(modes, dtype=float)
+    if polarizability_derivatives.shape[:2] != (3, 3) or polarizability_derivatives.ndim != 3:
+        raise ValueError("polarizability_derivatives must have shape (3, 3, 3N)")
+    if modes.ndim != 2 or modes.shape[1] != polarizability_derivatives.shape[2]:
+        raise ValueError(
+            f"modes must have shape (nmode, {polarizability_derivatives.shape[2]}), got {modes.shape}"
+        )
+
+    mode_polarizabilities = np.tensordot(modes, polarizability_derivatives, axes=(1, 2))
+    mode_polarizabilities = 0.5 * (mode_polarizabilities + np.swapaxes(mode_polarizabilities, 1, 2))
+    axx = mode_polarizabilities[:, 0, 0]
+    ayy = mode_polarizabilities[:, 1, 1]
+    azz = mode_polarizabilities[:, 2, 2]
+    axy = mode_polarizabilities[:, 0, 1]
+    ayz = mode_polarizabilities[:, 1, 2]
+    azx = mode_polarizabilities[:, 2, 0]
+    alpha_bar = (axx + ayy + azz) / 3.0
+    gamma2 = 0.5 * ((axx - ayy) ** 2 + (ayy - azz) ** 2 + (azz - axx) ** 2) + 3.0 * (
+        axy ** 2 + ayz ** 2 + azx ** 2
+    )
+    activities = 45.0 * alpha_bar ** 2 + 7.0 * gamma2
+    return activities, mode_polarizabilities
+
+
 def normal_mode(coord, mass, hessian):
     # compute normal mode
     # coord in Bohr, mass in g/mol, hessian in Hartree/Bohr**2

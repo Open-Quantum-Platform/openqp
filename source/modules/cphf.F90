@@ -49,6 +49,7 @@ module cphf_mod
 
   private
   public :: cphf_solve
+  public :: cphf_static_polarizability
   public :: cphf_polarizability_selftest
   public :: cphf_polarizability_selftest_C
 
@@ -216,25 +217,23 @@ contains
     call cphf_polarizability_selftest(inf)
   end subroutine cphf_polarizability_selftest_C
 
-!> @brief Validate the CPHF solver via the static dipole polarizability.
+!> @brief Compute native closed-shell static dipole polarizability.
 !>   For each Cartesian q, the perturbation is the dipole operator; the MO
 !>   occ-vir RHS is B^q_{ia} = -<i|q|a> (in MO basis). Solving A U^q = B^q gives
-!>   the orbital response, and alpha_pq = -4 sum_{ia} <p|i a> ... ; for closed
-!>   shell, alpha_pq = -4 sum_{ia} mu^p_{ia} U^q_{ia} (the factor 4 = 2 spin x 2
-!>   from the symmetric +/- response). Writes the 3x3 tensor to
-!>   /tmp/cphf_polar.out for comparison with PySCF mf.Polarizability().
-  subroutine cphf_polarizability_selftest(infos)
+!>   the orbital response, and alpha_pq = -4 sum_{ia} mu^p_{ia} U^q_{ia}.
+  subroutine cphf_static_polarizability(infos, alpha)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use int1, only: multipole_integrals
     use mathlib, only: unpack_matrix
     type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(out) :: alpha(3,3)
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: mo_a(:,:)
     real(kind=dp), allocatable :: mints(:,:), dipfull(:,:), dip_mo(:,:)
     real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), scr(:,:)
-    real(kind=dp) :: origin(3), alpha(3,3)
-    integer :: nbf, nbf2, nocc, nvir, lexc, q, i, a, ia, u
+    real(kind=dp) :: origin(3)
+    integer :: nbf, nbf2, nocc, nvir, lexc, q, i, a, ia
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -280,6 +279,19 @@ contains
       end do
     end do
 
+    deallocate(mints, dipfull, dip_mo, scr, bvec, uvec)
+  end subroutine cphf_static_polarizability
+
+!> @brief Validate the CPHF solver via the reusable static dipole polarizability.
+!>   Writes the 3x3 tensor to /tmp/cphf_polar.out for comparison with PySCF.
+  subroutine cphf_polarizability_selftest(infos)
+    type(information), target, intent(inout) :: infos
+
+    real(kind=dp) :: alpha(3,3)
+    integer :: i, u
+
+    call cphf_static_polarizability(infos, alpha)
+
     open(newunit=u, file='/tmp/cphf_polar.out', status='replace', action='write')
     write(u,'(a)') 'CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
@@ -287,8 +299,6 @@ contains
     end do
     write(u,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
     close(u)
-
-    deallocate(mints, dipfull, dip_mo, scr, bvec, uvec)
   end subroutine cphf_polarizability_selftest
 
 end module cphf_mod
