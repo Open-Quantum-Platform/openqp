@@ -17,29 +17,11 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
     set(CMAKE_Fortran_FLAGS_RELEASE "-O2 -xHost")
 endif()
 
-# try finding 32-bit BLAS/LAPACK first
-set(BLA_SIZEOF_INTEGER 4 CACHE STRING "Size of BLAS/LAPACK integer type (4 for LP64, 8 for ILP64)")
-find_package(BLAS)
-find_package(LAPACK)
-
-# check if 32-bit BLAS/LAPACK found
-if (NOT BLAS_FOUND OR NOT LAPACK_FOUND)
-    message(STATUS "BLAS/LAPACK with 32-bit integers not found, trying version with 64-bit integers...")
-
-    # now try finding 64-bit BLAS/LAPACK
-    set(BLA_SIZEOF_INTEGER 8 CACHE STRING "Size of BLAS/LAPACK integer type (4 for LP64, 8 for ILP64)" FORCE)
-    find_package(BLAS REQUIRED)
-    find_package(LAPACK REQUIRED)
-
-    if (BLAS_FOUND AND LAPACK_FOUND)
-        message(STATUS "Using BLAS/LAPACK with 64-bit integers (ILP64) ")
-        add_definitions(-DUSE_ILP64)
-    else()
-        message(FATAL_ERROR "Could not find a suitable BLAS/LAPACK library (neither with 32-bit or 64-bit integers).")
-    endif()
-else()
-    message(STATUS "Using BLAS/LAPACK with 32-bit integers (LP64)")
-endif()
+# OpenQP requires ILP64 BLAS/LAPACK.
+set(BLA_SIZEOF_INTEGER 8 CACHE STRING "Size of BLAS/LAPACK integer type (8 for ILP64)" FORCE)
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+add_definitions(-DUSE_ILP64)
 
 # define source files
 set(OPENTRUSTREGION_SOURCES src/opentrustregion.f90 src/c_interface.f90)

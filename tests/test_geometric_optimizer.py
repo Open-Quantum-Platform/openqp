@@ -50,12 +50,6 @@ def install_runfunc_stubs():
     libscipy.MEP = type("MEP", (), {})
     sys.modules["oqp.library.libscipy"] = libscipy
 
-    libdlfind = types.ModuleType("oqp.library.libdlfind")
-    libdlfind.DLFindMin = type("DLFindMin", (), {})
-    libdlfind.DLFindTS = type("DLFindTS", (), {})
-    libdlfind.DLFindMECI = type("DLFindMECI", (), {})
-    sys.modules["oqp.library.libdlfind"] = libdlfind
-
     libgeometric = types.ModuleType("oqp.library.libgeometric")
 
     class GeometricOpt:
@@ -78,11 +72,16 @@ def install_runfunc_stubs():
         def __init__(self, mol):
             self.mol = mol
 
+    class GeometricNEBOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
     libgeometric.GeometricOpt = GeometricOpt
     libgeometric.GeometricMECIOpt = GeometricMECIOpt
     libgeometric.GeometricMECPOpt = GeometricMECPOpt
     libgeometric.GeometricTSOpt = GeometricTSOpt
     libgeometric.GeometricIRCOpt = GeometricIRCOpt
+    libgeometric.GeometricNEBOpt = GeometricNEBOpt
     sys.modules["oqp.library.libgeometric"] = libgeometric
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
@@ -174,6 +173,23 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         input_checker._check_optimize(config, report)
 
         self.assertTrue(report.ok, report.to_text())
+
+    def test_input_checker_rejects_removed_dlfind_backend(self):
+        input_checker = load_module(
+            "input_checker_removed_dlfind_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {"runtype": "optimize", "method": "hf"},
+            "optimize": {"lib": "dlfind", "istate": 0},
+        }
+
+        report = input_checker.CheckReport()
+        input_checker._check_optimize(config, report)
+
+        self.assertFalse(report.ok)
+        self.assertIn("Unknown optimization library", report.to_text())
+        self.assertIn("scipy or geometric", report.to_text())
 
     def test_input_checker_accepts_geometric_for_meci(self):
         input_checker = load_module(

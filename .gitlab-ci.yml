@@ -26,7 +26,7 @@ build:
       - external/fprettify
       - objdir/external
   script:
-    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DLINALG_LIB_INT64=OFF -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
+    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DLINALG_LIB_INT64=ON -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
     - cmake --build objdir --parallel 4 --target install
 
   artifacts:
