@@ -74,6 +74,22 @@ class TestVibrationalIntensities(unittest.TestCase):
         np.testing.assert_allclose(mode_polarizabilities[0], np.eye(3) * 2.0)
         np.testing.assert_allclose(mode_polarizabilities[1], np.diag([1.0, -1.0, 0.0]))
         np.testing.assert_allclose(activities, [180.0, 21.0])
+    def test_linear_diatomic_retains_one_vibrational_mode(self):
+        frequency = load_frequency_module()
+        coord = np.array([0.0, 0.0, -0.7, 0.0, 0.0, 0.7])
+        mass = np.array([1.0, 1.0])
+        hessian = np.zeros((6, 6))
+        hessian[2, 2] = 1.0
+        hessian[5, 5] = 1.0
+        hessian[2, 5] = -1.0
+        hessian[5, 2] = -1.0
+
+        freqs, modes, inertia = frequency.normal_mode(coord, mass, hessian)
+
+        self.assertEqual(freqs.shape, (1,))
+        self.assertEqual(modes.shape, (1, 6))
+        self.assertGreater(freqs[0], 0.0)
+        self.assertEqual(inertia.shape, (3,))
 
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ module cphf_mod
   private
   public :: cphf_solve
   public :: cphf_static_polarizability
+  public :: cphf_static_polarizability_C
   public :: cphf_polarizability_selftest
   public :: cphf_polarizability_selftest_C
 
@@ -216,6 +217,16 @@ contains
     inf => oqp_handle_get_info(c_handle)
     call cphf_polarizability_selftest(inf)
   end subroutine cphf_polarizability_selftest_C
+
+  subroutine cphf_static_polarizability_C(c_handle, alpha) bind(C, name="cphf_static_polarizability")
+    use iso_c_binding, only: c_double
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    type(oqp_handle_t) :: c_handle
+    real(c_double), intent(out) :: alpha(3,3)
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call cphf_static_polarizability(inf, alpha)
+  end subroutine cphf_static_polarizability_C
 
 !> @brief Compute native closed-shell static dipole polarizability.
 !>   For each Cartesian q, the perturbation is the dipole operator; the MO

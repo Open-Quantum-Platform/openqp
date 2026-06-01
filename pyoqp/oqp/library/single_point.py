@@ -630,37 +630,112 @@ class Hessian(Calculator):
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
 
+    def _native_property_tensors_at(self, coord_bohr):
+        """Return native OpenQP dipole (a.u.) and static polarizability at displaced geometry."""
+
+        from oqp.pyoqp import Runner
+
+        def _config_value(value):
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, (list, tuple)):
+                if len(value) == 1 and not isinstance(value[0], (list, tuple)):
+                    return str(value[0])
+                return ','.join(
+                    ' '.join(str(item) for item in entry) if isinstance(entry, (list, tuple)) else str(entry)
+                    for entry in value
+                )
+            return str(value)
+
+        raw_config = copy.deepcopy(self.mol.config)
+        config = {
+            section: {key: _config_value(value) for key, value in values.items()}
+            for section, values in raw_config.items()
+        }
+        config['input']['runtype'] = 'energy'
+        if config.get('guess', {}).get('type') == 'json':
+            config['guess']['type'] = 'huckel'
+        config['guess']['save_mol'] = 'false'
+        project = f"{self.mol.project_name}_vibprop"
+        runner = Runner(
+            project=project,
+            input_dict=config,
+            log=os.devnull,
+            silent=1,
+            usempi=False,
+        )
+        runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        runner.run()
+
+        dipole = np.zeros(3, dtype=np.float64)
+        alpha = np.zeros((3, 3), dtype=np.float64)
+        oqp.electric_dipole_au(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole)))
+        oqp.cphf_static_polarizability(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(alpha)))
+        return dipole, alpha
+
     def _compute_vibrational_intensities(self, modes):
-        """Compute IR/Raman intensities when the active Hessian backend supports them."""
+        """Compute IR/Raman intensities using native OpenQP property kernels."""
 
-        metadata = getattr(self.mol, 'hessian_metadata', {}) or {}
-        if metadata.get('backend') != 'external_pyscf':
-            self.mol.vibrational_intensity_metadata = {
-                'status': 'unavailable',
-                'reason': 'IR/Raman intensities currently require the external PySCF HF/DFT Hessian backend.',
-            }
-            return
-
-        try:
-            external = importlib.import_module('oqp.library.external')
-            vib = external.vibrational_intensities_from_pyscf(self.mol, modes)
-        except Exception as exc:
+        modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
+        coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
+        ncoord = coord0.size
+        if modes.ndim != 2 or modes.shape[1] != ncoord:
             self.mol.vibrational_intensity_metadata = {
                 'status': 'failed',
-                'reason': str(exc),
+                'reason': f'Expected modes with shape (nmode, {ncoord}), got {modes.shape}',
             }
             return
 
-        self.mol.infrared_intensities = np.asarray(vib['infrared_intensities'], dtype=float)
-        self.mol.raman_activities = np.asarray(vib['raman_activities'], dtype=float)
-        self.mol.infrared_mode_dipole_derivatives = np.asarray(
-            vib['infrared_mode_dipole_derivatives'], dtype=float
+        displacement = 1.0e-3
+        dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
+        polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)
+        flat0 = coord0.reshape(-1)
+        for idx in range(ncoord):
+            disp = np.zeros(ncoord, dtype=float)
+            disp[idx] = displacement
+            try:
+                dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
+                dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
+            except Exception as exc:
+                self.mol.vibrational_intensity_metadata = {
+                    'status': 'failed',
+                    'backend': 'native_openqp_finite_difference',
+                    'reason': str(exc),
+                }
+                return
+            dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
+            polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
+
+        nmode = modes.shape[0]
+        ir = np.zeros(nmode, dtype=np.float64)
+        mode_dipoles = np.zeros((nmode, 3), dtype=np.float64)
+        raman = np.zeros(nmode, dtype=np.float64)
+        mode_polars = np.zeros((nmode, 3, 3), dtype=np.float64)
+        oqp.vibrational_intensities_native(
+            self.mol,
+            np.int64(nmode),
+            np.int64(ncoord),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(modes)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(polar_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(ir)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_dipoles)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(raman)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_polars)),
         )
-        self.mol.raman_mode_polarizability_derivatives = np.asarray(
-            vib['raman_mode_polarizability_derivatives'], dtype=float
-        )
-        self.mol.vibrational_intensity_metadata = dict(vib.get('metadata', {}))
-        self.mol.vibrational_intensity_metadata['status'] = 'computed'
+
+        self.mol.infrared_intensities = ir
+        self.mol.raman_activities = raman
+        self.mol.infrared_mode_dipole_derivatives = mode_dipoles
+        self.mol.raman_mode_polarizability_derivatives = mode_polars
+        self.mol.vibrational_intensity_metadata = {
+            'status': 'computed',
+            'backend': 'native_openqp_finite_difference',
+            'property_kernels': 'electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native',
+            'displacement_bohr': float(displacement),
+            'ir_units': 'km/mol',
+            'raman_units': 'a.u.',
+        }
 
     def analytical_hess(self):
         method = self.mol.config['input']['method']

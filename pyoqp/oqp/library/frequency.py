@@ -116,7 +116,11 @@ def normal_mode(coord, mass, hessian):
             tr[3*i+j, 5] = + mij * (p_xyz[i, 0] * p_axis[j, 1] - p_xyz[i, 1] * p_axis[j, 0])
 
     u, s, v = np.linalg.svd(tr, full_matrices=True)
-    b = u[:, 6:]
+    n_external = 3
+    if natom > 1:
+        linear = np.count_nonzero(p_mom > 1.0e-8) < 3
+        n_external = 5 if linear else 6
+    b = u[:, n_external:]
 
     h, u3 = np.linalg.eigh(np.dot(b.T, np.dot(mw_hess, b)))
     q = np.dot(b, u3)

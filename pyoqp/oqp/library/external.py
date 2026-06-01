@@ -2,7 +2,6 @@
 import os
 import sys
 import json
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -398,89 +397,6 @@ def _build_pyscf_hessian_mf(mol, coord_bohr=None):
     except KeyError:
         lib.num_threads(1)
     return mf
-
-
-def _polarizability_driver(mf):
-    """Return the PySCF polarizability driver module for an SCF object."""
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Module .* is under testing")
-        if dft is not None and isinstance(mf, dft.rks.RKS):
-            from pyscf.prop.polarizability import rks as polar_rks
-            return polar_rks
-        if dft is not None and isinstance(mf, dft.uks.UKS):
-            from pyscf.prop.polarizability import uks as polar_uks
-            return polar_uks
-        if isinstance(mf, scf.uhf.UHF):
-            from pyscf.prop.polarizability import uhf as polar_uhf
-            return polar_uhf
-        from pyscf.prop.polarizability import rhf as polar_rhf
-        return polar_rhf
-
-
-def _pyscf_polarizability(mf):
-    driver = _polarizability_driver(mf)
-    if driver is None:
-        raise NotImplementedError("PySCF polarizability module is unavailable")
-    return np.asarray(driver.Polarizability(mf).polarizability(), dtype=float)
-
-
-def _pyscf_dipole(mf):
-    return np.asarray(mf.dip_moment(unit='AU', verbose=0), dtype=float)
-
-
-def vibrational_intensities_from_pyscf(mol, modes, displacement=1.0e-3):
-    """Finite-difference IR intensities and Raman activities for HF/DFT modes.
-
-    Dipoles and static polarizabilities are evaluated at +/- Cartesian nuclear
-    displacements with the same PySCF SCF settings used by the Hessian bridge.
-    """
-
-    modes = np.asarray(modes, dtype=float)
-    coord0 = np.asarray(mol.get_system(), dtype=float).reshape((-1, 3))
-    ncoord = coord0.size
-    if modes.ndim != 2 or modes.shape[1] != ncoord:
-        raise ValueError(f"Expected modes with shape (nmode, {ncoord}), got {modes.shape}")
-
-    from oqp.library.frequency import infrared_intensities, raman_activities
-
-    dipole_derivs = np.zeros((3, ncoord), dtype=float)
-    polar_derivs = np.zeros((3, 3, ncoord), dtype=float)
-    for idx in range(ncoord):
-        disp = np.zeros(ncoord, dtype=float)
-        disp[idx] = displacement
-        plus = (coord0.reshape(-1) + disp).reshape(coord0.shape)
-        minus = (coord0.reshape(-1) - disp).reshape(coord0.shape)
-
-        mf_plus = _build_pyscf_hessian_mf(mol, coord_bohr=plus)
-        mf_plus.kernel()
-        dip_plus = _pyscf_dipole(mf_plus)
-        pol_plus = _pyscf_polarizability(mf_plus)
-
-        mf_minus = _build_pyscf_hessian_mf(mol, coord_bohr=minus)
-        mf_minus.kernel()
-        dip_minus = _pyscf_dipole(mf_minus)
-        pol_minus = _pyscf_polarizability(mf_minus)
-
-        dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
-        polar_derivs[:, :, idx] = (pol_plus - pol_minus) / (2.0 * displacement)
-
-    ir, mode_dipoles = infrared_intensities(dipole_derivs, modes)
-    raman, mode_polarizabilities = raman_activities(polar_derivs, modes)
-    return {
-        "infrared_intensities": ir,
-        "infrared_mode_dipole_derivatives": mode_dipoles,
-        "raman_activities": raman,
-        "raman_mode_polarizability_derivatives": mode_polarizabilities,
-        "dipole_derivatives": dipole_derivs,
-        "polarizability_derivatives": polar_derivs,
-        "metadata": {
-            "backend": "external_pyscf_finite_difference",
-            "displacement_bohr": float(displacement),
-            "ir_units": "km/mol",
-            "raman_units": "a.u.",
-        },
-    }
 
 
 def analytic_hessian_from_pyscf(mol, mf_factory=None):

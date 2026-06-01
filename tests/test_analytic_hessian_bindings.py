@@ -106,11 +106,30 @@ class TestAnalyticHessianBindings(unittest.TestCase):
 
     def test_native_cphf_exposes_reusable_static_polarizability_kernel(self):
         source = read("source/modules/cphf.F90")
+        header = read("include/oqp.h")
 
         self.assertIn("public :: cphf_static_polarizability", source)
         self.assertIn("subroutine cphf_static_polarizability(infos, alpha)", source)
         self.assertIn("call cphf_static_polarizability(infos, alpha)", source)
+        self.assertIn("bind(C, name=\"cphf_static_polarizability\")", source)
+        self.assertIn("void cphf_static_polarizability(struct oqp_handle_t *inf, double *alpha);", header)
         self.assertIn("cphf_polarizability_selftest", source)
+
+    def test_native_dipole_and_vibrational_intensity_entry_points_replace_pyscf_bridge(self):
+        header = read("include/oqp.h")
+        electric = read("source/modules/electric_moments.F90")
+        vib = read("source/modules/vibrational_intensities.F90")
+        single_point = read("pyoqp/oqp/library/single_point.py")
+        external = read("pyoqp/oqp/library/external.py")
+
+        self.assertIn("void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);", header)
+        self.assertIn("bind(C, name=\"electric_dipole_au\")", electric)
+        self.assertIn("bind(C, name=\"vibrational_intensities_native\")", vib)
+        self.assertIn("void vibrational_intensities_native(struct oqp_handle_t *inf, int64_t nmode, int64_t ncoord,", header)
+        self.assertIn("oqp.vibrational_intensities_native", single_point)
+        self.assertNotIn("vibrational_intensities_from_pyscf", single_point)
+        self.assertNotIn("external_pyscf_finite_difference", single_point)
+        self.assertNotIn("def vibrational_intensities_from_pyscf", external)
 
 
 if __name__ == "__main__":
