@@ -572,7 +572,7 @@ class Molecule:
         if runtype in ['grad', 'optimize', 'meci', 'mep']:
             skip_keys.append('hess')
 
-        if runtype in ['hess', 'nacme', 'nac']:
+        if runtype in ['hess', 'nacme', 'nac', 'soc']:
             skip_keys.append('grad')
 
         message = ''

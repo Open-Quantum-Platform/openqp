@@ -55,7 +55,9 @@ OQP_CONFIG_SCHEMA = {
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
-        'soc_2e': {'type': int,  'default': '1'},    
+        # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
+        # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
+        'soc_2e': {'type': int, 'default': '1'},
     },
     'dftb': {
         'executable': {'type': str, 'default': 'dftb+'},

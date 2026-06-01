@@ -8,16 +8,6 @@ module soc_mrsf_mod
   character(len=*), parameter :: module_name = "soc_mrsf_mod"
 
 
-  real(kind=dp), parameter :: ZEFF_321G(54) = [ &
-       1.00d0,  2.00d0,  1.50d0,  2.20d0,  3.00d0,  3.90d0,  4.90d0,  6.00d0, &
-       7.20d0, 10.00d0, 10.67d0, 11.52d0, 12.35d0, 13.16d0, 13.95d0, 14.72d0, &
-      15.47d0, 18.00d0, 22.42d0, 23.00d0, 21.00d0, 22.00d0, 23.00d0, 24.00d0, &
-      25.00d0, 26.00d0, 27.00d0, 28.00d0, 29.00d0, 30.00d0, 34.72d0, 34.88d0, &
-      34.98d0, 35.02d0, 35.00d0, 36.00d0, 45.88d0, 47.12d0, 39.00d0, 40.00d0, &
-      41.00d0, 42.00d0, 43.00d0, 44.00d0, 45.00d0, 46.00d0, 47.00d0, 48.00d0, &
-      60.72d0, 62.00d0, 63.24d0, 64.48d0, 65.72d0, 54.00d0 ]
-
-
   private
   public soc_mrsf
 
@@ -338,9 +328,7 @@ contains
 !>  nuclear charge. Loops over shell pairs (ii >= jj) and accumulates into
 !>  packed lower-triangular arrays. Results are normalised with basis function norms.
 !>
-!>  Note: currently uses bare nuclear charges (ze = Z). Slater effective charges
-!>  (ZEFF_321G) are available but commented out.
-!>
+!>  Note: uses bare nuclear charges (ze = Z).
 !> @param[inout] infos   OQP information struct (basis, atoms)
 !> @param[out]   lx_ao   Lx AO integrals, packed lower-triangular (nbf*(nbf+1)/2)
 !> @param[out]   ly_ao   Ly AO integrals, packed lower-triangular
@@ -409,8 +397,6 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
       do ig = 1, cntp%numpairs
         do iat = 1, nat
           iz = nint(infos%atoms%zn(iat))
-!         ZEFFECTIVE CHARGES
-!          ze = merge(ZEFF_321G(iz), real(iz, dp), iz <= 54)
           ze = real(iz, dp)
           call comp_soc_int1_prim(cntp, ig, infos%atoms%xyz(:,iat), ze, socblk)
         end do
