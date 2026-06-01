@@ -57,6 +57,8 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
+            'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
+            'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
         ]
@@ -234,6 +236,31 @@ class Molecule:
 
         return []
 
+    def get_mrsf_ekt_results(self):
+        """Collect MRSF-EKT root results for the final JSON file."""
+        if self.data is None:
+            return {}
+
+        try:
+            eigenvalues = np.array(self.data['OQP::mrsf_ekt_eigenvalues'])
+            strengths = np.array(self.data['OQP::mrsf_ekt_strengths'])
+            orbitals = np.array(self.data['OQP::mrsf_ekt_orbitals_mo'])
+        except AttributeError:
+            return {}
+
+        hartree_to_ev = 27.211386245988
+        ebe_ev = (-eigenvalues * hartree_to_ev).tolist()
+        return {
+            'mrsf_ekt': {
+                'tdhf_type': self.config.get('tdhf', {}).get('type'),
+                'target_state': self.config.get('tdhf', {}).get('target'),
+                'eigenvalues_hartree': eigenvalues.tolist(),
+                'ebe_ev': ebe_ev,
+                'pole_strengths': strengths.tolist(),
+                'orbitals_mo': orbitals.tolist(),
+            }
+        }
+
     def get_data(self):
         """
         Extract data from mol to dict
@@ -283,6 +310,7 @@ class Molecule:
         data['nac'] = np.array(self.get_nac()).tolist()
         data['soc'] = np.array(self.get_soc()).tolist()
         data['hess'] = np.array(self.get_hess()).tolist()
+        data.update(self.get_mrsf_ekt_results())
 
         return data
 
@@ -555,8 +583,15 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
             'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
-            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO', 'json'
+            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO',
+            'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
+            'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
+            'json'
         ]
+        tdhf_type = self.config.get('tdhf', {}).get('type')
+        required_ref_keys = []
+        if tdhf_type in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):
+            required_ref_keys.append('mrsf_ekt')
 
         if runtype in ['energy']:
             skip_keys.append('grad')
@@ -577,10 +612,18 @@ class Molecule:
             with open(ref_file, 'r') as indata:
                 ref_data = json.load(indata)
 
+            for key in required_ref_keys:
+                if key not in ref_data:
+                    total_diff += 1.0
+                    message += f'   PyOQP missing reference {key:<20} ... failed (1.00000000)\n'
+
             for key, value in ref_data.items():
                 if key in skip_keys:
                     continue
-                flag, diff = compare_data(runtime_data[key], value)
+                if key not in runtime_data:
+                    flag, diff = 'failed', 1.0
+                else:
+                    flag, diff = compare_data(runtime_data[key], value)
                 total_diff += diff
                 message += f'   PyOQP checking {key:<20} ... {flag} ({diff:.8f})\n'
         else:
@@ -594,6 +637,32 @@ def compare_data(data_1, data_2):
     """
     Compute the numerical differences between two arrays
     """
+    if isinstance(data_1, dict) or isinstance(data_2, dict):
+        if not isinstance(data_1, dict) or not isinstance(data_2, dict):
+            return 'failed', 1.0
+        diff = 0.0
+        for key in sorted(data_2):
+            if key not in data_1:
+                diff += 1.0
+                continue
+            _, subdiff = compare_data(data_1[key], data_2[key])
+            diff += subdiff
+        if np.round(diff, 4) > 0:
+            return 'failed', diff
+        return 'passed', diff
+
+    if isinstance(data_1, str) or isinstance(data_2, str):
+        diff = 0.0 if data_1 == data_2 else 1.0
+        if diff > 0:
+            return 'failed', diff
+        return 'passed', diff
+
+    if data_1 is None or data_2 is None:
+        diff = 0.0 if data_1 is data_2 else 1.0
+        if diff > 0:
+            return 'failed', diff
+        return 'passed', diff
+
     diff = np.sum(np.abs(np.array(data_1) - np.array(data_2)))
     if np.round(diff, 4) > 0:
         return 'failed', diff

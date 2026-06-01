@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -32,6 +33,29 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("'mrsf_ekt_ip'", data)
         self.assertIn("'mrsf_ekt_ea'", data)
 
+    def test_ekt_has_dedicated_runtype_and_input_group(self):
+        checker = read("pyoqp/oqp/utils/input_checker.py")
+        data = read("pyoqp/oqp/molecule/oqpdata.py")
+        runner = read("pyoqp/oqp/pyoqp.py")
+        single_point = read("pyoqp/oqp/library/single_point.py")
+
+        self.assertIn('"ekt"', checker)
+        self.assertIn("'ekt':", data)
+        self.assertIn("'ip': {'type': bool", data)
+        self.assertIn("'ea': {'type': bool", data)
+        self.assertIn("'ekt': compute_energy", runner)
+        self.assertIn("self.runtype == 'ekt'", single_point)
+        self.assertIn("tdhf.type=mrsf", checker)
+        self.assertIn("MRSF-TDDFT", checker)
+        self.assertIn("IP, EA, or both", checker)
+
+    def test_legacy_mrsf_ekt_tdhf_types_are_energy_only(self):
+        checker = read("pyoqp/oqp/utils/input_checker.py")
+
+        self.assertIn("EKT analysis must use [input] runtype=ekt", checker)
+        self.assertIn("Legacy tdhf.type=mrsf_ekt_ip/mrsf_ekt_ea", checker)
+        self.assertIn("runtype != \"energy\"", checker)
+
     def test_fortran_module_ports_gamess_ekt_equations(self):
         source = read("source/modules/tdhf_mrsf_ekt.F90")
 
@@ -61,8 +85,8 @@ class TestMRSFEKTScaffold(unittest.TestCase):
 
     def test_examples_cover_mrsf_ekt_ip_and_ea(self):
         cases = {
-            "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp.inp": "type=mrsf_ekt_ip",
-            "examples/other/h2o_rohf_mrsf_ekt_ea_6-31g_bhhlyp.inp": "type=mrsf_ekt_ea",
+            "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp.inp": "ip=True",
+            "examples/other/h2o_rohf_mrsf_ekt_ea_6-31g_bhhlyp.inp": "ea=True",
         }
 
         for relpath, td_type in cases.items():
@@ -72,10 +96,43 @@ class TestMRSFEKTScaffold(unittest.TestCase):
                 self.assertTrue(path.exists(), f"missing example input: {relpath}")
                 self.assertTrue(ref.exists(), f"missing example reference: {ref.relative_to(ROOT)}")
                 text = path.read_text()
+                ref_data = json.loads(ref.read_text())
                 self.assertIn("method=tdhf", text)
-                self.assertIn("runtype=energy", text)
+                self.assertIn("runtype=ekt", text)
                 self.assertIn("type=rohf", text)
+                self.assertIn("type=mrsf", text)
+                self.assertIn("[ekt]", text)
                 self.assertIn(td_type, text)
+                self.assertIn("mrsf_ekt", ref_data)
+                self.assertIn("eigenvalues_hartree", ref_data["mrsf_ekt"])
+                self.assertIn("pole_strengths", ref_data["mrsf_ekt"])
+
+    def test_final_json_persists_mrsf_ekt_root_results(self):
+        fortran = read("source/modules/tdhf_mrsf_ekt.F90")
+        tags = read("source/tagarray_driver.F90")
+        molecule = read("pyoqp/oqp/molecule/molecule.py")
+
+        self.assertIn("OQP_mrsf_ekt_eigenvalues", tags)
+        self.assertIn("OQP::mrsf_ekt_eigenvalues", molecule)
+        self.assertIn("OQP::mrsf_ekt_strengths", molecule)
+        self.assertIn("OQP::mrsf_ekt_orbitals_mo", molecule)
+        self.assertIn("mrsf_ekt", molecule)
+        self.assertIn("ebe_ev", molecule)
+        self.assertIn("call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues", fortran)
+        self.assertIn("call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues", fortran)
+
+    def test_run_tests_checks_structured_mrsf_ekt_values(self):
+        molecule = read("pyoqp/oqp/molecule/molecule.py")
+
+        self.assertIn("'mrsf_ekt_ip'", molecule)
+        self.assertIn("'mrsf_ekt_ea'", molecule)
+        self.assertIn("required_ref_keys", molecule)
+        self.assertIn("'mrsf_ekt'", molecule)
+        self.assertIn("missing reference {key", molecule)
+        self.assertIn("OQP::mrsf_ekt_density_mo", molecule)
+        self.assertIn("OQP::mrsf_ekt_eigenvalues", molecule)
+        self.assertIn("def compare_data", molecule)
+        self.assertIn("isinstance(data_1, dict)", molecule)
 
 
 if __name__ == "__main__":

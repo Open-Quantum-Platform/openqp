@@ -6,7 +6,7 @@ system=
 charge=0
 method=tdhf
 basis=6-31g
-runtype=energy
+runtype=ekt
 functional=bhhlyp
 d4=False
 
@@ -28,9 +28,13 @@ ang_npts=302
 pruned=
 
 [tdhf]
-type=mrsf_ekt_ea
+type=mrsf
 maxit=30
 multiplicity=1
 conv=1.0e-8
 nstate=10
 zvconv=1.0e-8
+
+[ekt]
+ip=False
+ea=True

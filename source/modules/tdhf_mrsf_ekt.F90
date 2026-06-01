@@ -64,12 +64,12 @@ contains
     real(kind=dp), allocatable :: dom_mo_coeff(:), dom_no_coeff(:), dom_no_occ(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
     real(kind=dp), contiguous, pointer :: density_store(:,:), lagrangian_store(:,:)
-    real(kind=dp), contiguous, pointer :: fock_store(:,:), orbital_store(:,:), strength_store(:)
+    real(kind=dp), contiguous, pointer :: fock_store(:,:), orbital_store(:,:), eig_store(:), strength_store(:)
     character(len=*), parameter :: tags_required(7) = (/ character(len=80) :: &
       OQP_FOCK_A, OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, OQP_td_p, OQP_WAO, OQP_td_bvec_mo /)
-    character(len=*), parameter :: tags_alloc(5) = (/ character(len=80) :: &
+    character(len=*), parameter :: tags_alloc(6) = (/ character(len=80) :: &
       OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
-      OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_strengths /)
+      OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths /)
 
     ! Run the parent MRSF calculation and Z-vector first so the selected
     ! neutral state's relaxed density P and energy-weighted density /
@@ -222,6 +222,8 @@ contains
         comment='MRSF-EKT Fock matrix in MO basis')
     call infos%dat%reserve_data(OQP_mrsf_ekt_orbitals_mo, TA_TYPE_REAL64, nbf*nroot, (/ nbf, nroot /), &
         comment='MRSF-EKT Dyson-like orbital coefficients in MO basis')
+    call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues, TA_TYPE_REAL64, nroot, &
+        comment='MRSF-EKT generalized-eigenproblem eigenvalues in Hartree')
     call infos%dat%reserve_data(OQP_mrsf_ekt_strengths, TA_TYPE_REAL64, nroot, &
         comment='MRSF-EKT pole strengths')
 
@@ -229,11 +231,13 @@ contains
     call tagarray_get_data(infos%dat, OQP_mrsf_ekt_lagrangian_mo, lagrangian_store)
     call tagarray_get_data(infos%dat, OQP_mrsf_ekt_fock_mo, fock_store)
     call tagarray_get_data(infos%dat, OQP_mrsf_ekt_orbitals_mo, orbital_store)
+    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues, eig_store)
     call tagarray_get_data(infos%dat, OQP_mrsf_ekt_strengths, strength_store)
     density_store = density_mo
     lagrangian_store = lagrangian_mo
     fock_store = fock_mo
     orbital_store = orbitals
+    eig_store = eig
     strength_store = strengths
 
     if (electron_affinity) then

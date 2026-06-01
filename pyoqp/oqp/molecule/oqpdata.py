@@ -149,6 +149,10 @@ OQP_CONFIG_SCHEMA = {
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
+    'ekt': {
+        'ip': {'type': bool, 'default': 'True'},
+        'ea': {'type': bool, 'default': 'False'},
+    },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
         'td_prop': {'type': bool, 'default': 'False'},
