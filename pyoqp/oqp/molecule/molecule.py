@@ -561,6 +561,8 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
+            'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::soc_evec_re', 'OQP::soc_evec_im', 'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
             'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
             'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO', 'json'
         ]
