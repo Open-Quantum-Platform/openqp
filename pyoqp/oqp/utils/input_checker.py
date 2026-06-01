@@ -621,18 +621,6 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             action="Disable td_prop unless you have a confirmed downstream implementation.",
         )
 
-    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if method == "tdhf" and td_type == "umrsf" and runtype == "grad":
-        report.add(
-            "ERROR",
-            "tdhf.type",
-            "UMRSF-TDDFT gradients are not implemented.",
-            value=td_type,
-            expected="rpa, tda, sf, or mrsf for excited-state gradients",
-            action="Use runtype=energy for UMRSF, or switch to a supported TDHF gradient type.",
-            wiki=WIKI_HELP["tdhf.type"],
-        )
-
     if runtype != "grad":
         return
 
@@ -744,6 +732,25 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
     if method == "dftb" and runtype not in DFTB_SUPPORTED_RUNTYPES:
         return
 
+    # UMRSF-TDDFT only implements the energy path. Every other runtype
+    # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
+    # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
+    # which exist for UMRSF yet. Reject them here at the single choke point
+    # so validation fails early instead of dying at runtime.
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if method == "tdhf" and td_type == "umrsf" and runtype != "energy":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT only supports runtype=energy; "
+            "gradients, Hessians, and Z-vectors are not implemented.",
+            value=f"{td_type}/{runtype}",
+            expected="energy",
+            action="Use runtype=energy for UMRSF until UMRSF gradients/Z-vectors are implemented.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+        return
+
     if runtype == "grad":
         if method == "hf":
             if _max_state(_as_list(_get(config, "properties", "grad", []))) > 0:
@@ -853,18 +860,6 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Set istate=0 or switch to method=tdhf.",
         )
 
-    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if method == "tdhf" and td_type == "umrsf" and runtype in {"optimize", "mep", "ts", "meci", "mecp"}:
-        report.add(
-            "ERROR",
-            "tdhf.type",
-            "UMRSF-TDDFT optimizer gradients and crossing searches are not implemented.",
-            value=f"{td_type}/{runtype}",
-            expected="rpa, tda, sf, or mrsf for gradient-driven TDHF runtypes",
-            action="Use UMRSF only with runtype=energy until UMRSF gradients/Z-vectors are implemented.",
-            wiki=WIKI_HELP["tdhf.type"],
-        )
-
     if method == "tdhf" and runtype in {"optimize", "mep", "ts"} and istate == 0:
         report.add(
             "ERROR",
@@ -960,20 +955,9 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
 
 def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
-    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     istate = _get(config, "optimize", "istate", 0)
     product = _get(config, "neb", "product", "")
     nimage = _get(config, "neb", "nimage", 5)
-
-    if method == "tdhf" and td_type == "umrsf":
-        report.add(
-            "ERROR",
-            "tdhf.type",
-            "UMRSF-TDDFT NEB gradients are not implemented.",
-            value=td_type,
-            expected="mrsf for excited-state NEB",
-            action="Use UMRSF only with runtype=energy until UMRSF gradients/Z-vectors are implemented.",
-        )
 
     if method == "hf" and istate != 0:
         report.add(
