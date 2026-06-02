@@ -20,3 +20,5 @@ share/*
 examples/data_*
 build/
 .venv/
+__pycache__/
+*.py[cod]
