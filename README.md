@@ -12,7 +12,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 | Nonadiabatic dynamics data | MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows | NAC support uses the TLF-based MRSF-TDDFT machinery. |
 | Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy, DL-FIND, and geomeTRIC backends are available depending on the requested job. |
 | Initial guesses and SCF stability | Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization | MOKIT is optional and mainly useful for broader external wavefunction conversion. |
-| Integrations | LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, OpenqpView, and optional DFTB+ | The DFTB+ bridge covers configured ground-state energy, gradient, and geometry optimization workflows. |
+| Integrations | LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView | External viewers and workflow integrations are available around the native OpenQP electronic-structure engines. |
 | Performance and deployment | OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images | MPI requires an MPI implementation such as OpenMPI. |
 
 ### Upcoming Features

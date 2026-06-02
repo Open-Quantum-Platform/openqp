@@ -90,10 +90,6 @@ def install_runfunc_stubs():
     setattr(libgeometric, "GeometricNEBOpt", GeometricNEBOpt)
     sys.modules["oqp.library.libgeometric"] = libgeometric
 
-    dftbplus = types.ModuleType("oqp.library.dftbplus")
-    setattr(dftbplus, "optimize_openqp_molecule", lambda mol: None)
-    setattr(dftbplus, "run_openqp_molecule", lambda mol, gradient=False: None)
-    sys.modules["oqp.library.dftbplus"] = dftbplus
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
 
