@@ -559,19 +559,27 @@ contains
         unstable = .true.
         return
       end if
+      if (.not. ieee_is_finite(b(n))) then
+        unstable = .true.
+        return
+      end if
 
       x(n) = b(n) / A(n,n)
+      if (.not. ieee_is_finite(x(n))) then
+        unstable = .true.
+        return
+      end if
       do i = n-1, 1, -1
         if (.not. ieee_is_finite(A(i,i)) .or. abs(A(i,i)) < GMRES_DENOMINATOR_FLOOR) then
           unstable = .true.
           return
         end if
 
-        rhs = b(i)
-        if (.not. ieee_is_finite(rhs)) then
+        if (.not. ieee_is_finite(b(i))) then
           unstable = .true.
           return
         end if
+        rhs = b(i)
         do j = i+1, n
           if (.not. ieee_is_finite(A(i,j))) then
             unstable = .true.

@@ -154,6 +154,22 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         happy_block = block[breakdown:solution_update]
         self.assertRegex(happy_block, r"exit\b")
 
+    def test_mrsf_gmres_back_substitution_rejects_nonfinite_rhs_and_seed_solution(self):
+        """GMRES triangular solve must not seed y(n) from non-finite RHS or produce NaN/Inf."""
+        src = MRSF_ZVEC_SRC.read_text()
+        helper = re.search(r"subroutine back_substitution\(.*?end subroutine back_substitution", src, re.S | re.I)
+        if helper is None:
+            self.fail("Could not locate MRSF GMRES back_substitution helper")
+        block = helper.group(0)
+
+        self.assertIn("if (.not. ieee_is_finite(b(n)))", block)
+        self.assertIn("x(n) = b(n) / A(n,n)", block)
+        seeded = block.index("x(n) = b(n) / A(n,n)")
+        seed_check = block.index("if (.not. ieee_is_finite(x(n)))")
+        self.assertLess(seeded, seed_check)
+        self.assertIn("if (.not. ieee_is_finite(b(i)))", block)
+        self.assertNotIn("rhs = b(i)\n        if (.not. ieee_is_finite(rhs))", block)
+
 
 if __name__ == "__main__":
     unittest.main()
