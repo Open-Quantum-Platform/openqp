@@ -56,6 +56,7 @@ class Molecule:
         self.vibrational_intensity_metadata = {}
         self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
         self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
+        self.symmetry_metadata = {}
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -98,6 +99,91 @@ class Molecule:
         ).astype(int)
 
         return copy.deepcopy(atoms)
+
+    @staticmethod
+    def _parse_bool_like(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, np.integer)):
+            return bool(value)
+        if isinstance(value, str):
+            lower = value.strip().lower()
+            if lower in ['.true.', 'true', 'on', '1', 'yes', 'y', 't']:
+                return True
+            if lower in ['.false.', 'false', 'off', '0', 'no', 'n', 'f', '']:
+                return False
+        return False
+
+    @staticmethod
+    def _parse_enabled_mode(value):
+        if isinstance(value, str) and value.strip().lower() == 'auto':
+            return 'auto'
+        if isinstance(value, bool):
+            return bool(value)
+        if isinstance(value, (int, np.integer)):
+            return bool(value)
+        if isinstance(value, str):
+            lower = value.strip().lower()
+            if lower in ['.true.', 'true', '1', 'on', 'yes']:
+                return True
+            if lower in ['.false.', 'false', '0', 'off', 'no', 'f']:
+                return False
+        return False
+
+    def initialize_symmetry_metadata(self):
+        symmetry = self.config.get('symmetry', {}) if isinstance(self.config, dict) else {}
+        requested_point_group = symmetry.get('point_group', 'auto')
+        requested_subgroup = symmetry.get('subgroup', 'auto')
+
+        requested_point_group = requested_point_group if isinstance(requested_point_group, str) and requested_point_group else 'auto'
+        requested_subgroup = requested_subgroup if isinstance(requested_subgroup, str) and requested_subgroup else 'auto'
+
+        enabled = self._parse_enabled_mode(symmetry.get('enabled', 'false'))
+
+        if enabled == 'auto':
+            status = 'auto'
+            point_group = requested_point_group.lower() if requested_point_group != 'auto' else 'c1'
+            subgroup = requested_subgroup.lower() if requested_subgroup != 'auto' else 'c1'
+        elif enabled:
+            status = 'enabled'
+            point_group = requested_point_group.lower() if requested_point_group != 'auto' else 'c1'
+            subgroup = requested_subgroup.lower() if requested_subgroup != 'auto' else 'c1'
+        else:
+            status = 'disabled'
+            point_group = 'c1'
+            subgroup = 'c1'
+
+        self.symmetry_metadata = {
+            'status': status,
+            'enabled': enabled,
+            'requested_point_group': requested_point_group,
+            'requested_subgroup': requested_subgroup,
+            'point_group': point_group,
+            'subgroup': subgroup,
+            'detected_point_group': point_group,
+            'detected_subgroup': subgroup,
+            'label_mo': self._parse_bool_like(symmetry.get('label_mo', True)),
+            'label_states': self._parse_bool_like(symmetry.get('label_states', True)),
+            'label_modes': self._parse_bool_like(symmetry.get('label_modes', True)),
+            'use_integral_symmetry': self._parse_bool_like(symmetry.get('use_integral_symmetry', 'False')),
+            'use_response_symmetry': self._parse_bool_like(symmetry.get('use_response_symmetry', 'False')),
+            'strict': self._parse_bool_like(symmetry.get('strict', False)),
+            'tolerance': float(symmetry.get('tolerance', 1.0e-5)),
+            'raw': {
+                'enabled': symmetry.get('enabled', 'false'),
+                'point_group': requested_point_group,
+                'subgroup': requested_subgroup,
+                'label_mo': symmetry.get('label_mo', True),
+                'label_states': symmetry.get('label_states', True),
+                'label_modes': symmetry.get('label_modes', True),
+                'use_integral_symmetry': symmetry.get('use_integral_symmetry', 'False'),
+                'use_response_symmetry': symmetry.get('use_response_symmetry', 'False'),
+                'strict': symmetry.get('strict', False),
+                'tolerance': symmetry.get('tolerance', 1.0e-5),
+            },
+        }
+
+        return self.symmetry_metadata
 
     def get_mass(self):
         """
@@ -346,6 +432,7 @@ class Molecule:
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
             'energy': self.mol_energy.energy,
+            'symmetry_metadata': self.symmetry_metadata,
         }
 
         # save td energies if available
@@ -447,6 +534,7 @@ class Molecule:
         self.elem = self.data._data.qn
         self.mass = self.data._data.mass
         self.mol_energy = self.data._data.mol_energy
+        self.initialize_symmetry_metadata()
 
         return self
 
@@ -555,6 +643,7 @@ class Molecule:
             'vibrational_intensity_metadata': self.vibrational_intensity_metadata,
             'infrared_mode_dipole_derivatives': self.infrared_mode_dipole_derivatives.tolist(),
             'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
+            'symmetry_metadata': self.symmetry_metadata,
         }
 
         with open(jsonfile, 'w') as outdata:
@@ -615,6 +704,9 @@ class Molecule:
                     print(f"Warning: Key {key} not found in data")
                 except Exception as e:
                     print(f"Error: {e}")
+        if isinstance(data, dict) and 'symmetry_metadata' in data:
+            self.symmetry_metadata = data['symmetry_metadata']
+
 
     def read_freqs(self):
         jsonfile = self.log.replace('.log', '.hess.json')
@@ -658,7 +750,7 @@ class Molecule:
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
             'OQP::hf_hessian',
-            'json'
+            'json', 'symmetry_metadata'
         ]
         tdhf_type = self.config.get('tdhf', {}).get('type')
         required_ref_keys = []

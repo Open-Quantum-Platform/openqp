@@ -93,6 +93,7 @@ class Runner:
         self.mol.start_time = start_time
 
         dump_log(self.mol, title='', section='start')
+        dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
 
     def run(self, test_mod=False):
         """
