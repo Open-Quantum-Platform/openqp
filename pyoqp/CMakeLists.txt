@@ -75,7 +75,7 @@ add_dependencies(liboqp oqp)
 
 get_filename_component(OQP_INSTALL ${CMAKE_INSTALL_PREFIX} ABSOLUTE)
 #configure_file(${CMAKE_CURRENT_SOURCE_DIR}/oqp.sh ${CMAKE_CURRENT_BINARY_DIR}/oqp.sh @ONLY)
-#configure_file(${CMAKE_CURRENT_SOURCE_DIR}/oqp_dl-find.sh ${CMAKE_CURRENT_BINARY_DIR}/oqp_dl-find.sh @ONLY)
+
 
 install(
     #FILES ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -90,7 +90,7 @@ install(
 #)
 
 #install(
-#    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/oqp_runner.py ${CMAKE_CURRENT_SOURCE_DIR}/oqp_dl-find.py ${CMAKE_CURRENT_BINARY_DIR}/oqp.sh ${CMAKE_CURRENT_BINARY_DIR}/oqp_dl-find.sh
+#    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/oqp_runner.py ${CMAKE_CURRENT_BINARY_DIR}/oqp.sh
 #    DESTINATION bin
 #)
 

@@ -180,7 +180,17 @@ class OQPTester:
                 result = self.run_single_test(input_file)
                 self.results.append(result)
         else:
-            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+            # Each OpenQP calculation loads a Fortran/C backend with some
+            # process-global state.  Reusing a Python worker for multiple
+            # tests can leak state between independent inputs; in particular,
+            # running a TRAH SCF test before an ECP/MRSF energy test in the
+            # same worker can make the later SCF exit after 0 iterations.
+            # Use one calculation per child process to preserve test isolation
+            # while still allowing tests to run concurrently.
+            with ProcessPoolExecutor(
+                max_workers=self.max_workers,
+                max_tasks_per_child=1,
+            ) as executor:
                 future_to_file = {
                     executor.submit(self.run_single_test, input_file): input_file
                     for input_file in input_files

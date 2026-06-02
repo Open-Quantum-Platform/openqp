@@ -8,7 +8,14 @@ from oqp.library.single_point import (
 )
 
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt, MEP
-from oqp.library.libdlfind import DLFindMin, DLFindTS, DLFindMECI
+from oqp.library.libgeometric import (
+    GeometricIRCOpt,
+    GeometricMECIOpt,
+    GeometricMECPOpt,
+    GeometricNEBOpt,
+    GeometricOpt,
+    GeometricTSOpt,
+)
 
 
 def compute_energy(mol):
@@ -178,15 +185,17 @@ def get_optimizer(mol):
             'mecp': MECPOpt,
             'mep': MEP,
             'ts': None,
+            'irc': None,
             'neb': None,
         },
-        'dlfind': {
-            'optimize': DLFindMin,
-            'meci': DLFindMECI,
-            'mecp': None,
+        'geometric': {
+            'optimize': GeometricOpt,
+            'meci': GeometricMECIOpt,
+            'mecp': GeometricMECPOpt,
             'mep': None,
-            'ts': DLFindTS,
-            'neb': None,
+            'ts': GeometricTSOpt,
+            'irc': GeometricIRCOpt,
+            'neb': GeometricNEBOpt,
         },
     }
 

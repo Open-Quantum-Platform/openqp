@@ -53,6 +53,7 @@ class Runner:
         # Define the mapping of run types to their respective functions
         self.run_func = {
             'energy': compute_energy,
+            'ekt': compute_energy,
             'grad': compute_grad,
             'nac': compute_nac,
             'nacme': compute_nacme,
@@ -62,6 +63,8 @@ class Runner:
             'mecp': compute_geom,
             'mep': compute_geom,
             'ts': compute_geom,
+            'irc': compute_geom,
+            'neb': compute_geom,
             'hess': compute_hess,
             'thermo': compute_thermo,
             'prop': compute_properties,
@@ -185,7 +188,8 @@ def main():
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
-    parser.add_argument('--run_tests',
+    parser.add_argument('--run_tests', '--test',
+                        dest='run_tests',
                         metavar='path',
                         help='run tests from a specified folder or:\n'
                              '  all    - Run all tests in examples\n'

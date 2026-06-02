@@ -134,6 +134,7 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
         'tlf': {'type': int, 'default': '2'},
@@ -149,6 +150,10 @@ OQP_CONFIG_SCHEMA = {
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
+    'ekt': {
+        'ip': {'type': bool, 'default': 'True'},
+        'ea': {'type': bool, 'default': 'False'},
+    },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
         'td_prop': {'type': bool, 'default': 'False'},
@@ -160,7 +165,7 @@ OQP_CONFIG_SCHEMA = {
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'scipy'},
+        'lib': {'type': str, 'default': 'geometric'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},
@@ -184,11 +189,21 @@ OQP_CONFIG_SCHEMA = {
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
     },
-    'dlfind': {
-        'printl': {'type': int, 'default': '2'},
-        'icoord': {'type': int, 'default': '3'},
-        'iopt': {'type': int, 'default': '3'},
-        'ims': {'type': int, 'default': '0'},
+    'geometric': {
+        'coordsys': {'type': str, 'default': 'tric'},
+        'trust': {'type': float, 'default': '0.1'},
+        'tmax': {'type': float, 'default': '0.3'},
+        'convergence_set': {'type': str, 'default': 'GAU'},
+        'prefix': {'type': str, 'default': 'geometric'},
+        'hessian': {'type': str, 'default': 'never'},
+        'irc_direction': {'type': str, 'default': 'forward'},
+        'constraints_file': {'type': str, 'default': ''},
+        'enforce': {'type': float, 'default': '0.0'},
+        'conmethod': {'type': int, 'default': '0'},
+    },
+    'neb': {
+        'product': {'type': str, 'default': ''},
+        'nimage': {'type': int, 'default': '5'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
@@ -233,7 +248,7 @@ class OQPData:
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf')
-    _td_types = ('rpa', 'tda', 'sf', 'mrsf')
+    _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
     _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
@@ -305,6 +320,7 @@ class OQPData:
         "tdhf": {
             "type": "set_tdhf_type",
             "nstate": "set_tdhf_nstate",
+            "target": "set_tdhf_target",
             "multiplicity": "set_tdhf_multiplicity",
             "maxit": "set_tdhf_maxit",
             "maxit_zv": "set_tdhf_maxit_zv",

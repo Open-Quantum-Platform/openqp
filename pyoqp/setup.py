@@ -16,7 +16,8 @@ setup(
     install_requires=[
         'numpy>=1.20.0',
         'scipy>=1.10.0',
-        'libdlfind>=0.0.3',
+        'geometric>=1.0',
+        'pyscf>=2.3.0',
         # 'dftd4>=3.5.0',
         'cffi>=1.16.0',
         'mpi4py>=4.0.0',

@@ -21,7 +21,8 @@ license = { text = "GPLv3" }
 dependencies = [
   "numpy>=1.20.0",
   "scipy>=1.10.0",
-  "libdlfind>=0.0.3",
+  "geometric>=1.0",
+  "pyscf>=2.3.0",
   "cffi>=1.16.0",
 #  "mpi4py>=4.0.0",
   "basis_set_exchange",
@@ -39,8 +40,11 @@ wheel.packages = ["pyoqp/oqp"]
 [tool.scikit-build.cmake.define]
 USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
-LINALG_LIB_INT64 = "OFF"
+LINALG_LIB_INT64 = "ON"
 CMAKE_INSTALL_PREFIX = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 #[tool.cibuildwheel]
 #before-all = "yum install -y openblas-devel gcc-gfortran"
