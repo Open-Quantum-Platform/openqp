@@ -291,6 +291,8 @@ contains
       write(iw,'(/3x,24("-")&
                &/6x,"Z-Vector not converged"&
                &/3x,24("-")/)')
+      write(iw,'(" PCG reached the maximum z-vector iterations; ",&
+               &"final residual = ",1p,e13.6)') pcg%error
       infos%mol_energy%Z_Vector_converged=.false.
     end select
     call flush(iw)

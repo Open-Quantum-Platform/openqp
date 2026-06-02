@@ -182,6 +182,21 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("call measure_time", guard_block)
         self.assertRegex(guard_block, r"return\b")
 
+    def test_rhf_zvector_pcg_nonconverged_path_logs_final_residual(self):
+        """RHF/TDA z-vector max-iteration exits must report the true final PCG residual."""
+        src = RHF_ZVEC_SRC.read_text()
+        select = re.search(r"select case \(pcg%errcode\).*?end select", src, re.S | re.I)
+        if select is None:
+            self.fail("Could not locate RHF z-vector PCG status dispatch")
+        block = select.group(0)
+        default = block[block.index("case default"):block.index("end select")]
+
+        self.assertIn("Z-Vector not converged", default)
+        self.assertIn("PCG reached the maximum z-vector iterations", default)
+        self.assertIn("final residual = ", default)
+        self.assertIn("pcg%error", default)
+        self.assertLess(default.index("Z-Vector not converged"), default.index("final residual = "))
+
     def test_mrsf_gmres_recomputes_true_residual_after_solution_update(self):
         """MRSF GMRES must not accept only the Givens residual estimate after restart updates."""
         src = MRSF_ZVEC_SRC.read_text()
