@@ -50,12 +50,6 @@ def install_runfunc_stubs():
     libscipy.MEP = type("MEP", (), {})
     sys.modules["oqp.library.libscipy"] = libscipy
 
-    libdlfind = types.ModuleType("oqp.library.libdlfind")
-    libdlfind.DLFindMin = type("DLFindMin", (), {})
-    libdlfind.DLFindTS = type("DLFindTS", (), {})
-    libdlfind.DLFindMECI = type("DLFindMECI", (), {})
-    sys.modules["oqp.library.libdlfind"] = libdlfind
-
     libgeometric = types.ModuleType("oqp.library.libgeometric")
 
     class GeometricOpt:

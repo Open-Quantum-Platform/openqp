@@ -6,11 +6,11 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 | Area | What OpenQP can do now | Notes |
 | --- | --- | --- |
-| Electronic structure | HF, DFT, TDHF/TDDFT, SF-TDDFT, and MRSF-TDDFT ground- and excited-state calculations | MRSF-TDDFT includes DTCAM-series exchange-correlation functionals. |
-| Derivative properties | Energies, analytic gradients, numerical Hessians, and guarded HF/DFT analytic Hessians | HF/DFT analytic Hessians return labeled backend metadata and use no silent numerical fallback. |
+| Electronic structure | HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations | MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis. |
+| Derivative properties | Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic-Hessian development components | Native CPHF/CPKS response and integral-derivative kernels are under active validation. |
 | Vibrational analysis | Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly | IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels. |
 | Nonadiabatic dynamics data | MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows | NAC support uses the TLF-based MRSF-TDDFT machinery. |
-| Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy, DL-FIND, and geomeTRIC backends are available depending on the requested job. |
+| Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy and geomeTRIC backends are available depending on the requested job. |
 | Initial guesses and SCF stability | Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization | MOKIT is optional and mainly useful for broader external wavefunction conversion. |
 | Integrations | LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView | External viewers and workflow integrations are available around the native OpenQP electronic-structure engines. |
 | Performance and deployment | OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images | MPI requires an MPI implementation such as OpenMPI. |
@@ -18,7 +18,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
-- **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
 ### Quickstart
 
@@ -54,7 +53,7 @@ or
 
 ```bash
 cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF
+cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 ninja -C build install
 cd pyoqp
 pip install .
@@ -64,7 +63,7 @@ pip install .
 
 ```bash
 cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
+cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 ninja -C build install
 cd pyoqp
 pip install .
@@ -74,14 +73,14 @@ pip install .
 
 ```bash
 cd openqp
-cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=ON
+cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 make -C build install
 cd pyoqp
 pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- Use `-DLINALG_LIB_INT64=OFF` to ensure compatibility with third-party software like libdlfind compiled with 32-bit BLAS.
+- OpenQP requires ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default).
 
 #### Environmental Settings
 
