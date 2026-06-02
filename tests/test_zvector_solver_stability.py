@@ -66,6 +66,19 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(error)", block)
         self.assertIn("if (.not. all(ieee_is_finite(x)))", block)
 
+    def test_pcg_optimize_only_writes_optional_outputs_when_present(self):
+        """Reusable PCG driver must not assign absent optional err/cgiters outputs."""
+        src = PCG_SRC.read_text()
+        helper = re.search(r"subroutine pcg_optimize\(.*?end subroutine", src, re.S | re.I)
+        if helper is None:
+            self.fail("Could not locate pcg_optimize implementation")
+        block = helper.group(0)
+
+        self.assertIn("optional, intent(out) :: err", block)
+        self.assertIn("optional, intent(out) :: cgiters", block)
+        self.assertIn("if (present(err)) err = pcg%error", block)
+        self.assertNotIn("\n      err = pcg%error", block)
+
     def test_rhf_zvector_preconditioner_clamps_near_zero_denominators(self):
         """RHF/RPA/TDA z-vector preconditioner must be finite and floor guarded."""
         src = RHF_ZVEC_SRC.read_text()

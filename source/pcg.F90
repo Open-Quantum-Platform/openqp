@@ -350,7 +350,7 @@ contains
 
     if (pcg%errcode == PCG_CONVERGED .or. pcg%errcode == PCG_OK) then
       b = pcg%x
-      err = pcg%error
+      if (present(err)) err = pcg%error
     end if
 
     return
