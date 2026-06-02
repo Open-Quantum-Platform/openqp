@@ -6,6 +6,7 @@ module tdhf_mrsf_z_vector_mod
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
   real(kind=dp), parameter :: GMRES_DENOMINATOR_FLOOR = 1.0d-14
+  real(kind=dp), parameter :: MRSF_ZVEC_DENOMINATOR_FLOOR = 1.0d-14
 
   ! Module-level work arrays for GMRES to avoid repeated allocation
   real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
@@ -822,10 +823,10 @@ contains
     integer :: nsocc, lzdim, xvec_dim
 
   ! General data
-    real(kind=dp) :: alpha, error
+    real(kind=dp) :: alpha, error, pap
     character(len=10) :: solver_name
 
-    logical :: dft
+    logical :: dft, mrsf_zvector_breakdown
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
@@ -849,6 +850,7 @@ contains
     if (scf_type==3) roref = .true.
 
     dft = infos%control%hamilton == 20
+    mrsf_zvector_breakdown = .false.
 
   ! Files open
   ! 3. LOG: Write: Main output file
@@ -1362,12 +1364,45 @@ contains
         call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                      nocca, noccb)
 
-        alpha = 1.0_dp/dot_product(pk, lhs)
+        if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite lhs/search direction")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
+
+        pap = dot_product(pk, lhs)
+        if (.not. ieee_is_finite(pap) .or. abs(pap) < MRSF_ZVEC_DENOMINATOR_FLOOR) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: unsafe p^T A p denominator")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
+
+        alpha = 1.0_dp / pap
+        if (.not. ieee_is_finite(alpha)) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite alpha")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
         xk = xk + pk * alpha
         errv = errv - alpha*lhs
+        if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite solution/residual update")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
         error = dot_product(errv, errv)
+        if (.not. ieee_is_finite(error)) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite residual norm")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
         write(iw,'(" Iter#",I2," Error =",&
               &3x,1p,e10.3,1x,"/",1p,e10.3)') &
                 iter, error, cnvtol
@@ -1382,6 +1417,21 @@ contains
     end if  ! End solver selection
 
 ! -----------------------------------------------
+    if (mrsf_zvector_breakdown) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector breakdown"&
+             &/3x,24("-")/)')
+       call flush(iw)
+       call int2_data%clean()
+       call int2_driver%clean()
+       if (dft) call dftclean(infos)
+       call measure_time(print_total=1, log_unit=iw)
+       call cleanup_gmres_work()
+       close(iw)
+       return
+    end if
+
     if (error>cnvtol) then
        infos%mol_energy%Z_Vector_converged=.false.
        write(*,'(/3x,24("-")&

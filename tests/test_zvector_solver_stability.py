@@ -259,6 +259,35 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(b(i)))", block)
         self.assertNotIn("rhs = b(i)\n        if (.not. ieee_is_finite(rhs))", block)
 
+    def test_mrsf_default_cg_guards_pap_denominator_and_breakdown_solution(self):
+        """Default fast MRSF CG path must not divide by tiny p^T A p or use bad xk."""
+        src = MRSF_ZVEC_SRC.read_text()
+        self.assertIn("MRSF_ZVEC_DENOMINATOR_FLOOR", src)
+        self.assertIn("mrsf_zvector_breakdown", src)
+
+        loop = re.search(r"do iter = 1, infos%control%maxit_zv.*?end do", src, re.S | re.I)
+        if loop is None:
+            self.fail("Could not locate MRSF default CG z-vector loop")
+        block = loop.group(0)
+
+        self.assertNotIn("alpha = 1.0_dp/dot_product(pk, lhs)", block)
+        self.assertIn("pap = dot_product(pk, lhs)", block)
+        self.assertIn("if (.not. ieee_is_finite(pap) .or. abs(pap) < MRSF_ZVEC_DENOMINATOR_FLOOR)", block)
+        self.assertIn("alpha = 1.0_dp / pap", block)
+        self.assertIn("if (.not. ieee_is_finite(alpha))", block)
+        self.assertIn("if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk)))", block)
+        self.assertIn("if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv)))", block)
+        self.assertIn("if (.not. ieee_is_finite(error))", block)
+
+        breakdown = src.index("if (mrsf_zvector_breakdown) then")
+        first_solution_use = min(src.index("call sfropcal"), src.index("call mrsfqropcal"))
+        self.assertLess(breakdown, first_solution_use)
+        guard_block = src[breakdown:first_solution_use]
+        self.assertIn("call int2_data%clean()", guard_block)
+        self.assertIn("call int2_driver%clean()", guard_block)
+        self.assertIn("if (dft) call dftclean(infos)", guard_block)
+        self.assertRegex(guard_block, r"return\b")
+
 
 if __name__ == "__main__":
     unittest.main()
