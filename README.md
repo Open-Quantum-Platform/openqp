@@ -2,32 +2,18 @@
 
 Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
-### Key Features
+### Current Functionality
 
-- **Autonomous Modules of Quantum Chemistry Theories for Easy Interoperability**
-- **Flexible prototyping through a Python wrapper, PyOQP**
-- **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
-- **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
-- **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
-- **Ground State Properties** by HF and DFT theories
-- **Geometry Optimization, Transition State Search, and Conical Intersection Search** by SciPy and [DL-Find](https://github.com/digital-chemistry-laboratory/libdlfind)
-- [geomeTRIC](https://github.com/leeping/geomeTRIC) optimizer backend for state-specific optimization, MECI, MECP, transition-state searches, constrained optimizations, and IRC paths
-- [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
-- [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
-- [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) Integration to support a variety of basis sets
-- [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
-- **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
-- [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
-- Optional external [DFTB+](https://dftbplus.org/) backend for ground-state energy, gradient, and geometry optimization workflows
-- **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
-- [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
-- Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
-- Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
-- [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
-  
-### Backend Integrations
-
-Optional external-backend integrations let OpenQP call user-provided engines for targeted workflows; the current DFTB+ bridge covers ground-state energy, gradient, and geometry optimization when configured in the `[dftb]` input section.
+| Area | What OpenQP can do now | Notes |
+| --- | --- | --- |
+| Electronic structure | HF, DFT, TDHF/TDDFT, SF-TDDFT, and MRSF-TDDFT ground- and excited-state calculations | MRSF-TDDFT includes DTCAM-series exchange-correlation functionals. |
+| Derivative properties | Energies, analytic gradients, numerical Hessians, and guarded HF/DFT analytic Hessians | HF/DFT analytic Hessians return labeled backend metadata and use no silent numerical fallback. |
+| Vibrational analysis | Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly | IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels. |
+| Nonadiabatic dynamics data | MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows | NAC support uses the TLF-based MRSF-TDDFT machinery. |
+| Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy, DL-FIND, and geomeTRIC backends are available depending on the requested job. |
+| Initial guesses and SCF stability | Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization | MOKIT is optional and mainly useful for broader external wavefunction conversion. |
+| Integrations | LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, OpenqpView, and optional DFTB+ | The DFTB+ bridge covers configured ground-state energy, gradient, and geometry optimization workflows. |
+| Performance and deployment | OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images | MPI requires an MPI implementation such as OpenMPI. |
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
