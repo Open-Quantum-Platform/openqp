@@ -331,6 +331,27 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(bq))", reorth)
         self.assertIn("if (.not. ieee_is_finite(fnorm)) cycle", reorth)
 
+    def test_tdhf_davidson_preconditioner_rejects_nonfinite_denominators_before_flooring(self):
+        """TDHF Davidson preconditioner must not turn NaN denominators into finite large steps."""
+        src = TDHF_LIB_SRC.read_text()
+        helper = re.search(
+            r"subroutine apply_davidson_preconditioner\(.*?end subroutine apply_davidson_preconditioner",
+            src,
+            re.S | re.I,
+        )
+        if helper is None:
+            self.fail("Could not locate TDHF Davidson preconditioner helper")
+        block = helper.group(0)
+
+        self.assertIn("if (.not. ieee_is_finite(denom)) then", block)
+        nonfinite_guard = block.index("if (.not. ieee_is_finite(denom)) then")
+        floor_guard = block.index("if (abs(denom) < DAVIDSON_DENOMINATOR_FLOOR) then")
+        self.assertLess(nonfinite_guard, floor_guard)
+        guard_block = block[nonfinite_guard:floor_guard]
+        self.assertIn("qout(ii) = 0.0_dp", guard_block)
+        self.assertRegex(guard_block, r"cycle\b")
+        self.assertIn("denom = merge(DAVIDSON_DENOMINATOR_FLOOR, -DAVIDSON_DENOMINATOR_FLOOR, denom >= 0.0_dp)", block)
+
     def test_mrsf_gmres_back_substitution_rejects_nonfinite_rhs_and_seed_solution(self):
         """GMRES triangular solve must not seed y(n) from non-finite RHS or produce NaN/Inf."""
         src = MRSF_ZVEC_SRC.read_text()

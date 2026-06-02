@@ -774,7 +774,11 @@ contains
 
     do ii = 1, ubound(qout, 1)
       denom = energy - abd(ii)
-      if (.not. davidson_safe_denominator(denom)) then
+      if (.not. ieee_is_finite(denom)) then
+        qout(ii) = 0.0_dp
+        cycle
+      end if
+      if (abs(denom) < DAVIDSON_DENOMINATOR_FLOOR) then
         denom = merge(DAVIDSON_DENOMINATOR_FLOOR, -DAVIDSON_DENOMINATOR_FLOOR, denom >= 0.0_dp)
       end if
       qout(ii) = residual(ii) / denom
