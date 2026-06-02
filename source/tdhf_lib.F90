@@ -805,9 +805,11 @@ contains
     integer, intent(out) :: ick
     logical, intent(in) :: tamm_dancoff
 
-    real(kind=dp) :: bq, fnorm
+    real(kind=dp) :: bq, fnorm, max_abs_overlap
     integer :: istat, k, ms, ndsrt, mxvec
+    logical :: bad_vector
     real(kind=dp), parameter :: norm_threshold = 1.0D-09
+    real(kind=dp), parameter :: reorth_threshold = 1.0D-08
 
     mxvec = ubound(bvec, 2)
 
@@ -821,12 +823,33 @@ contains
 
     do k = 1, ndsrt
       if (any(.not. ieee_is_finite(q(:,k)))) cycle
+      max_abs_overlap = 0.0_dp
+      bad_vector = .false.
 !     MGS: orthonormalize next vector w.r.t. all
 !     previous vectors
       do istat = 1, nvec
         bq = dot_product(bvec(:,istat),q(:,k))
+        if (.not. ieee_is_finite(bq)) then
+          bad_vector = .true.
+          exit
+        end if
+        max_abs_overlap = max(max_abs_overlap, abs(bq))
         q(:,k) = q(:,k) - bq*bvec(:,istat)
       end do
+      if (bad_vector) cycle
+
+      if (max_abs_overlap > reorth_threshold) then
+! Davidson MGS reorthogonalization pass
+        do istat = 1, nvec
+          bq = dot_product(bvec(:,istat),q(:,k))
+          if (.not. ieee_is_finite(bq)) then
+            bad_vector = .true.
+            exit
+          end if
+          q(:,k) = q(:,k) - bq*bvec(:,istat)
+        end do
+        if (bad_vector) cycle
+      end if
 
       fnorm = norm2(q(:,k))
 

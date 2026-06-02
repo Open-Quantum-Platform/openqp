@@ -15,6 +15,7 @@ PCG_SRC = ROOT / "source" / "pcg.F90"
 RHF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_z_vector.F90"
 SF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_sf_z_vector.F90"
 MRSF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
+TDHF_LIB_SRC = ROOT / "source" / "tdhf_lib.F90"
 
 
 class ZVectorSolverStabilityTests(unittest.TestCase):
@@ -210,6 +211,24 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("H(j+1,j) = 0.0_dp", breakdown_branch)
         happy_block = block[breakdown:solution_update]
         self.assertRegex(happy_block, r"exit\b")
+
+    def test_tdhf_davidson_basis_append_reorthogonalizes_when_overlap_drifts(self):
+        """TDHF Davidson basis expansion should reorthogonalize vectors with residual overlap drift."""
+        src = TDHF_LIB_SRC.read_text()
+        helper = re.search(r"subroutine rpanewb\(.*?end subroutine rpanewb", src, re.S | re.I)
+        if helper is None:
+            self.fail("Could not locate TDHF Davidson rpanewb basis helper")
+        block = helper.group(0)
+
+        self.assertIn("reorth_threshold", block)
+        self.assertIn("max_abs_overlap", block)
+        self.assertRegex(block, r"max_abs_overlap\s*=\s*max\(max_abs_overlap,\s*abs\(bq\)\)")
+        self.assertIn("if (max_abs_overlap > reorth_threshold) then", block)
+        reorth = block[block.index("if (max_abs_overlap > reorth_threshold) then"):]
+        self.assertIn("! Davidson MGS reorthogonalization pass", reorth)
+        self.assertIn("q(:,k) = q(:,k) - bq*bvec(:,istat)", reorth)
+        self.assertIn("if (.not. ieee_is_finite(bq))", reorth)
+        self.assertIn("if (.not. ieee_is_finite(fnorm)) cycle", reorth)
 
     def test_mrsf_gmres_back_substitution_rejects_nonfinite_rhs_and_seed_solution(self):
         """GMRES triangular solve must not seed y(n) from non-finite RHS or produce NaN/Inf."""
