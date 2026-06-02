@@ -19,6 +19,7 @@ contains
   subroutine tdhf_sf_z_vector(infos)
 
     use precision, only: dp
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use io_constants, only: iw
     use oqp_tagarray_driver
 
@@ -46,6 +47,7 @@ contains
     implicit none
 
     character(len=*), parameter :: subroutine_name = "tdhf_sf_z_vector"
+    real(kind=dp), parameter :: SF_ZVEC_DENOMINATOR_FLOOR = 1.0d-12
 
     type(basis_set), pointer :: basis
     type(information), target, intent(inout) :: infos
@@ -83,9 +85,9 @@ contains
     integer :: nsocc, lzdim
 
   ! General data
-    real(kind=dp) :: alpha, error
+    real(kind=dp) :: alpha, error, pap
 
-    logical :: dft
+    logical :: dft, zvector_breakdown
     integer :: scf_type, mol_mult
 
     ! tagarray
@@ -326,14 +328,25 @@ contains
     call flush(iw)
 
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
+    call sanitize_sf_zvector_preconditioner(xm, xminv, iw)
 
     call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+    zvector_breakdown = .false.
+    if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
+        any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
+      zvector_breakdown = .true.
+      write(*,'(/3x,24("-")&
+            &/6x,"Z-Vector breakdown: non-finite initial PCG state"&
+            &/3x,24("-")/)')
+    end if
 
     write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
 
 ! -----------------------------------------------
 
     do iter = 1, infos%control%maxit_zv
+
+      if (zvector_breakdown) exit
 
       call sfrogen(wrk1, wrk2, pk, nocca, noccb)
 !     Alpha
@@ -382,12 +395,40 @@ contains
       call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                    nocca, noccb)
 
-      alpha = 1.0_dp/dot_product(pk, lhs)
+      if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: non-finite SF PCG operator state at iter", I4)') iter
+        exit
+      end if
+
+      pap = dot_product(pk, lhs)
+      if (.not. ieee_is_finite(pap) .or. abs(pap) < SF_ZVEC_DENOMINATOR_FLOOR) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: unsafe SF PCG denominator at iter", I4, 1x, 1p,e12.4)') iter, pap
+        exit
+      end if
+
+      alpha = 1.0_dp / pap
+      if (.not. ieee_is_finite(alpha)) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: non-finite SF PCG alpha at iter", I4)') iter
+        exit
+      end if
 
       xk = xk + pk * alpha
       errv = errv - alpha*lhs
+      if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv))) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: non-finite SF PCG update at iter", I4)') iter
+        exit
+      end if
 
       error = dot_product(errv, errv)
+      if (.not. ieee_is_finite(error)) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: non-finite SF PCG residual at iter", I4)') iter
+        exit
+      end if
       write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
         iter, error, cnvtol
       call flush(iw)
@@ -395,12 +436,22 @@ contains
       if (error<cnvtol) exit
 
       call pcgb(pk, errv, xminv)
+      if (any(.not. ieee_is_finite(pk))) then
+        zvector_breakdown = .true.
+        write(*,'(" Z-Vector breakdown: non-finite SF PCG search direction at iter", I4)') iter
+        exit
+      end if
 
     end do
 
 
 ! -----------------------------------------------
-    if (error>cnvtol) then
+    if (zvector_breakdown) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector breakdown"&
+             &/3x,24("-")/)')
+    else if (error>cnvtol) then
        infos%mol_energy%Z_Vector_converged=.false.
        write(*,'(/3x,24("-")&
              &/6x,"Z-Vector not converged"&
@@ -413,6 +464,14 @@ contains
     endif
 
     call flush(iw)
+
+    if (zvector_breakdown) then
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
+    end if
 
     call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
 
@@ -497,5 +556,38 @@ contains
     close(iw)
 
   end subroutine tdhf_sf_z_vector
+
+  subroutine sanitize_sf_zvector_preconditioner(xm, xminv, log_unit)
+    use precision, only: dp
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+
+    implicit none
+
+    real(kind=dp), intent(in) :: xm(:)
+    real(kind=dp), intent(inout) :: xminv(:)
+    integer, intent(in) :: log_unit
+    real(kind=dp), parameter :: SF_ZVEC_DENOMINATOR_FLOOR = 1.0d-12
+    real(kind=dp) :: denom
+    integer :: i, regularized
+
+    regularized = 0
+    do i = 1, size(xm)
+      denom = xm(i)
+      if (.not. ieee_is_finite(denom) .or. abs(denom) < SF_ZVEC_DENOMINATOR_FLOOR) then
+        if (ieee_is_finite(denom) .and. denom < 0.0_dp) then
+          denom = -SF_ZVEC_DENOMINATOR_FLOOR
+        else
+          denom = SF_ZVEC_DENOMINATOR_FLOOR
+        end if
+        regularized = regularized + 1
+      end if
+      xminv(i) = 1.0_dp / denom
+    end do
+
+    if (regularized > 0) then
+      write(log_unit,'(" SF z-vector preconditioner regularized ", I0, " denominator(s)")') regularized
+      call flush(log_unit)
+    end if
+  end subroutine sanitize_sf_zvector_preconditioner
 
 end module tdhf_sf_z_vector_mod

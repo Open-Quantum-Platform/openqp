@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PCG_SRC = ROOT / "source" / "pcg.F90"
 RHF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_z_vector.F90"
+SF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_sf_z_vector.F90"
 
 
 class ZVectorSolverStabilityTests(unittest.TestCase):
@@ -71,6 +72,46 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertRegex(block, r"ieee_is_finite\(denom\)")
         self.assertRegex(block, r"1\.0_dp\s*/\s*denom")
         self.assertIn("regularized", block.lower())
+
+    def test_sf_zvector_loop_guards_alpha_breakdown_and_nonfinite_updates(self):
+        """SF z-vector loop must not divide by tiny/non-finite p^T A p or save bad vectors."""
+        src = SF_ZVEC_SRC.read_text()
+
+        self.assertIn("use, intrinsic :: ieee_arithmetic", src)
+        self.assertIn("SF_ZVEC_DENOMINATOR_FLOOR", src)
+        self.assertIn("sanitize_sf_zvector_preconditioner", src)
+        self.assertRegex(src, r"call\s+sanitize_sf_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
+
+        loop = re.search(r"do iter = 1, infos%control%maxit_zv.*?end do", src, re.S | re.I)
+        if loop is None:
+            self.fail("Could not locate SF z-vector PCG loop")
+        block = loop.group(0)
+
+        self.assertNotIn("alpha = 1.0_dp/dot_product(pk, lhs)", block)
+        self.assertIn("pap = dot_product(pk, lhs)", block)
+        self.assertIn("if (.not. ieee_is_finite(pap) .or. abs(pap) < SF_ZVEC_DENOMINATOR_FLOOR)", block)
+        self.assertIn("alpha = 1.0_dp / pap", block)
+        self.assertIn("if (.not. ieee_is_finite(alpha))", block)
+        self.assertIn("if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk)))", block)
+        self.assertIn("if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv)))", block)
+        self.assertIn("if (.not. ieee_is_finite(error))", block)
+        self.assertIn("if (any(.not. ieee_is_finite(pk)))", block)
+        self.assertIn("Z-Vector breakdown", src)
+
+    def test_sf_zvector_breakdown_skips_density_and_w_updates_from_bad_solution(self):
+        """SF z-vector must not build response densities/W with a non-finite breakdown solution."""
+        src = SF_ZVEC_SRC.read_text()
+        breakdown = src.index("if (zvector_breakdown) then")
+        first_solution_use = min(
+            src.index("call sfropcal"),
+            src.index("call sfrowcal"),
+        )
+        self.assertLess(breakdown, first_solution_use)
+        guard_block = src[breakdown:first_solution_use]
+        self.assertIn("call int2_driver%clean()", guard_block)
+        self.assertIn("if (dft) call dftclean(infos)", guard_block)
+        self.assertIn("call measure_time", guard_block)
+        self.assertRegex(guard_block, r"return\b")
 
 
 if __name__ == "__main__":
