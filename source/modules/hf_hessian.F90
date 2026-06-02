@@ -30,7 +30,7 @@ contains
     ! OpenQP derivative integrals and the current OpenQP SCF density/MOs, then
     ! calls cphf_solve on the full 3N RHS block.  The final analytic Hessian
     ! contraction is still guarded at the Python dispatch layer by marking the
-    ! PySCF matrix as an oracle/final-assembly fallback; this routine is the
+    ! PySCF matrix as a reference final-assembly backend; this routine is the
     ! native response gate, not a placeholder Hessian matrix.
     use precision, only: dp
     use types, only: information
@@ -71,7 +71,7 @@ contains
 
     write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
     write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
-    write(iw,'(A)') '  Final analytic Hessian assembly remains guarded; PySCF final Hessian is retained as oracle.'
+    write(iw,'(A)') '  Final analytic Hessian assembly remains guarded; PySCF final Hessian is retained as reference.'
 
     if (nocc <= 0 .or. nvir <= 0 .or. ncart <= 0) then
       write(iw,'(A)') '  Native CPHF prepass skipped: empty occupied/virtual/nuclear space.'

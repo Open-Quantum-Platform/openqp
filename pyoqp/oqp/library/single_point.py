@@ -760,14 +760,14 @@ class Hessian(Calculator):
         )
 
     def analytical_ground_state_hess(self):
-        """Run native OpenQP CPHF prepass plus external PySCF final Hessian oracle.
+        """Run native OpenQP CPHF prepass plus external PySCF reference final Hessian.
 
         The native OpenQP CPHF/CPKS solver is exercised first for all nuclear
         perturbations in the HF/DFT analytic Hessian response problem. The final
         Cartesian Hessian assembly is not yet promoted, so the matrix returned to
         frequency analysis still comes from the explicitly labeled external PySCF
-        final Hessian oracle. This is no numerical fallback: if either native
-        CPHF prepass or the oracle Hessian fails, the analytic request fails.
+        reference final Hessian. This is no numerical fallback: if either native
+        CPHF prepass or the reference Hessian fails, the analytic request fails.
         """
 
         native_hess_func = self.native_hess_func['hf']
@@ -789,15 +789,15 @@ class Hessian(Calculator):
         hessian, _flags = external.analytic_hessian_from_pyscf(self.mol)
         metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
         metadata.update({
-            'backend': 'native_openqp_cphf_pyscf_oracle',
+            'backend': 'native_openqp_cphf_pyscf_reference',
             'native_openqp_cphf': True,
             'native_openqp_cphf_solver_exercised': True,
             'native_openqp_final_assembly': False,
-            'oracle_backend': 'external_pyscf',
+            'reference_backend': 'external_pyscf',
             'no_numerical_fallback': True,
         })
         setattr(self.mol, 'hessian_metadata', metadata)
-        return hessian, ['computed', 'native_openqp_cphf', 'external_pyscf_oracle']
+        return hessian, ['computed', 'native_openqp_cphf', 'external_pyscf_reference']
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']

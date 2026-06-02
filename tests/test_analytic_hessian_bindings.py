@@ -31,13 +31,14 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         ]:
             self.assertIn(symbol, source)
 
-    def test_hf_dispatch_runs_native_cphf_prepass_before_pyscf_oracle_without_numerical_fallback(self):
+    def test_hf_dispatch_runs_native_cphf_prepass_before_pyscf_reference_without_numerical_fallback(self):
         source = read("pyoqp/oqp/library/single_point.py")
 
         self.assertIn("native_hess_func", source)
         self.assertIn("no numerical fallback", source.lower())
         self.assertIn("native OpenQP CPHF prepass", source)
-        self.assertIn("external PySCF final Hessian oracle", source)
+        self.assertIn("external PySCF reference final Hessian", source)
+        self.assertNotIn("oracle", source.lower())
         self.assertIn("analytic_hessian_from_pyscf", source)
         self.assertIn("native_hess_func = self.native_hess_func['hf']", source)
         self.assertIn("native_hess_func(self.mol)", source)
@@ -61,6 +62,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("Native OpenQP HF/DFT Hessian CPHF response prepass", source)
         self.assertIn("call cphf_solve", source)
         self.assertIn("Final analytic Hessian assembly remains guarded", source)
+        self.assertIn("retained as reference", source)
         self.assertNotIn("implementation is not available yet", source)
 
     def test_tdhf_hessian_fortran_scaffolds_export_c_abi_without_claiming_support(self):
@@ -154,6 +156,15 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("Frequencies --", file_utils)
         self.assertIn("Atom AN", file_utils)
         self.assertNotIn("for mode in block", file_utils)
+
+    def test_hessian_frequency_mode_log_keeps_lines_terminal_width(self):
+        file_utils = read("pyoqp/oqp/utils/file_utils.py")
+
+        self.assertIn("for start in range(0, len(freqs), 1):", file_utils)
+        self.assertIn("{axis:>12s}", file_utils)
+        self.assertIn("{component:12.8f}", file_utils)
+        self.assertNotIn("{axis:>18s}", file_utils)
+        self.assertNotIn("{component:18.8f}", file_utils)
 
     def test_cphf_solver_logs_iteration_residuals_and_timing(self):
         source = read("source/modules/cphf.F90")
