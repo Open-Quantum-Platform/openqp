@@ -733,6 +733,14 @@ contains
           threshold = 1.0d-15, &
           infos = infos)
     end if
+
+    if (any(.not. ieee_is_finite(ab1))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      write(*,'(" MRSF z-vector operator rejected non-finite response")')
+      call int2_data%clean()
+      deallocate(int2_data)
+      return
+    end if
     
     ! Transform to MO basis - Fixed to use correct mo_b for beta
     call mntoia(ab1(:,:,1), gmres_ab1_mo_a, mo_a, mo_a, nocca, nocca)

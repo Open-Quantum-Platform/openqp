@@ -313,6 +313,28 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("xminv(i) = 1.0_dp / denom", block)
         self.assertIn("if (regularized > 0) then", block)
 
+    def test_mrsf_operator_rejects_nonfinite_response_before_mo_transform(self):
+        """MRSF operator must not transform/use NaN integral or XC response blocks."""
+        src = MRSF_ZVEC_SRC.read_text()
+        operator = re.search(
+            r"subroutine\s+apply_z_operator\(.*?end subroutine apply_z_operator",
+            src,
+            re.S | re.I,
+        )
+        if operator is None:
+            self.fail("Could not locate MRSF z-vector operator helper")
+        block = operator.group(0)
+
+        self.assertIn("if (any(.not. ieee_is_finite(ab1))) then", block)
+        guard = block.index("if (any(.not. ieee_is_finite(ab1))) then")
+        self.assertLess(guard, block.index("call mntoia(ab1(:,:,1)"))
+        cleanup_block = block[guard:block.index("call mntoia(ab1(:,:,1)")]
+        self.assertIn("MRSF z-vector operator rejected non-finite response", cleanup_block)
+        self.assertIn("x_out = ieee_value(0.0_dp, ieee_quiet_nan)", cleanup_block)
+        self.assertIn("call int2_data%clean()", cleanup_block)
+        self.assertIn("deallocate(int2_data)", cleanup_block)
+        self.assertRegex(cleanup_block, r"return\b")
+
     def test_mrsf_default_cg_guards_pap_denominator_and_breakdown_solution(self):
         """Default fast MRSF CG path must not divide by tiny p^T A p or use bad xk."""
         src = MRSF_ZVEC_SRC.read_text()
