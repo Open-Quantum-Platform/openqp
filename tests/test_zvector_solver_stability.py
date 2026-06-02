@@ -118,6 +118,22 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("call pcg%clean()", normal_exit)
         self.assertLess(normal_exit.index("call pcg%clean()"), normal_exit.index("return"))
 
+    def test_pcg_optimize_cleans_allocated_solver_state_before_abort_on_breakdown(self):
+        """Reusable default CG driver should release PCG work arrays before aborting on breakdown."""
+        src = PCG_SRC.read_text()
+        helper = re.search(r"subroutine pcg_optimize\(.*?end subroutine", src, re.S | re.I)
+        if helper is None:
+            self.fail("Could not locate pcg_optimize implementation")
+        block = helper.group(0)
+
+        self.assertIn("integer :: final_errcode", block)
+        error_exit = block[block.index("9999 continue"):]
+        self.assertIn("final_errcode = pcg%errcode", error_exit)
+        self.assertIn("call pcg%clean()", error_exit)
+        self.assertIn("trim(errmsg(final_errcode))", error_exit)
+        self.assertLess(error_exit.index("final_errcode = pcg%errcode"), error_exit.index("call pcg%clean()"))
+        self.assertLess(error_exit.index("call pcg%clean()"), error_exit.index("call show_message"))
+
     def test_rhf_zvector_preconditioner_clamps_near_zero_denominators(self):
         """RHF/RPA/TDA z-vector preconditioner must be finite and floor guarded."""
         src = RHF_ZVEC_SRC.read_text()

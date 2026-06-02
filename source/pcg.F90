@@ -333,6 +333,7 @@ contains
 
     type(pcg_t) :: pcg
     integer :: iter
+    integer :: final_errcode
 
     if (present(cgiters)) cgiters = 0
 
@@ -371,8 +372,10 @@ contains
     return
     9999 continue
 
+    final_errcode = pcg%errcode
+    call pcg%clean()
     call show_message('PCG: an error has occured, ' // &
-                      trim(errmsg(pcg%errcode)), WITH_ABORT)
+                      trim(errmsg(final_errcode)), WITH_ABORT)
 
   end subroutine
 
