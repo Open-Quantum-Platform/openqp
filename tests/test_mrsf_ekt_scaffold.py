@@ -1,4 +1,7 @@
+import importlib.util
 import json
+import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -7,6 +10,49 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read(relpath):
     return (ROOT / relpath).read_text()
+
+
+def minimal_config(**overrides):
+    config = {
+        "input": {
+            "method": "tdhf",
+            "runtype": "ekt",
+            "basis": "6-31g*",
+            "system": "\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\nH 1.0 0.0 0.0",
+        },
+        "scf": {"type": "rohf", "multiplicity": 3},
+        "tdhf": {"type": "mrsf", "multiplicity": 1, "nstate": 1, "nvdav": 10},
+        "ekt": {"ip": True, "ea": False},
+        "guess": {},
+        "properties": {"grad": "1"},
+    }
+    for section, values in overrides.items():
+        config.setdefault(section, {}).update(values)
+    return config
+
+
+def load_input_checker():
+    """Load the backend-free input checker with a narrow MPI stub."""
+    oqp_mod = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    utils_mod = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    mpi_mod = types.ModuleType("oqp.utils.mpi_utils")
+
+    class MPIManager:
+        size = 1
+        use_mpi = False
+
+    setattr(mpi_mod, "MPIManager", MPIManager)
+    sys.modules["oqp.utils.mpi_utils"] = mpi_mod
+    setattr(oqp_mod, "utils", utils_mod)
+    setattr(utils_mod, "mpi_utils", mpi_mod)
+
+    path = ROOT / "pyoqp/oqp/utils/input_checker.py"
+    spec = importlib.util.spec_from_file_location("openqp_pr161_input_checker", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class TestMRSFEKTScaffold(unittest.TestCase):
@@ -55,6 +101,32 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("EKT analysis must use [input] runtype=ekt", checker)
         self.assertIn("Legacy tdhf.type=mrsf_ekt_ip/mrsf_ekt_ea", checker)
         self.assertIn("runtype != \"energy\"", checker)
+
+    def test_legacy_mrsf_ekt_tdhf_types_error_for_grad_runtype(self):
+        checker = load_input_checker()
+        config = minimal_config(
+            input={"runtype": "grad"},
+            tdhf={"type": "mrsf_ekt_ip", "multiplicity": 1, "nstate": 1, "nvdav": 10},
+        )
+
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        messages = "\n".join(item.message for item in report.errors)
+
+        self.assertIn("Legacy tdhf.type=mrsf_ekt_ip/mrsf_ekt_ea is energy-only", messages)
+        self.assertIn("EKT analysis must use [input] runtype=ekt", messages)
+
+    def test_dedicated_ekt_runtype_requires_mrsf_tddft_and_ip_or_ea(self):
+        checker = load_input_checker()
+        config = minimal_config(
+            tdhf={"type": "rpa", "multiplicity": 1, "nstate": 1, "nvdav": 10},
+            ekt={"ip": False, "ea": False},
+        )
+
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        messages = "\n".join(item.message for item in report.errors)
+
+        self.assertIn("EKT runtype only supports MRSF-TDDFT", messages)
+        self.assertIn("EKT runtype must request IP, EA, or both", messages)
 
     def test_fortran_module_ports_gamess_ekt_equations(self):
         source = read("source/modules/tdhf_mrsf_ekt.F90")
