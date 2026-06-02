@@ -277,6 +277,24 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(b(i)))", block)
         self.assertNotIn("rhs = b(i)\n        if (.not. ieee_is_finite(rhs))", block)
 
+    def test_mrsf_zvector_preconditioner_sanitizes_nonfinite_values_before_solver_choice(self):
+        """MRSF z-vector CG/GMRES must not seed either solver with NaN/Inf preconditioners."""
+        src = MRSF_ZVEC_SRC.read_text()
+        self.assertIn("sanitize_mrsf_zvector_preconditioner", src)
+        self.assertRegex(src, r"(?s)call\s+sfromcal\(xm,\s*xminv,.*?call\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
+
+        helper = re.search(
+            r"subroutine\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*log_unit\).*?end subroutine",
+            src,
+            re.S | re.I,
+        )
+        if helper is None:
+            self.fail("Missing MRSF z-vector preconditioner sanitizer helper")
+        block = helper.group(0)
+        self.assertIn("if (.not. ieee_is_finite(denom) .or. abs(denom) < MRSF_ZVEC_DENOMINATOR_FLOOR)", block)
+        self.assertIn("xminv(i) = 1.0_dp / denom", block)
+        self.assertIn("if (regularized > 0) then", block)
+
     def test_mrsf_default_cg_guards_pap_denominator_and_breakdown_solution(self):
         """Default fast MRSF CG path must not divide by tiny p^T A p or use bad xk."""
         src = MRSF_ZVEC_SRC.read_text()

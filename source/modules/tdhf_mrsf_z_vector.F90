@@ -741,6 +741,35 @@ contains
     
   end subroutine apply_z_operator
 
+  ! Sanitize MRSF z-vector diagonal preconditioner from orbital-energy gaps.
+  subroutine sanitize_mrsf_zvector_preconditioner(xm, xminv, log_unit)
+    use precision, only: dp
+    implicit none
+    real(kind=dp), intent(in) :: xm(:)
+    real(kind=dp), intent(out) :: xminv(:)
+    integer, intent(in) :: log_unit
+    real(kind=dp) :: denom
+    integer :: i, regularized
+
+    regularized = 0
+    do i = 1, size(xm)
+      denom = xm(i)
+      if (.not. ieee_is_finite(denom) .or. abs(denom) < MRSF_ZVEC_DENOMINATOR_FLOOR) then
+        if (ieee_is_finite(denom) .and. denom < 0.0_dp) then
+          denom = -MRSF_ZVEC_DENOMINATOR_FLOOR
+        else
+          denom = MRSF_ZVEC_DENOMINATOR_FLOOR
+        end if
+        regularized = regularized + 1
+      end if
+      xminv(i) = 1.0_dp / denom
+    end do
+
+    if (regularized > 0) then
+      write(log_unit,'(" MRSF z-vector preconditioner regularized ", I0, " denominator(s)")') regularized
+    end if
+  end subroutine sanitize_mrsf_zvector_preconditioner
+
   ! Apply preconditioner (simple diagonal preconditioner)
   subroutine apply_z_precond(x_in, x_out, xminv)
     use precision, only: dp
@@ -1212,6 +1241,7 @@ contains
     call flush(iw)
 
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
+    call sanitize_mrsf_zvector_preconditioner(xm, xminv, iw)
 
     ! Choose solver based on input option (0=CG, 1=GMRES)
     if (infos%tddft%z_solver == 1) then
@@ -1219,13 +1249,6 @@ contains
       ! ============================================
       ! GMRES SOLVER
       ! ============================================
-      
-      ! Check preconditioner condition
-      if (any(abs(xminv) < 1.0d-12) .or. any(abs(xminv) > 1.0d12)) then
-        write(iw,'(" Warning: Preconditioner poorly conditioned, applying regularization")')
-        where(abs(xminv) < 1.0d-12) xminv = sign(1.0d-12, xminv)
-        where(abs(xminv) > 1.0d12) xminv = sign(1.0d12, xminv)
-      end if
       
       ! Initial guess with same strategy as CG
       xk = 0.0_dp
