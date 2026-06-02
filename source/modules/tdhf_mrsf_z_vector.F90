@@ -1,8 +1,11 @@
 module tdhf_mrsf_z_vector_mod
 
+  use precision, only: dp
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
+  real(kind=dp), parameter :: GMRES_DENOMINATOR_FLOOR = 1.0d-14
 
   ! Module-level work arrays for GMRES to avoid repeated allocation
   real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
@@ -140,7 +143,7 @@ contains
     
     real(kind=dp) :: beta, h_ij, temp, error, error_initial
     integer :: i, j, k, iter, m, restart_count, inner_iter
-    logical :: converged
+    logical :: converged, unstable
     
     ! Initialize GMRES work arrays ONCE at the beginning
     call init_gmres_work(nbf, nocca, noccb)
@@ -160,6 +163,7 @@ contains
     iter_out = 0
     restart_count = 0
     converged = .false.
+    unstable = .false.
     
     write(iw,'(/," GMRES Solver Parameters:")')
     write(iw,'("   Problem size        : ", I8)') n
@@ -176,9 +180,24 @@ contains
                        fa, fb, scale_exch, dft)
     r = b - Ax
     error_initial = sqrt(dot_product(r, r))
+    if (.not. ieee_is_finite(error_initial)) then
+      write(iw,'(" GMRES: initial residual is non-finite; aborting iterative safety")')
+      call flush(iw)
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      unstable = .true.
+    else if (error_initial < GMRES_DENOMINATOR_FLOOR) then
+      write(iw,'(" GMRES: initial residual is already below denominator floor")')
+      call flush(iw)
+      error_out = error_initial
+      iter_out = 0
+      converged = .true.
+    end if
     
-    ! Outer iteration loop (restarts)
-    do iter = 1, max_iter
+    if (unstable) then
+      ! Safety fallback handled above; skip GMRES iterations
+    else
+      do iter = 1, max_iter
       
       restart_count = restart_count + 1
       
@@ -192,6 +211,11 @@ contains
       call apply_precond(r, V(:,1))
       
       beta = sqrt(dot_product(V(:,1), V(:,1)))
+      if (.not. ieee_is_finite(beta) .or. beta < GMRES_DENOMINATOR_FLOOR) then
+        write(iw,'(" GMRES: degenerate residual norm at restart ", I3)') restart_count
+        unstable = .true.
+        exit
+      end if
       
       ! Check for convergence
       error = beta
@@ -243,9 +267,10 @@ contains
         H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))
         
         ! Check for breakdown
-        if (abs(H(j+1,j)) < 1.0d-12) then
-          write(iw,'(" GMRES: Lucky breakdown at iteration ", I3)') j
+        if (.not. ieee_is_finite(H(j+1,j)) .or. abs(H(j+1,j)) < GMRES_DENOMINATOR_FLOOR) then
+          write(iw,'(" GMRES: Lucky/unsafe breakdown at iteration ", I3)') j
           inner_iter = j
+          unstable = .true.
           exit
         end if
         
@@ -270,7 +295,7 @@ contains
         g(j) = temp
         
         ! Check convergence
-        error = abs(g(j+1)) 
+        error = abs(g(j+1))
         iter_out = iter_out + 1
         
         ! Print progress every 5 inner iterations or at convergence
@@ -292,10 +317,17 @@ contains
         end if
       end do
       
-      ! Solve upper triangular system for y
-      call back_substitution(H(1:inner_iter,1:inner_iter), g(1:inner_iter), &
-                             y(1:inner_iter), inner_iter)
+      if (inner_iter > 0 .and. .not. unstable) then
+        ! Solve upper triangular system for y
+        call back_substitution(H(1:inner_iter,1:inner_iter), g(1:inner_iter), &
+                               y(1:inner_iter), inner_iter, unstable)
+      end if
       
+      if (unstable) then
+        error_out = huge(1.0_dp)
+        exit
+      end if
+
       ! Update solution: x = x + V*y
       do i = 1, inner_iter
         x = x + y(i) * V(:,i)
@@ -312,6 +344,7 @@ contains
       end if
       
     end do
+    end if
     
     ! Final status
     write(iw,'(" ---------   -----  -------------   ---------")')
@@ -320,7 +353,11 @@ contains
             iter_out, restart_count-1
       write(iw,'(" Final residual norm: ", 1p,e13.6)') error_out
     else
-      write(iw,'(" GMRES did not converge within ", I4, " iterations")') max_iter
+      if (unstable) then
+        write(iw,'(" GMRES terminated due to numerical instability")')
+      else
+        write(iw,'(" GMRES did not converge within ", I4, " iterations")') max_iter
+      end if
       write(iw,'(" Final residual norm: ", 1p,e13.6)') error_out
     end if
     write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
@@ -338,7 +375,8 @@ contains
       real(kind=dp), intent(out) :: c, s
       real(kind=dp) :: r
       
-      if (abs(b) < 1.0d-14) then
+      if (.not. ieee_is_finite(a) .or. .not. ieee_is_finite(b) .or. &
+          (abs(a) < GMRES_DENOMINATOR_FLOOR .and. abs(b) < GMRES_DENOMINATOR_FLOOR)) then
         c = 1.0_dp
         s = 0.0_dp
       else
@@ -348,21 +386,44 @@ contains
       end if
     end subroutine givens_rotation
     
-    subroutine back_substitution(A, b, x, n)
+    subroutine back_substitution(A, b, x, n, unstable)
       integer, intent(in) :: n
       real(kind=dp), intent(in) :: A(n,n), b(n)
       real(kind=dp), intent(out) :: x(n)
+      logical, intent(out) :: unstable
       integer :: i, j
-      
+      real(kind=dp) :: rhs
+
+      if (n <= 0) then
+        unstable = .true.
+        return
+      end if
+
+      if (.not. ieee_is_finite(A(n,n)) .or. abs(A(n,n)) < GMRES_DENOMINATOR_FLOOR) then
+        unstable = .true.
+        return
+      end if
+
       x(n) = b(n) / A(n,n)
       do i = n-1, 1, -1
-        x(i) = b(i)
+        if (.not. ieee_is_finite(A(i,i)) .or. abs(A(i,i)) < GMRES_DENOMINATOR_FLOOR) then
+          unstable = .true.
+          return
+        end if
+
+        rhs = b(i)
         do j = i+1, n
-          x(i) = x(i) - A(i,j) * x(j)
+          if (.not. ieee_is_finite(A(i,j))) then
+            unstable = .true.
+            return
+          end if
+          rhs = rhs - A(i,j) * x(j)
         end do
-        x(i) = x(i) / A(i,i)
+        x(i) = rhs / A(i,i)
       end do
+      unstable = .false.
     end subroutine back_substitution
+
     
   end subroutine gmres_solve
 
