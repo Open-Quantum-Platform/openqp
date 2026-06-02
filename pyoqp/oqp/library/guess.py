@@ -6,7 +6,6 @@ import oqp
 from oqp.utils.file_utils import try_basis
 from oqp.utils.file_utils import try_data_file
 from oqp.utils.file_utils import dump_log
-from oqp.library.external import guess_from_pyscf, guess_from_pyscf_initial_density
 
 def update_guess(mol):
     if mol.config['json']['scf_type'] == 'rhf':
@@ -79,15 +78,6 @@ def guess(mol):
         alpha = 'computed'
         beta = 'computed'
 
-    elif guess_type == 'pyscf':
-        guess_from_pyscf(mol)
-        alpha = 'computed'
-        beta = 'computed'
-
-    elif guess_type in ('sad', 'sap'):
-        guess_from_pyscf_initial_density(mol, guess_type)
-        alpha = 'computed'
-        beta = 'computed'
 #    # molden does not have sufficient numerical accuracy
 #    elif guess_type == "molden":
 #        # Check if the molden file from the input exists

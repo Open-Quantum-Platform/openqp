@@ -21,8 +21,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
 - [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
 - **Native Fortran initial guesses** (no PySCF required at runtime, MPI-safe): `guess.type=hcore`, `huckel`, `modhuckel` (weighted Wolfsberg-Helmholz), `minao` (projected atomic minimal-basis densities), and `sap` (superposition of atomic potentials, Lehtola, JCTC 15, 1593 (2019))
-- Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
-- [MOKIT](https://github.com/1234zou/MOKIT) for adopting better initial guess from pyscf/ORCA or broader external wavefunction conversion workflows
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
   
 ### Upcoming Features
@@ -54,7 +52,7 @@ git clone https://github.com/Open-Quantum-Platform/openqp.git
 cd openqp
 pip install .
 ```
-This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
+This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. All initial guesses (`guess.type=hcore`, `huckel`, `modhuckel`, `minao`, `sap`) are native and require no external quantum-chemistry package at runtime.
 
 #### Detailed compile for developers
 
