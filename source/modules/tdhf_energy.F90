@@ -15,6 +15,7 @@ contains
   end subroutine tdhf_energy_C
 
   subroutine tdhf_energy(infos)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use io_constants, only: iw
     use oqp_tagarray_driver
     use types, only: information
@@ -254,7 +255,15 @@ contains
 !     Get perturbed vectors Q if required
       call rparesvec(scr3,abp_r,abm_l,vlo,vro,eex,xm,ndsr,errors,cnvtol,imax,tamm_dancoff)
 
-      mxerr = maxval(errors(imax+1:ndsr))
+      if (imax < ndsr) then
+        if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then
+          ierr = 4
+          exit
+        end if
+        mxerr = maxval(errors(imax+1:ndsr))
+      else
+        mxerr = 0.0_dp
+      end if
 
       call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
 
@@ -295,6 +304,14 @@ contains
     case (3)
       write(*,'(/,2x,"..something is wrong.. No vectors were added")')
       infos%mol_energy%Davidson_converged=.false.
+    case (4)
+      write(*,'(/,2X,"TD-DFT Davidson breakdown: non-finite residual",/)')
+      infos%mol_energy%Davidson_converged=.false.
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
     end select
 
     call get_td_transition_dipole(basis, dip, mo_a, vro, vlo, nstates, nocc)

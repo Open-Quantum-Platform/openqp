@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TDHF_LIB_SRC = ROOT / "source" / "tdhf_lib.F90"
 TDHF_SF_LIB_SRC = ROOT / "source" / "tdhf_sf_lib.F90"
+TDHF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_energy.F90"
 
 
 class DavidsonSolverStabilityTests(unittest.TestCase):
@@ -76,6 +77,39 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("merge(SF_DAVIDSON_DENOMINATOR_FLOOR, -SF_DAVIDSON_DENOMINATOR_FLOOR", block)
         self.assertIn("ieee_is_finite(q(ii,ist))", block)
         self.assertNotIn("if( val2<1.0D-12 )then", block)
+
+    def test_tdhf_davidson_driver_stops_before_outputs_on_nonfinite_residuals(self):
+        """TDHF Davidson driver must not print/store transition data after NaN residuals."""
+        src = TDHF_ENERGY_SRC.read_text()
+
+        self.assertIn("use, intrinsic :: ieee_arithmetic", src)
+        self.assertIn("TD-DFT Davidson breakdown: non-finite residual", src)
+
+        residual_check = re.search(
+            r"call rparesvec\(.*?call rpaprint",
+            src,
+            re.S | re.I,
+        )
+        if residual_check is None:
+            self.fail("Could not locate TDHF Davidson residual check")
+        loop_block = residual_check.group(0)
+        self.assertIn("if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then", loop_block)
+        self.assertIn("ierr = 4", loop_block)
+        self.assertLess(loop_block.index("if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then"), loop_block.index("mxerr = maxval(errors(imax+1:ndsr))"))
+
+        breakdown = src.index("case (4)")
+        first_output = min(
+            src.index("call get_td_transition_dipole"),
+            src.index("call td_print_results"),
+            src.index("call infos%dat%reserve_data(OQP_td_t"),
+        )
+        self.assertLess(breakdown, first_output)
+        guard_block = src[breakdown:first_output]
+        self.assertIn("infos%mol_energy%Davidson_converged=.false.", guard_block)
+        self.assertIn("call int2_driver%clean()", guard_block)
+        self.assertIn("if (dft) call dftclean(infos)", guard_block)
+        self.assertIn("call measure_time", guard_block)
+        self.assertRegex(guard_block, r"return\b")
 
 
 if __name__ == "__main__":
