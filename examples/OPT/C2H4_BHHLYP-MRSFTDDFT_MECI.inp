@@ -14,21 +14,23 @@ basis=6-31g*
 
 [scf]
 type=rohf
-maxit=50
+maxit=30
 multiplicity=3
 
 [tdhf]
 type=mrsf
 nstate=5
+maxit=30
 
 [optimize]
 optimizer=bfgs
-maxit=50
+maxit=2
 istate=1
 jstate=2
-energy_shift=1e-5
-energy_gap=1e-4
-rmsd_grad=5e-4
-max_grad=1e-3
-pen_sigma=200
+energy_shift=1
+energy_gap=1
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
 

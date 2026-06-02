@@ -449,8 +449,39 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
-        for n, f in enumerate(info):
-            loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
+        ir = np.asarray(getattr(mol, 'infrared_intensities', []), dtype=float)
+        raman = np.asarray(getattr(mol, 'raman_activities', []), dtype=float)
+        if ir.size == len(info) and raman.size == len(info):
+            loginfo += '   Mode       Frequency(cm-1)      IR(km/mol)        Raman(activity)\n'
+            for n, f in enumerate(info):
+                loginfo += f'   {n + 1:4d} {f:20.2f} {ir[n]:16.6f} {raman[n]:20.6f}\n'
+        else:
+            for n, f in enumerate(info):
+                loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
+
+    if section == 'freq_modes':
+        atoms, freqs, modes = info
+        atoms = np.asarray(atoms, dtype=int)
+        freqs = np.asarray(freqs, dtype=float)
+        modes = np.asarray(modes, dtype=float)
+        natom = len(atoms)
+        loginfo += """
+   Normal mode eigenvectors (Cartesian, mass-unweighted)
+   Frequencies -- values are in cm^-1; X/Y/Z columns are normal-mode components.
+"""
+        for start in range(0, len(freqs), 1):
+            stop = min(start + 1, len(freqs))
+            block = range(start, stop)
+            loginfo += '\n                 ' + ''.join(f'{mode_index + 1:>12d}' for mode_index in block) + '\n'
+            loginfo += '   Frequencies --' + ''.join(f'{freqs[mode_index]:12.4f}' for mode_index in block) + '\n'
+            loginfo += '     Atom AN      ' + ''.join(f'{axis:>12s}' for _mode_index in block for axis in ('X', 'Y', 'Z')) + '\n'
+            for atom_index, atomic_number in enumerate(atoms):
+                symbol = ELEMENTS_NAME[atomic_number] if 0 <= atomic_number < len(ELEMENTS_NAME) else str(atomic_number)
+                row = f'   {atom_index + 1:6d} {atomic_number:2d} {symbol:>2s}'
+                for mode_index in block:
+                    vec = modes[mode_index].reshape((natom, 3))[atom_index]
+                    row += ''.join(f'{component:12.8f}' for component in vec)
+                loginfo += row + '\n'
 
     if section == 'thermo':
         temp = info['temp']

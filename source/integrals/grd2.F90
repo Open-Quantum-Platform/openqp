@@ -310,10 +310,6 @@ contains
 !   Project rotational contaminant from gradients
 !   call dfinal(1)
 
-    write(iw, fmt="( &
-      &/1X,'The Coarse/fine Schwarz Screenings Skipped ',I12,'/'I12,' Blocks.' &
-      &/1X,'The Number of Gradient Integral Blocks Computed Was',I10 &
-      &)") skip1,skip2,numint
 
   end subroutine grd2_driver_gen
 

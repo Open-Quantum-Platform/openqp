@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -10,12 +11,19 @@ from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
 
 try:
-    from pyscf import gto, dft, lib
+    from pyscf import gto, scf, dft, lib
+    from pyscf.scf import cphf as pyscf_cphf
+    from pyscf.scf import ucphf as pyscf_ucphf
+    from pyscf.lib import logger as pyscf_logger
 
 except ModuleNotFoundError:
     gto = None
+    scf = None
     dft = None
     lib = None
+    pyscf_cphf = None
+    pyscf_ucphf = None
+    pyscf_logger = None
 
 pyscf_functional = {
     "pbe0": "pbe0",
@@ -301,4 +309,195 @@ def guess_from_pyscf_initial_density(mol, guess_type):
     load_pyscf_guess(mf, mol)
 
     return
+
+
+def _compact_hessian_summary(flat_hessian, max_asymmetry):
+    """Return compact Hessian metadata without embedding the matrix payload."""
+
+    return {
+        "schema_version": "analytic_hessian_validation.v1",
+        "report_type": "runtime_hessian_bridge",
+        "matrix_payload": "omitted",
+        "shape": list(flat_hessian.shape),
+        "max_asymmetry_before_symmetrization": float(max_asymmetry),
+    }
+
+
+def _flatten_pyscf_hessian(raw_hessian, return_metadata=False):
+    """Convert PySCF's (nat, nat, 3, 3) Hessian to OpenQP (3N, 3N)."""
+
+    hess4 = np.asarray(raw_hessian, dtype=float)
+    if hess4.ndim != 4 or hess4.shape[2:] != (3, 3) or hess4.shape[0] != hess4.shape[1]:
+        raise ValueError(f"Expected PySCF Hessian shape (nat, nat, 3, 3), got {hess4.shape}")
+    flat = hess4.transpose(0, 2, 1, 3).reshape(hess4.shape[0] * 3, hess4.shape[1] * 3)
+    max_asymmetry = float(np.max(np.abs(flat - flat.T))) if flat.size else 0.0
+    sym_flat = 0.5 * (flat + flat.T)
+    if return_metadata:
+        return sym_flat, _compact_hessian_summary(sym_flat, max_asymmetry)
+    return sym_flat
+
+
+def _build_pyscf_hessian_mf(mol, coord_bohr=None):
+    """Build a guarded PySCF mean-field object for HF/RHF analytic Hessians."""
+
+    if gto is None or scf is None:
+        raise NotImplementedError(
+            "PySCF is required for the external HF/RHF analytic Hessian bridge; "
+            "no numerical fallback will be used."
+        )
+    # Only disable under *real* multi-rank MPI (mol.usempi is hard-coded True even
+    # in serial runs; the actual indicator is the MPI manager's use_mpi flag).
+    mpi_mgr = getattr(mol, "mpi_manager", None)
+    if mpi_mgr is not None and getattr(mpi_mgr, "use_mpi", 0):
+        raise NotImplementedError(
+            "PySCF external analytic Hessian bridge is disabled under MPI; no numerical fallback will be used."
+        )
+
+    scf_type = mol.config.get("scf", {}).get("type", "rhf").lower()
+    if scf_type not in ("rhf", "uhf"):
+        raise NotImplementedError(
+            "PySCF external analytic Hessian bridge supports RHF and UHF, got "
+            f"scf.type={scf_type} (ROHF analytic Hessian is not available in PySCF; "
+            "no numerical fallback will be used)."
+        )
+
+    atoms = []
+    # get_system() already returns coordinates in Bohr; PySCF is built with
+    # unit='Bohr' below, so no conversion is applied (note ANGSTROM_TO_BOHR is
+    # actually the Bohr->Angstrom factor, 0.529177).
+    if coord_bohr is None:
+        coord = np.asarray(mol.get_system(), dtype=float).reshape((-1, 3))
+    else:
+        coord = np.asarray(coord_bohr, dtype=float).reshape((-1, 3))
+    for n, at in enumerate(mol.get_atoms()):
+        atoms.append([ELEMENTS_NAME[SYMBOL_MAP[int(at)]], coord[n]])
+
+    mole = gto.Mole()
+    mole.atom = atoms
+    mole.unit = 'Bohr'
+    basis = str(mol.config["input"].get("basis", "")).strip()
+    if basis.lower() == "library":
+        raise NotImplementedError(
+            "PySCF external analytic Hessian bridge does not support OpenQP basis=library "
+            "tagged basis mappings; set a PySCF-compatible global basis or use [hess] type=numerical."
+        )
+    mole.basis = basis
+    mole.charge = mol.config["input"].get("charge", 0)
+    mole.spin = mol.config["scf"].get("multiplicity", 1) - 1
+    mole.output = '%s.analytic_hess.pyscf' % mol.project_name
+    mole.verbose = 5
+    mole.build(cart=True)
+
+    functional = mol.config.get("input", {}).get("functional", "hf").lower()
+    is_hf = functional in {"", "hf"}
+    if not is_hf and dft is None:
+        raise NotImplementedError(
+            "PySCF DFT support is required for external DFT analytic Hessians; no numerical fallback will be used."
+        )
+    if scf_type == "rhf":
+        mf = scf.RHF(mole) if is_hf else dft.RKS(mole)
+    else:  # uhf
+        mf = scf.UHF(mole) if is_hf else dft.UKS(mole)
+    if not is_hf:
+        mf.xc = pyscf_functional.get(functional, functional)
+
+    try:
+        os.environ["PYSCF_MAX_MEMORY"]
+    except KeyError:
+        mf.max_memory = 1000
+    try:
+        os.environ["OMP_NUM_THREADS"]
+    except KeyError:
+        lib.num_threads(1)
+    return mf
+
+
+def _enable_pyscf_cphf_iteration_logging(mf):
+    """Make PySCF Hessian CPHF/UCPHF Krylov iterations visible in the backend log."""
+
+    logger_mod = pyscf_logger
+    if logger_mod is None:
+        return []
+    patches = []
+    cphf_log = logger_mod.Logger(getattr(mf, "stdout", sys.stdout), logger_mod.DEBUG)
+
+    def _patch_solver(module, label):
+        if module is None or not hasattr(module, "solve"):
+            return
+        original_solve = module.solve
+
+        def logged_solve(*args, **kwargs):
+            kwargs.setdefault("verbose", cphf_log)
+            max_cycle = kwargs.get("max_cycle", 50)
+            tol = kwargs.get("tol", 1e-9)
+            cphf_log.info("PyOQP: %s solver iterations begin; max_cycle=%s tol=%s", label, max_cycle, tol)
+            t0 = (logger_mod.process_clock(), logger_mod.perf_counter())
+            try:
+                return original_solve(*args, **kwargs)
+            finally:
+                cphf_log.timer(f"PyOQP: {label} solver total", *t0)
+
+        module.solve = logged_solve
+        patches.append((module, original_solve))
+
+    _patch_solver(pyscf_cphf, "CPHF")
+    _patch_solver(pyscf_ucphf, "UCPHF")
+    return patches
+
+
+def analytic_hessian_from_pyscf(mol, mf_factory=None):
+    """Return a conservative PySCF-backed analytic Hessian for HF/DFT only.
+
+    This is a dispatch scaffold, not TDDFT/SF/MRSF support. Unsupported
+    response-theory methods raise NotImplementedError explicitly so callers do
+    not silently fall back to numerical Hessians.
+    """
+
+    method = mol.config.get("input", {}).get("method", "hf").lower()
+    td_type = mol.config.get("tdhf", {}).get("type", "rpa").lower()
+    if method == "tdhf":
+        if td_type == "mrsf":
+            raise NotImplementedError("MRSF-TDDFT analytic Hessian is not implemented")
+        if td_type in {"sf", "umrsf"}:
+            raise NotImplementedError(f"{td_type.upper()} analytic Hessian is not implemented")
+        raise NotImplementedError(f"TDHF/TDDFT analytic Hessian is not implemented for tdhf.type={td_type}")
+    if method != "hf":
+        raise NotImplementedError(f"Analytic Hessian is not implemented for method={method}")
+
+    if mf_factory is None:
+        mf_factory = _build_pyscf_hessian_mf
+    mf = mf_factory(mol)
+    scf_wall_start = time.perf_counter()
+    scf_cpu_start = time.process_time()
+    mf.kernel()
+    scf_wall_seconds = time.perf_counter() - scf_wall_start
+    scf_cpu_seconds = time.process_time() - scf_cpu_start
+    hess_obj = mf.Hessian()
+    hess_obj.verbose = max(getattr(hess_obj, "verbose", 0), 5)
+    hess_wall_start = time.perf_counter()
+    hess_cpu_start = time.process_time()
+    cphf_patches = _enable_pyscf_cphf_iteration_logging(mf)
+    try:
+        hessian, compact_summary = _flatten_pyscf_hessian(hess_obj.kernel(), return_metadata=True)
+    finally:
+        for module, original_solve in cphf_patches:
+            module.solve = original_solve
+    hess_wall_seconds = time.perf_counter() - hess_wall_start
+    hess_cpu_seconds = time.process_time() - hess_cpu_start
+    metadata = {
+        "backend": "external_pyscf",
+        "native_openqp_kernel": False,
+        "no_numerical_fallback": True,
+        "shape": list(hessian.shape),
+        "max_asymmetry_before_symmetrization": compact_summary["max_asymmetry_before_symmetrization"],
+        "timing_seconds": {
+            "pyscf_scf_wall": scf_wall_seconds,
+            "pyscf_scf_cpu": scf_cpu_seconds,
+            "pyscf_hessian_wall": hess_wall_seconds,
+            "pyscf_hessian_cpu": hess_cpu_seconds,
+        },
+        "compact_validation_summary": compact_summary,
+    }
+    setattr(mol, "hessian_metadata", metadata)
+    return hessian, ["computed", "external_pyscf"]
 

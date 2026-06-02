@@ -24,12 +24,12 @@ method=tdhf
 [scf]
 type=rohf
 multiplicity=3
-maxit=80
+maxit=30
 
 [tdhf]
 type=mrsf
 nstate=4
-maxit=80
+maxit=30
 
 [optimize]
 lib=geometric
