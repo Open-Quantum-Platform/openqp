@@ -6,14 +6,14 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 | Area | What OpenQP can do now | Notes |
 | --- | --- | --- |
-| Electronic structure | HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations | MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis. |
-| Derivative properties | Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic Hessians | Native CPHF/CPKS response, integral-derivative kernels, and final Hessian assembly are implemented for supported closed-shell HF/DFT paths. |
-| Vibrational analysis | Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly | IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels. |
-| Nonadiabatic dynamics data | MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows | NAC support uses the TLF-based MRSF-TDDFT machinery. |
-| Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy and geomeTRIC backends are available depending on the requested job. |
-| Initial guesses and SCF stability | Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization | MOKIT is optional and mainly useful for broader external wavefunction conversion. |
-| Integrations | LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView | External viewers and workflow integrations are available around the native OpenQP electronic-structure engines. |
-| Performance and deployment | OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images | MPI requires an MPI implementation such as OpenMPI. |
+| Electronic structure | <small>HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations</small> | <small>MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis.</small> |
+| Derivative properties | <small>Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic Hessians</small> | <small>Native CPHF/CPKS response, integral-derivative kernels, and final Hessian assembly are implemented for supported closed-shell HF/DFT paths.</small> |
+| Vibrational analysis | <small>Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly</small> | <small>IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels.</small> |
+| Nonadiabatic dynamics data | <small>MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows</small> | <small>NAC support uses the TLF-based MRSF-TDDFT machinery.</small> |
+| Geometry/path optimization | <small>Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows</small> | <small>SciPy and geomeTRIC backends are available depending on the requested job.</small> |
+| Initial guesses and SCF stability | <small>Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization</small> | <small>MOKIT is optional and mainly useful for broader external wavefunction conversion.</small> |
+| Integrations | <small>LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView</small> | <small>External viewers and workflow integrations are available around the native OpenQP electronic-structure engines.</small> |
+| Performance and deployment | <small>OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images</small> | <small>MPI requires an MPI implementation such as OpenMPI.</small> |
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
