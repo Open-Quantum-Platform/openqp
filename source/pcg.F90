@@ -2,6 +2,7 @@ module pcg_mod
 
   use precision, only: dp
   use iso_c_binding, only: c_ptr, c_loc, c_null_ptr, c_f_pointer
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
 
@@ -12,6 +13,7 @@ module pcg_mod
   public PCG_OK
   public PCG_NOT_INITIALIZED
   public PCG_BAD_ARGUMENT
+  public PCG_BREAKDOWN
   public pcg_matvec
   public pcg_t
   public pcg_optimize
@@ -22,6 +24,8 @@ module pcg_mod
   integer, parameter :: PCG_OK              = 0
   integer, parameter :: PCG_NOT_INITIALIZED = 1
   integer, parameter :: PCG_BAD_ARGUMENT    = 2
+  integer, parameter :: PCG_BREAKDOWN       = 3
+  real(kind=dp), parameter :: PCG_DENOMINATOR_FLOOR = 1.0d-24
 
   integer, parameter :: msglen = 32
 
@@ -32,6 +36,7 @@ module pcg_mod
       , "PCG_OK" &
       , "PCG_NOT_INITIALIZED" &
       , "PCG_BAD_ARGUMENT" &
+      , "PCG_BREAKDOWN" &
     ]
 
   interface
@@ -153,7 +158,7 @@ contains
     implicit none
     class(pcg_t), intent(inout) :: this
 
-    real(kind=dp) :: rz, alpha, beta
+    real(kind=dp) :: rz, rz_new, pap, alpha, beta
 
     if (.not.this%initialized) then
       this%error = PCG_NOT_INITIALIZED
@@ -167,12 +172,27 @@ contains
       call this%update(Ap, p, this%dat)
 
       rz = dot_product(r, y)
-      alpha = rz / dot_product(p, Ap)
+      pap = dot_product(p, Ap)
+      if (.not. pcg_safe_positive_denominator(pap) .or. &
+          .not. pcg_safe_positive_denominator(rz)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
+      alpha = rz / pap
+      if (.not. ieee_is_finite(alpha)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       x(:) = x(:) + alpha*p(:)
       r(:) = r(:) - alpha*Ap(:)
 
       error = norm2(r)
+      if (.not. ieee_is_finite(error)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       if (error<this%tol) then
         this%errcode = PCG_CONVERGED
@@ -180,12 +200,33 @@ contains
       end if
 
       call this%precond(y, r, this%dat)
-      beta = dot_product(r, y) / rz
+      rz_new = dot_product(r, y)
+      if (.not. pcg_safe_positive_denominator(rz_new) .or. &
+          .not. ieee_is_finite(rz_new)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+      beta = rz_new / rz
+      if (.not. ieee_is_finite(beta)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       p(:) = y(:) + beta*p(:)
 
     end associate
 
   end subroutine
+
+!#################################################################
+
+  logical function pcg_safe_positive_denominator(value)
+    implicit none
+    real(kind=dp), intent(in) :: value
+
+    pcg_safe_positive_denominator = ieee_is_finite(value) .and. &
+      abs(value) >= PCG_DENOMINATOR_FLOOR
+
+  end function pcg_safe_positive_denominator
 
 !#################################################################
 

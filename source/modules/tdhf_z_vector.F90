@@ -8,10 +8,12 @@ module tdhf_z_vector_mod
     int2_fock_data_t, int2_tdgrd_data_t
   use mod_dft_molgrid, only: dft_grid_t
   use oqp_linalg
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_z_vector_mod"
+  real(kind=dp), parameter :: ZVEC_PRECOND_FLOOR = 1.0d-12
 
   private
   public tdhf_z_vector_C
@@ -234,7 +236,7 @@ contains
         pxm(j,i) = mo_energy_a(nocc+i) - mo_energy_a(j)
       end do
     end do
-    xminv = 1.0d0/xm
+    call sanitize_zvector_preconditioner(xm, xminv, iw)
 
     cgdata = tdhf_cg_data( &
         infos=infos, int2_driver=int2_driver, &
@@ -266,6 +268,13 @@ contains
                &/6x,"Z-Vector converged"&
                &/3x,24("-")/)')
       infos%mol_energy%Z_Vector_converged=.true.
+    case (PCG_BREAKDOWN)
+      write(iw,'(/3x,24("-")&
+               &/6x,"Z-Vector PCG breakdown"&
+               &/3x,24("-")/)')
+      write(iw,'(" PCG stopped on a non-finite or near-zero denominator; ",&
+               &"final residual = ",1p,e13.6)') pcg%error
+      infos%mol_energy%Z_Vector_converged=.false.
     case default
       write(iw,'(/3x,24("-")&
                &/6x,"Z-Vector not converged"&
@@ -362,6 +371,40 @@ contains
     close(iw)
 
   end subroutine oqp_tdhf_z_vector
+
+!###############################################################################
+
+!> @brief Build a finite diagonal preconditioner for the Z-vector PCG solve.
+  subroutine sanitize_zvector_preconditioner(xm, xminv, log_unit)
+    implicit none
+    real(kind=dp), intent(in) :: xm(:)
+    real(kind=dp), intent(out) :: xminv(:)
+    integer, intent(in) :: log_unit
+
+    integer :: idx, regularized
+    real(kind=dp) :: denom
+
+    regularized = 0
+    do idx = 1, size(xm)
+      denom = xm(idx)
+      if (.not. ieee_is_finite(denom)) then
+        denom = ZVEC_PRECOND_FLOOR
+        regularized = regularized + 1
+      else if (abs(denom) < ZVEC_PRECOND_FLOOR) then
+        denom = sign(ZVEC_PRECOND_FLOOR, denom)
+        regularized = regularized + 1
+      end if
+      xminv(idx) = 1.0_dp / denom
+    end do
+
+    if (regularized > 0) then
+      write(log_unit,'(" Z-vector preconditioner regularized ",I0," denominators ",&
+                      &"below ",1p,e10.3)') &
+        regularized, ZVEC_PRECOND_FLOOR
+      call flush(log_unit)
+    end if
+
+  end subroutine sanitize_zvector_preconditioner
 
 !###############################################################################
 
