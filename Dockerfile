@@ -28,7 +28,7 @@ ENV PATH="/opt/cmake/bin:$PATH"
 # checked out the branch/PR being tested, so do not clone main again here.
 COPY . /opt/openqp
 WORKDIR /opt/openqp
-RUN cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF
+RUN cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 RUN ninja -C build install
 RUN cd pyoqp && pip3 install .
 

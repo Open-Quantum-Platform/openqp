@@ -357,26 +357,6 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
         )
 
-    if section == 'dlf-ci':
-        loginfo += """
-   PyOQP follow state:                 %14s %14s
-   PyOQP meci search algorithm:        dl-find/ci
-   PyOQP energy shift:                 %14.6f %14.6f %s
-   PyOQP energy gap:                   %14.6f %14.6f %s
-   PyOQP rmsd step:                    %14.6f %14.6f %s
-   PyOQP max step:                     %14.6f %14.6f %s
-   PyOQP rmsd grad:                    %14.6f %14.6f %s
-   PyOQP max grad:                     %14.6f %14.6f %s
-
-""" % (
-            info['istate'], info['jstate'],
-            info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
-            info['gap'], info['energy_gap'], info['gap'] <= info['energy_gap'],
-            info['rmsd_step'], info['target_rmsd_step'], info['rmsd_step'] <= info['target_rmsd_step'],
-            info['max_step'], info['target_max_step'], info['max_step'] <= info['target_max_step'],
-            info['rmsd_grad'], info['target_rmsd_grad'], info['rmsd_grad'] <= info['target_rmsd_grad'],
-            info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
-        )
     if section == 'mep':
         loginfo += """
    PyOQP MEP follow state:             %14s
@@ -387,22 +367,6 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP MEP energy shift:             %14.6f
    
 """ % (info['istate'], info['itr'], info['status'], info['radius'], info['energy'], info['de'])
-
-    if section == 'dlf':
-        icoord = mol.config['dlfind']['icoord']
-        iopt = mol.config['dlfind']['iopt']
-        ims = mol.config['dlfind']['ims']
-
-        loginfo += """
-   PyOQP dl-find coordinates           %3s %14s
-   PyOQP dl-find method                %3s %14s
-   PyOQP dl-find multistate            %3s %14s
-        
-""" % (
-            icoord, DL_FIND_PARAMS['icoord'][icoord],
-            iopt, DL_FIND_PARAMS['iopt'][iopt],
-            ims, DL_FIND_PARAMS['ims'][ims],
-        )
 
     if section == 'num_nacv':
         ndim, dx, restart, jobs, nproc, threads = info
@@ -913,33 +877,3 @@ def write_config(config):
         input_file += '\n'
 
     return input_file, input_dict
-
-
-DL_FIND_PARAMS = {
-    'icoord': {
-        0: 'cartesian',
-        1: 'internal-1',
-        2: 'internal-2',
-        3: 'internal-3',
-        4: 'internal-4',
-        10: 'cartesian/ci',
-        11: 'internal-1/ci',
-        22: 'internal-2/ci',
-        33: 'internal-3/ci',
-        44: 'internal-4/ci',
-    },
-    'iopt': {
-        0: 'steepest',
-        1: 'cg/auto',
-        2: 'cg/10',
-        3: 'l-bfgs',
-        9: 'p-rfo/ts',
-    },
-    'ims': {
-        0: 'single',
-        1: 'penalty/ci',
-        2: 'projection/ci',
-        3: 'lagrange-newton/ci',
-    }
-
-}

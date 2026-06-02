@@ -163,6 +163,7 @@ class SinglePoint(Calculator):
         super().__init__(mol)
         self.mol = mol
         self.method = mol.config['input']['method']
+        self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
         self.library = mol.config['input']['library']
@@ -187,6 +188,8 @@ class SinglePoint(Calculator):
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
             'umrsf': oqp.tdhf_umrsf_energy,
+            'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
+            'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
         }
 
         # initialize state sign
@@ -443,8 +446,22 @@ class SinglePoint(Calculator):
         self.energy_func['hf'](self.mol)
 
     def tddft(self):
+        if self.runtype == 'ekt':
+            if self.td != 'mrsf':
+                raise ValueError('EKT runtype only supports MRSF-TDDFT: set [tdhf] type=mrsf')
+            ekt_ip = self.mol.config['ekt']['ip']
+            ekt_ea = self.mol.config['ekt']['ea']
+            if not ekt_ip and not ekt_ea:
+                raise ValueError('EKT runtype requires [ekt] ip=True and/or ea=True')
+            dump_log(self.mol, title='PyOQP: MRSF-EKT steps', section='tdhf')
+            if ekt_ip:
+                self.energy_func['mrsf_ekt_ip'](self.mol)
+            if ekt_ea:
+                self.energy_func['mrsf_ekt_ea'](self.mol)
+            return
+
         # check td type
-        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf']:
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 
         # do TDDFT
