@@ -150,6 +150,8 @@ contains
     real(kind=dp), allocatable :: Ax(:)      ! A*x
     
     real(kind=dp) :: beta, h_ij, temp, error, error_initial, true_residual
+    real(kind=dp) :: max_abs_overlap
+    real(kind=dp), parameter :: gmres_reorth_threshold = 1.0d-10
     integer :: i, j, k, iter, m, restart_count, inner_iter
     logical :: converged, unstable, happy_breakdown
     
@@ -348,19 +350,35 @@ contains
           exit
         end if
         
-        ! Reorthogonalization for numerical stability
+        ! Reorthogonalize only when residual overlap drift is measurable.
+        max_abs_overlap = 0.0_dp
         do i = 1, j
           temp = dot_product(V(:,j+1), V(:,i))
-          H(i,j) = H(i,j) + temp
-          if (.not. ieee_is_finite(temp) .or. .not. ieee_is_finite(H(i,j))) then
+          if (.not. ieee_is_finite(temp)) then
             unstable = .true.
             exit
           end if
-          V(:,j+1) = V(:,j+1) - temp * V(:,i)
+          max_abs_overlap = max(max_abs_overlap, abs(temp))
         end do
         if (unstable) then
-          write(iw,'(" GMRES: non-finite H entry during re-orthogonalization")')
+          write(iw,'(" GMRES: non-finite overlap during re-orthogonalization check")')
           exit
+        end if
+        if (max_abs_overlap > gmres_reorth_threshold) then
+          ! GMRES MGS reorthogonalization pass
+          do i = 1, j
+            temp = dot_product(V(:,j+1), V(:,i))
+            H(i,j) = H(i,j) + temp
+            if (.not. ieee_is_finite(temp) .or. .not. ieee_is_finite(H(i,j))) then
+              unstable = .true.
+              exit
+            end if
+            V(:,j+1) = V(:,j+1) - temp * V(:,i)
+          end do
+          if (unstable) then
+            write(iw,'(" GMRES: non-finite H entry during re-orthogonalization")')
+            exit
+          end if
         end if
         
         H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))

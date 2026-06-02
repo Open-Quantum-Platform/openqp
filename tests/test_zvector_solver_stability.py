@@ -225,6 +225,24 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         happy_block = block[breakdown:solution_update]
         self.assertRegex(happy_block, r"exit\b")
 
+    def test_mrsf_gmres_reorthogonalizes_only_when_overlap_drift_exceeds_threshold(self):
+        """GMRES should avoid unconditional second MGS passes but reorthogonalize drifted vectors."""
+        src = MRSF_ZVEC_SRC.read_text()
+        solve = re.search(r"subroutine gmres_solve\(.*?end subroutine gmres_solve", src, re.S | re.I)
+        if solve is None:
+            self.fail("Could not locate MRSF gmres_solve implementation")
+        block = solve.group(0)
+
+        self.assertIn("gmres_reorth_threshold", block)
+        self.assertIn("max_abs_overlap", block)
+        self.assertRegex(block, r"max_abs_overlap\s*=\s*max\(max_abs_overlap,\s*abs\(temp\)\)")
+        self.assertIn("if (max_abs_overlap > gmres_reorth_threshold) then", block)
+        reorth = block[block.index("if (max_abs_overlap > gmres_reorth_threshold) then"):]
+        self.assertIn("! GMRES MGS reorthogonalization pass", reorth)
+        self.assertIn("H(i,j) = H(i,j) + temp", reorth)
+        self.assertIn("V(:,j+1) = V(:,j+1) - temp * V(:,i)", reorth)
+        self.assertIn("if (.not. ieee_is_finite(temp) .or. .not. ieee_is_finite(H(i,j)))", reorth)
+
     def test_tdhf_davidson_basis_append_reorthogonalizes_when_overlap_drifts(self):
         """TDHF Davidson basis expansion should reorthogonalize vectors with residual overlap drift."""
         src = TDHF_LIB_SRC.read_text()
