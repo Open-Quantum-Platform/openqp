@@ -182,32 +182,6 @@ contains
             call int2_rys_compute_ordered_am(eri0, gdat, int2_driver%ppairs, ids, am0, zero_shq)
             if (zero_shq) cycle
             p0(1:nl,1:nk,1:nj,1:ni) => eri0(1:nl*nk*nj*ni)
-            do axis = 1, 3
-              amr = am0
-              amr(1) = amr(1) + 1
-              erir = 0.0_dp
-              call int2_rys_compute_ordered_am(erir, gdat, int2_driver%ppairs, ids, amr, zero_shq)
-              if (zero_shq) cycle
-              pr(1:nl,1:nk,1:nj,1:num_cart_bf(amr(1))) => erir(1:nl*nk*nj*num_cart_bf(amr(1)))
-              do ii = 1, ni
-                mapr = raised_cart_index(ii, am0(1), axis)
-                mu = basis%ao_offset(si) + ii - 1
-                do jj = 1, nj
-                  nu = basis%ao_offset(sj) + jj - 1
-                  do kk = 1, nk
-                    kap = basis%ao_offset(sk) + kk - 1
-                    do ll = 1, nl
-                      lam = basis%ao_offset(sl) + ll - 1
-                      norm4 = basis%bfnrm(mu)*basis%bfnrm(nu)*basis%bfnrm(kap)*basis%bfnrm(lam)
-                      base_val = p0(ll,kk,jj,ii)
-                      raised_val = pr(ll,kk,jj,mapr)
-                      d(axis) = (raised_val + basis%shell_centers(si,axis)*base_val) * norm4
-                    end do
-                  end do
-                end do
-              end do
-              nullify(pr)
-            end do
             do ii = 1, ni
               mu = basis%ao_offset(si) + ii - 1
               do jj = 1, nj
