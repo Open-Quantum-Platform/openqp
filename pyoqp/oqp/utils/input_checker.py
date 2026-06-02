@@ -13,6 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data",
+    "ekt",
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
