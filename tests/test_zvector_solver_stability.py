@@ -277,6 +277,24 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(b(i)))", block)
         self.assertNotIn("rhs = b(i)\n        if (.not. ieee_is_finite(rhs))", block)
 
+    def test_mrsf_operator_rejects_nonfinite_input_before_expensive_response_work(self):
+        """MRSF GMRES operator applications must fail closed before integral/DFT work on NaN vectors."""
+        src = MRSF_ZVEC_SRC.read_text()
+        self.assertIn("ieee_value", src)
+        self.assertIn("ieee_quiet_nan", src)
+        operator = re.search(
+            r"subroutine\s+apply_z_operator\(.*?end subroutine apply_z_operator",
+            src,
+            re.S | re.I,
+        )
+        if operator is None:
+            self.fail("Could not locate MRSF z-vector operator helper")
+        block = operator.group(0)
+        self.assertIn("if (any(.not. ieee_is_finite(x_in))) then", block)
+        self.assertIn("x_out = ieee_value(0.0_dp, ieee_quiet_nan)", block)
+        self.assertIn("MRSF z-vector operator rejected non-finite input", block)
+        self.assertLess(block.index("if (any(.not. ieee_is_finite(x_in)))"), block.index("allocate(int2_data)"))
+
     def test_mrsf_zvector_preconditioner_sanitizes_nonfinite_values_before_solver_choice(self):
         """MRSF z-vector CG/GMRES must not seed either solver with NaN/Inf preconditioners."""
         src = MRSF_ZVEC_SRC.read_text()

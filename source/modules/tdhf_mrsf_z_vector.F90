@@ -1,7 +1,7 @@
 module tdhf_mrsf_z_vector_mod
 
   use precision, only: dp
-  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
@@ -669,6 +669,12 @@ contains
     
     nvira = nbf - nocca
     nvirb = nbf - noccb
+
+    if (any(.not. ieee_is_finite(x_in))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      write(*,'(" MRSF z-vector operator rejected non-finite input")')
+      return
+    end if
     
     ! Ensure work arrays are initialized and have correct dimensions
     if (.not. gmres_work_allocated .or. &
