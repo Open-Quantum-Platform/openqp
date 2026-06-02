@@ -300,7 +300,6 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         src = MRSF_ZVEC_SRC.read_text()
         self.assertIn("sanitize_mrsf_zvector_preconditioner", src)
         self.assertRegex(src, r"(?s)call\s+sfromcal\(xm,\s*xminv,.*?call\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
-
         helper = re.search(
             r"subroutine\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*log_unit\).*?end subroutine",
             src,
@@ -312,6 +311,22 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(denom) .or. abs(denom) < MRSF_ZVEC_DENOMINATOR_FLOOR)", block)
         self.assertIn("xminv(i) = 1.0_dp / denom", block)
         self.assertIn("if (regularized > 0) then", block)
+
+    def test_mrsf_zvector_preconditioner_application_fails_closed_on_stale_nonfinite_inputs(self):
+        """The shared MRSF preconditioner helper must not multiply stale NaN/Inf inputs into a solver step."""
+        src = MRSF_ZVEC_SRC.read_text()
+        helper = re.search(
+            r"subroutine\s+apply_z_precond\(x_in,\s*x_out,\s*xminv\).*?end subroutine apply_z_precond",
+            src,
+            re.S | re.I,
+        )
+        if helper is None:
+            self.fail("Missing MRSF apply_z_precond helper")
+        block = helper.group(0)
+        self.assertIn("if (any(.not. ieee_is_finite(x_in)) .or. any(.not. ieee_is_finite(xminv)))", block)
+        self.assertIn("x_out = ieee_value(0.0_dp, ieee_quiet_nan)", block)
+        self.assertRegex(block, r"return\b")
+        self.assertLess(block.index("ieee_is_finite(x_in)"), block.index("x_out = xminv * x_in"))
 
     def test_mrsf_operator_rejects_nonfinite_response_before_mo_transform(self):
         """MRSF operator must not transform/use NaN integral or XC response blocks."""

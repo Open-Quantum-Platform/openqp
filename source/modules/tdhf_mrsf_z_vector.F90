@@ -790,9 +790,14 @@ contains
     implicit none
     real(kind=dp), intent(in) :: x_in(:), xminv(:)
     real(kind=dp), intent(out) :: x_out(:)
-    
+
+    if (any(.not. ieee_is_finite(x_in)) .or. any(.not. ieee_is_finite(xminv))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      return
+    end if
+
     x_out = xminv * x_in
-    
+
   end subroutine apply_z_precond
 
   subroutine tdhf_mrsf_z_vector_C(c_handle) bind(C, name="tdhf_mrsf_z_vector")
