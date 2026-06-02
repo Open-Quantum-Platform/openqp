@@ -1355,6 +1355,12 @@ contains
                    nocca, noccb)
 
       call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+      if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
+          any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
+        write(iw,'(" MRSF CG Z-Vector breakdown: non-finite initial PCG state")')
+        mrsf_zvector_breakdown = .true.
+        error = huge(1.0_dp)
+      end if
 
       write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
       call flush(iw)
@@ -1458,6 +1464,12 @@ contains
         if (error<cnvtol) exit
 
         call pcgb(pk, errv, xminv)
+        if (any(.not. ieee_is_finite(pk))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite search direction after preconditioner")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
       end do
       

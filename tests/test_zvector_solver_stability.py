@@ -332,6 +332,18 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk)))", block)
         self.assertIn("if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv)))", block)
         self.assertIn("if (.not. ieee_is_finite(error))", block)
+        self.assertRegex(
+            src,
+            r"(?s)call\s+pcgrbpini\(errv,\s*pk,\s*error,\s*rhs,\s*xminv,\s*lhs\).*?"
+            r"if\s*\(\.not\.\s*ieee_is_finite\(error\).*?any\(\.not\.\s*ieee_is_finite\(errv\)\).*?"
+            r"any\(\.not\.\s*ieee_is_finite\(pk\)\).*?any\(\.not\.\s*ieee_is_finite\(lhs\)\)",
+            "MRSF default CG must reject non-finite initial PCG state before iterations.",
+        )
+        self.assertRegex(
+            block,
+            r"(?s)call\s+pcgb\(pk,\s*errv,\s*xminv\).*?if\s*\(any\(\.not\.\s*ieee_is_finite\(pk\)\)\)",
+            "MRSF default CG must reject a non-finite search direction after pcgb.",
+        )
 
         breakdown = src.index("if (mrsf_zvector_breakdown) then")
         first_solution_use = min(src.index("call sfropcal"), src.index("call mrsfqropcal"))
