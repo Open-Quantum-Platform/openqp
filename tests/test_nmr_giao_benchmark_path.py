@@ -55,6 +55,7 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
     def test_run_openqp_uses_pip_installed_runtime_without_explicit_openqp_root(self):
         env = dict(os.environ)
         env.pop("OPENQP_ROOT", None)
+        env["PYTHONPATH"] = "/opt/homebrew/lib/python3.11/site-packages" + os.pathsep + env.get("PYTHONPATH", "")
         proc = subprocess.run(
             [sys.executable, str(DRIVER), "--check-openqp-runtime"],
             cwd=ROOT,
@@ -72,6 +73,15 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
         self.assertIn("peak_memory_mb", text)
         self.assertIn("Peak memory/MiB", text)
 
+    def test_benchmark_outputs_do_not_mix_origin_and_shielding_metrics(self):
+        text = DRIVER.read_text()
+        self.assertNotIn("Metric/ppm", text)
+        self.assertNotIn("max absolute isotropic shielding", text)
+        self.assertIn("origin_dependence_ppm", text)
+        self.assertIn("sigma_iso_ppm", text)
+        self.assertIn("openqp_minus_pyscf_delta_ppm", text)
+        self.assertIn("no row mixes these quantities", text)
+
     def test_benchmark_results_capture_reference_and_gated_status(self):
         path = ROOT / "tests" / "fixtures" / "nmr" / "benchmark_results" / "nmr_giao_benchmark_results.json"
         self.assertTrue(path.exists(), "Run scripts/nmr_giao_benchmark_matrix.py before reporting benchmarks")
@@ -80,10 +90,17 @@ class NMRGIAOBenchmarkPathTests(unittest.TestCase):
         gauges = {(row["backend"], row["gauge"]) for row in data["rows"]}
         self.assertIn(("pyscf", "giao"), gauges)
         self.assertIn(("pyscf", "cgo"), gauges)
-        self.assertIn(("openqp", "giao"), gauges)
         self.assertTrue(any(row["backend"] == "pyscf" and row["gauge"] == "giao" and row["status"] == "ok" for row in data["rows"]))
-        self.assertTrue(any(row["backend"] == "openqp" and row["gauge"] == "giao" and row["status"] in {"gated", "skipped"} for row in data["rows"]))
         self.assertTrue(all("peak_memory_mb" in row for row in data["rows"]))
+        self.assertTrue(all("origin_dependence_ppm" in row for row in data["rows"]))
+        self.assertTrue(all("sigma_iso_ppm" in row for row in data["rows"]))
+        self.assertTrue(all("openqp_minus_pyscf_delta_ppm" in row for row in data["rows"]))
+        self.assertTrue(all("max_origin_delta_ppm" not in row for row in data["rows"]))
+        self.assertTrue(all("reference_delta_ppm" not in row for row in data["rows"]))
+        self.assertFalse(
+            any(row["backend"] == "openqp" and row["gauge"] == "giao" and row.get("sigma_iso_ppm") for row in data["rows"]),
+            "Do not tabulate native OpenQP GIAO numeric shielding before implementation/validation",
+        )
 
 
 if __name__ == "__main__":

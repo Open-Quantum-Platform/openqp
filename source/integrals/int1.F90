@@ -23,6 +23,8 @@ module int1
         comp_lz_int1_prim, &
         comp_amom_int1_prim, &
         comp_giao_overlap_deriv_prim, &
+        comp_giao_h10_core_prim, &
+        comp_giao_h10_terms_prim, &
         comp_nmr_dia_int1_prim, &
         comp_pso_int1_prim, &
         MAX_EL_MOM, &
@@ -52,6 +54,8 @@ module int1
     public multipole_integrals
     public angular_momentum_integrals
     public giao_overlap_derivative
+    public giao_h10_core
+    public giao_h10_core_terms_full
     public nmr_dia_shielding
     public pso_integrals
     public electrostatic_potential
@@ -393,6 +397,59 @@ contains
     if (dbug) then
        do i = 1, 3
          write(iw,*) 'GIAO overlap derivative integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute the one-electron part of the RHF GIAO h10 magnetic derivative.
+!> @details Returns packed lower-triangular real coefficients of the imaginary
+!>  first-order GIAO core-Hamiltonian derivative for x/y/z magnetic-field
+!>  components.  This routine intentionally contains only h10 one-electron
+!>  kinetic+nuclear-attraction terms; it does not include the GIAO two-electron
+!>  Fock derivative, CPHF/CPKS response, shielding assembly, or GIAO ungating.
+ subroutine giao_h10_core(basis, coord, zq, ints, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Hx', 'Hy', 'Hz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for GIAO h10 core derivative integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call giao_h10_core_ints(ints, basis, coord, zq, size(zq), tol)
+
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'GIAO h10 core derivative integrals ('//trim(labels(i))//'), lower triangle'
          call print_sym_labeled(ints(:,i),nbf,basis)
        end do
     end if
@@ -1672,6 +1729,164 @@ contains
 
     do ig = 1, cntp%numpairs
         call comp_giao_overlap_deriv_prim(cntp, ig, blk)
+    end do
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute one-electron GIAO h10 core derivative integrals.
+ SUBROUTINE giao_h10_core_ints(ints, basis, coord, zq, nat, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis,ii)
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+            CALL shj%fetch_by_id(basis,jj)
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            blk = 0.0d0
+            CALL int1_giao_h10_core(cntp, coord, zq, nat, blk)
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of one-electron GIAO h10 derivative integrals.
+!> @details Matches the one-electron PySCF/libcint convention
+!>  h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin;
+!>  the two-electron GIAO magnetic Fock derivative is intentionally absent here.
+ SUBROUTINE int1_giao_h10_core(cntp, coord, zq, nat, blk)
+!dir$ attributes inline :: int1_giao_h10_core
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+    real(real64), dimension(BLOCKSIZE,3) :: amom_blk
+!dir$ assume_aligned blk : 64
+!dir$ assume_aligned amom_blk : 64
+
+    amom_blk = 0.0_real64
+    do ig = 1, cntp%numpairs
+        call comp_giao_h10_core_prim(cntp, ig, coord, zq, nat, blk)
+        call comp_amom_int1_prim(cntp, ig, cntp%rj, amom_blk)
+    end do
+    ! libcint/PySCF int1e_giao_irjxp is the negative transpose of the
+    ! angular-momentum block returned by comp_amom_int1_prim for the current
+    ! (bra=shi, ket=shj) shell-pair convention.  The packed lower-triangle
+    ! h10 contribution is therefore -0.5*irjxp = +0.5*amom_blk.
+    blk = blk + 0.5_real64*amom_blk
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Diagnostic full AO matrices for current native GIAO h10 term construction.
+ SUBROUTINE giao_h10_core_terms_full(basis, coord, zq, nat, ints, tol)
+
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: ints(:,:,:,:)
+    TYPE(basis_set), INTENT(IN) :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    REAL(REAL64), INTENT(IN) :: tol
+
+    INTEGER :: ii, jj, m, t, p, q, nbf
+    REAL(REAL64) :: tmp
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3,8) :: blk
+!dir$ attributes align : 64 :: blk
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    nbf = basis%nbf
+    ints = 0.0_real64
+
+!$omp parallel &
+!$omp   private(ii, jj, m, t, p, q, tmp, blk, shi, shj, cntp)
+    CALL cntp%alloc(basis)
+!$omp do schedule(dynamic)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis,ii)
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis,jj)
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            blk = 0.0_real64
+            CALL int1_giao_h10_terms(cntp, coord, zq, nat, blk)
+            do t = 1, 8
+              do m = 1, 3
+                CALL update_rectangular_matrix(shi, shj, blk(:,m,t), ints(:,:,m,t))
+              end do
+            end do
+        END DO
+    END DO
+!$omp end do
+!$omp end parallel
+
+    do t = 1, 8
+      do m = 1, 3
+        do q = 1, nbf
+          do p = 1, nbf
+            ints(p,q,m,t) = ints(p,q,m,t)*basis%bfnrm(p)*basis%bfnrm(q)
+          end do
+        end do
+        ! update_rectangular_matrix stores ints(ket,bra).  The debug records
+        ! are compared to PySCF/libcint in the usual (bra,ket) AO convention.
+        do q = 1, nbf
+          do p = 1, q - 1
+            tmp = ints(p,q,m,t)
+            ints(p,q,m,t) = ints(q,p,m,t)
+            ints(q,p,m,t) = tmp
+          end do
+        end do
+      end do
+    end do
+
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted diagnostic GIAO h10 terms for one shell pair.
+ SUBROUTINE int1_giao_h10_terms(cntp, coord, zq, nat, blk)
+!dir$ attributes inline :: int1_giao_h10_terms
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:,:)
+
+    integer :: ig
+!dir$ assume_aligned blk : 64
+
+    do ig = 1, cntp%numpairs
+        call comp_giao_h10_terms_prim(cntp, ig, coord, zq, nat, blk)
     end do
 
  end subroutine

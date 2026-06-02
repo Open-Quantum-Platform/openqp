@@ -39,7 +39,10 @@ MODULE mod_1e_primitives
  PUBLIC comp_lz_int1_prim
  PUBLIC comp_amom_int1_prim
  PUBLIC comp_giao_overlap_deriv_prim
+ PUBLIC comp_giao_h10_core_prim
+ PUBLIC comp_giao_h10_terms_prim
  PUBLIC comp_nmr_dia_int1_prim
+
  PUBLIC comp_pso_int1_prim
  public comp_mult_int1_prim
  public comp_allmult_int1_prim
@@ -599,6 +602,248 @@ END SUBROUTINE
     END DO
 
     END ASSOCIATE
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO/London first-order core-Hamiltonian magnetic derivative.
+!> @details Accumulates the real coefficient of the imaginary RHF GIAO h10 one-
+!>  electron operator, omitting the common factor i.  The convention follows the
+!>  PySCF/libcint RHF NMR core-orbital convention
+!>  h10_core = - int1e_ignuc(asym) - int1e_igkin.  The assembled
+!>  int1_giao_h10_core routine adds the separate -0.5*int1e_giao_irjxp
+!>  one-electron GIAO term.  This is still not a shielding, does not include the
+!>  GIAO two-electron Fock derivative, and must not ungate nmr_gauge=giao by
+!>  itself.
+ SUBROUTINE comp_giao_h10_core_prim(cp, id, coord, zq, nat, blk)
+!dir$ attributes inline :: comp_giao_h10_core_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS
+    type(rys_root_t) :: ryscomp
+    integer :: i, j, ic, nx, ny, nz, mx, my, mz, ij, jmax
+    real(real64) :: xx, dij, kin0, nuc0, kin_mom(3), nuc_mom(3), mom(3), cvec(3)
+    real(real64) :: ovl_x0, ovl_y0, ovl_z0, ovl_x1, ovl_y1, ovl_z1
+    real(real64) :: rys_x0, rys_y0, rys_z0, rys_x1, rys_y1, rys_z1
+    real(real64) :: xyzovl(0:max_ang+2,0:max_ang+1,3)
+    real(real64) :: xyzkin(0:max_ang_pad,0:max_ang+1,3)
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,NRT)
+!dir$ assume_aligned blk : 64
+!dir$ assume_aligned xyzkin : 64
+!dir$ assume_aligned xyzovl : 64
+!dir$ assume_aligned xyzin : 64
+
+    cvec = cp%ri(:3) - cp%rj(:3)
+
+    associate (pp => cp%p(id))
+    call overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang+1, cp%jang+2, xyzovl)
+    call kinetic_xyz_j(xyzkin, xyzovl, cp%iang+1, cp%jang, pp%aj)
+
+    ij = 0
+    jmax = cp%jnao
+    do i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      if (cp%iandj) jmax = i
+      do j = 1, jmax
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij + 1
+
+        ovl_x0 = xyzovl(mx,nx,X__)
+        ovl_y0 = xyzovl(my,ny,Y__)
+        ovl_z0 = xyzovl(mz,nz,Z__)
+        ovl_x1 = xyzovl(mx,nx+1,X__)
+        ovl_y1 = xyzovl(my,ny+1,Y__)
+        ovl_z1 = xyzovl(mz,nz+1,Z__)
+
+        kin0 = xyzkin(mx,nx,X__)*ovl_y0*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz,Z__)
+        kin_mom(X__) = xyzkin(mx,nx+1,X__)*ovl_y0*ovl_z0 &
+             + ovl_x1*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x1*ovl_y0*xyzkin(mz,nz,Z__) &
+             + cp%ri(X__)*kin0
+        kin_mom(Y__) = xyzkin(mx,nx,X__)*ovl_y1*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny+1,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y1*xyzkin(mz,nz,Z__) &
+             + cp%ri(Y__)*kin0
+        kin_mom(Z__) = xyzkin(mx,nx,X__)*ovl_y0*ovl_z1 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z1 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz+1,Z__) &
+             + cp%ri(Z__)*kin0
+        nuc_mom = 0.0_real64
+        nuc0 = 0.0_real64
+
+        do ic = 1, nat
+          xx = pp%aa*sum((pp%r(:3) - coord(:,ic))**2)
+          ryscomp%nroots = cp%nroots
+          ryscomp%x = xx
+          call QGaussRys(ryscomp, cp, id, coord(:,ic), -zq(ic), xyzin, 1)
+          dij = pp%expfac*TWOPI*pp%aa1
+          nuc0 = nuc0 + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(X__) = nuc_mom(X__) + dij*sum(xyzin(mx,nx+1,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Y__) = nuc_mom(Y__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny+1,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Z__) = nuc_mom(Z__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz+1,Z__,1:cp%nroots))
+        end do
+        nuc_mom(:) = nuc_mom(:) + cp%ri(:)*nuc0
+
+        mom = pp%expfac*kin_mom + nuc_mom
+        blk(ij,X__) = blk(ij,X__) + 0.5_real64*(cvec(Y__)*mom(Z__) - cvec(Z__)*mom(Y__))
+        blk(ij,Y__) = blk(ij,Y__) + 0.5_real64*(cvec(Z__)*mom(X__) - cvec(X__)*mom(Z__))
+        blk(ij,Z__) = blk(ij,Z__) + 0.5_real64*(cvec(X__)*mom(Y__) - cvec(Y__)*mom(X__))
+      end do
+    end do
+
+    end associate
+
+ END SUBROUTINE
+
+!> @brief Diagnostic primitive terms for the GIAO h10 one-electron block.
+!> @details Emits the current native term construction before packed triangular
+!>  antisymmetrization so tests can compare each term against the PySCF/libcint
+!>  oracle.  Term order is
+!>  1 raw current irjxp proxy, 2 -0.5*irjxp, 3 raw igkin proxy,
+!>  4 -igkin contribution, 5 raw ignuc proxy, 6 ignuc(asym) proxy,
+!>  7 -ignuc(asym) contribution, 8 final current h10 contribution.
+ SUBROUTINE comp_giao_h10_terms_prim(cp, id, coord, zq, nat, blk)
+!dir$ attributes inline :: comp_giao_h10_terms_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS
+    type(rys_root_t) :: ryscomp
+    integer :: i, j, ic, nx, ny, nz, mx, my, mz, ij
+    real(real64) :: xx, dij, kin0, nuc0, kin_mom(3), nuc_mom(3), kin_term(3), nuc_term(3), amom_term(3), cvec(3)
+    real(real64) :: ovl_x0, ovl_y0, ovl_z0, ovl_x1, ovl_y1, ovl_z1
+    real(real64) :: rys_x0, rys_y0, rys_z0, rys_x1, rys_y1, rys_z1
+    real(real64) :: aj, sx0, sy0, sz0, mx1, my1, mz1, dx, dy, dz
+    real(real64) :: xyzovl(0:max_ang+2,0:max_ang+1,3)
+    real(real64) :: xyzkin(0:max_ang_pad,0:max_ang+1,3)
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,NRT)
+    real(real64) :: xyzmom(3,0:1,0:max_ang+1,0:max_ang)
+!dir$ assume_aligned blk : 64
+
+    cvec = cp%ri(:3) - cp%rj(:3)
+
+    associate (pp => cp%p(id))
+    aj = pp%aj
+    call overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang+1, cp%jang+2, xyzovl)
+    call kinetic_xyz_j(xyzkin, xyzovl, cp%iang+1, cp%jang, pp%aj)
+    call multipole_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang, cp%jang+1, cp%rj, 1, xyzmom)
+
+    ij = 0
+    do i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      do j = 1, cp%jnao
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij + 1
+
+        ovl_x0 = xyzovl(mx,nx,X__)
+        ovl_y0 = xyzovl(my,ny,Y__)
+        ovl_z0 = xyzovl(mz,nz,Z__)
+        ovl_x1 = xyzovl(mx,nx+1,X__)
+        ovl_y1 = xyzovl(my,ny+1,Y__)
+        ovl_z1 = xyzovl(mz,nz+1,Z__)
+
+        kin0 = xyzkin(mx,nx,X__)*ovl_y0*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz,Z__)
+        kin_mom(X__) = xyzkin(mx,nx+1,X__)*ovl_y0*ovl_z0 &
+             + ovl_x1*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x1*ovl_y0*xyzkin(mz,nz,Z__) &
+             + cp%ri(X__)*kin0
+        kin_mom(Y__) = xyzkin(mx,nx,X__)*ovl_y1*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny+1,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y1*xyzkin(mz,nz,Z__) &
+             + cp%ri(Y__)*kin0
+        kin_mom(Z__) = xyzkin(mx,nx,X__)*ovl_y0*ovl_z1 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z1 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz+1,Z__) &
+             + cp%ri(Z__)*kin0
+        nuc_mom = 0.0_real64
+        nuc0 = 0.0_real64
+
+        do ic = 1, nat
+          xx = pp%aa*sum((pp%r(:3) - coord(:,ic))**2)
+          ryscomp%nroots = cp%nroots
+          ryscomp%x = xx
+          call QGaussRys(ryscomp, cp, id, coord(:,ic), -zq(ic), xyzin, 1)
+          dij = pp%expfac*TWOPI*pp%aa1
+          nuc0 = nuc0 + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(X__) = nuc_mom(X__) + dij*sum(xyzin(mx,nx+1,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Y__) = nuc_mom(Y__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny+1,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Z__) = nuc_mom(Z__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz+1,Z__,1:cp%nroots))
+        end do
+        nuc_mom(:) = nuc_mom(:) + cp%ri(:)*nuc0
+
+        sx0 = xyzmom(X__,0,mx,nx)
+        sy0 = xyzmom(Y__,0,my,ny)
+        sz0 = xyzmom(Z__,0,mz,nz)
+        mx1 = xyzmom(X__,1,mx,nx)
+        my1 = xyzmom(Y__,1,my,ny)
+        mz1 = xyzmom(Z__,1,mz,nz)
+        dx = 2*aj*xyzmom(X__,0,mx+1,nx) - mx*xyzmom(X__,0,max(mx-1,0),nx)
+        dy = 2*aj*xyzmom(Y__,0,my+1,ny) - my*xyzmom(Y__,0,max(my-1,0),ny)
+        dz = 2*aj*xyzmom(Z__,0,mz+1,nz) - mz*xyzmom(Z__,0,max(mz-1,0),nz)
+        amom_term(X__) = pp%expfac * sx0 * (my1*dz - mz1*dy)
+        amom_term(Y__) = pp%expfac * sy0 * (mz1*dx - mx1*dz)
+        amom_term(Z__) = pp%expfac * sz0 * (mx1*dy - my1*dx)
+
+        kin_term(X__) = 0.5_real64*pp%expfac*(cvec(Y__)*kin_mom(Z__) - cvec(Z__)*kin_mom(Y__))
+        kin_term(Y__) = 0.5_real64*pp%expfac*(cvec(Z__)*kin_mom(X__) - cvec(X__)*kin_mom(Z__))
+        kin_term(Z__) = 0.5_real64*pp%expfac*(cvec(X__)*kin_mom(Y__) - cvec(Y__)*kin_mom(X__))
+        nuc_term(X__) = 0.5_real64*(cvec(Y__)*nuc_mom(Z__) - cvec(Z__)*nuc_mom(Y__))
+        nuc_term(Y__) = 0.5_real64*(cvec(Z__)*nuc_mom(X__) - cvec(X__)*nuc_mom(Z__))
+        nuc_term(Z__) = 0.5_real64*(cvec(X__)*nuc_mom(Y__) - cvec(Y__)*nuc_mom(X__))
+
+        ! PySCF/libcint int1e_giao_irjxp uses the opposite sign convention from
+        ! this angular-momentum primitive block; the full debug assembler later
+        ! transposes the rectangular update into the usual (bra,ket) convention.
+        blk(ij,:,1) = blk(ij,:,1) - amom_term(:)
+        blk(ij,:,2) = blk(ij,:,2) + 0.5_real64*amom_term(:)
+        blk(ij,:,3) = blk(ij,:,3) - kin_term(:)
+        blk(ij,:,4) = blk(ij,:,4) + kin_term(:)
+        blk(ij,:,5) = blk(ij,:,5) - nuc_term(:)
+        blk(ij,:,6) = blk(ij,:,6) - nuc_term(:)
+        blk(ij,:,7) = blk(ij,:,7) + nuc_term(:)
+        blk(ij,:,8) = blk(ij,:,8) + 0.5_real64*amom_term(:) + kin_term(:) + nuc_term(:)
+      end do
+    end do
+
+    end associate
 
  END SUBROUTINE
 

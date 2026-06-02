@@ -112,7 +112,110 @@ nonzero); gate 3 PBE coupled == uncoupled (exact); gate 4 HF matches oracle and 
 coupling `Delta` matches for all functionals; gate 6 `|Delta|` scales with `c_x`.
 Oracle: `tests/fixtures/nmr/generate_pyscf_cgo_reference.py` -> `pyscf_cgo_reference.json`.
 
+## GIAO development checkpoint (branch `feat/giao-nmr`)
+
+CGO remains the only validated production NMR path.  The Python interface now
+recognizes `properties.nmr_gauge=cgo|giao`; `cgo` dispatches to this validated
+CGO implementation, while `giao` is deliberately gated with a `NotImplementedError`
+until the complete native London-orbital integral and response path passes the
+benchmark matrix.
+
+Current native GIAO implementation status:
+
+| Piece | File / symbol | Status |
+|-------|---------------|--------|
+| Gauge selector and runtime gate | `oqpdata.py`, `input_checker.py`, `runfunc.py` | Implemented; GIAO still gated |
+| Benchmark/oracle scaffold | `scripts/nmr_giao_benchmark_matrix.py`, `tests/fixtures/nmr/benchmark_results/` | Implemented; PySCF CGO/GIAO oracle + OpenQP CGO rows populated |
+| GIAO overlap magnetic derivative `S10` | `mod_1e_primitives.F90::comp_giao_overlap_deriv_prim`, `int1.F90::giao_overlap_derivative` | Native one-electron building block implemented |
+| GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; PySCF oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
+| GIAO two-electron magnetic derivative contractions | pending | Not implemented |
+| GIAO CPHF/CPKS RHS/response assembly | pending | Not implemented |
+| OpenQP native GIAO shielding output | pending | Not implemented; no CGO fallback allowed |
+
+The implemented `S10` block returns the real coefficient of the imaginary first
+magnetic-field derivative of the AO overlap matrix,
+`S10_a(mu,nu) = 0.5 * [(R_mu - R_nu) x <mu|r|nu>]_a`, and is intentionally not
+called by `runfunc.py` or the production CGO shielding routine.  The native
+`h10` one-electron block is now implemented alongside it as real-valued storage
+for the imaginary first-order GIAO one-electron operator.  Its current scope is
+the PySCF/libcint one-electron convention
+`h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin`.
+These blocks become useful for production only after the two-electron derivative
+image and the GIAO response terms are connected and benchmarked against the PySCF
+GIAO oracle.
+
+Conservative `h10` implementation note: in this codebase `h10` means the native
+first-order core-Hamiltonian magnetic derivative for the GIAO/London-orbital
+response path.  It is a one-electron AO magnetic-perturbation block and must not
+be confused with production CGO angular-momentum, PSO, or diamagnetic shielding
+integrals.  The existing AO core Hamiltonian is formed in `int1.F90::omp_hst` as
+nuclear attraction plus kinetic energy (`h = h + t` after separate `nuc_ints` and
+`kin_ovl_ints` assembly), so the native `h10` block includes the GIAO irjxp
+one-electron term plus both the kinetic magnetic-derivative contribution and the
+nuclear-attraction magnetic-derivative contribution.  Any overlap/metric term needed by the response equation must be
+handled consistently with the existing `S10` overlap derivative and the eventual
+GIAO response convention.
+
+The `h10` source locations should stay beside the existing one-electron integral
+code, not in the production CGO shielding path.  Primitive kernels naturally
+belong in `mod_1e_primitives.F90`, near `comp_kin_ovl_int1_prim`,
+`comp_coulomb_int1_prim`, and `comp_giao_overlap_deriv_prim`.  Assembled AO
+matrices naturally belong in `int1.F90`, parallel to `giao_overlap_derivative`
+and the current one-electron assembly routines.  The current magnetic-derivative
+convention is real-valued storage for the real coefficient of an imaginary
+operator/derivative: `S10` omits the common factor `i`, angular momentum stores
+real antisymmetric `A` with physical `L = -i A`, and PSO stores a real
+antisymmetric block with physical operator `-i A`.  Future `h10` work must match
+that phase/sign convention or explicitly document a tested conversion.
+
+Component ordering is Cartesian `(x, y, z)` in the second dimension or third
+array dimension for magnetic perturbation blocks: examples include packed
+`ints(nbf*(nbf+1)/2,3)` for `S10`/angular momentum and full
+`pso_full(nbf,nbf,3)` for PSO.  The `h10` matrix tests compare AO and, if needed,
+MO-transformed component blocks against the PySCF oracle; they must not generate
+native shielding output.  `h10` alone still does not enable native
+GIAO shielding: `nmr_gauge=giao` remains gated until `h10`, two-electron magnetic
+derivatives, the GIAO CPHF/CPKS RHS/response assembly, and PySCF-oracle benchmark
+validation are all complete.  Do not use placeholder zero `h10` matrices, CGO
+values as GIAO `h10`, fake shielding rows, benchmark rows, or a CGO fallback to
+make native GIAO appear available.
+
+## ROHF implementation / audit checkpoint
+
+ROHF ground-state SCF support and ROHF NMR response support are separate tasks.
+The current code recognizes `scf.type=rohf` as SCF type 3 and contains a native
+ROHF SCF path in `source/scf.F90`, including alpha/beta electron counts,
+ROHF occupations, shared spatial orbitals, UROHF two-electron Fock construction,
+and a Guest-Saunders effective ROHF Fock transformation.  Existing SF/MRSF input
+paths also require an ROHF reference.  This is ground-state/reference support; it
+is not a claim of validated ROHF NMR shielding.
+
+Current conservative ROHF/NMR status:
+
+| Piece | Status |
+|-------|--------|
+| ROHF input/interface recognition | Present (`OQPData._scftypes`, input checker, examples) |
+| ROHF ground-state SCF driver | Present but should remain under audit/regression coverage before being used as an NMR benchmark foundation |
+| ROHF-CGO NMR response | Not implemented / not validated |
+| ROHF-GIAO NMR response | Not implemented / not validated |
+| ROHF-GIAO shielding | Not validated; `nmr_gauge=giao` remains gated with `NotImplementedError` |
+| RHF/UHF fallback for requested ROHF | Not allowed |
+
+ROHF is required before open-shell NMR benchmarks that need a restricted
+open-shell reference, but ROHF SCF alone is insufficient for open-shell NMR.  A
+future ROHF NMR implementation must explicitly add the response equations for
+closed-shell/doubly occupied and singly occupied open-shell subspaces, alpha/beta
+occupation handling, total and spin density requirements, effective ROHF Fock
+contributions in the response, DIIS/convergence integration where applicable, and
+a benchmark against an external oracle.  Until then, requesting NMR shielding with
+`scf.type=rohf` raises a clear `NotImplementedError`; no requested ROHF case may
+be silently routed through RHF, UHF, or the CGO fallback for GIAO.
+
+ABI/build caution: ROHF and NMR fixes must preserve the integer-sensitive
+BLAS/LAPACK and compiler-default integer behavior in the current CMake context;
+do not hide type mismatches behind global compiler flags.
+
 ## Out of scope (future work)
 
-GIAO (gauge-including atomic orbitals), UHF/ROHF open-shell references, MRSF-TDDFT
-NMR (see `MRSF_NMR_DESIGN.md`), and spin-spin coupling constants.
+Validated OpenQP GIAO shieldings, UHF/ROHF open-shell references, MRSF-TDDFT NMR
+(see `MRSF_NMR_DESIGN.md`), and spin-spin coupling constants.

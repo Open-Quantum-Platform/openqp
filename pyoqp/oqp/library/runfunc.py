@@ -48,6 +48,16 @@ def compute_scf_prop(mol):
         elif prop == 'resp':
             oqp.resp_charges(mol)
         elif prop == 'nmr':
+            scf_type = mol.config.get("scf", {}).get("type", "rhf")
+            if isinstance(scf_type, str):
+                scf_type = scf_type.lower()
+            if scf_type == "rohf":
+                raise NotImplementedError(
+                    "ROHF NMR shielding requested. ROHF SCF/reference support exists, "
+                    "but ROHF NMR response support is separate and is not implemented "
+                    "or validated for ROHF-CGO or ROHF-GIAO; no RHF/UHF fallback is allowed."
+                )
+
             nmr_gauge = mol.config.get("properties", {}).get("nmr_gauge", "cgo")
             if isinstance(nmr_gauge, str):
                 nmr_gauge = nmr_gauge.lower()

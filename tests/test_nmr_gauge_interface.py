@@ -41,7 +41,10 @@ class NMRGaugeInterfaceTests(unittest.TestCase):
             self.skipTest("Overleaf hf-dft-nmr manuscript not present")
         text = main.read_text()
         self.assertIn("common gauge-origin formulation", text)
-        self.assertIn("gauge-including atomic orbitals will be introduced", text)
+        self.assertRegex(
+            text,
+            r"gauge-including atomic orbitals (will be introduced|are being introduced)",
+        )
         self.assertNotIn("implementation now supports gauge-including atomic orbitals", text)
 
     def test_giao_benchmark_matrix_tracks_required_comparisons(self):

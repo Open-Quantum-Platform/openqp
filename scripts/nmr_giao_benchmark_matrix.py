@@ -317,15 +317,36 @@ def _write_outputs(records, outdir: Path):
     csv_path = outdir / "nmr_giao_benchmark_results.csv"
     md_path = outdir / "nmr_giao_benchmark_results.md"
     json_path.write_text(json.dumps(records, indent=2) + "\n")
-    fields = ["system", "basis", "method", "backend", "gauge", "status", "max_origin_delta_ppm", "wall_time_seconds", "peak_memory_mb", "reference_delta_ppm", "notes"]
+    fields = [
+        "system",
+        "basis",
+        "method",
+        "backend",
+        "gauge",
+        "status",
+        "origin_dependence_ppm",
+        "sigma_iso_ppm",
+        "pyscf_reference_iso_ppm",
+        "openqp_minus_pyscf_delta_ppm",
+        "wall_time_seconds",
+        "peak_memory_mb",
+        "notes",
+    ]
     with csv_path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for r in records["rows"]:
             writer.writerow({k: r.get(k, "") for k in fields})
-    lines = ["# NMR CGO/GIAO benchmark matrix", "", f"Status: {records['status']}", "", "|System|Basis|Method|Backend|Gauge|Status|Max origin delta/ppm|Reference delta/ppm|Wall/s|Peak memory/MiB|Notes|", "|---|---:|---|---|---|---|---:|---:|---:|---:|---|"]
+    lines = [
+        "# NMR CGO/GIAO benchmark matrix",
+        "",
+        f"Status: {records['status']}",
+        "",
+        "|System|Basis|Method|Backend|Gauge|Status|Origin dependence/ppm|Sigma iso/ppm|PySCF reference iso/ppm|OpenQP-PySCF delta/ppm|Wall/s|Peak memory/MiB|Notes|",
+        "|---|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|---|",
+    ]
     for r in records["rows"]:
-        lines.append("|{system}|{basis}|{method}|{backend}|{gauge}|{status}|{max_origin_delta_ppm}|{reference_delta_ppm}|{wall_time_seconds}|{peak_memory_mb}|{notes}|".format(**{k: r.get(k, "") for k in ["system","basis","method","backend","gauge","status","max_origin_delta_ppm","reference_delta_ppm","wall_time_seconds","peak_memory_mb","notes"]}))
+        lines.append("|{system}|{basis}|{method}|{backend}|{gauge}|{status}|{origin_dependence_ppm}|{sigma_iso_ppm}|{pyscf_reference_iso_ppm}|{openqp_minus_pyscf_delta_ppm}|{wall_time_seconds}|{peak_memory_mb}|{notes}|".format(**{k: r.get(k, "") for k in fields}))
     md_path.write_text("\n".join(lines) + "\n")
     return json_path, csv_path, md_path
 
@@ -364,7 +385,7 @@ def main():
     for name, basis, method in cases:
         if method not in METHODS:
             continue
-        ref_giao0 = None
+        pyscf_reference = {}
         for gauge in ("cgo", "giao"):
             vals = []
             tensors = None
@@ -387,29 +408,42 @@ def main():
             if vals:
                 arr = np.vstack(vals)
                 max_delta = float(np.max(np.ptp(arr, axis=0)))
-                if gauge == "giao":
-                    ref_giao0 = arr[0]
-                ref_delta = "0.000000" if gauge == "giao" or ref_giao0 is None else f"{float(np.max(np.abs(arr[0] - ref_giao0))):.6f}"
+                sigma_iso_ppm = ";".join(f"{x:.6f}" for x in arr[0])
+                pyscf_reference[gauge] = arr[0]
             else:
                 max_delta = ""
-                ref_delta = ""
+                sigma_iso_ppm = ""
             rows.append({
                 "system": name, "basis": basis, "method": method, "backend": "pyscf", "gauge": gauge,
-                "status": status, "max_origin_delta_ppm": f"{max_delta:.6f}" if isinstance(max_delta, float) else max_delta,
-                "reference_delta_ppm": ref_delta, "wall_time_seconds": f"{wall:.3f}", "peak_memory_mb": f"{peak_memory_mb:.1f}", "notes": notes,
+                "status": status, "origin_dependence_ppm": f"{max_delta:.6f}" if isinstance(max_delta, float) else max_delta,
+                "sigma_iso_ppm": sigma_iso_ppm,
+                "pyscf_reference_iso_ppm": sigma_iso_ppm,
+                "openqp_minus_pyscf_delta_ppm": "",
+                "wall_time_seconds": f"{wall:.3f}", "peak_memory_mb": f"{peak_memory_mb:.1f}", "notes": notes,
                 "tensor_components_ppm": tensors,
             })
         if args.run_openqp:
             for gauge in ("cgo", "giao"):
                 r = _run_openqp(name, basis, method, gauge)
+                iso = r.get("isotropic_shielding_ppm") or []
+                ref = pyscf_reference.get(gauge)
+                delta = ""
+                if iso and ref is not None:
+                    assert np is not None
+                    delta = f"{float(np.max(np.abs(np.asarray(iso) - ref))):.6f}"
                 rows.append({
                     "system": name, "basis": basis, "method": method, "backend": "openqp", "gauge": gauge,
-                    "status": r["status"], "max_origin_delta_ppm": "pending" if gauge == "giao" else "not_sampled",
-                    "reference_delta_ppm": "pending", "wall_time_seconds": f"{r.get('wall_time_seconds', 0.0):.3f}", "peak_memory_mb": f"{r.get('peak_memory_mb', 0.0):.1f}",
+                    "status": r["status"],
+                    "origin_dependence_ppm": "pending" if gauge == "giao" and r["status"] == "ok" else "",
+                    "sigma_iso_ppm": ";".join(f"{x:.6f}" for x in iso),
+                    "pyscf_reference_iso_ppm": ";".join(f"{x:.6f}" for x in ref) if ref is not None else "",
+                    "openqp_minus_pyscf_delta_ppm": delta,
+                    "wall_time_seconds": f"{r.get('wall_time_seconds', 0.0):.3f}", "peak_memory_mb": f"{r.get('peak_memory_mb', 0.0):.1f}",
                     "notes": r.get("reason", r.get("tail", ""))[:160],
                 })
     records = {
         "status": "reference_ready_openqp_giao_gated",
+        "metric_definition": "Origin-dependence, shielding magnitude, and OpenQP-minus-PySCF agreement are separate fields; no row mixes these quantities in one generic metric column.",
         "matrix_file": str(MATRIX),
         "metrics": matrix["metrics"],
         "origin_translations_bohr": translations,
