@@ -33,6 +33,29 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertLess(block.index(update_call), block.index(residual))
         self.assertIn("if (any(.not. ieee_is_finite(this%Ap)))", block)
 
+    def test_pcg_init_marks_exact_initial_solution_converged_without_step_breakdown(self):
+        """PCG with x0 already solving Ax=b must converge at init instead of taking a zero-rz step."""
+        src = PCG_SRC.read_text()
+        init = re.search(r"subroutine pcg_init\(this, b, update, precond, dat, x0, tol\).*?end subroutine", src, re.S | re.I)
+        if init is None:
+            self.fail("Could not locate pcg_init implementation")
+        block = init.group(0)
+
+        residual = "this%error = norm2(this%r)"
+        converged = "if (this%error <= this%tol) then"
+        self.assertIn(residual, block)
+        self.assertIn(converged, block)
+        self.assertLess(block.index(residual), block.index(converged))
+        self.assertIn("this%errcode = PCG_CONVERGED", block)
+
+        optimize = re.search(r"subroutine pcg_optimize\(.*?end subroutine", src, re.S | re.I)
+        if optimize is None:
+            self.fail("Could not locate pcg_optimize implementation")
+        opt_block = optimize.group(0)
+        self.assertIn("case (PCG_OK)", opt_block)
+        self.assertIn("case (PCG_CONVERGED)", opt_block)
+        self.assertLess(opt_block.index("case (PCG_CONVERGED)"), opt_block.index("do iter = 1, mxit"))
+
     def test_pcg_step_guards_breakdown_denominators_and_nonfinite_updates(self):
         """PCG must not divide by zero/tiny denominators or propagate NaN/Inf."""
         src = PCG_SRC.read_text()

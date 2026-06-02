@@ -157,6 +157,10 @@ contains
     end if
 
     this%initialized = .true.
+    if (this%error <= this%tol) then
+      this%errcode = PCG_CONVERGED
+      return
+    end if
 
   end subroutine
 
@@ -333,7 +337,16 @@ contains
     if (present(cgiters)) cgiters = 0
 
     call pcg%init(b=b, update=update, precond=precond, dat=dat, x0=x0, tol=tol)
-    if (pcg%errcode /= PCG_OK) goto 9999
+    select case (pcg%errcode)
+      case (PCG_OK)
+        continue
+      case (PCG_CONVERGED)
+        b = pcg%x
+        if (present(err)) err = pcg%error
+        return
+      case default
+        goto 9999
+    end select
 
     do iter = 1, mxit
       if (present(cgiters)) cgiters = iter
