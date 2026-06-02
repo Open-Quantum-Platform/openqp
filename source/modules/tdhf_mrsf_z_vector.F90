@@ -141,7 +141,7 @@ contains
     real(kind=dp), allocatable :: w(:)       ! Work vector
     real(kind=dp), allocatable :: Ax(:)      ! A*x
     
-    real(kind=dp) :: beta, h_ij, temp, error, error_initial
+    real(kind=dp) :: beta, h_ij, temp, error, error_initial, true_residual
     integer :: i, j, k, iter, m, restart_count, inner_iter
     logical :: converged, unstable
     
@@ -424,8 +424,21 @@ contains
       do i = 1, inner_iter
         x = x + y(i) * V(:,i)
       end do
-      
-      error_out = error
+      if (any(.not. ieee_is_finite(x))) then
+        write(iw,'(" GMRES: non-finite solution update")')
+        unstable = .true.
+        error_out = huge(1.0_dp)
+        exit
+      end if
+
+      call recompute_gmres_true_residual(true_residual, unstable)
+      if (unstable) then
+        error_out = huge(1.0_dp)
+        exit
+      end if
+      error_out = true_residual
+      converged = true_residual < tol
+      error = true_residual
       
       if (converged .or. iter_out >= max_iter) exit
       
@@ -466,6 +479,40 @@ contains
     
   contains
     
+    subroutine recompute_gmres_true_residual(true_residual, unstable)
+      real(kind=dp), intent(out) :: true_residual
+      logical, intent(out) :: unstable
+
+      call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
+                         nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                         fa, fb, scale_exch, dft)
+      if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. &
+          any(.not. ieee_is_finite(b))) then
+        write(iw,'(" GMRES: non-finite values during true residual recomputation")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      r = b - Ax
+      if (any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite true residual vector")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      true_residual = sqrt(dot_product(r, r))
+      if (.not. ieee_is_finite(true_residual)) then
+        write(iw,'(" GMRES: non-finite true residual norm")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      unstable = .false.
+    end subroutine recompute_gmres_true_residual
+
     subroutine givens_rotation(a, b, c, s)
       real(kind=dp), intent(in) :: a, b
       real(kind=dp), intent(out) :: c, s

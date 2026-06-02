@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PCG_SRC = ROOT / "source" / "pcg.F90"
 RHF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_z_vector.F90"
 SF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_sf_z_vector.F90"
+MRSF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
 
 
 class ZVectorSolverStabilityTests(unittest.TestCase):
@@ -112,6 +113,21 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (dft) call dftclean(infos)", guard_block)
         self.assertIn("call measure_time", guard_block)
         self.assertRegex(guard_block, r"return\b")
+
+    def test_mrsf_gmres_recomputes_true_residual_after_solution_update(self):
+        """MRSF GMRES must not accept only the Givens residual estimate after restart updates."""
+        src = MRSF_ZVEC_SRC.read_text()
+        solve = re.search(r"subroutine gmres_solve\(.*?end subroutine gmres_solve", src, re.S | re.I)
+        if solve is None:
+            self.fail("Could not locate MRSF gmres_solve implementation")
+        block = solve.group(0)
+
+        self.assertIn("true_residual", block)
+        self.assertIn("call recompute_gmres_true_residual", block)
+        self.assertRegex(block, r"r\s*=\s*b\s*-\s*Ax")
+        self.assertIn("true_residual = sqrt(dot_product(r, r))", block)
+        self.assertIn("error_out = true_residual", block)
+        self.assertIn("converged = true_residual < tol", block)
 
 
 if __name__ == "__main__":
