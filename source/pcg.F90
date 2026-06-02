@@ -90,9 +90,25 @@ contains
 
     integer :: veclen
 
+    if (size(b) <= 0) then
+      this%errcode = PCG_BAD_ARGUMENT
+      return
+    end if
+
     if (present(x0)) then
       if (size(x0) /= size(b)) then
         this%errcode = PCG_BAD_ARGUMENT
+        return
+      end if
+    end if
+
+    if (.not. all(ieee_is_finite(b))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
+    if (present(x0)) then
+      if (.not. all(ieee_is_finite(x0))) then
+        this%errcode = PCG_BREAKDOWN
         return
       end if
     end if
@@ -161,7 +177,14 @@ contains
     real(kind=dp) :: rz, rz_new, pap, alpha, beta
 
     if (.not.this%initialized) then
-      this%error = PCG_NOT_INITIALIZED
+      this%errcode = PCG_NOT_INITIALIZED
+      return
+    end if
+
+    if (any(.not. ieee_is_finite(this%x)) .or. any(.not. ieee_is_finite(this%b)) .or. &
+        any(.not. ieee_is_finite(this%p)) .or. any(.not. ieee_is_finite(this%r)) .or. &
+        any(.not. ieee_is_finite(this%y))) then
+      this%errcode = PCG_BREAKDOWN
       return
     end if
 
@@ -170,9 +193,22 @@ contains
               error => this%error)
 
       call this%update(Ap, p, this%dat)
+      if (any(.not. ieee_is_finite(Ap))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
+      if (any(.not. ieee_is_finite(p))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       rz = dot_product(r, y)
       pap = dot_product(p, Ap)
+      if (.not. ieee_is_finite(pap) .or. .not. ieee_is_finite(rz)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       if (.not. pcg_safe_positive_denominator(pap) .or. &
           .not. pcg_safe_positive_denominator(rz)) then
         this%errcode = PCG_BREAKDOWN
@@ -186,7 +222,19 @@ contains
       end if
 
       x(:) = x(:) + alpha*p(:)
+      if (.not. ieee_is_finite(x(1))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+      if (.not. all(ieee_is_finite(x))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       r(:) = r(:) - alpha*Ap(:)
+      if (any(.not. ieee_is_finite(r))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       error = norm2(r)
       if (.not. ieee_is_finite(error)) then
@@ -199,10 +247,23 @@ contains
         return
       end if
 
+      if (.not. pcg_safe_positive_denominator(error)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
       call this%precond(y, r, this%dat)
+      if (any(.not. ieee_is_finite(y))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       rz_new = dot_product(r, y)
+      if (.not. ieee_is_finite(rz_new)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       if (.not. pcg_safe_positive_denominator(rz_new) .or. &
-          .not. ieee_is_finite(rz_new)) then
+          .not. ieee_is_finite(rz_new) .or. any(.not. ieee_is_finite(y))) then
         this%errcode = PCG_BREAKDOWN
         return
       end if
@@ -212,6 +273,10 @@ contains
         return
       end if
       p(:) = y(:) + beta*p(:)
+      if (any(.not. ieee_is_finite(p))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
     end associate
 

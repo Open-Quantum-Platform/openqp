@@ -44,6 +44,10 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. pcg_safe_positive_denominator(rz_new)", block)
         self.assertIn("if (.not. ieee_is_finite(beta)", block)
         self.assertIn("if (.not. ieee_is_finite(error)", block)
+        self.assertIn("any(.not. ieee_is_finite(Ap))", block)
+        self.assertIn("any(.not. ieee_is_finite(y)", block)
+        self.assertIn("if (.not. ieee_is_finite(error)", block)
+        self.assertIn("if (.not. all(ieee_is_finite(x)))", block)
 
     def test_rhf_zvector_preconditioner_clamps_near_zero_denominators(self):
         """RHF/RPA/TDA z-vector preconditioner must be finite and floor guarded."""

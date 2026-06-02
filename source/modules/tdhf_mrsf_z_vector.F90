@@ -146,6 +146,27 @@ contains
     logical :: converged, unstable
     
     ! Initialize GMRES work arrays ONCE at the beginning
+    if (n <= 0 .or. restart <= 0) then
+      write(iw,'(" GMRES: invalid dimensions provided (n/restart)")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
+    if (size(b) /= n .or. size(x) /= n) then
+      write(iw,'(" GMRES: vector size does not match problem size")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
+    if (size(mo_a,1) /= nbf .or. size(mo_b,1) /= nbf) then
+      write(iw,'(" GMRES: invalid basis-size arguments")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
     call init_gmres_work(nbf, nocca, noccb)
     
     ! Allocate workspace
@@ -178,8 +199,23 @@ contains
     call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
                        nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                        fa, fb, scale_exch, dft)
+    if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. any(.not. ieee_is_finite(b))) then
+      write(iw,'(" GMRES: initial residual has non-finite input")')
+      call flush(iw)
+      error_out = huge(1.0_dp)
+      error_initial = huge(1.0_dp)
+      iter_out = 0
+      unstable = .true.
+    else
     r = b - Ax
     error_initial = sqrt(dot_product(r, r))
+    if (error_initial == 0.0_dp) then
+      write(iw,'(" GMRES: initial residual is exactly zero")')
+      call flush(iw)
+      error_out = error_initial
+      iter_out = 0
+      converged = .true.
+    else
     if (.not. ieee_is_finite(error_initial)) then
       write(iw,'(" GMRES: initial residual is non-finite; aborting iterative safety")')
       call flush(iw)
@@ -192,10 +228,12 @@ contains
       error_out = error_initial
       iter_out = 0
       converged = .true.
+      end if
+    end if
     end if
     
-    if (unstable) then
-      ! Safety fallback handled above; skip GMRES iterations
+    if (unstable .or. converged) then
+      ! Safety fallback or exact-zero residual handled above; skip GMRES iterations
     else
       do iter = 1, max_iter
       
@@ -205,12 +243,32 @@ contains
       call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
                          nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                          fa, fb, scale_exch, dft)
+      if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. any(.not. ieee_is_finite(b))) then
+        write(iw,'(" GMRES: non-finite values during restart residual setup")')
+        unstable = .true.
+        exit
+      end if
       r = b - Ax
+      if (any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite residual during restart")')
+        unstable = .true.
+        exit
+      end if
       
       ! Apply preconditioner to residual
       call apply_precond(r, V(:,1))
+      if (any(.not. ieee_is_finite(V(:,1))) .or. any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite preconditioned residual")')
+        unstable = .true.
+        exit
+      end if
       
       beta = sqrt(dot_product(V(:,1), V(:,1)))
+      if (any(.not. ieee_is_finite(V(:,1)))) then
+        write(iw,'(" GMRES: non-finite basis vector prior to scaling")')
+        unstable = .true.
+        exit
+      end if
       if (.not. ieee_is_finite(beta) .or. beta < GMRES_DENOMINATOR_FLOOR) then
         write(iw,'(" GMRES: degenerate residual norm at restart ", I3)') restart_count
         unstable = .true.
@@ -247,24 +305,54 @@ contains
         call apply_operator(V(:,j), w, infos, basis, molGrid, int2_driver, &
                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                            fa, fb, scale_exch, dft)
+        if (any(.not. ieee_is_finite(w)) .or. any(.not. ieee_is_finite(V(:,j)))) then
+          write(iw,'(" GMRES: non-finite basis/operator values at inner step", I3)') j
+          unstable = .true.
+          exit
+        end if
         
         ! Apply preconditioner
         call apply_precond(w, V(:,j+1))
+        if (any(.not. ieee_is_finite(V(:,j+1))) .or. any(.not. ieee_is_finite(w))) then
+          write(iw,'(" GMRES: non-finite preconditioned vector at inner step", I3)') j
+          unstable = .true.
+          exit
+        end if
         
         ! Modified Gram-Schmidt orthogonalization
         do i = 1, j
           H(i,j) = dot_product(V(:,j+1), V(:,i))
+          if (.not. ieee_is_finite(H(i,j))) then
+            unstable = .true.
+            exit
+          end if
           V(:,j+1) = V(:,j+1) - H(i,j) * V(:,i)
         end do
+        if (unstable) then
+          write(iw,'(" GMRES: non-finite H entry during orthogonalization")')
+          exit
+        end if
         
         ! Reorthogonalization for numerical stability
         do i = 1, j
           temp = dot_product(V(:,j+1), V(:,i))
           H(i,j) = H(i,j) + temp
+          if (.not. ieee_is_finite(temp) .or. .not. ieee_is_finite(H(i,j))) then
+            unstable = .true.
+            exit
+          end if
           V(:,j+1) = V(:,j+1) - temp * V(:,i)
         end do
+        if (unstable) then
+          write(iw,'(" GMRES: non-finite H entry during re-orthogonalization")')
+          exit
+        end if
         
         H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))
+        if (any(.not. ieee_is_finite(V(:,j+1)))) then
+          unstable = .true.
+          exit
+        end if
         
         ! Check for breakdown
         if (.not. ieee_is_finite(H(j+1,j)) .or. abs(H(j+1,j)) < GMRES_DENOMINATOR_FLOOR) then
@@ -283,6 +371,10 @@ contains
           H(i,j) = temp
         end do
         
+        if (.not. ieee_is_finite(H(j,j)) .or. .not. ieee_is_finite(H(j+1,j))) then
+          unstable = .true.
+          exit
+        end if
         ! Compute new Givens rotation
         call givens_rotation(H(j,j), H(j+1,j), c(j), s(j))
         
@@ -360,7 +452,11 @@ contains
       end if
       write(iw,'(" Final residual norm: ", 1p,e13.6)') error_out
     end if
-    write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
+    if (ieee_is_finite(error_initial) .and. abs(error_initial) >= GMRES_DENOMINATOR_FLOOR) then
+      write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
+    else
+      write(iw,'(" Relative reduction : not available")')
+    end if
     call flush(iw)
     
     ! Clean up local arrays
@@ -412,6 +508,10 @@ contains
         end if
 
         rhs = b(i)
+        if (.not. ieee_is_finite(rhs)) then
+          unstable = .true.
+          return
+        end if
         do j = i+1, n
           if (.not. ieee_is_finite(A(i,j))) then
             unstable = .true.
@@ -419,7 +519,15 @@ contains
           end if
           rhs = rhs - A(i,j) * x(j)
         end do
+        if (.not. ieee_is_finite(rhs)) then
+          unstable = .true.
+          return
+        end if
         x(i) = rhs / A(i,i)
+        if (.not. ieee_is_finite(x(i))) then
+          unstable = .true.
+          return
+        end if
       end do
       unstable = .false.
     end subroutine back_substitution
