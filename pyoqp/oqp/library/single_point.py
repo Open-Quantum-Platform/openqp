@@ -433,9 +433,11 @@ class SinglePoint(Calculator):
             True if a converged SCF solution was obtained.
         """
         data = self.mol.data
-        primary = self.converger_type
-        fallback = self.alternative_scf
-        trah_stab_default = self.mol.config['scf']['trh_stab']
+        scf_config = self.mol.config.get('scf', {})
+        primary = getattr(self, 'converger_type', scf_config.get('converger_type', 'diis'))
+        fallback = getattr(self, 'alternative_scf', scf_config.get('alternative_scf', 'trah'))
+        stability = getattr(self, 'stability', scf_config.get('stability', False))
+        trah_stab_default = scf_config.get('trh_stab', False)
 
         # --- Stage 1: primary converger ---
         data.set_scf_converger_type(primary)
@@ -460,8 +462,9 @@ class SinglePoint(Calculator):
         # (tdhf) runs: there the SCF is an intermediate reference and the extra
         # TRAH pass can energy-invariantly re-canonicalize orbitals, perturbing
         # sensitive (e.g. range-separated MRSF) excited-state gradients.
-        if converged and self.stability and primary != 'trah' and self.method == 'hf':
+        if converged and stability and primary != 'trah' and self.method == 'hf':
             e_pre = self.mol.mol_energy.energy
+            mol_energy_snapshot = getattr(self.mol.mol_energy, '__dict__', {}).copy()
             # Snapshot the converged orbitals so the safeguard is a true no-op
             # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
             # energy-invariantly, which would otherwise perturb sensitive
@@ -485,6 +488,11 @@ class SinglePoint(Calculator):
                 # Stable (no lower solution found) or the verification did not
                 # converge: restore the original converged orbitals unchanged.
                 self._restore_scf_state(snapshot)
+                for attr, value in mol_energy_snapshot.items():
+                    try:
+                        setattr(self.mol.mol_energy, attr, value)
+                    except Exception:
+                        pass
                 if not trah_ok:
                     # Re-run the primary converger (warm-started) so mol_energy
                     # is consistent with the restored orbitals.

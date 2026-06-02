@@ -12,13 +12,13 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data",
+    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
-TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
+TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -30,12 +30,12 @@ SCF_PROPS = {"el_mom", "mulliken"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
+    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
     "input.method": "Use method=hf for HF/DFT or method=tdhf for TDHF/TDDFT/SF/MRSF.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
-    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
+    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
     "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
@@ -488,6 +488,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
     if method != "tdhf":
         return
 
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
@@ -502,10 +503,21 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown TDHF response type.",
             value=td_type,
             expected=", ".join(sorted(TDHF_TYPES)),
-            action="Choose rpa, tda, sf, mrsf, or umrsf.",
+            action="Choose rpa, tda, sf, mrsf, umrsf, mrsf_ekt_ip, or mrsf_ekt_ea.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
+
+    if td_type in {"mrsf_ekt_ip", "mrsf_ekt_ea"} and runtype != "energy":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "Legacy tdhf.type=mrsf_ekt_ip/mrsf_ekt_ea is energy-only. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf.",
+            value=f"{runtype}/{td_type}",
+            expected="input.runtype=ekt with tdhf.type=mrsf, or input.runtype=energy for legacy direct EKT calls",
+            action="Set [input] runtype=ekt and [tdhf] type=mrsf for MRSF-EKT IP/EA analysis.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
 
     if td_type in {"rpa", "tda"} and scf_mult != td_mult:
         report.add(
@@ -701,6 +713,32 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose another runtype or implement the missing workflow first.",
             wiki=WIKI_HELP["input.runtype"],
         )
+        return
+
+    if runtype == "ekt":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        ekt_ip = bool(_get(config, "ekt", "ip", False))
+        ekt_ea = bool(_get(config, "ekt", "ea", False))
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "EKT runtype only supports MRSF-TDDFT.",
+                value=f"{method}/{td_type}",
+                expected="input.method=tdhf and tdhf.type=mrsf",
+                action="Set [input] method=tdhf and [tdhf] type=mrsf for MRSF-EKT analysis.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        if not ekt_ip and not ekt_ea:
+            report.add(
+                "ERROR",
+                "ekt",
+                "EKT runtype must request IP, EA, or both.",
+                value={"ip": ekt_ip, "ea": ekt_ea},
+                expected="[ekt] ip=True and/or ea=True",
+                action="Enable [ekt] ip, ea, or both for EKT analysis.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
         return
 
     if runtype == "grad":
