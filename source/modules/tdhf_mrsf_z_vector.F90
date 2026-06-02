@@ -1509,6 +1509,8 @@ contains
        write(*,'(/3x,24("-")&
              &/6x,"Z-Vector not converged"&
              &/3x,24("-")/)')
+       write(iw,'(" MRSF z-vector solver reached the maximum iterations; solver = ",A)') trim(solver_name)
+       write(iw,'(" final residual = ",1p,e13.6)') error
     else
        infos%mol_energy%Z_Vector_converged=.true.
        write(*,'(/3x,24("-")&

@@ -404,6 +404,26 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("deallocate(int2_data)", cleanup_block)
         self.assertRegex(cleanup_block, r"return\b")
 
+    def test_mrsf_zvector_nonconverged_path_logs_solver_and_final_residual(self):
+        """MRSF CG/GMRES max-iteration exits must report solver and final residual in the log."""
+        src = MRSF_ZVEC_SRC.read_text()
+        nonconv = re.search(
+            r"if \(error>cnvtol\) then.*?else",
+            src,
+            re.S | re.I,
+        )
+        if nonconv is None:
+            self.fail("Could not locate MRSF z-vector nonconvergence branch")
+        block = nonconv.group(0)
+
+        self.assertIn("Z-Vector not converged", block)
+        self.assertIn("MRSF z-vector solver reached the maximum iterations", block)
+        self.assertIn("solver = ", block)
+        self.assertIn("trim(solver_name)", block)
+        self.assertIn("final residual = ", block)
+        self.assertIn("error", block)
+        self.assertLess(block.index("Z-Vector not converged"), block.index("final residual = "))
+
     def test_mrsf_default_cg_guards_pap_denominator_and_breakdown_solution(self):
         """Default fast MRSF CG path must not divide by tiny p^T A p or use bad xk."""
         src = MRSF_ZVEC_SRC.read_text()
