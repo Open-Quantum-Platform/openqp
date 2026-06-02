@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from pyscf.scf.hf import get_jk
 
 ROOT = Path(__file__).resolve().parents[1]
 TOL = 5.0e-7
@@ -69,7 +68,7 @@ class NMRGIAOH10TwoElectronLiveTests(unittest.TestCase):
             self.fail(reason)
         try:
             import pyscf  # noqa: F401
-            from pyscf.scf.hf import get_jk  # noqa: F401
+            from pyscf.prop.nmr import rhf as nmr_rhf  # noqa: F401
         except Exception as exc:  # pragma: no cover - optional dependency gate
             self.skipTest(f"PySCF unavailable for two-electron h10 oracle: {exc}")
 
@@ -126,31 +125,21 @@ class NMRGIAOH10TwoElectronLiveTests(unittest.TestCase):
     @staticmethod
     def _pyscf_terms(case):
         from pyscf import gto, scf
+        from pyscf.prop.nmr import rhf as nmr_rhf
 
         mol = gto.M(atom=case["atom"], basis="sto-3g", unit="Angstrom", verbose=0)
         mf = scf.RHF(mol).run(conv_tol=1.0e-12)
         dm0 = mf.make_rdm1()
-        vj, vk = get_jk(mol, dm0)
+        vj, vk = nmr_rhf.get_jk(mol, dm0)
         twoe = vj - 0.5 * vk
 
-        # Keep the PySCF decomposition sanity-check when nmr helper module is
-        # available, but degrade gracefully when that submodule is not installed.
-        try:
-            from pyscf.prop.nmr import rhf as nmr_rhf
-            full_h10 = nmr_rhf.make_h10(mol, dm0, gauge_orig=None)
-            onee = (
-                -0.5 * mol.intor("int1e_giao_irjxp", 3)
-                - mol.intor_asymmetric("int1e_ignuc", 3)
-                - mol.intor("int1e_igkin", 3)
-            )
-            np.testing.assert_allclose(twoe, full_h10 - onee, atol=1.0e-10, rtol=0.0)
-        except Exception:
-            pass
-
-        if vj.ndim == 2:
-            vj = np.repeat(vj[np.newaxis, :, :], 3, axis=0)
-            vk = np.repeat(vk[np.newaxis, :, :], 3, axis=0)
-            twoe = np.repeat(twoe[np.newaxis, :, :], 3, axis=0)
+        full_h10 = nmr_rhf.make_h10(mol, dm0, gauge_orig=None)
+        onee = (
+            -0.5 * mol.intor("int1e_giao_irjxp", 3)
+            - mol.intor_asymmetric("int1e_ignuc", 3)
+            - mol.intor("int1e_igkin", 3)
+        )
+        np.testing.assert_allclose(twoe, full_h10 - onee, atol=1.0e-10, rtol=0.0)
         return {"vj": vj, "vk": vk, "twoe_h10": twoe}
 
     @staticmethod
@@ -174,8 +163,6 @@ class NMRGIAOH10TwoElectronLiveTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as wd:
                 text = self._run_debug(wd, case_name, case)
             native_terms = self._parse_debug(text)
-            if np.max(np.abs(native_terms["twoe_h10"])) < 1.0e-15:
-                self.skipTest("nmr_giao_h10_twoe_debug currently returns zero two-electron blocks")
             ref_terms = self._pyscf_terms(case)
             lines = [f"two-electron h10 diagnostics for {case_name}"]
             for term in TERMS:
