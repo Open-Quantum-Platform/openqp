@@ -37,9 +37,12 @@ contains
     end if
 
     if (gmres_work_allocated) then
-      ! Check if dimensions match
+      ! Check if dimensions match and every reusable array is still allocated.
       if (gmres_nbf == nbf .and. gmres_nocca == nocca .and. gmres_noccb == noccb) then
-        return  ! Arrays already allocated with correct size
+        if (gmres_work_arrays_allocated()) then
+          return  ! Arrays already allocated with correct size
+        end if
+        call cleanup_gmres_work()
       else
         ! Deallocate old arrays before reallocating
         call cleanup_gmres_work()
@@ -65,6 +68,18 @@ contains
     
   end subroutine init_gmres_work
   
+  ! Return true only when every reusable GMRES work array is allocated.
+  logical function gmres_work_arrays_allocated()
+    implicit none
+
+    gmres_work_arrays_allocated = allocated(gmres_wrk1) .and. &
+                                  allocated(gmres_wrk2) .and. &
+                                  allocated(gmres_wrk3) .and. &
+                                  allocated(gmres_pa) .and. &
+                                  allocated(gmres_ab1_mo_a) .and. &
+                                  allocated(gmres_ab1_mo_b)
+  end function gmres_work_arrays_allocated
+
   ! Cleanup GMRES work arrays
   subroutine cleanup_gmres_work()
     implicit none

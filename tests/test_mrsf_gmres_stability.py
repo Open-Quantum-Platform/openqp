@@ -83,6 +83,27 @@ class TestMrsfGmresStability(unittest.TestCase):
         self.assertIn("if (nvira <= 0 .or. nvirb <= 0)", block)
         self.assertLess(block.index("if (nvira <= 0 .or. nvirb <= 0)"), block.index("allocate(gmres_wrk1"))
 
+    def test_gmres_work_buffer_reuse_requires_all_arrays_allocated(self):
+        """A stale module flag must not skip allocation when any reusable GMRES buffer is absent."""
+        init = re.search(r"subroutine init_gmres_work\(nbf, nocca, noccb\).*?end subroutine init_gmres_work", self.src, re.S | re.I)
+        if init is None:
+            self.fail("Could not locate init_gmres_work")
+        block = init.group(0)
+
+        reuse = re.search(
+            r"if \(gmres_nbf == nbf \.and\. gmres_nocca == nocca \.and\. gmres_noccb == noccb\) then.*?! Deallocate old arrays before reallocating",
+            block,
+            re.S | re.I,
+        )
+        if reuse is None:
+            self.fail("Could not locate GMRES work-buffer reuse branch")
+        reuse_block = reuse.group(0)
+
+        self.assertIn("gmres_work_arrays_allocated()", block)
+        self.assertIn("if (gmres_work_arrays_allocated()) then", reuse_block)
+        self.assertLess(reuse_block.index("gmres_work_arrays_allocated()"), reuse_block.index("return"))
+        self.assertIn("call cleanup_gmres_work()", reuse_block)
+
 
 if __name__ == "__main__":
     unittest.main()
