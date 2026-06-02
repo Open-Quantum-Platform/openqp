@@ -343,6 +343,7 @@ contains
       case (PCG_CONVERGED)
         b = pcg%x
         if (present(err)) err = pcg%error
+        call pcg%clean()
         return
       case default
         goto 9999
@@ -366,6 +367,7 @@ contains
       if (present(err)) err = pcg%error
     end if
 
+    call pcg%clean()
     return
     9999 continue
 
