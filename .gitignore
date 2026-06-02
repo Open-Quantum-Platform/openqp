@@ -19,6 +19,7 @@ lib64/*
 share/*
 examples/data_*
 build/
+build_*/
 __pycache__/
 *.pyc
 openqp_test_tmp_*
