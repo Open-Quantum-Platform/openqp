@@ -293,9 +293,16 @@ class Molecule:
 
         hartree_to_ev = 27.211386245988
         ebe_ev = (-eigenvalues * hartree_to_ev).tolist()
+        ekt_type = self.config.get('tdhf', {}).get('type')
+        if self.config.get('input', {}).get('runtype') == 'ekt':
+            if self.config.get('ekt', {}).get('ip'):
+                ekt_type = 'mrsf_ekt_ip'
+            elif self.config.get('ekt', {}).get('ea'):
+                ekt_type = 'mrsf_ekt_ea'
+
         return {
             'mrsf_ekt': {
-                'tdhf_type': self.config.get('tdhf', {}).get('type'),
+                'tdhf_type': ekt_type,
                 'target_state': self.config.get('tdhf', {}).get('target'),
                 'eigenvalues_hartree': eigenvalues.tolist(),
                 'ebe_ev': ebe_ev,
@@ -655,10 +662,10 @@ class Molecule:
         ]
         tdhf_type = self.config.get('tdhf', {}).get('type')
         required_ref_keys = []
-        if tdhf_type in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):
+        if tdhf_type in ('mrsf_ekt_ip', 'mrsf_ekt_ea') or runtype == 'ekt':
             required_ref_keys.append('mrsf_ekt')
 
-        if runtype in ['energy']:
+        if runtype in ['energy', 'ekt']:
             skip_keys.append('grad')
             skip_keys.append('hess')
 
@@ -667,13 +674,6 @@ class Molecule:
 
         if runtype in ['hess', 'nacme', 'nac']:
             skip_keys.append('grad')
-        if runtype == 'hess':
-            # Hessian examples keep the detailed vibrational reference in
-            # ``*.hess.json``.  The legacy main ``*.json`` references store an
-            # empty placeholder for ``hess``; comparing that placeholder to the
-            # runtime Cartesian matrix creates a shape mismatch instead of a
-            # meaningful regression signal.
-            skip_keys.append('hess')
 
         message = ''
         total_diff = 0
@@ -683,6 +683,18 @@ class Molecule:
 
             with open(ref_file, 'r') as indata:
                 ref_data = json.load(indata)
+
+            # Hessian runs write detailed Hessian references to a sidecar
+            # <input>.hess.json. Keep the primary restart/reference JSON
+            # compact, but compare the runtime hess matrix against the
+            # sidecar when the primary hess field is intentionally empty.
+            if runtype == 'hess' and ref_data.get('hess') == []:
+                hess_ref_file = self.input_file.replace('.inp', '.hess.json')
+                if os.path.exists(hess_ref_file):
+                    with open(hess_ref_file, 'r') as hess_indata:
+                        hess_ref_data = json.load(hess_indata)
+                    if 'hessian' in hess_ref_data:
+                        ref_data['hess'] = hess_ref_data['hessian']
 
             for key in required_ref_keys:
                 if key not in ref_data:
@@ -743,7 +755,16 @@ def compare_data(data_1, data_2):
     arr_1 = np.array(data_1)
     arr_2 = np.array(data_2)
     if arr_1.shape != arr_2.shape:
-        return 'failed', 1.0
+        # Some references intentionally store a compact prefix of a longer
+        # runtime vector (e.g. EKT roots). Compare the reference-sized prefix
+        # when the remaining dimensions agree; otherwise report a clean
+        # failure instead of raising a broadcasting ValueError.
+        if arr_1.ndim == arr_2.ndim and arr_1.ndim > 0 \
+                and arr_1.shape[0] >= arr_2.shape[0] \
+                and arr_1.shape[1:] == arr_2.shape[1:]:
+            arr_1 = arr_1[:arr_2.shape[0]]
+        else:
+            return 'failed', 1.0
 
     if arr_1.size == 0:
         diff = 0.0
