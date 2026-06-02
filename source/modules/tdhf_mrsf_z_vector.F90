@@ -25,6 +25,16 @@ contains
     integer, intent(in) :: nbf, nocca, noccb
     integer :: nvira, nvirb, ok
     
+    if (nbf <= 0 .or. nocca < 0 .or. noccb < 0) then
+      call show_message('Invalid GMRES work dimensions before allocation', with_abort)
+    end if
+
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    if (nvira <= 0 .or. nvirb <= 0) then
+      call show_message('Invalid GMRES occupied/virtual dimensions before allocation', with_abort)
+    end if
+
     if (gmres_work_allocated) then
       ! Check if dimensions match
       if (gmres_nbf == nbf .and. gmres_nocca == nocca .and. gmres_noccb == noccb) then
@@ -34,9 +44,6 @@ contains
         call cleanup_gmres_work()
       end if
     end if
-    
-    nvira = nbf - nocca
-    nvirb = nbf - noccb
     
     allocate(gmres_wrk1(nbf,nbf), &
              gmres_wrk2(nbf,nbf), &

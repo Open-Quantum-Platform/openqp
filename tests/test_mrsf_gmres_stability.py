@@ -73,6 +73,16 @@ class TestMrsfGmresStability(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(x(i)))", block)
         self.assertIn("unstable = .true.", block)
 
+    def test_gmres_work_buffers_reject_invalid_virtual_dimensions_before_allocate(self):
+        init = re.search(r"subroutine init_gmres_work\(nbf, nocca, noccb\).*?end subroutine init_gmres_work", self.src, re.S | re.I)
+        if init is None:
+            self.fail("Could not locate init_gmres_work")
+        block = init.group(0)
+
+        self.assertIn("if (nbf <= 0 .or. nocca < 0 .or. noccb < 0)", block)
+        self.assertIn("if (nvira <= 0 .or. nvirb <= 0)", block)
+        self.assertLess(block.index("if (nvira <= 0 .or. nvirb <= 0)"), block.index("allocate(gmres_wrk1"))
+
 
 if __name__ == "__main__":
     unittest.main()
