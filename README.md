@@ -49,6 +49,26 @@ This is the recommended source install path. It builds and installs the OpenQP P
 or 
 #### Detailed Compile
 
+##### macOS with Homebrew GCC and native BLAS
+
+On macOS, use the Homebrew GCC toolchain for C/C++/Fortran and the native Accelerate BLAS/LAPACK provider. Replace `gcc-15`, `g++-15`, and `gfortran-15` with the installed Homebrew GCC version if needed.
+
+```bash
+cd openqp
+cmake -B build -G Ninja \
+  -DUSE_LIBINT=OFF \
+  -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 \
+  -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 \
+  -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
+  -DCMAKE_INSTALL_PREFIX=. \
+  -DENABLE_OPENMP=ON \
+  -DLINALG_LIB=auto \
+  -DLINALG_LIB_INT64=OFF
+ninja -C build install
+cd pyoqp
+pip install .
+```
+
 ##### OpenMP Support
 
 ```bash
@@ -80,7 +100,7 @@ pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- OpenQP requires ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default).
+- The Linux/manual examples above use ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default). The macOS example uses native Accelerate BLAS/LAPACK with `-DLINALG_LIB_INT64=OFF`.
 
 #### Environmental Settings
 
