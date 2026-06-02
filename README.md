@@ -7,6 +7,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - **Autonomous Modules of Quantum Chemistry Theories for Easy Interoperability**
 - **Flexible prototyping through a Python wrapper, PyOQP**
 - **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
+- **Ionization Potential/Electron Affinity spectra** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494), including ground- and excited-state response targets through `tdhf.type=mrsf_ekt_ip` / `mrsf_ekt_ea` and `tdhf.target`
 - **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
 - **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
 - **Ground State Properties** by HF and DFT theories
@@ -26,7 +27,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
-- **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
 ### Quickstart
 
