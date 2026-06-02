@@ -30,6 +30,7 @@ type=mrsf
 multiplicity=1
 nstate=25
 ixcore=7
-conv=1e-9
-zvconv=1e-9
+conv=1e-8
+zvconv=1e-8
+maxit=100
 
