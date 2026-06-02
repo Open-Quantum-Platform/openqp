@@ -258,6 +258,40 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
+    def test_rohf_hf_analytical_hessian_is_rejected_before_dispatch(self):
+        config = {
+            "input": {"method": "hf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 0, "nproc": 1, "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
+
+        self.assertFalse(report.ok)
+        self.assertIn("RHF and UHF only", report.to_text())
+        self.assertIn("ROHF analytic Hessian is not available", report.to_text())
+
+    def test_hf_analytical_hessian_rejects_openqp_library_basis_mapping(self):
+        config = {
+            "input": {
+                "method": "hf",
+                "runtype": "hess",
+                "system": "\nO 0 0 0 o1\nH 0 0 0.9 h1\nH 0 0.7 -0.3 h2",
+                "basis": "library",
+                "library": "\no1 sto-3g\nh1 sto-3g\nh2 sto-3g",
+            },
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 0, "nproc": 1, "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
+
+        self.assertFalse(report.ok)
+        self.assertIn("basis=library", report.to_text())
+        self.assertIn("PySCF reference bridge", report.to_text())
+
     def test_tddft_analytical_hessian_is_rejected_until_scaffold_exists(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},

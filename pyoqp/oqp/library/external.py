@@ -375,7 +375,13 @@ def _build_pyscf_hessian_mf(mol, coord_bohr=None):
     mole = gto.Mole()
     mole.atom = atoms
     mole.unit = 'Bohr'
-    mole.basis = mol.config["input"]["basis"]
+    basis = str(mol.config["input"].get("basis", "")).strip()
+    if basis.lower() == "library":
+        raise NotImplementedError(
+            "PySCF external analytic Hessian bridge does not support OpenQP basis=library "
+            "tagged basis mappings; set a PySCF-compatible global basis or use [hess] type=numerical."
+        )
+    mole.basis = basis
     mole.charge = mol.config["input"].get("charge", 0)
     mole.spin = mol.config["scf"].get("multiplicity", 1) - 1
     mole.output = '%s.analytic_hess.pyscf' % mol.project_name
