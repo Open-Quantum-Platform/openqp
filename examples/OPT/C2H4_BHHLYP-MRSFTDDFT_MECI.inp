@@ -27,8 +27,10 @@ optimizer=bfgs
 maxit=2
 istate=1
 jstate=2
-energy_shift=1e-5
-energy_gap=1e-4
+energy_shift=1
+energy_gap=1
 rmsd_grad=1
 max_grad=1
+rmsd_step=1
+max_step=1
 

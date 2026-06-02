@@ -21,4 +21,9 @@ maxit=30
 [optimize]
 istate=1
 maxit=5
+energy_shift=1
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
 
