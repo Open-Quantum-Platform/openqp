@@ -22,6 +22,11 @@ except ModuleNotFoundError:
     dftd_installed = 'not installed'
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.nac_utils import (
+    stable_nac_from_overlap,
+    symmetrize_derivative_coupling,
+    verify_nac_conventions,
+)
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 
 
@@ -992,19 +997,41 @@ class NACME(BasisOverlap):
         oqp.get_states_overlap(self.mol)
         state_overlap = self.mol.data["OQP::td_states_overlap"]
 
-        # compute time-derivative nac
-        dc_matrix = (state_overlap - state_overlap.T) / self.dt
+        # compute time-derivative nac from a gauge-stabilized state overlap.
+        # Raw electronic states can change sign, permute, or rotate inside a
+        # near-degenerate subspace between NAMD frames.  Before forming the HST
+        # antisymmetric derivative coupling, first reorder/sign-align the state
+        # overlap and project it to the nearest orthogonal matrix (Procrustes /
+        # polar alignment).  This leaves the small-step factor-2 convention from
+        # PR #160 intact while suppressing phase/root-tracking spikes.
+        dc_matrix, aligned_overlap, nac_overlap_used, nac_diag = stable_nac_from_overlap(
+            state_overlap,
+            self.dt,
+            method='polar',
+            min_match=0.5,
+        )
+        self.mol.data["OQP::td_states_overlap_aligned"] = aligned_overlap
+        self.mol.data["OQP::td_states_overlap_nac"] = nac_overlap_used
+        self.mol.data["OQP::nac_phase_diagnostics"] = nac_diag
+        # Energy gap, standard orientation gap[i,j] = E_j - E_i
+
         e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
         e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
         gap = e_j - e_i
+        # Interstate coupling h_ij = (E_j - E_i)*d_ij, derived from canonical d
+        # (symmetric, h_ij = h_ji by construction).
         nac_matrix = dc_matrix * gap
         nac_matrix = nac_matrix[0:self.nac_dim, 0:self.nac_dim]
+        verify_nac_conventions(dc_matrix, nac_matrix, label='nacme')
         self.mol.data["OQP::dc_matrix"] = dc_matrix
         self.mol.data["OQP::nac_matrix"] = nac_matrix
 
         dump_log(self.mol, title='PyOQP: Non-Adiabatic Coupling Matrix Calculation', section='nacme')
-        dump_log(self.mol, title='PyOQP: phase corrected state overlap (s_ij)', section='nacm', info=state_overlap)
-        dump_log(self.mol, title='PyOQP: phase corrected derivative coupling (d_ij)', section='nacm', info=dc_matrix)
+        dump_log(self.mol, title='PyOQP: raw state overlap (s_ij)', section='nacm', info=state_overlap)
+        dump_log(self.mol, title='PyOQP: gauge-aligned state overlap (s_ij)', section='nacm', info=aligned_overlap)
+        dump_log(self.mol, title='PyOQP: polar state overlap used for NAC (s_ij)', section='nacm', info=nac_overlap_used)
+        dump_log(self.mol, title='PyOQP: NAC phase/root diagnostics', section='nacm', info=nac_diag)
+        dump_log(self.mol, title='PyOQP: phase stable derivative coupling (d_ij)', section='nacm', info=dc_matrix)
         dump_log(self.mol, title='PyOQP: state energy gap (e_ji)', section='nacm', info=gap)
         dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm',
                  info=nac_matrix)
@@ -1196,17 +1223,31 @@ class NAC(Calculator):
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
+        # Central-difference average of the per-point derivative couplings.
+        # Each per-point dcme is (S - S^T)/(2*dx) = +/- d_ij (the HST factor is
+        # applied at the source in NACME.nacme), so this yields the canonical
+        # antisymmetric d_ij.
         dcm = (forward - backward) / 2
-        e_i = np.array(self.mol.energies[1:]).reshape((1, -1))
-        e_j = np.array(self.mol.energies[1:]).reshape((-1, 1))
+        # Energy gap, standard orientation gap[i,j] = E_j - E_i, unified with
+        # NACME.nacme (row = bra state i, column = ket state j).
+        e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
+        e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
         gap = e_j - e_i
-        np.fill_diagonal(gap, 1)
-        gap = gap.reshape((1, -1))
-        nacm = dcm * gap
+        np.fill_diagonal(gap, 1)  # guard; diagonal d/h are zero regardless
 
         # reshape matrix -> (nstate x nstate, natom x 3) -> (nstate, nstate, natom, 3)
         dcv = dcm.T.reshape((self.nstate, self.nstate, self.natom, 3))
-        nacv = nacm.T.reshape((self.nstate, self.nstate, self.natom, 3))
+        # Full numerical NAC-vector cleanup: after collecting all displaced
+        # NACME workers, explicitly project tiny root/phase numerical noise out
+        # of the derivative-coupling tensor before deriving h. This preserves
+        # the canonical d_ij=-d_ji convention for every Cartesian component and
+        # makes h_ij=(E_j-E_i)d_ij symmetric by construction.
+        dcv = symmetrize_derivative_coupling(dcv)
+        gap = gap.reshape((self.nstate, self.nstate, 1, 1))
+        nacv = dcv * gap
+
+        # convention guard: d antisymmetric, h symmetric over the state pair
+        verify_nac_conventions(dcv, nacv, label='numerical_nac')
 
         # delete scratch folder
         if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
