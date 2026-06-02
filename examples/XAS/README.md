@@ -27,8 +27,9 @@ For example, one can put singly occupied electrons in one of core orbital and LU
 
 One first need to swap MO (core and HOMO) by "swapmo=2,7" in the "HCN_CHP-MRSF.inp" example. Then one need to restrict the MO ordering during SCF by "rstctmo=True" keyword.  Once the SCF is converged, one can get excitations from core (HOMO) by "ixcore=7" keyword.
 
-In the example, Carbon K-edge is compted from state 2 which is 1s --> pi* transition. The ground state obtained from CHP-MRSF is usually poorly described, therefore, it's better the use ground state from KS DFT (or MRSF-TDDFT) calculation. 
-The final delta-CHP-MRSF energy is obtained as the difference between CHP state - KS DFT, -82.7431859863 - (-93.3641769363) = 10.62099095 (289.01 eV) with 0.0429 of oscillator strength.
+In the example, Carbon K-edge is computed from state 2, which is a 1s --> pi* transition. The ground state obtained from CHP-MRSF is usually poorly described, therefore, it is better to use the ground state from KS DFT (or MRSF-TDDFT) calculation.
+
+Current reference values for `HCN_CHP-MRSF.inp` are: core-hole reference state 0 = -82.7656845061 Hartree; bright state 2 = -83.3333968722 Hartree; transition 1 -> 2 = 293.81 eV with oscillator strength 0.0530. The DFT ground-state reference from `HCN_DFT.inp` is -93.3641769363 Hartree. If an absolute delta-CHP-MRSF energy is formed as bright CHP state 2 minus KS DFT, the value is 10.0307800641 Hartree (272.95 eV). Do not use the core-hole reference state 0 energy as the bright XAS state energy.
 
 * Important note for delta-CHP-MRSF
 In current implementation, we don't get core (HOMO after using swapmo and rstctmo) -> LUMO excitation.  
