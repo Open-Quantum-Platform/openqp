@@ -275,6 +275,18 @@ contains
       write(iw,'(" PCG stopped on a non-finite or near-zero denominator; ",&
                &"final residual = ",1p,e13.6)') pcg%error
       infos%mol_energy%Z_Vector_converged=.false.
+      call flush(iw)
+      deallocate(xminv, rhs, xm)
+      if (allocated(int2_data)) then
+        call int2_data%clean()
+        deallocate(int2_data)
+      end if
+      call pcg%clean()
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
     case default
       write(iw,'(/3x,24("-")&
                &/6x,"Z-Vector not converged"&

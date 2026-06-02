@@ -128,6 +128,23 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("call measure_time", guard_block)
         self.assertRegex(guard_block, r"return\b")
 
+    def test_rhf_zvector_pcg_breakdown_skips_density_and_w_updates_from_bad_solution(self):
+        """RHF/TDA z-vector must not build P/W densities after PCG breakdown."""
+        src = RHF_ZVEC_SRC.read_text()
+        breakdown = src.index("case (PCG_BREAKDOWN)")
+        first_solution_use = min(
+            src.index("call iatogen"),
+            src.index("call compute_w_mo"),
+        )
+        self.assertLess(breakdown, first_solution_use)
+        guard_block = src[breakdown:first_solution_use]
+        self.assertIn("call int2_data%clean()", guard_block)
+        self.assertIn("call int2_driver%clean()", guard_block)
+        self.assertIn("if (dft) call dftclean(infos)", guard_block)
+        self.assertIn("call pcg%clean()", guard_block)
+        self.assertIn("call measure_time", guard_block)
+        self.assertRegex(guard_block, r"return\b")
+
     def test_mrsf_gmres_recomputes_true_residual_after_solution_update(self):
         """MRSF GMRES must not accept only the Givens residual estimate after restart updates."""
         src = MRSF_ZVEC_SRC.read_text()
