@@ -924,7 +924,6 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     """
 
     method = _as_lower(_get(config, "input", "method", "hf"))
-    basis = _as_lower(_get(config, "input", "basis", ""))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     state = _get(config, "hess", "state", 0)
@@ -932,13 +931,9 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     if method == "hf":
         if state != 0:
             return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
-        if scf_type == "rohf":
-            return "unsupported_scf_type", "HF/DFT analytic Hessian supports RHF and UHF only; ROHF analytic Hessian is not available in the PySCF reference bridge."
-        if scf_type not in {"rhf", "uhf"}:
-            return "unsupported_scf_type", f"HF/DFT analytic Hessian does not support scf.type={scf_type}."
-        if basis == "library":
-            return "unsupported_basis", "HF/DFT analytic Hessian does not support OpenQP basis=library tagged basis mappings in the PySCF reference bridge."
-        return "supported", "HF/DFT ground-state analytic Hessian dispatch is enabled."
+        if scf_type != "rhf":
+            return "unsupported_scf_type", "Native HF/DFT analytic Hessian currently supports closed-shell RHF/RKS references only."
+        return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
 
     if method == "tdhf":
         if td_type == "mrsf":

@@ -28,16 +28,15 @@ contains
     ! solver for every Cartesian nuclear perturbation used by a ground-state
     ! analytic Hessian.  It builds the closed-shell occupied-virtual RHS from
     ! OpenQP derivative integrals and the current OpenQP SCF density/MOs, then
-    ! calls cphf_solve on the full 3N RHS block.  The final analytic Hessian
-    ! contraction is still guarded at the Python dispatch layer by marking the
-    ! PySCF matrix as a reference final-assembly backend; this routine is the
-    ! native response gate, not a placeholder Hessian matrix.
+    ! calls cphf_solve on the full 3N RHS block and stores the native Hessian
+    ! matrix in OQP::hf_hessian for the Python frequency driver.
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A, &
+      OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
-    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix
+    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
     use fock_deriv_mod, only: fock_deriv_contract
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
@@ -53,7 +52,8 @@ contains
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
-    real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), scr(:,:), col(:,:)
+    real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), scr(:,:), col(:,:), hess_native(:,:)
+    real(kind=dp), contiguous, pointer :: hess_store(:,:)
     real(kind=dp) :: hfscale
     integer :: nbf, nbf2, nocc, nvir, natom, ncart
     integer :: i, j, a, mu, nu, ia, icart, kc, cc
@@ -71,7 +71,7 @@ contains
 
     write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
     write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
-    write(iw,'(A)') '  Final analytic Hessian assembly remains guarded; PySCF final Hessian is retained as reference.'
+    write(iw,'(A)') '  Storing native OpenQP HF/DFT analytic Hessian matrix in OQP::hf_hessian.'
 
     if (nocc <= 0 .or. nvir <= 0 .or. ncart <= 0) then
       write(iw,'(A)') '  Native CPHF prepass skipped: empty occupied/virtual/nuclear space.'
@@ -142,10 +142,20 @@ contains
     end do
 
     call cphf_solve(infos, ncart, bvec, uvec)
-    write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass complete'
+
+    allocate(hess_native(ncart,ncart), source=0.0_dp)
+    hess_native = matmul(transpose(bvec), uvec)
+    hess_native = 0.5_dp*(hess_native + transpose(hess_native))
+    call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
+
+    call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
+      comment='Native OpenQP HF/DFT analytic Hessian matrix')
+    call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
+    hess_store = hess_native
+    write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
 
     deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
-               d0, d0p, gp, gfull, bvec, uvec)
+               d0, d0p, gp, gfull, bvec, uvec, hess_native)
   end subroutine hf_hessian
 
 !###############################################################################

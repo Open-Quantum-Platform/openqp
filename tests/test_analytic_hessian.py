@@ -163,25 +163,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
         restore_modules(self._module_snapshot)
 
-    def test_hf_analytical_hessian_runs_native_fortran_cphf_prepass_before_pyscf_reference(self):
-        external_calls = []
-        external_mod = types.ModuleType("oqp.library.external")
-
-        def analytic_hessian_from_pyscf(mol):
-            external_calls.append(mol)
-            mol.hessian_metadata = {
-                "backend": "external_pyscf",
-                "native_openqp_kernel": False,
-                "no_numerical_fallback": True,
-                "shape": [6, 6],
-                "max_asymmetry_before_symmetrization": 0.0,
-                "compact_validation_summary": {"matrix_payload": "omitted"},
-            }
-            return np.eye(6), ["computed", "external_pyscf"]
-
-        setattr(external_mod, "analytic_hessian_from_pyscf", analytic_hessian_from_pyscf)
-        sys.modules["oqp.library.external"] = external_mod
-
+    def test_hf_analytical_hessian_reads_native_fortran_hessian_without_external_backend(self):
         class Mol:
             config = {
                 "guess": {"save_mol": False},
@@ -192,7 +174,12 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
                 "scf": {"multiplicity": 1},
                 "tdhf": {"type": "rpa", "multiplicity": 1},
             }
-            data = {"natom": 2}
+            data = {"natom": 2, "OQP::hf_hessian": np.eye(6)}
+
+            def set_hessian_result(self, raw_hessian):
+                self.hessian = np.asarray(raw_hessian, dtype=float)
+                self.hessian_metadata = {"max_asymmetry": 0.0, "symmetrized": False}
+                return self.hessian
 
         mol = Mol()
         hessian = self.single_point.Hessian(mol)
@@ -200,14 +187,14 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         result, flags = hessian.analytical_ground_state_hess()
 
         self.assertEqual(self.native_calls, [mol])
-        self.assertEqual(external_calls, [mol])
-        self.assertEqual(flags, ["computed", "native_openqp_cphf", "external_pyscf_reference"])
+        self.assertEqual(flags, ["computed", "native_openqp"])
         self.assertEqual(result.shape, (6, 6))
-        self.assertEqual(mol.hessian_metadata["backend"], "native_openqp_cphf_pyscf_reference")
-        self.assertTrue(mol.hessian_metadata["native_openqp_cphf"])
+        self.assertEqual(mol.hessian_metadata["backend"], "native_openqp")
+        self.assertTrue(mol.hessian_metadata["native_openqp_kernel"])
         self.assertTrue(mol.hessian_metadata["native_openqp_cphf_solver_exercised"])
-        self.assertFalse(mol.hessian_metadata["native_openqp_final_assembly"])
-        self.assertEqual(mol.hessian_metadata["reference_backend"], "external_pyscf")
+        self.assertTrue(mol.hessian_metadata["native_openqp_final_assembly"])
+        self.assertTrue(mol.hessian_metadata["no_external_hessian_backend"])
+        self.assertNotIn("reference_backend", mol.hessian_metadata)
 
     def test_sf_analytical_hessian_routes_separately_from_mrsf_private_path(self):
         class Mol:
@@ -269,10 +256,9 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
         self.assertFalse(report.ok)
-        self.assertIn("RHF and UHF only", report.to_text())
-        self.assertIn("ROHF analytic Hessian is not available", report.to_text())
+        self.assertIn("closed-shell RHF/RKS", report.to_text())
 
-    def test_hf_analytical_hessian_rejects_openqp_library_basis_mapping(self):
+    def test_hf_analytical_hessian_allows_openqp_library_basis_mapping(self):
         config = {
             "input": {
                 "method": "hf",
@@ -288,9 +274,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertFalse(report.ok)
-        self.assertIn("basis=library", report.to_text())
-        self.assertIn("PySCF reference bridge", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
 
     def test_tddft_analytical_hessian_is_rejected_until_scaffold_exists(self):
         config = {

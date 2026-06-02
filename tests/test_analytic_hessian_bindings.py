@@ -31,18 +31,19 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         ]:
             self.assertIn(symbol, source)
 
-    def test_hf_dispatch_runs_native_cphf_prepass_before_pyscf_reference_without_numerical_fallback(self):
+    def test_hf_dispatch_reads_native_hessian_without_external_backend_or_fallback(self):
         source = read("pyoqp/oqp/library/single_point.py")
 
         self.assertIn("native_hess_func", source)
         self.assertIn("no numerical fallback", source.lower())
-        self.assertIn("native OpenQP CPHF prepass", source)
-        self.assertIn("external PySCF reference final Hessian", source)
+        self.assertIn("OQP::hf_hessian", source)
         self.assertNotIn("oracle", source.lower())
-        self.assertIn("analytic_hessian_from_pyscf", source)
+        self.assertNotIn("analytic_hessian_from_pyscf(self.mol)", source)
         self.assertIn("native_hess_func = self.native_hess_func['hf']", source)
         self.assertIn("native_hess_func(self.mol)", source)
-        self.assertIn("Native Fortran CPHF Hessian response log", source)
+        self.assertIn("Native Fortran HF/DFT analytic Hessian log", source)
+        self.assertIn("'backend': 'native_openqp'", source)
+        self.assertIn("'no_external_hessian_backend': True", source)
 
     def test_public_sf_dispatch_is_separate_from_private_mrsf_path(self):
         source = read("pyoqp/oqp/library/single_point.py")
@@ -51,7 +52,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("td_type == 'sf'", source)
         self.assertIn("return self.analytical_sf_hess()", source)
 
-    def test_hf_hessian_fortran_runs_native_cphf_solver_diagnostic_without_claiming_final_assembly(self):
+    def test_hf_hessian_fortran_stores_native_hessian_matrix(self):
         source = read("source/modules/hf_hessian.F90")
 
         self.assertIn("module hf_hessian_mod", source)
@@ -61,8 +62,9 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("use cphf_mod, only: cphf_solve", source)
         self.assertIn("Native OpenQP HF/DFT Hessian CPHF response prepass", source)
         self.assertIn("call cphf_solve", source)
-        self.assertIn("Final analytic Hessian assembly remains guarded", source)
-        self.assertIn("retained as reference", source)
+        self.assertIn("OQP_hf_hessian", source)
+        self.assertIn("reserve_data(OQP_hf_hessian", source)
+        self.assertIn("hess_store = hess_native", source)
         self.assertNotIn("implementation is not available yet", source)
 
     def test_tdhf_hessian_fortran_scaffolds_export_c_abi_without_claiming_support(self):
