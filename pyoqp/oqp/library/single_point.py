@@ -687,6 +687,16 @@ class Hessian(Calculator):
         else:
             self.hess_func = self.numerical_hess
 
+        # Native Hessian ABI placeholders (oqp.hf_hessian, oqp.tdhf_hessian,
+        # oqp.tdhf_sf_hessian). These entries are intentionally not used as a
+        # numerical fallback while kernels/storage are still being implemented.
+        self.native_hess_func = {
+            'hf': getattr(oqp, 'hf_hessian', None),
+            'rpa': getattr(oqp, 'tdhf_hessian', None),
+            'tda': getattr(oqp, 'tdhf_hessian', None),
+            'sf': getattr(oqp, 'tdhf_sf_hessian', None),
+        }
+
         method = mol.config['input']['method']
         scf_mult = mol.config['scf']['multiplicity']
         td_mult = mol.config['tdhf']['multiplicity']
@@ -716,6 +726,7 @@ class Hessian(Calculator):
                 self.mol.hessian = hessian
                 self.mol.modes = modes
                 self.mol.inertia = inertia
+                self._compute_vibrational_intensities(modes)
 
                 self.mol.save_freqs(self.state)
                 dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
@@ -725,6 +736,12 @@ class Hessian(Calculator):
                     self.mol.save_data()
 
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
+        dump_log(
+            self.mol,
+            title='PyOQP: Frequency Normal Mode Eigenvectors',
+            section='freq_modes',
+            info=(self.mol.get_atoms(), freqs, modes),
+        )
 
         for t in self.temperature:
             thermal_data = thermal_analysis(
@@ -738,8 +755,183 @@ class Hessian(Calculator):
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
 
+    def _native_property_tensors_at(self, coord_bohr):
+        """Return native OpenQP dipole (a.u.) and static polarizability at displaced geometry."""
+
+        from oqp.pyoqp import Runner
+
+        def _config_value(value):
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, (list, tuple)):
+                if len(value) == 1 and not isinstance(value[0], (list, tuple)):
+                    return str(value[0])
+                return ','.join(
+                    ' '.join(str(item) for item in entry) if isinstance(entry, (list, tuple)) else str(entry)
+                    for entry in value
+                )
+            return str(value)
+
+        raw_config = copy.deepcopy(self.mol.config)
+        config = {
+            section: {key: _config_value(value) for key, value in values.items()}
+            for section, values in raw_config.items()
+        }
+        config['input']['runtype'] = 'energy'
+        if config.get('guess', {}).get('type') == 'json':
+            config['guess']['type'] = 'huckel'
+        config['guess']['save_mol'] = 'false'
+        project = f"{self.mol.project_name}_vibprop"
+        runner = Runner(
+            project=project,
+            input_dict=config,
+            log=os.devnull,
+            silent=1,
+            usempi=False,
+        )
+        runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        runner.run()
+
+        dipole = np.zeros(3, dtype=np.float64)
+        alpha = np.zeros((3, 3), dtype=np.float64)
+        oqp.electric_dipole_au(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole)))
+        oqp.cphf_static_polarizability(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(alpha)))
+        return dipole, alpha
+
+    def _compute_vibrational_intensities(self, modes):
+        """Compute IR/Raman intensities using native OpenQP property kernels."""
+
+        modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
+        coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
+        ncoord = coord0.size
+        if modes.ndim != 2 or modes.shape[1] != ncoord:
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'failed',
+                'reason': f'Expected modes with shape (nmode, {ncoord}), got {modes.shape}',
+            }
+            return
+
+        displacement = 1.0e-3
+        dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
+        polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)
+        flat0 = coord0.reshape(-1)
+        for idx in range(ncoord):
+            disp = np.zeros(ncoord, dtype=float)
+            disp[idx] = displacement
+            try:
+                dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
+                dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
+            except Exception as exc:
+                self.mol.vibrational_intensity_metadata = {
+                    'status': 'failed',
+                    'backend': 'native_openqp_finite_difference',
+                    'reason': str(exc),
+                }
+                return
+            dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
+            polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
+
+        nmode = modes.shape[0]
+        ir = np.zeros(nmode, dtype=np.float64)
+        mode_dipoles = np.zeros((nmode, 3), dtype=np.float64)
+        raman = np.zeros(nmode, dtype=np.float64)
+        mode_polars = np.zeros((nmode, 3, 3), dtype=np.float64)
+        oqp.vibrational_intensities_native(
+            self.mol,
+            np.int64(nmode),
+            np.int64(ncoord),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(modes)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(polar_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(ir)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_dipoles)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(raman)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_polars)),
+        )
+
+        self.mol.infrared_intensities = ir
+        self.mol.raman_activities = raman
+        self.mol.infrared_mode_dipole_derivatives = mode_dipoles
+        self.mol.raman_mode_polarizability_derivatives = mode_polars
+        self.mol.vibrational_intensity_metadata = {
+            'status': 'computed',
+            'backend': 'native_openqp_finite_difference',
+            'property_kernels': 'electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native',
+            'displacement_bohr': float(displacement),
+            'ir_units': 'km/mol',
+            'raman_units': 'a.u.',
+        }
+
     def analytical_hess(self):
-        exit('analytical hessian is not available yet, choose numerical')
+        method = self.mol.config['input']['method']
+        td_type = self.mol.config['tdhf']['type']
+
+        if method == 'hf':
+            return self.analytical_ground_state_hess()
+        if method == 'tdhf' and td_type in {'tda', 'rpa'}:
+            return self.analytical_tddft_hess()
+        if method == 'tdhf' and td_type == 'sf':
+            return self.analytical_sf_hess()
+        if method == 'tdhf' and td_type in {'mrsf', 'umrsf'}:
+            return self.analytical_mrsf_hess()
+        raise NotImplementedError(
+            f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
+        )
+
+    def analytical_ground_state_hess(self):
+        """Run the native OpenQP HF/DFT analytic Hessian kernel and return its stored matrix."""
+
+        native_hess_func = self.native_hess_func['hf']
+        if native_hess_func is None:
+            raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
+        native_hess_func(self.mol)
+        native_cphf_log = os.path.join(getattr(self.mol, 'log_path', os.getcwd()), 'fort.6')
+        if os.path.exists(native_cphf_log) and hasattr(self.mol, 'log'):
+            with open(native_cphf_log, 'r', encoding='utf-8', errors='replace') as source:
+                native_text = source.read()
+            if native_text.strip():
+                with open(self.mol.log, 'a', encoding='utf-8') as target:
+                    target.write('\n\n')
+                    target.write('PyOQP: Native Fortran HF/DFT analytic Hessian log\n')
+                    target.write(native_text)
+                    target.write('\n')
+
+        try:
+            raw_hessian = self.mol.data['OQP::hf_hessian']
+        except (AttributeError, KeyError) as exc:
+            raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
+
+        hessian = self.mol.set_hessian_result(raw_hessian)
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp',
+            'native_openqp_kernel': True,
+            'native_openqp_cphf_solver_exercised': True,
+            'native_openqp_final_assembly': True,
+            'no_external_hessian_backend': True,
+            'no_numerical_fallback': True,
+            'shape': list(hessian.shape),
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp']
+
+    def analytical_tddft_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        raise NotImplementedError(
+            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
+        )
+
+    def analytical_sf_hess(self):
+        raise NotImplementedError(
+            'SF-TDDFT analytic Hessian is not implemented yet; no numerical fallback will be used.'
+        )
+
+    def analytical_mrsf_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        label = 'MRSF-TDDFT' if td_type == 'mrsf' else td_type.upper()
+        raise NotImplementedError(
+            f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
+        )
 
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'

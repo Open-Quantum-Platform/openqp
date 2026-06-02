@@ -3,6 +3,7 @@ import os
 import copy
 import json
 import platform
+import warnings
 import numpy as np
 import oqp
 from oqp.utils.input_parser import OQPConfigParser
@@ -47,8 +48,14 @@ class Molecule:
         self.soc = []  # Npairs, 1,
         self.freqs = np.zeros(0)  # 3Natom-6
         self.hessian = np.zeros(0)  # 3Natom, 3Natom
+        self.hessian_metadata = {}
         self.modes = np.zeros(0)  # 3Natom-6, 3Natom
         self.inertia = np.zeros(0)  # 3
+        self.infrared_intensities = np.zeros(0)
+        self.raman_activities = np.zeros(0)
+        self.vibrational_intensity_metadata = {}
+        self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+        self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -59,6 +66,7 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
+            'OQP::hf_hessian',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
         ]
@@ -234,7 +242,42 @@ class Molecule:
         Get hessian results
         """
 
-        return []
+        return copy.deepcopy(self.hessian)
+
+    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8):
+        """
+        Store a final Cartesian Hessian in OpenQP frequency conventions.
+
+        Native analytic Hessian kernels should hand one square ``(3N, 3N)``
+        matrix to this helper. The helper records the pre-symmetrization
+        asymmetry for diagnostics and stores the symmetrized matrix used by
+        normal-mode analysis; it does not compute a numerical fallback.
+        """
+
+        hessian = np.asarray(raw_hessian, dtype=float)
+        if hessian.ndim != 2 or hessian.shape[0] != hessian.shape[1]:
+            raise ValueError(f"Expected square Hessian matrix, got shape={hessian.shape}")
+
+        natom = self.data['natom']
+        expected = 3 * natom
+        if hessian.shape != (expected, expected):
+            raise ValueError(
+                f"Expected Hessian shape ({expected}, {expected}) for {natom} atoms, got {hessian.shape}"
+            )
+
+        max_asymmetry = float(np.max(np.abs(hessian - hessian.T))) if hessian.size else 0.0
+        if max_asymmetry > asymmetry_tol:
+            warnings.warn(
+                f"Analytic Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
+                RuntimeWarning,
+            )
+
+        self.hessian = 0.5 * (hessian + hessian.T)
+        self.hessian_metadata = {
+            'max_asymmetry': max_asymmetry,
+            'symmetrized': bool(max_asymmetry > 0.0),
+        }
+        return self.hessian
 
     def get_mrsf_ekt_results(self):
         """Collect MRSF-EKT root results for the final JSON file."""
@@ -491,9 +534,20 @@ class Molecule:
             'mass': self.get_mass().tolist(),
             'energy': self.energies[state],
             'hessian': self.hessian.tolist(),
+            'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
-            'inertia': self.modes.tolist(),
+            'frequency_modes': {
+                'frequencies_cm-1': self.freqs.tolist(),
+                'normal_mode_eigenvectors': self.modes.tolist(),
+                'normal_mode_eigenvectors_units': 'Cartesian displacement, mass-unweighted, row-major by vibrational mode',
+            },
+            'inertia': self.inertia.tolist(),
+            'infrared_intensities': self.infrared_intensities.tolist(),
+            'raman_activities': self.raman_activities.tolist(),
+            'vibrational_intensity_metadata': self.vibrational_intensity_metadata,
+            'infrared_mode_dipole_derivatives': self.infrared_mode_dipole_derivatives.tolist(),
+            'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
         }
 
         with open(jsonfile, 'w') as outdata:
@@ -566,9 +620,19 @@ class Molecule:
 
         energy = data['energy']
         hessian = data['hessian']
+        self.hessian_metadata = data.get('hessian_metadata', {})
         freqs = data['freqs']
         modes = data['modes']
         inertia = data['inertia']
+        self.infrared_intensities = np.array(data.get('infrared_intensities', []), dtype=float)
+        self.raman_activities = np.array(data.get('raman_activities', []), dtype=float)
+        self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
+        self.infrared_mode_dipole_derivatives = np.array(
+            data.get('infrared_mode_dipole_derivatives', []), dtype=float
+        )
+        self.raman_mode_polarizability_derivatives = np.array(
+            data.get('raman_mode_polarizability_derivatives', []), dtype=float
+        )
 
         return energy, hessian, freqs, modes, inertia
 
@@ -586,6 +650,7 @@ class Molecule:
             'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
+            'OQP::hf_hessian',
             'json'
         ]
         tdhf_type = self.config.get('tdhf', {}).get('type')

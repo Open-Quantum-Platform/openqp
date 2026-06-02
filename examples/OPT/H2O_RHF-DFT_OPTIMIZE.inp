@@ -15,4 +15,5 @@ multiplicity=1
 
 [optimize]
 istate=0
+maxit=5
 
