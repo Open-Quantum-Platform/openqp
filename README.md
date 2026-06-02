@@ -7,7 +7,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 | Area | What OpenQP can do now | Notes |
 | --- | --- | --- |
 | Electronic structure | HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations | MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis. |
-| Derivative properties | Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic-Hessian development components | Native CPHF/CPKS response and integral-derivative kernels are under active validation. |
+| Derivative properties | Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic Hessians | Native CPHF/CPKS response, integral-derivative kernels, and final Hessian assembly are implemented for supported closed-shell HF/DFT paths. |
 | Vibrational analysis | Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly | IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels. |
 | Nonadiabatic dynamics data | MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows | NAC support uses the TLF-based MRSF-TDDFT machinery. |
 | Geometry/path optimization | Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows | SciPy and geomeTRIC backends are available depending on the requested job. |
