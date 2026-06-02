@@ -16,7 +16,9 @@ multiplicity=3
 [tdhf]
 type=mrsf
 nstate=2
+maxit=30
 
 [optimize]
 istate=1
+maxit=5
 
