@@ -143,7 +143,7 @@ contains
     
     real(kind=dp) :: beta, h_ij, temp, error, error_initial, true_residual
     integer :: i, j, k, iter, m, restart_count, inner_iter
-    logical :: converged, unstable
+    logical :: converged, unstable, happy_breakdown
     
     ! Initialize GMRES work arrays ONCE at the beginning
     if (n <= 0 .or. restart <= 0) then
@@ -185,6 +185,7 @@ contains
     restart_count = 0
     converged = .false.
     unstable = .false.
+    happy_breakdown = .false.
     
     write(iw,'(/," GMRES Solver Parameters:")')
     write(iw,'("   Problem size        : ", I8)') n
@@ -298,6 +299,7 @@ contains
       
       ! Arnoldi process
       inner_iter = 0
+      happy_breakdown = .false.
       do j = 1, m
         inner_iter = j
         
@@ -355,14 +357,19 @@ contains
         end if
         
         ! Check for breakdown
-        if (.not. ieee_is_finite(H(j+1,j)) .or. abs(H(j+1,j)) < GMRES_DENOMINATOR_FLOOR) then
-          write(iw,'(" GMRES: Lucky/unsafe breakdown at iteration ", I3)') j
+        if (.not. ieee_is_finite(H(j+1,j))) then
+          write(iw,'(" GMRES: non-finite Arnoldi norm at iteration ", I3)') j
           inner_iter = j
           unstable = .true.
           exit
+        else if (abs(H(j+1,j)) < GMRES_DENOMINATOR_FLOOR) then
+          write(iw,'(" GMRES: happy breakdown at iteration ", I3, "; recomputing true residual")') j
+          inner_iter = j
+          H(j+1,j) = 0.0_dp
+          happy_breakdown = .true.
+        else
+          V(:,j+1) = V(:,j+1) / H(j+1,j)
         end if
-        
-        V(:,j+1) = V(:,j+1) / H(j+1,j)
         
         ! Apply previous Givens rotations
         do i = 1, j-1
@@ -399,6 +406,11 @@ contains
         
         if (error < tol) then
           converged = .true.
+          inner_iter = j
+          exit
+        end if
+
+        if (happy_breakdown) then
           inner_iter = j
           exit
         end if

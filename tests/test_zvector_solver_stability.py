@@ -129,6 +129,31 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("error_out = true_residual", block)
         self.assertIn("converged = true_residual < tol", block)
 
+    def test_mrsf_gmres_distinguishes_happy_breakdown_from_instability(self):
+        """A tiny Arnoldi norm can be a happy breakdown; GMRES should update x and check true residual."""
+        src = MRSF_ZVEC_SRC.read_text()
+        solve = re.search(r"subroutine gmres_solve\(.*?end subroutine gmres_solve", src, re.S | re.I)
+        if solve is None:
+            self.fail("Could not locate MRSF gmres_solve implementation")
+        block = solve.group(0)
+
+        self.assertIn("happy_breakdown", block)
+        self.assertIn("happy_breakdown = .false.", block)
+        self.assertIn("GMRES: happy breakdown", block)
+        self.assertIn("happy_breakdown = .true.", block)
+
+        breakdown = block.index("happy_breakdown = .true.")
+        solution_update = block.index("! Update solution: x = x + V*y")
+        true_residual = block.index("call recompute_gmres_true_residual")
+        self.assertLess(breakdown, solution_update)
+        self.assertLess(solution_update, true_residual)
+
+        breakdown_branch = block[block.rindex("else if", 0, breakdown):block.index("else\n          V(:,j+1)", breakdown)]
+        self.assertNotIn("unstable = .true.", breakdown_branch)
+        self.assertIn("H(j+1,j) = 0.0_dp", breakdown_branch)
+        happy_block = block[breakdown:solution_update]
+        self.assertRegex(happy_block, r"exit\b")
+
 
 if __name__ == "__main__":
     unittest.main()
