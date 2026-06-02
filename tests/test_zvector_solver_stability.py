@@ -18,6 +18,20 @@ MRSF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
 
 
 class ZVectorSolverStabilityTests(unittest.TestCase):
+    def test_pcg_init_builds_true_residual_for_nonzero_initial_guess(self):
+        """PCG initialization must compute A*x0 before forming r=b-A*x0."""
+        src = PCG_SRC.read_text()
+        init = re.search(r"subroutine pcg_init\(this, b, update, precond, dat, x0, tol\).*?end subroutine", src, re.S | re.I)
+        if init is None:
+            self.fail("Could not locate pcg_init implementation")
+        block = init.group(0)
+
+        update_call = "call this%update(this%Ap, this%x, this%dat)"
+        residual = "this%r(:) = this%b - this%Ap"
+        self.assertIn(update_call, block)
+        self.assertLess(block.index(update_call), block.index(residual))
+        self.assertIn("if (any(.not. ieee_is_finite(this%Ap)))", block)
+
     def test_pcg_step_guards_breakdown_denominators_and_nonfinite_updates(self):
         """PCG must not divide by zero/tiny denominators or propagate NaN/Inf."""
         src = PCG_SRC.read_text()

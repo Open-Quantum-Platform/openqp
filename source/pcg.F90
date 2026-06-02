@@ -133,11 +133,28 @@ contains
 
     this%dat = c_loc(dat)
 
+    call this%update(this%Ap, this%x, this%dat)
+    if (any(.not. ieee_is_finite(this%Ap))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     this%r(:) = this%b - this%Ap
+    if (any(.not. ieee_is_finite(this%r))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     call this%precond(this%y, this%r, this%dat)
+    if (any(.not. ieee_is_finite(this%y))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     this%p(:) = this%y
 
     this%error = norm2(this%r)
+    if (.not. ieee_is_finite(this%error)) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
 
     this%initialized = .true.
 
