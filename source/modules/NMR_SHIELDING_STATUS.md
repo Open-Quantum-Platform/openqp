@@ -128,7 +128,7 @@ Current native GIAO implementation status:
 | Benchmark/oracle scaffold | `scripts/nmr_giao_benchmark_matrix.py`, `tests/fixtures/nmr/benchmark_results/` | Implemented; PySCF CGO/GIAO oracle + OpenQP CGO rows populated |
 | GIAO overlap magnetic derivative `S10` | `mod_1e_primitives.F90::comp_giao_overlap_deriv_prim`, `int1.F90::giao_overlap_derivative` | Native one-electron building block implemented |
 | GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; PySCF oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
-| GIAO two-electron magnetic derivative contractions | pending | Not implemented |
+| GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::nmr_giao_h10_twoe_debug`; PySCF oracle calls `pyscf.prop.nmr.rhf.get_jk` | Native RHF debug contraction implemented and PySCF-validated; not wired into production shielding |
 | GIAO CPHF/CPKS RHS/response assembly | pending | Not implemented |
 | OpenQP native GIAO shielding output | pending | Not implemented; no CGO fallback allowed |
 
@@ -140,9 +140,14 @@ called by `runfunc.py` or the production CGO shielding routine.  The native
 for the imaginary first-order GIAO one-electron operator.  Its current scope is
 the PySCF/libcint one-electron convention
 `h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin`.
-These blocks become useful for production only after the two-electron derivative
-image and the GIAO response terms are connected and benchmarked against the PySCF
-GIAO oracle.
+These blocks become useful for production only after the validated two-electron
+derivative image is connected to the GIAO response terms and the resulting
+shieldings are benchmarked against the PySCF GIAO oracle.
+
+`tests/test_nmr_giao_h10_twoe_live.py` is the live RHF two-electron checkpoint:
+it compares the native `vj`, `vk`, and `twoe_h10 = vj - 0.5*vk` debug matrices
+for H2 and H2O/STO-3G against PySCF `pyscf.prop.nmr.rhf.get_jk(mol, dm0)` and
+keeps the production `nmr_gauge=giao` route gated.
 
 Conservative `h10` implementation note: in this codebase `h10` means the native
 first-order core-Hamiltonian magnetic derivative for the GIAO/London-orbital

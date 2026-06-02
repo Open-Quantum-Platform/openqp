@@ -31,6 +31,7 @@ class NMRGIAONativeScaffoldTests(unittest.TestCase):
     def test_native_giao_h10_core_symbols_exist(self):
         int1 = INT1.read_text()
         prim = PRIM.read_text()
+        debug = (ROOT / "source" / "modules" / "nmr_giao_debug.F90").read_text()
         self.assertIn("public giao_h10_core", int1)
         self.assertIn("subroutine giao_h10_core", int1.lower())
         self.assertIn("giao_h10_core_ints", int1)
@@ -39,6 +40,9 @@ class NMRGIAONativeScaffoldTests(unittest.TestCase):
         self.assertIn("h10_core = - int1e_ignuc(asym) - int1e_igkin", prim)
         self.assertIn("h10_onee = -0.5*int1e_giao_irjxp", int1)
         self.assertIn("GIAO two-electron Fock derivative", prim)
+        self.assertIn("public nmr_giao_h10_twoe_debug", debug)
+        self.assertIn("subroutine nmr_giao_h10_twoe_debug", debug.lower())
+        self.assertIn("GIAO_H10_TWOE_DEBUG_FULL", debug)
 
     def test_native_giao_piece_is_not_wired_as_cgo_fallback(self):
         runfunc = RUNFUNC.read_text()
@@ -63,6 +67,8 @@ class NMRGIAONativeScaffoldTests(unittest.TestCase):
         self.assertIn("Component ordering is Cartesian `(x, y, z)`", status)
         self.assertIn("h10` alone still does not enable native", status)
         self.assertIn("Native one-electron building block implemented; validation in progress", status)
+        self.assertIn("Native RHF debug contraction implemented and PySCF-validated", status)
+        self.assertIn("tests/test_nmr_giao_h10_twoe_live.py", status)
         self.assertIn("h10_onee = -0.5*int1e_giao_irjxp", status)
         self.assertIn("Not implemented; no CGO fallback allowed", status)
         self.assertIn("no CGO fallback allowed", status)
