@@ -143,6 +143,32 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("error_out = true_residual", block)
         self.assertIn("converged = true_residual < tol", block)
 
+    def test_mrsf_gmres_restart_convergence_uses_true_residual_before_preconditioned_beta(self):
+        """Restart-level convergence must use ||b-Ax||, not the preconditioned Arnoldi seed norm."""
+        src = MRSF_ZVEC_SRC.read_text()
+        solve = re.search(r"subroutine gmres_solve\(.*?end subroutine gmres_solve", src, re.S | re.I)
+        if solve is None:
+            self.fail("Could not locate MRSF gmres_solve implementation")
+        block = solve.group(0)
+
+        restart_setup = re.search(
+            r"! Compute initial residual r = b - A\*x.*?! Apply preconditioner to residual",
+            block,
+            re.S | re.I,
+        )
+        if restart_setup is None:
+            self.fail("Could not locate GMRES restart residual setup")
+        setup = restart_setup.group(0)
+
+        self.assertIn("true_residual = sqrt(dot_product(r, r))", setup)
+        self.assertIn("if (.not. ieee_is_finite(true_residual))", setup)
+        self.assertIn("if (true_residual < tol) then", setup)
+        self.assertIn("error_out = true_residual", setup)
+
+        pre_arnoldi = block[block.index("! Compute initial residual r = b - A*x"):block.index("! Arnoldi process")]
+        self.assertLess(pre_arnoldi.index("true_residual = sqrt(dot_product(r, r))"), pre_arnoldi.index("call apply_precond"))
+        self.assertNotIn("if (error < tol) then", pre_arnoldi)
+
     def test_mrsf_gmres_distinguishes_happy_breakdown_from_instability(self):
         """A tiny Arnoldi norm can be a happy breakdown; GMRES should update x and check true residual."""
         src = MRSF_ZVEC_SRC.read_text()

@@ -262,6 +262,18 @@ contains
         unstable = .true.
         exit
       end if
+      true_residual = sqrt(dot_product(r, r))
+      if (.not. ieee_is_finite(true_residual)) then
+        write(iw,'(" GMRES: non-finite true residual during restart")')
+        unstable = .true.
+        exit
+      end if
+      if (true_residual < tol) then
+        error_out = true_residual
+        error = true_residual
+        converged = .true.
+        exit
+      end if
       
       ! Apply preconditioner to residual
       call apply_precond(r, V(:,1))
@@ -283,18 +295,11 @@ contains
         exit
       end if
       
-      ! Check for convergence
-      error = beta
+      ! Report the true residual; beta is only the preconditioned Arnoldi seed norm.
+      error = true_residual
       if (iter == 1) then
         write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
               restart_count, error, error/error_initial
-      end if
-      
-      if (error < tol) then
-        error_out = error
-        iter_out = iter
-        converged = .true.
-        exit
       end if
       
       V(:,1) = V(:,1) / beta
