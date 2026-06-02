@@ -528,14 +528,15 @@ contains
     subroutine givens_rotation(a, b, c, s)
       real(kind=dp), intent(in) :: a, b
       real(kind=dp), intent(out) :: c, s
-      real(kind=dp) :: r
+      real(kind=dp) :: r, scale
       
       if (.not. ieee_is_finite(a) .or. .not. ieee_is_finite(b) .or. &
           (abs(a) < GMRES_DENOMINATOR_FLOOR .and. abs(b) < GMRES_DENOMINATOR_FLOOR)) then
         c = 1.0_dp
         s = 0.0_dp
       else
-        r = sqrt(a*a + b*b)
+        scale = max(abs(a), abs(b))
+        r = scale * sqrt((a/scale)**2 + (b/scale)**2)
         c = a / r
         s = b / r
       end if

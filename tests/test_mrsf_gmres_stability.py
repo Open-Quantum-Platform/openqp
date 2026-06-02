@@ -47,6 +47,18 @@ class TestMrsfGmresStability(unittest.TestCase):
         self.assertIn("if (unstable .or. converged) then", block)
         self.assertIn("Relative reduction : not available", block)
 
+    def test_givens_rotation_uses_overflow_safe_hypot_scaling(self):
+        gmres = re.search(r"subroutine gmres_solve\(.*?end subroutine gmres_solve", self.src, re.S | re.I)
+        if gmres is None:
+            self.fail("Could not locate gmres_solve")
+        block = gmres.group(0)
+
+        # Direct sqrt(a*a + b*b) can overflow before normalization even when
+        # the final cosine/sine are representable. GMRES must scale first.
+        self.assertIn("scale = max(abs(a), abs(b))", block)
+        self.assertIn("r = scale * sqrt((a/scale)**2 + (b/scale)**2)", block)
+        self.assertNotIn("sqrt(a*a + b*b)", block)
+
     def test_back_substitution_avoids_zero_or_nonfinite_pivots(self):
         bs = re.search(r"subroutine back_substitution\(A, b, x, n, unstable\).*?end subroutine back_substitution", self.src, re.S | re.I)
         if bs is None:
