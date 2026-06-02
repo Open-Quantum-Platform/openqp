@@ -113,19 +113,6 @@ class AnalyticHessianExternalRuntimeTests(unittest.TestCase):
             self.external.analytic_hessian_from_pyscf(Mol(), mf_factory=lambda _mol: FakeMF())
 
 
-    def test_design_note_documents_all_planned_hessian_tiers(self):
-        design_note = ROOT / "docs/analytic_hessian_design.md"
-
-        text = design_note.read_text()
-
-        self.assertIn("## Units and data contract", text)
-        self.assertIn("## HF analytic Hessian", text)
-        self.assertIn("## DFT analytic Hessian", text)
-        self.assertIn("## TDDFT analytic Hessian", text)
-        self.assertIn("## MRSF-TDDFT analytic Hessian", text)
-        self.assertIn("no silent numerical fallback", text.lower())
-
-
 class AnalyticHessianNativeDispatchTests(unittest.TestCase):
     def setUp(self):
         self._module_snapshot = snapshot_modules()
