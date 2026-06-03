@@ -80,7 +80,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["sign_scale_convention"], "chg = -0.5 * q_cav")
         self.assertEqual(
             inputs["validation_status"],
-            "requires PySCF/ddX/reference cross-check before runtime use",
+            "requires independent-reference/ddX cross-check before runtime use",
         )
         self.assertFalse(inputs["runtime_pcm_enabled"])
 
@@ -93,7 +93,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(inputs["reference_target"], "RHF/ROHF reference density")
         self.assertEqual(inputs["response_solvent_coupling"], "not enabled")
         self.assertEqual(inputs["gradient_support"], "not enabled")
-        self.assertEqual(inputs["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
+        self.assertEqual(inputs["backend_validation_status"], "pending independent-reference/ddX cross-check")
 
     def test_solvent_helpers_reject_nonfinite_numeric_inputs(self):
         solvent = _load_solvent("finite_values")
@@ -179,7 +179,7 @@ class DDXSCFIntegrationSeamTests(unittest.TestCase):
         self.assertEqual(terms["response_solvent_coupling"], "not enabled")
         self.assertEqual(terms["gradient_support"], "not enabled")
         self.assertFalse(terms["runtime_pcm_enabled"])
-        self.assertEqual(terms["backend_validation_status"], "pending PySCF/ddX/reference cross-check")
+        self.assertEqual(terms["backend_validation_status"], "pending independent-reference/ddX cross-check")
 
     def test_provisional_ddx_reaction_field_inputs_requires_literal_boolean_opt_in(self):
         solvent = _load_solvent("provisional_opt_in")

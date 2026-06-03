@@ -360,7 +360,7 @@ epsilon=water
         text = matrix_path.read_text(encoding="utf-8")
         self.assertIn("MRSF-TDDFT with PCM-solvated ROHF reference", text)
         self.assertIn("runtype=energy", text)
-        self.assertIn("PySCF", text)
+        self.assertIn("independent-reference", text)
         self.assertIn("analytic PCM gradients", text)
         self.assertIn("ddX q_cav sign/scale is provisional", text)
 

@@ -12,7 +12,7 @@ reference-supplied-potential prototype:
   energy convention, kept as an independent validation cross-check against the
   backend ``esolv``.
 * ``provisional_ddx_external_charges`` -- the provisional ``-0.5 * q_cav``
-  sign/scale candidate, still pending PySCF/ddX/reference cross-check.
+  sign/scale candidate, still pending independent-reference/ddX cross-check.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def reference_scf_pcm_energy_terms(density_blocks, reaction_potential):
         "response_solvent_coupling": "not enabled",
         "gradient_support": "not enabled",
         "runtime_pcm_enabled": False,
-        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
+        "backend_validation_status": "pending independent-reference/ddX cross-check",
     }
 
 
@@ -150,7 +150,7 @@ def provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False):
     The ddPCM finite-difference smoke suggests ``chg = -0.5*q_cav`` for the
     ``external_charge_potential`` AO-matrix seam.  The sign/scale is still
     provisional, so callers must opt in explicitly until it is cross-checked
-    against PySCF/ddX/reference-package data.
+    against independent-reference/ddX data.
     """
     _require_provisional_opt_in(allow_provisional)
     return [-0.5 * value for value in _as_float_list(q_cav, name="q_cav")]
@@ -185,11 +185,11 @@ def provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisiona
         "chg": charges,
         "provisional_sign_scale": True,
         "sign_scale_convention": "chg = -0.5 * q_cav",
-        "validation_status": "requires PySCF/ddX/reference cross-check before runtime use",
+        "validation_status": "requires independent-reference/ddX cross-check before runtime use",
         "pcm_scope": "reference_scf_energy_only",
         "reference_target": "RHF/ROHF reference density",
         "response_solvent_coupling": "not enabled",
         "gradient_support": "not enabled",
         "runtime_pcm_enabled": False,
-        "backend_validation_status": "pending PySCF/ddX/reference cross-check",
+        "backend_validation_status": "pending independent-reference/ddX cross-check",
     }
