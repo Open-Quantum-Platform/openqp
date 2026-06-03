@@ -148,6 +148,26 @@ contains
     hess_native = 0.5_dp*(hess_native + transpose(hess_native))
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
 
+    ! --- One-electron + Pulay second-derivative skeleton (fixed density) ------
+    ! Mirrors the production HF gradient assembly (hf_1e_grad): the analytic
+    ! Hessian skeleton is d/dx of [grad_ee_overlap(W) + grad_ee_kinetic(P)
+    ! + grad_en(P)] evaluated at the fixed converged density, i.e. the
+    ! second-derivative integral contractions hess_ee_overlap / hess_ee_kinetic
+    ! / hess_en.  This is distinct from (and additive to) the CPHF response
+    ! term above; the 2e ERI second-derivative skeleton is added separately.
+    block
+      use grd1, only: eijden, hess_ee_overlap, hess_ee_kinetic, hess_en
+      real(kind=dp), allocatable :: wlag(:), pden(:), hcc(:,:)
+      allocate(wlag(nbf2), pden(nbf2), hcc(ncart,ncart), source=0.0_dp)
+      call eijden(wlag, nbf, infos)                 ! energy-weighted (Lagrangian) density
+      pden = dmat_a                                 ! total density (closed-shell RHF)
+      call hess_ee_overlap(basis, wlag, hess_native)            ! overlap / Pulay
+      call hess_ee_kinetic(basis, pden, hess_native)            ! kinetic
+      call hess_en(basis, basis%atoms%xyz, &
+                   basis%atoms%zn - basis%ecp_zn_num, pden, hess_native, hess_cc=hcc)
+      deallocate(wlag, pden, hcc)
+    end block
+
     call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
       comment='Native OpenQP HF/DFT analytic Hessian matrix')
     call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
