@@ -640,18 +640,6 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             action="Use grad=1,2,... for TDHF/MRSF gradients.",
         )
 
-    if method == "tdhf" and runtype == "grad" and grad_states:
-        highest_grad = max(int(state) for state in grad_states if state not in (None, ""))
-        nstate = _get(config, "tdhf", "nstate", 1)
-        if highest_grad == nstate:
-            report.add(
-                "WARNING",
-                "tdhf.nstate",
-                "The requested gradient root is exactly the highest computed TD state.",
-                value=nstate,
-                expected=f">= {highest_grad + 1}",
-                action="Consider increasing tdhf.nstate by 1 to avoid missing degenerate states.",
-            )
 
 
 def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None:

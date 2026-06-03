@@ -333,10 +333,11 @@ class SinglePoint(Calculator):
         if ixcore == "-1":  # if default
             return
         ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
-        # shift MO energies 
+        # Shift occupied MO energies before building the TD trial vectors, leaving
+        # the requested core orbital(s) available for ixcore excitations.
         noccB = self.mol.data['nelec_B']
         tmp = self.mol.data["OQP::E_MO_A"]
-        for i in range(noccB + 1):  # up to HOMO-1
+        for i in range(1, noccB + 1):  # 1-based occupied MO indices
             if i not in ixcore_array:
                 tmp[i - 1] = -100000  # shift the MO energy down
 
@@ -642,10 +643,6 @@ class Gradient(Calculator):
 
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
-
-        if self.nstate == max(self.grads):
-            print(f'\nGradient requested state {max(self.grads)} == the highest computed state {self.nstate}')
-            print(f'It is recommended to compute {self.nstate + 1} states to avoid missing degenerate states\n')
 
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
