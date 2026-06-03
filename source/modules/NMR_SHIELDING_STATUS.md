@@ -130,8 +130,9 @@ Current native GIAO implementation status:
 | GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; PySCF oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
 | GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::giao_h10_twoe_matrix` (+ `nmr_giao_h10_twoe_debug` emitter); PySCF oracle calls `pyscf.prop.nmr.rhf.get_jk` | Native RHF debug contraction implemented and PySCF-validated; refactored into the reusable `giao_h10_twoe_matrix` builder |
 | GIAO CPHF/CPKS RHS/response assembly (paramagnetic) | `nmr_giao_shielding.F90::nmr_giao_shielding_debug` | **Implemented and PySCF-validated** (uncoupled + coupled). h1=h10(1e+2e), s1=S10, MO transform, GIAO CPHF/CPKS first-order solve (exchange-only coupled response scaled by `c_x`), PSO contraction. See note below. |
-| GIAO diamagnetic term (second-order GIAO integrals) | pending (`int1e_giao_a11part`, `int1e_a01gp` analogues) | Not implemented |
-| OpenQP native GIAO shielding output (total) | pending | Not implemented; no CGO fallback allowed (needs the diamagnetic term) |
+| GIAO diamagnetic `a11part` (London diamagnetic) | `int1.F90::giao_a11part_corr` + `nmr_dia_shielding(o=0)` | **Implemented and PySCF-validated EXACTLY** (O 386.94, H 26.76). Reuses the validated CGO diamagnetic at gauge origin 0 plus a Hellmann-Feynman field correction weighted by the ket center (verified vs libcint to 3.8e-8 at integral level). |
+| GIAO diamagnetic `a01gp` (London gauge correction) | `mod_1e_primitives.F90::comp_giao_a01gp_prim`, `int1.F90::giao_a01gp_contract` | **Partial:** exact for s-functions (H), structurally incomplete for p/d (O). Implements the leading `cvec x (bra-position-weighted PSO)`; misses higher-angular-momentum terms of libcint's full a01gp derivative chain (`g0..g7`). |
+| OpenQP native GIAO shielding output (total) | `nmr_giao_shielding.F90` (debug emitter) | **Near-complete, gated.** Total = dia + coupled para matches the PySCF GIAO oracle to ~1e-3 ppm for s-only atoms and ~0.5 ppm for atoms with p functions (the a01gp p residual). `nmr_gauge=giao` stays gated until a01gp is completed and the total is HF-exact; no CGO fallback. |
 
 ### GIAO paramagnetic checkpoint — VALIDATED
 

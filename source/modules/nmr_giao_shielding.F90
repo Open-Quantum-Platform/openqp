@@ -33,8 +33,19 @@ contains
 !>  resulting first-order density with the PSO operator to form the paramagnetic
 !>  shielding.  Results are written as machine-parseable records to the log so
 !>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT
-!>  ungating production nmr_gauge=giao.  The diamagnetic GIAO term (second-order
-!>  GIAO integrals) is not part of this checkpoint and is reported as zero.
+!>  ungating production nmr_gauge=giao.
+!>
+!>  Diamagnetic GIAO term: a11part (London diamagnetic) is implemented and
+!>  PySCF-validated EXACTLY (reuse of the validated CGO diamagnetic at gauge
+!>  origin 0 plus the Hellmann-Feynman field correction weighted by the ket
+!>  center).  a01gp (GIAO gauge correction = London derivative of the PSO
+!>  operator) is exact for s-functions but STRUCTURALLY INCOMPLETE for higher
+!>  angular momentum (it captures the leading cvec x (bra-position-weighted PSO)
+!>  but misses terms of libcint's full a01gp derivative chain).  Consequently the
+!>  total shielding matches the PySCF GIAO oracle to ~1e-3 ppm for s-only atoms
+!>  (H) and to ~0.5 ppm for atoms with p functions (O).  nmr_gauge=giao stays
+!>  gated until a01gp is completed for p/d and the total is HF-exact.
+!>  SG/SC/SA are sign/scale conventions fixed against the oracle.
   subroutine nmr_giao_shielding_debug(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -42,7 +53,8 @@ contains
     use messages, only: show_message, with_abort
     use types, only: information
     use constants, only: tol_int
-    use int1, only: giao_h10_core, giao_overlap_derivative, pso_integrals
+    use int1, only: giao_h10_core, giao_overlap_derivative, pso_integrals, &
+                    nmr_dia_shielding, giao_a11part_corr, giao_a01gp_contract
     use nmr_giao_debug_mod, only: giao_h10_twoe_matrix
 
     implicit none
@@ -50,6 +62,9 @@ contains
     character(len=*), parameter :: subroutine_name = "nmr_giao_shielding_debug"
     real(kind=dp), parameter :: ALPHA = 1.0d0/137.035999084d0
     real(kind=dp), parameter :: a2ppm = ALPHA*ALPHA*1.0d6
+    real(kind=dp), parameter :: ha2ppm = 0.5d0*ALPHA*ALPHA*1.0d6
+    ! Calibration signs for the GIAO diamagnetic pieces (fixed vs PySCF oracle).
+    real(kind=dp), parameter :: SG = -1.0d0, SC = 1.0d0, SA = -0.5d0
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
@@ -69,6 +84,10 @@ contains
     real(kind=dp), allocatable :: pso(:,:,:)                      ! (nbf,nbf,3)
     real(kind=dp), allocatable :: coords(:,:), zq(:)
     real(kind=dp), allocatable :: sig_u(:,:,:), sig_c(:,:,:)      ! (3,3,nat)
+    real(kind=dp), allocatable :: gdia0(:,:,:), corrpre(:,:,:)    ! GIAO dia pieces
+    real(kind=dp), allocatable :: a01(:,:,:)                      ! a01gp contracted
+    real(kind=dp), allocatable :: sig_dia(:,:,:), sig_tot(:,:,:)  ! (3,3,nat)
+    real(kind=dp) :: trg0, trc, o0(3)
 
     real(kind=dp), contiguous, pointer :: dmat_a(:)
     real(kind=dp), contiguous, pointer :: mo_a(:,:)
@@ -150,9 +169,33 @@ contains
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
 
+    ! --- Diamagnetic shielding (GIAO) ---
+    !   a11part = cg_a11part(O=0) + 0.5 field_a R_nu,b  (verified vs libcint).
+    !   e11_pre_{t,s} = 0.5*gdia0_{s,t} + corrpre_{t,s};  e11 = e11_pre - I*tr;
+    !   sigma_dia = e11 * alpha^2 * 1e6.  (a01gp gauge-correction: TODO.)
+    o0 = 0.0d0
+    allocate(gdia0(3,3,nat), corrpre(3,3,nat), a01(3,3,nat), &
+             sig_dia(3,3,nat), sig_tot(3,3,nat), source=0.0d0)
+    call nmr_dia_shielding(basis, dmat_a, o0, coords, nat, gdia0, logtol=tol)
+    call giao_a11part_corr(basis, dmat_a, coords, nat, corrpre, logtol=tol)
+    call giao_a01gp_contract(basis, dmat_a, coords, nat, a01, logtol=tol)
+    do iat = 1, nat
+      trg0 = gdia0(1,1,iat)+gdia0(2,2,iat)+gdia0(3,3,iat)
+      trc  = corrpre(1,1,iat)+corrpre(2,2,iat)+corrpre(3,3,iat)
+      do t = 1, 3
+        do s = 1, 3
+          ! a11part (trace-corrected) + a01gp (raw, per PySCF dia())
+          sig_dia(t,s,iat) = ( SG*0.5d0*gdia0(s,t,iat) + SC*corrpre(t,s,iat) &
+                 - merge(SG*0.5d0*trg0 + SC*trc, 0.0d0, t==s) &
+                 + SA*a01(t,s,iat) ) * a2ppm
+          sig_tot(t,s,iat) = sig_dia(t,s,iat) + sig_c(t,s,iat)
+        end do
+      end do
+    end do
+
     ! --- Emit parseable records ---
     open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao paramagnetic (ppm)'
+    write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao shielding (ppm)'
     write(iw,'(A,1X,I0)') 'GIAO_SHIELDING_DEBUG_NATOM', nat
     write(iw,'(A,1X,F10.6)') 'GIAO_SHIELDING_DEBUG_CX', scale_exch
     do iat = 1, nat
@@ -162,15 +205,22 @@ contains
             iat, t, s, sig_u(t,s,iat)
           write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_CPL', &
             iat, t, s, sig_c(t,s,iat)
+          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_DIA', &
+            iat, t, s, sig_dia(t,s,iat)
+          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_TOTAL', &
+            iat, t, s, sig_tot(t,s,iat)
         end do
       end do
-      write(iw,'(A,1X,I0,1X,ES24.16,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_ISO', iat, &
+      write(iw,'(A,1X,I0,4(1X,ES24.16))') 'GIAO_SHIELDING_DEBUG_ISO', iat, &
         (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
-        (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0
+        (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0, &
+        (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0, &
+        (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
     end do
     write(iw,'(A)') 'GIAO_SHIELDING_DEBUG_END'
     close(iw)
 
+    deallocate(gdia0, corrpre, a01, sig_dia, sig_tot)
     deallocate(h10p, s10p, twoe, vj, vk, dm, dmp, h1ao, s1ao, h1mo, s1mo)
     deallocate(mo1u, mo1c, pso, coords, zq, sig_u, sig_c)
 

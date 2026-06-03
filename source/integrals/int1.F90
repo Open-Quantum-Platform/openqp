@@ -57,6 +57,8 @@ module int1
     public giao_h10_core
     public giao_h10_core_terms_full
     public nmr_dia_shielding
+    public giao_a11part_corr
+    public giao_a01gp_contract
     public pso_integrals
     public electrostatic_potential
     public basis_overlap
@@ -530,6 +532,147 @@ contains
 !> @param[in]   c        nucleus coordinates
 !> @param[inout] ints    full integrals, dimension (nbf, nbf, 3), antisymmetric
 !> @param[in]   logtol   optional screening tolerance
+!> @brief GIAO a11part London correction, density-contracted.
+!> @details The GIAO diamagnetic a11part integral satisfies (verified vs libcint)
+!>   <mu|giao_a11part_{a,b}|nu> = <mu|cg_a11part(O=0)_{a,b}|nu>
+!>                              + 0.5 * <mu|(r-R_N)_a/|r-R_N|^3|nu> * R_nu,b
+!>  where R_nu is the KET shell center.  This routine returns the density-
+!>  contracted correction tensor
+!>   corr_{a,b}(N) = 0.5 * sum_{mu,nu} <mu|(r-R_N)_a/|r-R_N|^3|nu> * R_nu,b * D_{mu,nu}
+!>  using the validated Hellmann-Feynman field integral (comp_coulomb_helfeyder1)
+!>  on the density whose columns are pre-scaled by the ket-shell-center component.
+!>  The caller adds this (trace-corrected) to the CGO diamagnetic at gauge origin
+!>  0 (nmr_dia_shielding with o=0) to form the full GIAO a11part contribution.
+ subroutine giao_a11part_corr(basis, denab, coords, nat, corr, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+    use mod_1e_primitives, only: comp_coulomb_helfeyder1
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: corr(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:), densb(:,:), aoc(:,:)
+    real(real64) :: tol, der(3)
+    integer :: ii, jj, ic, nbf, b, ish, ao, k
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), densb(nbf,nbf), aoc(nbf,3), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    ! AO -> shell center map
+    do ish = 1, basis%nshell
+      do k = 1, basis%naos(ish)
+        ao = basis%ao_offset(ish) + k - 1
+        aoc(ao,1:3) = basis%shell_centers(ish,1:3)
+      end do
+    end do
+
+    corr = 0.0d0
+    call cntp%alloc(basis)
+
+    do b = 1, 3
+      ! scale ket (column) by its shell-center b-component
+      do ao = 1, nbf
+        densb(:,ao) = dens(:,ao)*aoc(ao,b)
+      end do
+      do ii = 1, basis%nshell
+        call shi%fetch_by_id(basis, ii)
+        do jj = 1, basis%nshell
+          call shj%fetch_by_id(basis, jj)
+          call cntp%shell_pair(basis, shi, shj, tol)
+          if (cntp%numpairs==0) cycle
+          do ic = 1, nat
+            der = 0.0d0
+            call comp_coulomb_helfeyder1(cntp, coords(:,ic), 1.0d0, &
+                   densb(basis%ao_offset(ii):, basis%ao_offset(jj):), der)
+            corr(1:3,b,ic) = corr(1:3,b,ic) + 0.5d0*der(1:3)
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(dens, densb, aoc)
+
+ end subroutine
+
+!> @brief GIAO a01gp gauge-correction, density-contracted (9 comp -> 3x3).
+!> @details Returns e2_{a,col}(N) = sum_{mu,nu} <mu|a01gp_{a,col}|nu> D_{mu,nu}
+!>  for each nucleus N, with a01gp the GIAO derivative of the PSO operator
+!>  (comp_giao_a01gp_prim).  cvec = R_bra - R_ket per shell pair.  The caller
+!>  adds this (NOT trace-corrected, per PySCF dia()) to the trace-corrected
+!>  a11part contribution.
+ subroutine giao_a01gp_contract(basis, denab, coords, nat, e2, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+    use mod_1e_primitives, only: comp_giao_a01gp_prim
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: e2(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:)
+    real(real64) :: tol, cvec(3), blk(blocksize,9)
+    integer :: ii, jj, ic, nbf, a, col, i, j, ij, oi, oj
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    e2 = 0.0d0
+    call cntp%alloc(basis)
+
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      oi = basis%ao_offset(ii)
+      do jj = 1, basis%nshell
+        call shj%fetch_by_id(basis, jj)
+        oj = basis%ao_offset(jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        cvec = basis%shell_centers(ii,1:3) - basis%shell_centers(jj,1:3)
+        do ic = 1, nat
+          blk = 0.0d0
+          call comp_giao_a01gp_prim(cntp, coords(:,ic), cvec, blk)
+          ! contract: e2(a,col) += sum_ij den(bra,ket) * blk(ij, (a-1)*3+col)
+          ij = 0
+          do i = 1, cntp%inao
+            do j = 1, cntp%jnao
+              ij = ij + 1
+              do a = 1, 3
+                do col = 1, 3
+                  e2(a,col,ic) = e2(a,col,ic) &
+                    + dens(oi+i-1, oj+j-1) * blk(ij,(a-1)*3+col)
+                end do
+              end do
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(dens)
+
+ end subroutine
+
  subroutine pso_integrals(basis, c, ints, logtol)
     use precision, only: dp
     type(basis_set), intent(in) :: basis

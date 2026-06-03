@@ -44,6 +44,7 @@ MODULE mod_1e_primitives
  PUBLIC comp_nmr_dia_int1_prim
 
  PUBLIC comp_pso_int1_prim
+ PUBLIC comp_giao_a01gp_prim
  public comp_mult_int1_prim
  public comp_allmult_int1_prim
  PUBLIC comp_coulomb_dampch_int1_prim
@@ -1096,6 +1097,135 @@ END SUBROUTINE
           blk(ij,X__) = blk(ij,X__) + fac*px
           blk(ij,Y__) = blk(ij,Y__) + fac*py
           blk(ij,Z__) = blk(ij,Z__) + fac*pz
+        END DO
+      END DO
+
+      END ASSOCIATE
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO a01gp gauge-correction integrals (9 components).
+!> @details a01gp = (g | nabla-rinv cross p |): the GIAO/London first-order
+!>  derivative of the PSO operator at nucleus c.  Returns
+!>    blk(ij,(a-1)*3+col) = (cvec x M^{(col)})_a ,
+!>  with cvec = R_bra - R_ket and M^{(col)}_b = <mu|(r-R_bra)_b PSO_col|nu>
+!>  (the bra-position-weighted PSO, built by raising the bra angular momentum by
+!>  one in coordinate b, no center shift).  Full (both-triangle) block, no
+!>  packing.  The overall sign/scale is calibrated by the caller against the
+!>  PySCF int1e_a01gp oracle.
+ SUBROUTINE comp_giao_a01gp_prim(cp, c, cvec, blk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), cvec(3)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS+3
+    type(rys_root_t) :: ryscomp
+    REAL(REAL64) :: xx, ww, tt, bb, dd(3), rji(3), ric(3), fac, aj
+    INTEGER :: id, k, nr, ni, nj, m, a, col
+    INTEGER :: i, j, ix, iy, iz, jx, jy, jz, ij, jmax
+    REAL(REAL64) :: mm(3,3)   ! M^{(col)}_b : (b, col)
+    real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
+    real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)   ! (ket,bra,coord,root)
+    real(real64) :: dkt(0:max_ang, 0:max_ang+1, 3, NRT)   ! ket derivative
+!dir$ assume_aligned xyzin : 64
+
+    ric = cp%ri(:3) - c(:3)
+    rji = cp%rj(:3) - cp%ri(:3)
+
+    DO id = 1, cp%numpairs
+      ASSOCIATE (pp => cp%p(id), &
+                 iang => cp%iang, jang => cp%jang, &
+                 inao => cp%inao, jnao => cp%jnao)
+
+      aj = pp%aj
+      ! One more Rys root than the PSO term: the extra bra-position raise
+      ! (r-R_bra) increases the polynomial order by one.
+      nr = cp%nroots + 2
+      xx = pp%aa*sum((pp%r-c)**2)
+      ryscomp%nroots = nr
+      ryscomp%x = xx
+      call ryscomp%evaluate()
+
+      DO k = 1, nr
+        ww = ryscomp%w(k)*ryscomp%u(k)
+        tt = ryscomp%u(k)/(1.0d0+ryscomp%u(k))
+        bb = 0.5d0*(1.0d0-tt)/pp%aa
+        dd = (pp%r-cp%rj) - tt*(pp%r-c)
+
+        xyzin(0,0,1,k) = 1.0d0
+        xyzin(0,0,2,k) = 1.0d0
+        xyzin(0,0,3,k) = ww
+        xyzin(1,0,1,k) = dd(1)
+        xyzin(1,0,2,k) = dd(2)
+        xyzin(1,0,3,k) = dd(3)*ww
+
+        DO nj = 2, (iang+jang)+3
+          xyzin(nj,0,:,k) = dd*xyzin(nj-1,0,:,k) + (nj-1)*bb*xyzin(nj-2,0,:,k)
+        END DO
+        nj = (iang+jang)+3
+        DO ni = 1, iang+2
+          nj = nj-1
+          xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + rji(1)*xyzin(0:nj,ni-1,1,k)
+          xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + rji(2)*xyzin(0:nj,ni-1,2,k)
+          xyzin(0:nj,ni,3,k) = xyzin(1:nj+1,ni-1,3,k) + rji(3)*xyzin(0:nj,ni-1,3,k)
+        END DO
+
+        ! field factor (r-c)_coord, bra 0:iang+1
+        DO m = 1, 3
+          fld(0:jang,0:iang+1,m,k) = xyzin(0:jang,1:iang+2,m,k) &
+                                   + ric(m)*xyzin(0:jang,0:iang+1,m,k)
+        END DO
+        ! ket derivative, bra 0:iang+1
+        dkt(0,0:iang+1,1:3,k) = 2.0d0*aj*xyzin(1,0:iang+1,1:3,k)
+        DO nj = 1, jang
+          dkt(nj,0:iang+1,1:3,k) = 2.0d0*aj*xyzin(nj+1,0:iang+1,1:3,k) &
+                                 - nj*xyzin(nj-1,0:iang+1,1:3,k)
+        END DO
+      END DO
+
+      fac = pp%expfac*TWOPI*2.0d0
+
+      ij = 0
+      jmax = jnao
+      DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jmax
+          jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+          ij = ij+1
+
+          ! M^{(col)}_b : bra-position-weighted PSO (raise bra coord b by one).
+          ! col=1 (PSO_x):
+          mm(1,1) = sum( xyzin(jx,ix+1,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          mm(2,1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy+1,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy+1,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          mm(3,1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz+1,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz+1,3,1:nr) ) )
+          ! col=2 (PSO_y):
+          mm(1,2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix+1,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix+1,1,1:nr) ) )
+          mm(2,2) = sum( xyzin(jy,iy+1,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          mm(3,2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz+1,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz+1,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          ! col=3 (PSO_z):
+          mm(1,3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix+1,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix+1,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+          mm(2,3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy+1,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy+1,2,1:nr) ) )
+          mm(3,3) = sum( xyzin(jz,iz+1,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+
+          DO col = 1, 3
+            blk(ij,(1-1)*3+col) = blk(ij,(1-1)*3+col) + &
+              fac*( cvec(Y__)*mm(Z__,col) - cvec(Z__)*mm(Y__,col) )
+            blk(ij,(2-1)*3+col) = blk(ij,(2-1)*3+col) + &
+              fac*( cvec(Z__)*mm(X__,col) - cvec(X__)*mm(Z__,col) )
+            blk(ij,(3-1)*3+col) = blk(ij,(3-1)*3+col) + &
+              fac*( cvec(X__)*mm(Y__,col) - cvec(Y__)*mm(X__,col) )
+          END DO
         END DO
       END DO
 
