@@ -1067,186 +1067,7 @@ contains
       , 'Solver method      is', trim(solver_name)
     call flush(iw)
 
-  ! Prepare for ROHF
-    ! Fock matrices A and B
-    if( roref )then
-        wrk1t(1:nbf*nbf) => wrk1
-  !   Alapha
-      call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
-      call unpack_matrix(wrk1t, fa)
-
-  !   Beta
-      call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
-      call unpack_matrix(wrk1t, fb)
-    end if
-
-  ! Make density like part
-    call unpack_matrix(ta, pa(:,:,1))
-    call unpack_matrix(tb, pa(:,:,2))
-
-  ! Initialize ERI calculations
-    scale_exch = 1.0_dp
-    scale_exch2 = 1.0_dp
-    if (dft) then
-       scale_exch = infos%dft%HFscale    !> Reference HF exchange
-       scale_exch2 = infos%tddft%HFscale !> Response HF exchange
-    end if
-
-    if (mrst==1 .or. mrst==3 ) then
-
-      int2_data_st = int2_mrsf_data_t( &
-          d3 = fmrst1, &
-          tamm_dancoff = .true., &
-          scale_exchange = scale_exch2, &
-          scale_coulomb = scale_exch2)
-
-    else if( mrst==5  )then
-
-      int2_data_q = int2_td_data_t( &
-          d2=bvec, &
-          int_apb = .false., &
-          int_amb = .false., &
-          tamm_dancoff = .true., &
-          scale_exchange = scale_exch2)
-
-    end if
-
-    int2_data = int2_tdgrd_data_t( &
-        d2 = pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
-
-    call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-    ab1 => int2_data%apb(:,:,:,1)
-
-    pa = pa*2
-    call utddft_fxc( &
-        basis = basis, &
-        molGrid = molGrid, &
-        isVecs = .true., &
-        wfa = mo_a, &
-        wfb = mo_b, &
-        fxa = ab1(:,:,1:1), &
-        fxb = ab1(:,:,2:2), &
-        dxa = pa(:,:,1:1), &
-        dxb = pa(:,:,2:2), &
-        nmtx = 1, &
-        threshold = 1.0d-15, &
-        infos = infos)
-
-!   ALPHA: AO(M,N) -> MO(IA+)
-    call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
-
-    call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
-
-    if (mrst==1 .or. mrst==3) then
-
-      call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
-      call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
-
-      fmrst1(1,7,:,:) = td_abxc
-
-      td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
-
-    ! Initialize ERI calculations
-      call int2_driver%run(int2_data_st, &
-            cam = dft.and.infos%dft%cam_flag, &
-            alpha = infos%tddft%cam_alpha, &
-            alpha_coulomb = infos%tddft%cam_alpha, &
-            beta = infos%tddft%cam_beta,&
-            beta_coulomb = infos%tddft%cam_beta, &
-            mu = infos%tddft%cam_mu)
-      fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
-
-    ! Scaling factor if triplet
-      if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
-
-      ! Spin pair coupling
-      if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
-         fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
-      if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
-         fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
-      if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-         fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-
-      call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), wrk2, wrk1)
-
-      call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
-
-      call iatogen(bvec_mo_d(:,1), wrk3, nocca, noccb)
-
-      call dgemm('n', 't', nbf, nocca, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
-      call dgemm('t', 'n', nbf, nbf, nocca, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
-
-   ! spin pair ov-ov, co-co, co-ov coupling
-      call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
-
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-      call dgemm('n', 't', nocca, nocca, nvirb, &
-                -1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tij, nocca)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-      call dgemm('t', 'n', nvirb, nvirb, nocca, &
-                 1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tab, nvirb)
-
-      call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                   Tij, Tab, Fa, Fb, nocca, noccb)
-
-    else if(mrst==5) then
-
-   !  Initialize ERI calculations
-      call int2_driver%run(int2_data_q, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%tddft%cam_alpha, &
-            beta=infos%tddft%cam_beta,&
-            mu=infos%tddft%cam_mu)
-
-      call orthogonal_transform('n', nbf, mo_a, int2_data_q%amb(:,:,1,1), wrk2, wrk1)
-
-      call iatogen(bvec_mo(:,target_state),wrk3,noccb,nocca)
-
-      call dgemm('t', 'n', nbf, nbf, noccb, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
-      call dgemm('n', 't', nbf, noccb, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
-
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-      call dgemm('n', 't', noccb, noccb, nvira, &
-                -1.0_dp, bvec_mo(:,target_state), noccb, &
-                         bvec_mo(:,target_state), noccb, &
-                 0.0_dp, tij, noccb)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-      call dgemm('t', 'n', nvira, nvira, noccb, &
-                 1.0_dp, bvec_mo(:,target_state), noccb, &
-                         bvec_mo(:,target_state), noccb, &
-                 0.0_dp, tab, nvira)
-
-      call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                      tab, tij, fa, fb, nocca, noccb)
-    end if
+    call build_mrsf_zvector_rhs()
 
     write(*,'(/3x,25("-")&
              &/6x,"START Z-VECTOR LOOP (",A,")"&
@@ -1704,6 +1525,193 @@ contains
   !   ROHF, half one more time:
       wao = wao*0.5_dp
     end subroutine build_mrsf_relaxed_density_and_w
+
+
+    ! Assemble the z-vector right-hand side (rhs) and the ROHF Fock/density
+    ! intermediates it needs.  Host association preserves behavior versus the
+    ! previous inline RHS construction.
+    subroutine build_mrsf_zvector_rhs()
+    ! Prepare for ROHF
+      ! Fock matrices A and B
+      if( roref )then
+          wrk1t(1:nbf*nbf) => wrk1
+    !   Alapha
+        call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
+        call unpack_matrix(wrk1t, fa)
+
+    !   Beta
+        call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
+        call unpack_matrix(wrk1t, fb)
+      end if
+
+    ! Make density like part
+      call unpack_matrix(ta, pa(:,:,1))
+      call unpack_matrix(tb, pa(:,:,2))
+
+    ! Initialize ERI calculations
+      scale_exch = 1.0_dp
+      scale_exch2 = 1.0_dp
+      if (dft) then
+         scale_exch = infos%dft%HFscale    !> Reference HF exchange
+         scale_exch2 = infos%tddft%HFscale !> Response HF exchange
+      end if
+
+      if (mrst==1 .or. mrst==3 ) then
+
+        int2_data_st = int2_mrsf_data_t( &
+            d3 = fmrst1, &
+            tamm_dancoff = .true., &
+            scale_exchange = scale_exch2, &
+            scale_coulomb = scale_exch2)
+
+      else if( mrst==5  )then
+
+        int2_data_q = int2_td_data_t( &
+            d2=bvec, &
+            int_apb = .false., &
+            int_amb = .false., &
+            tamm_dancoff = .true., &
+            scale_exchange = scale_exch2)
+
+      end if
+
+      int2_data = int2_tdgrd_data_t( &
+          d2 = pa, &
+          int_apb = .true., &
+          int_amb = .false., &
+          tamm_dancoff = .false., &
+          scale_exchange = scale_exch)
+
+      call int2_driver%run(int2_data, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%dft%cam_alpha, &
+              beta=infos%dft%cam_beta,&
+              mu=infos%dft%cam_mu)
+      ab1 => int2_data%apb(:,:,:,1)
+
+      pa = pa*2
+      call utddft_fxc( &
+          basis = basis, &
+          molGrid = molGrid, &
+          isVecs = .true., &
+          wfa = mo_a, &
+          wfb = mo_b, &
+          fxa = ab1(:,:,1:1), &
+          fxb = ab1(:,:,2:2), &
+          dxa = pa(:,:,1:1), &
+          dxb = pa(:,:,2:2), &
+          nmtx = 1, &
+          threshold = 1.0d-15, &
+          infos = infos)
+
+  !   ALPHA: AO(M,N) -> MO(IA+)
+      call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+
+      call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
+
+      if (mrst==1 .or. mrst==3) then
+
+        call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
+        call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
+
+        fmrst1(1,7,:,:) = td_abxc
+
+        td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
+
+      ! Initialize ERI calculations
+        call int2_driver%run(int2_data_st, &
+              cam = dft.and.infos%dft%cam_flag, &
+              alpha = infos%tddft%cam_alpha, &
+              alpha_coulomb = infos%tddft%cam_alpha, &
+              beta = infos%tddft%cam_beta,&
+              beta_coulomb = infos%tddft%cam_beta, &
+              mu = infos%tddft%cam_mu)
+        fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
+      ! Scaling factor if triplet
+        if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
+
+        ! Spin pair coupling
+        if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
+           fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
+        if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
+           fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
+        if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
+           fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+
+        call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), wrk2, wrk1)
+
+        call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
+
+        call iatogen(bvec_mo_d(:,1), wrk3, nocca, noccb)
+
+        call dgemm('n', 't', nbf, nocca, nbf, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxa, nbf)
+        call dgemm('t', 'n', nbf, nbf, nocca, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxb, nbf)
+
+     ! spin pair ov-ov, co-co, co-ov coupling
+        call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
+
+     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
+        call dgemm('n', 't', nocca, nocca, nvirb, &
+                  -1.0_dp, bvec_mo_d, nocca, &
+                           bvec_mo_d, nocca, &
+                   0.0_dp, tij, nocca)
+
+     !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
+        call dgemm('t', 'n', nvirb, nvirb, nocca, &
+                   1.0_dp, bvec_mo_d, nocca, &
+                           bvec_mo_d, nocca, &
+                   0.0_dp, tab, nvirb)
+
+        call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
+                     Tij, Tab, Fa, Fb, nocca, noccb)
+
+      else if(mrst==5) then
+
+     !  Initialize ERI calculations
+        call int2_driver%run(int2_data_q, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%tddft%cam_alpha, &
+              beta=infos%tddft%cam_beta,&
+              mu=infos%tddft%cam_mu)
+
+        call orthogonal_transform('n', nbf, mo_a, int2_data_q%amb(:,:,1,1), wrk2, wrk1)
+
+        call iatogen(bvec_mo(:,target_state),wrk3,noccb,nocca)
+
+        call dgemm('t', 'n', nbf, nbf, noccb, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxa, nbf)
+        call dgemm('n', 't', nbf, noccb, nbf, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxb, nbf)
+
+     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
+        call dgemm('n', 't', noccb, noccb, nvira, &
+                  -1.0_dp, bvec_mo(:,target_state), noccb, &
+                           bvec_mo(:,target_state), noccb, &
+                   0.0_dp, tij, noccb)
+
+     !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
+        call dgemm('t', 'n', nvira, nvira, noccb, &
+                   1.0_dp, bvec_mo(:,target_state), noccb, &
+                           bvec_mo(:,target_state), noccb, &
+                   0.0_dp, tab, nvira)
+
+        call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
+                        tab, tij, fa, fb, nocca, noccb)
+      end if
+    end subroutine build_mrsf_zvector_rhs
 
   end subroutine tdhf_mrsf_z_vector
 
