@@ -112,3 +112,26 @@ molecules is the `l = 2` truncation limit.
   Tier-2 validation.
 - The `l = 2` truncation is the next physics limiter for polar molecules
   (needs higher `l` or a density-projected `psi`).
+
+## Update — trim applied
+
+The benchmark matrix was relabeled (no physics changed):
+
+- The 9 entries with **positive `e_pcm`** (CO₂, CH₃OH, CH₃CN × HF/BHHLYP/PBE)
+  were demoted from `status=verified` to `diagnostic_unphysical_pending`, each
+  with a `physical_review` field. Both the diagnostics and reference tests now
+  **skip** these (the diagnostics test gained a `status != verified` skip), so
+  no unphysical value is locked in as a passing gate. `ch3oh_rhf_hf` (which also
+  exceeded the `phi_source_vs_exact_rms < 0.05` self-consistency gate) is in
+  this set.
+- The 21 physically-sound, gate-passing negative-`e_pcm` entries (H₂O, NH₃, HF,
+  CH₄, CO, HCN, H₂CO × 3 methods) remain `verified` **regression baselines**.
+- A top-level `_review` block in the JSON records the regression-baseline
+  (circular, not independent) caveat and the scope note (DFT + extended molecule
+  set exceed the H₂O-first instruction).
+
+Validated with a real ddX build: H₂O diagnostics + reference **pass**, the
+demoted entries **skip** with an explanatory message, and the Tier-1 adapter
+regression still **passes**. A protocol-matched independent reference is still
+the outstanding requirement for true Tier-2 validation; a stricter trim to the
+H₂O/NH₃-only scope is available if desired.

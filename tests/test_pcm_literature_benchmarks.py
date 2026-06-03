@@ -219,6 +219,13 @@ def _make_pcm_diagnostics_test(bench):
     """
 
     def test(self):
+        if bench.get("status") != "verified":
+            self.skipTest(
+                f"benchmark '{bench['id']}' is not a verified gate "
+                f"(status={bench.get('status')!r}); see physical_review in "
+                "tests/data/pcm_literature_benchmarks.json and "
+                "docs/solvent_pcm_source_term_review.md."
+            )
         proc, log = _run(_input_text(bench, pcm_on=True))
         if _ddx_unavailable(log):
             self.skipTest(

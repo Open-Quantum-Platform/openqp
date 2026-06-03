@@ -939,7 +939,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CO2 RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -187.6328313431,
       "empirical_verification": {
@@ -969,7 +969,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "co2_rhf_bhhlyp_631gs_water",
@@ -994,7 +996,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CO2 RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -188.483929033,
@@ -1025,7 +1027,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "co2_rhf_pbe_631gs_water",
@@ -1050,7 +1054,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CO2 RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -188.3919932345,
@@ -1081,7 +1085,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "hcn_rhf_hf_631gs_water",
@@ -1446,7 +1452,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3OH RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -115.0324298273,
       "empirical_verification": {
@@ -1476,7 +1482,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.06591791347,
-      "phi_source_vs_exact_max_threshold": 0.162861406576
+      "phi_source_vs_exact_max_threshold": 0.162861406576,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "ch3oh_rhf_bhhlyp_631gs_water",
@@ -1504,7 +1512,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3OH RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -115.6426627331,
@@ -1535,7 +1543,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.060651508317,
-      "phi_source_vs_exact_max_threshold": 0.142397095737
+      "phi_source_vs_exact_max_threshold": 0.142397095737,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "ch3oh_rhf_pbe_631gs_water",
@@ -1563,7 +1573,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3OH RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -115.5647508511,
@@ -1594,7 +1604,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.057309035124,
-      "phi_source_vs_exact_max_threshold": 0.139387923251
+      "phi_source_vs_exact_max_threshold": 0.139387923251,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "ch3cn_rhf_hf_631gs_water",
@@ -1622,7 +1634,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3CN RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -131.9256090613,
       "empirical_verification": {
@@ -1652,7 +1664,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "ch3cn_rhf_bhhlyp_631gs_water",
@@ -1680,7 +1694,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3CN RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -132.6701019878,
@@ -1711,7 +1725,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     },
     {
       "id": "ch3cn_rhf_pbe_631gs_water",
@@ -1739,7 +1755,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "diagnostic_unphysical_pending",
       "benchmark_label": "CH3CN RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -132.5820353323,
@@ -1770,7 +1786,25 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
     }
-  ]
+  ],
+  "_review": {
+    "source": "docs/solvent_pcm_source_term_review.md (commit on feat/solvent-backend-spike)",
+    "regression_baseline_caveat": "All tier2 closed-shell reference_value entries are OpenQP/ddX self-baselines (reference_kind=openqp_ddx_closed_shell_diagnostic_baseline), i.e. a regression lock, NOT validation against literature or an independent code. A protocol-matched independent reference (e.g. pyddx) is still required for true Tier-2 validation.",
+    "scope_note": "The 10-molecule x {HF,BHHLYP,PBE} matrix exceeds the handoff's H2O-first / RHF-energy scope. Retained as regression baselines, but DFT and the larger polar set are beyond the originally instructed scope.",
+    "demoted_unphysical": [
+      "co2_rhf_hf_631gs_water",
+      "co2_rhf_bhhlyp_631gs_water",
+      "co2_rhf_pbe_631gs_water",
+      "ch3oh_rhf_hf_631gs_water",
+      "ch3oh_rhf_bhhlyp_631gs_water",
+      "ch3oh_rhf_pbe_631gs_water",
+      "ch3cn_rhf_hf_631gs_water",
+      "ch3cn_rhf_bhhlyp_631gs_water",
+      "ch3cn_rhf_pbe_631gs_water"
+    ]
+  }
 }
