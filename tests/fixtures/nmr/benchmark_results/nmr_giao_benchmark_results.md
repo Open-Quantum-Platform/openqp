@@ -1,0 +1,16 @@
+# NMR CGO/GIAO benchmark matrix
+
+Status: reference_ready_openqp_giao_gated
+
+|System|Basis|Method|Backend|Gauge|Status|Origin dependence/ppm|Sigma iso/ppm|PySCF reference iso/ppm|OpenQP-PySCF delta/ppm|Wall/s|Peak memory/MiB|Notes|
+|---|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|---|
+|h2o|sto-3g|hf|pyscf|cgo|ok|343.193360|179.544514;26.777905;26.777905|179.544514;26.777905;26.777905||0.128|111.4|PySCF trusted reference|
+|h2o|sto-3g|hf|pyscf|giao|ok|0.000253|371.692241;33.988071;33.988071|371.692241;33.988071;33.988071||0.110|111.7|PySCF trusted reference|
+|h2o|sto-3g|pbe|pyscf|cgo|ok|338.191722|152.193928;27.074787;27.074787|152.193928;27.074787;27.074787||0.483|178.3|PySCF trusted reference|
+|h2o|sto-3g|pbe|pyscf|giao|ok|9.756080|451.425560;32.920488;32.920488|451.425560;32.920488;32.920488||0.487|178.4|PySCF trusted reference|
+|formaldehyde|6-31g*|hf|pyscf|cgo|ok|108.921635|43.209602;-392.643148;25.224441;25.224441|43.209602;-392.643148;25.224441;25.224441||0.785|179.0|PySCF trusted reference|
+|formaldehyde|6-31g*|hf|pyscf|giao|ok|0.000004|15.857224;-393.693503;23.078485;23.078485|15.857224;-393.693503;23.078485;23.078485||1.018|179.1|PySCF trusted reference|
+|formaldehyde|6-31g*|pbe0|pyscf|cgo|ok|104.750288|35.661158;-387.340139;24.496286;24.496286|35.661158;-387.340139;24.496286;24.496286||1.686|293.8|PySCF trusted reference|
+|formaldehyde|6-31g*|pbe0|pyscf|giao|ok|8.497257|17.385080;-399.204860;19.901184;19.901184|17.385080;-399.204860;19.901184;19.901184||1.915|294.0|PySCF trusted reference|
+|formaldehyde|6-31g*|pbe|pyscf|cgo|ok|102.945576|34.600681;-373.711577;24.369747;24.369747|34.600681;-373.711577;24.369747;24.369747||1.416|296.0|PySCF trusted reference|
+|formaldehyde|6-31g*|pbe|pyscf|giao|ok|10.296883|20.608175;-391.573162;18.342895;18.342895|20.608175;-391.573162;18.342895;18.342895||1.644|296.1|PySCF trusted reference|

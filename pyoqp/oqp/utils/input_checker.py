@@ -44,6 +44,7 @@ OPT_LIBS = {"scipy", "dlfind", "geometric"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken", "nmr"}
+NMR_GAUGES = {"cgo", "giao"}
 DLFIND_SINGLE_ICOORD = {0, 1, 2, 3, 4}
 DLFIND_LN_ICOORD = {10, 11, 12, 13, 14}
 DLFIND_MIN_IOPT = {0, 1, 2, 3}
@@ -600,6 +601,7 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     grad_states = _as_list(_get(config, "properties", "grad", []))
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
+    nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
 
     for prop in scf_prop:
         if prop not in SCF_PROPS:
@@ -610,6 +612,25 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=prop,
                 expected=", ".join(sorted(SCF_PROPS)),
                 action="Remove the keyword or confirm that downstream code can ignore it.",
+            )
+
+    if "nmr" in scf_prop:
+        if nmr_gauge not in NMR_GAUGES:
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "Unknown NMR shielding gauge formulation.",
+                value=nmr_gauge,
+                expected=", ".join(sorted(NMR_GAUGES)),
+                action="Use nmr_gauge=cgo for the validated common gauge-origin path, or nmr_gauge=giao for the gated development path.",
+            )
+        elif nmr_gauge == "giao":
+            report.add(
+                "WARNING",
+                "properties.nmr_gauge",
+                "GIAO NMR shielding is an explicit development option and is not yet validated for production benchmarks.",
+                value=nmr_gauge,
+                action="Use nmr_gauge=cgo for validated results until GIAO benchmarks pass.",
             )
 
     if td_prop:

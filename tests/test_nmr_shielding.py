@@ -74,7 +74,8 @@ class NMRShieldingTests(unittest.TestCase):
         inp.write_text(INPUT)
         env = dict(os.environ)
         env["OPENQP_ROOT"] = self.root
-        env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+        root_parent = str(Path(self.root).parent)
+        env["PYTHONPATH"] = root_parent + os.pathsep + env.get("PYTHONPATH", "")
         proc = subprocess.run(
             [sys.executable, "-m", "oqp.pyoqp", str(inp)],
             cwd=workdir, env=env, capture_output=True, text=True,
