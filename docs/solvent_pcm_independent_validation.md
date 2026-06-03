@@ -60,3 +60,51 @@ Replace the `l ≤ 2` Mulliken source with a higher-`l` and/or full
 density-projected `psi` so the H₂O reaction field matches an independent ddPCM,
 then re-run this comparison. A pass criterion of ratio ∈ [0.95, 1.05] vs PySCF
 ddPCM (as NH₃ already meets) would constitute genuine Tier-2 validation.
+
+## Root-cause refinement (investigation update)
+
+Further investigation changes the recommended fix. Three results:
+
+1. **The reference is solid.** PySCF `ddPCM` ("under testing") was cross-checked
+   against PySCF's mature `ddCOSMO` at the same protocol:
+
+   | molecule | OpenQP/ddX | PySCF ddPCM | PySCF ddCOSMO | OpenQP/ddCOSMO |
+   | --- | --- | --- | --- | --- |
+   | H₂O | −5.55 | −9.63 | −10.41 | 0.53 |
+   | NH₃ | −7.42 | −7.83 | −8.33 | 0.89 |
+
+   ddPCM and ddCOSMO agree to ~7 %, so the ~2× H₂O shortfall is real, not a
+   reference artifact.
+
+2. **It is NOT a source-moment (dipole) error.** OpenQP's `l ≤ 1` atom-centered
+   source (net Mulliken charge + atomic dipole, row partition) reproduces the
+   **exact** H₂O RHF dipole to ratio **1.000** (net charges alone give 1.088×).
+   So a "higher-`l` density-projected `psi`" does **not** address the gap — the
+   molecular multipoles are already represented correctly.
+
+3. **Root cause: the point-multipole source is fundamentally insufficient for a
+   molecular cavity.** ddX's multipole interface places the entire solute as
+   point multipoles **at the atom centers**, then evaluates `phi` at the cavity
+   points from those. An atom-centered multipole expansion only converges to the
+   true potential *outside* the sphere enclosing the density; the ddPCM cavity
+   points sit close to (and around) neighbouring atoms, inside that region, so
+   the point-multipole `phi` is wrong there regardless of `l`. PySCF instead
+   evaluates the **exact** density potential at every cavity point (3-center
+   integrals) and projects the density onto a volume grid for `psi`. That the
+   error is larger for the compact H₂O cavity than for NH₃ is consistent with
+   this near-field explanation.
+
+### Revised recommendation
+
+Abandon the multipole-source route; do **not** pursue higher-`l` multipoles
+(they will not converge at the near cavity). The correct fix is the
+**exact-density coupling** PySCF/ddCOSMO use, which OpenQP is already half-way
+to: `electrostatic_potential_unweighted` already gives the **exact** `phi` at
+cavity points (the primitive the retired `oqp_ddx_pcm_solve` path used). What
+remains is (a) a correct density-derived `psi` (the ddCOSMO volume-grid
+projection, not a multipole expansion) and (b) re-solving the ddX convergence
+that drove the earlier switch to the multipole path. This is research-grade
+Fortran work, not a small source-term tweak; it was therefore **not** attempted
+here in preference to shipping an unvalidated change. The PySCF ddPCM/ddCOSMO
+gate above is the acceptance test for it (ratio ∈ [0.95, 1.05]).
+
