@@ -332,16 +332,20 @@ build in the analytic Hessian only had to run the established two-pass split:
 
 | Hessian term | routine | CAM handling |
 |--------------|---------|--------------|
-| 2e second-derivative skeleton | `grd2_hess_driver` | **new** two-pass wrapper (this stage), mirroring `grd2_driver` |
+| 2e second-derivative skeleton | `grd2_hess_driver` | two-pass CAM split (upstream's recursive driver, #173) |
 | CPHF response-Fock derivative `G[P]^x` / `F^x` | `fock_deriv_contract(_os)` -> `grd2_driver` | already auto-detects `cam_flag` |
 | reorthonormalization `G[d0]`, relaxed-density `G[dP]` | `fock_jk` -> `int2_driver` | already CAM-aware |
 | CPHF A-matrix (orbital Hessian) | `cphf_apbx`/`_uhf`/`_rohf` | already CAM-aware |
 | XC skeleton/kernel (`dHse`, RHS `dVxc`, `f_xc`) | `dftexcor` / `derexc_blk` | functional's own XC; unaffected by the range split |
 
-The only code change was splitting `grd2_hess_driver` into a thin CAM two-pass
-wrapper plus `grd2_hess_driver_gen` (the former body), exactly parallel to
-`grd2_driver`/`grd2_driver_gen`. Everything else was already in place — the
-robustness sweep's ~1e-1 CAM error was entirely the un-split 2e skeleton.
+Every Fock build in the analytic Hessian therefore runs the established two-pass
+split (long-range Coulomb + `cam_alpha` K[1/r], then `cam_beta` erfc-attenuated
+K) with no further code needed: the response-Fock and reorthonormalization paths
+auto-detect `cam_flag`, and the 2e second-derivative skeleton's `grd2_hess_driver`
+gained the same split in upstream #173 (a recursive two-pass driver, parallel to
+`grd2_driver`). This branch's contribution for CAM is therefore the open-shell
+validation and removing the runtime/input-checker gates; the robustness sweep's
+~1e-1 CAM error was entirely the un-split 2e skeleton, now resolved.
 
 Validation (`max|analytic - numerical|`, 6-31g OH/OH+, exactly symmetric):
 
