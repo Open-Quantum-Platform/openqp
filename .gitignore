@@ -8,6 +8,9 @@
 *.sw?
 *.un~
 *.log
+*.pyc
+__pycache__/
+.pytest_cache/
 f90deps.mk
 objdir*
 external/*
