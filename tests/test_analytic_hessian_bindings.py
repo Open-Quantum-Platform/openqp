@@ -138,7 +138,6 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         electric = read("source/modules/electric_moments.F90")
         vib = read("source/modules/vibrational_intensities.F90")
         single_point = read("pyoqp/oqp/library/single_point.py")
-        external = read("pyoqp/oqp/library/external.py")
 
         self.assertIn("void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);", header)
         self.assertIn("bind(C, name=\"electric_dipole_au\")", electric)
@@ -147,7 +146,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("oqp.vibrational_intensities_native", single_point)
         self.assertNotIn("vibrational_intensities_from_pyscf", single_point)
         self.assertNotIn("external_pyscf_finite_difference", single_point)
-        self.assertNotIn("def vibrational_intensities_from_pyscf", external)
+        self.assertFalse((ROOT / "pyoqp/oqp/library/external.py").exists())
 
     def test_hessian_frequency_log_prints_normal_mode_eigenvectors(self):
         single_point = read("pyoqp/oqp/library/single_point.py")
@@ -177,17 +176,6 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("CPHF ITER", source)
         self.assertIn("CPHF wall time", source)
         self.assertIn("call cpu_time", source)
-
-    def test_pyscf_bridge_enables_cphf_iteration_logging(self):
-        source = read("pyoqp/oqp/library/external.py")
-
-        self.assertIn("from pyscf.scf import cphf as pyscf_cphf", source)
-        self.assertIn("_enable_pyscf_cphf_iteration_logging", source)
-        self.assertIn("PyOQP: %s solver iterations begin", source)
-        self.assertIn("kwargs.setdefault(\"verbose\", cphf_log)", source)
-        self.assertIn("cphf_log.timer(f\"PyOQP: {label} solver total\"", source)
-        self.assertIn("module.solve = original_solve", source)
-
 
 if __name__ == "__main__":
     unittest.main()

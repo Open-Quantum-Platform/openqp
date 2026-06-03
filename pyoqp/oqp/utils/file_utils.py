@@ -42,6 +42,26 @@ def try_basis(basis, path=None, fallback='6-31g'):
     raise FileNotFoundError(f"Basis `{basis}` is not available")
 
 
+def try_data_file(name):
+    """Resolve a data file shipped under share/basis_sets (installed) or the
+    source basis_sets/ tree (development)."""
+
+    try:
+        root = os.environ["OPENQP_ROOT"]
+    except KeyError:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+    for candidate in (
+        name,
+        os.path.join(root, "share", "basis_sets", name),
+        os.path.join(root, "basis_sets", name),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(f"Data file `{name}` is not available")
+
+
 def what_is_time():
     # This function return current time
 
@@ -821,6 +841,7 @@ def dump_data(mol, data, title=None, fpath='.'):
 def write_xyz(atoms, coord, info):
     # coord in Bohr
     coord = coord.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     natom = len(coord)
     xyz = '%s\nGeom %s\n' % (natom, ' '.join([str(x) for x in info]))
     for n, line in enumerate(coord):
@@ -839,6 +860,7 @@ def write_xyz(atoms, coord, info):
 def write_grad(atoms, grad):
     # grad in Hartree/Bohr
     grad = grad.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     xyz = ''
     for n, line in enumerate(grad):
         a = atoms[n]

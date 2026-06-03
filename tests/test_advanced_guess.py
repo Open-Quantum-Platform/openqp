@@ -32,7 +32,20 @@ class TestAdvancedGuessConfig(unittest.TestCase):
     def setUp(self):
         install_minimal_oqp_stubs()
 
-    def test_input_checker_accepts_sad_guess(self):
+    def test_input_checker_accepts_native_guess_modes(self):
+        input_checker = load_module(
+            "input_checker_native_guess_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+
+        for guess_type in ("hcore", "huckel", "modhuckel", "minao", "sap"):
+            with self.subTest(guess_type=guess_type):
+                config = {"guess": {"type": guess_type}}
+                report = input_checker.CheckReport()
+                input_checker._check_guess(config, report)
+                self.assertTrue(report.ok, report.to_text())
+
+    def test_input_checker_rejects_removed_sad_guess(self):
         input_checker = load_module(
             "input_checker_sad_under_test",
             "pyoqp/oqp/utils/input_checker.py",
@@ -42,19 +55,8 @@ class TestAdvancedGuessConfig(unittest.TestCase):
         report = input_checker.CheckReport()
         input_checker._check_guess(config, report)
 
-        self.assertTrue(report.ok, report.to_text())
-
-    def test_input_checker_accepts_sap_guess(self):
-        input_checker = load_module(
-            "input_checker_sap_under_test",
-            "pyoqp/oqp/utils/input_checker.py",
-        )
-        config = {"guess": {"type": "sap"}}
-
-        report = input_checker.CheckReport()
-        input_checker._check_guess(config, report)
-
-        self.assertTrue(report.ok, report.to_text())
+        self.assertFalse(report.ok)
+        self.assertIn("Unknown guess type", report.to_text())
 
 
 if __name__ == "__main__":

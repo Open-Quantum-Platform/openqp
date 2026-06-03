@@ -11,7 +11,7 @@ module huckel
 
 contains
 
- subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis)
+ subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis, modified)
 
    use constants, only: tol_int
    use types,     only: information
@@ -25,9 +25,11 @@ contains
 
    type(information), intent(in) :: infos
    type(basis_set), intent(in) :: basis, huckel_basis
+   logical, intent(in), optional :: modified
 
    real(kind=dp) :: ovl(*), orbitals(*)
    integer :: nat, i, ok, l0, l0co, nbf, nbf2, nbf_co, nact, ndoc, nproj
+   logical :: use_modified
 
    real(kind=dp), allocatable :: scr(:)
    real(kind=dp), allocatable :: q(:)
@@ -64,8 +66,11 @@ contains
      nact = infos%mol_prop%nelec_a-infos%mol_prop%nelec_b
    end if
 
+   use_modified = .false.
+   if (present(modified)) use_modified = modified
+
 !  Extended Huckel calculation in mini basis set
-   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int)
+   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int, use_modified)
 
 !  Do at most 5 virtuals from the huckel
    nproj = min(l0co,ndoc+nact+5)
@@ -84,7 +89,7 @@ contains
  end subroutine huckel_guess
 
 !> @brief   Extended Huckel calculation in a Huzinaga minimal basis set
- subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int)
+ subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int, modified)
     use eigen, only: diag_symm_full
     use mathlib, only: unpack_matrix
     use messages, only: show_message, WITH_ABORT
@@ -100,9 +105,13 @@ contains
     type(basis_set), intent(in) :: basis
     real(kind=dp) :: vec(:,:), zan(:)
     integer :: l0co, nat, tol_int
+    logical, intent(in), optional :: modified
 
     real(kind=dp), parameter :: BITSY=0.05D+00
-    real(kind=dp), parameter :: FUDGE = 1.75d+00/2.0d0
+    real(kind=dp), parameter :: WH_K = 1.75d+00
+    real(kind=dp), parameter :: FUDGE = WH_K/2.0d0
+    logical :: use_modified
+    real(kind=dp) :: delta, kij, hsum
 !
     real(kind=dp) :: eneg(18)
     integer :: l1co, l2co, l3co, &
@@ -117,6 +126,9 @@ contains
     real(kind=dp), allocatable :: TSH(:), Q(:,:), SCR(:,:)
     integer, allocatable :: llim(:), iulim(:)
     logical, allocatable :: core(:)
+
+    use_modified = .false.
+    if (present(modified)) use_modified = modified
 
     l1co = basis%nbf
     l2co = (l1co*l1co+l1co)/2
@@ -225,11 +237,32 @@ contains
     end do
 
 !   generate the off-diagonal of the extended Huckel operator
-    do i = 2, l0co
-       do j=1,i-1
-          h2(j,i) = FUDGE*h2(j,i)*(h2(i,i)+h2(j,j))
-       end do
-    end do
+    if (use_modified) then
+!     Modified (weighted) Wolfsberg-Helmholz formula, cf. Ammeter et al.
+!     J. Am. Chem. Soc. 100, 3686 (1978) and Psi4's MODHUCKEL guess:
+!       H_ij = 1/2 * K_ij * (H_ii + H_jj) * S_ij
+!       K_ij = K + d**2 + d**4*(1-K),  d = (H_ii - H_jj)/(H_ii + H_jj),  K = 1.75
+!     The energy-dependent K_ij reduces overbinding for orbitals of very
+!     different energies and yields a sharper guess than constant-K GWH.
+      do i = 2, l0co
+         do j = 1, i-1
+            hsum = h2(i,i) + h2(j,j)
+            if (abs(hsum) > tiny(1.0d0)) then
+               delta = (h2(i,i) - h2(j,j)) / hsum
+               kij = WH_K + delta*delta + delta**4*(1.0d0 - WH_K)
+            else
+               kij = WH_K
+            end if
+            h2(j,i) = 0.5d0*kij*h2(j,i)*hsum
+         end do
+      end do
+    else
+      do i = 2, l0co
+         do j=1,i-1
+            h2(j,i) = FUDGE*h2(j,i)*(h2(i,i)+h2(j,j))
+         end do
+      end do
+    end if
 
     call diag_symm_full(1,l0co,h2,l1co,eig,ierr)
     if (ierr /= 0) call show_message('Huckel MBS diagonalization failure', WITH_ABORT)

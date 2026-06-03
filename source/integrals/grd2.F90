@@ -123,6 +123,10 @@ contains
       call grd2_driver_gen(infos, basis, de_internal, gcomp)
       de = de + de_internal
     else
+      ! Only adopt the DFT hybrid mixing here for actual DFT calculations
+      ! (hamilton>=20).  For pure Hartree-Fock the caller already set the
+      ! correct hfscale (=1.0); infos%dft%hfscale is not meaningful in that
+      ! case (it is left at its -1.0 sentinel) and must not clobber it.
       if (infos%control%hamilton >= 20) then
         gcomp%hfscale = infos%dft%hfscale
         gcomp%hfscale2 = infos%tddft%hfscale
