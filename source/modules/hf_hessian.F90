@@ -69,12 +69,14 @@ contains
     hfscale = 1.0_dp
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
 
+    open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
     write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
     write(iw,'(A)') '  Storing native OpenQP HF/DFT analytic Hessian matrix in OQP::hf_hessian.'
 
     if (nocc <= 0 .or. nvir <= 0 .or. ncart <= 0) then
       write(iw,'(A)') '  Native CPHF prepass skipped: empty occupied/virtual/nuclear space.'
+      close(iw)
       return
     end if
 
@@ -466,6 +468,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
+    close(iw)
 
     deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
                d0, d0p, gp, gfull, bvec, uvec, hess_native)
