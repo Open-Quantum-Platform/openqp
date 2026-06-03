@@ -172,7 +172,6 @@ module types
     integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES)
     integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
     logical(c_bool) :: umrsf= .False.      !< UMRSF branch calculations switch in td_mrsf_energy module
-    logical(c_bool) :: xc_buffer = .False. !< Cache AO values + XC kernel across Davidson iterations (opt-in)
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator
