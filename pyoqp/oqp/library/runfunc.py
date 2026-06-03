@@ -63,7 +63,22 @@ def compute_scf_prop(mol):
                     )
                 oqp.nmr_shielding(mol)
             elif nmr_gauge == "giao":
-                # GIAO (London) NMR shielding, validated for RHF / UHF / ROHF.
+                # GIAO (London) NMR shielding, validated for HF RHF/UHF/ROHF.
+                # DFT GIAO requires the London (GIAO) derivative of the XC
+                # potential (the "vxc_giao" term), which is an essential
+                # contribution (tens of ppm) and is not yet implemented; without
+                # it DFT GIAO shielding is incorrect.  Gate DFT here.
+                functional = mol.config.get("input", {}).get("functional", "")
+                functional = str(functional or "").lower()
+                if functional and functional not in ("none", "hf"):
+                    raise NotImplementedError(
+                        "DFT GIAO NMR shielding is not yet available: the London "
+                        "(GIAO) derivative of the exchange-correlation potential "
+                        "(the 'vxc_giao' term) is required for correct DFT "
+                        "shielding and is not implemented. Use nmr_gauge=cgo for "
+                        "DFT NMR, or nmr_gauge=giao with a Hartree-Fock reference "
+                        "(no functional)."
+                    )
                 oqp.nmr_giao_shielding(mol)
             else:
                 raise ValueError(

@@ -49,13 +49,17 @@ contains
 !>  resulting first-order density with the PSO operator to form the paramagnetic
 !>  shielding.
 !>
-!>  DFT (RKS/UKS/ROKS): the first-order Hamiltonian uses the exact-exchange-scaled
-!>  (c_x) two-electron GIAO derivative and the exchange-only coupled response (the
-!>  semilocal XC kernel does not contribute to the imaginary/antisymmetric
-!>  magnetic response).  The explicit London derivative of the semilocal XC
-!>  potential (the PySCF "vxc_giao" term in h1) is NOT included -- a common
-!>  approximation; for high-c_x hybrids it is small.  Pure-exchange (HF, c_x=1)
-!>  is exact.
+!>  Hartree-Fock (RHF/UHF/ROHF) is validated against the PySCF GIAO oracle.
+!>
+!>  DFT is GATED at the driver (nmr_gauge=giao with a functional raises
+!>  NotImplementedError).  Correct DFT GIAO shielding requires the London (GIAO)
+!>  derivative of the exchange-correlation potential -- the "vxc_giao" term in
+!>  h1 -- which is an ESSENTIAL contribution (verified to be tens of ppm; e.g.
+!>  ~+220 ppm on the oxygen of H2O/PBE/STO-3G), not a small correction.  It needs
+!>  a GIAO-weighted XC grid integration (the London derivative of the AO values
+!>  and gradients), and the closed-shell h1 two-electron exchange must also be
+!>  scaled by c_x.  Until that lands, DFT GIAO is gated; use nmr_gauge=cgo for
+!>  DFT NMR (CGO carries no London phase, so it has no vxc_giao term).
 !>
 !>  Results are written as machine-parseable records to the log so
 !>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT

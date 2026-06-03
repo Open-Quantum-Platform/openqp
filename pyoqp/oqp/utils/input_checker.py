@@ -634,6 +634,18 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=f"{nmr_gauge} with scf.type={scf_type}",
                 action="Use nmr_gauge=giao for open-shell (UHF/ROHF) NMR shielding.",
             )
+        elif nmr_gauge == "giao":
+            functional = _as_lower(_get(config, "input", "functional", ""))
+            if functional and functional not in ("none", "hf"):
+                report.add(
+                    "ERROR",
+                    "properties.nmr_gauge",
+                    "DFT GIAO NMR shielding is not yet available (the London XC "
+                    "potential derivative 'vxc_giao' term is not implemented).",
+                    value=f"giao with functional={functional}",
+                    action="Use nmr_gauge=cgo for DFT NMR, or nmr_gauge=giao with a "
+                           "Hartree-Fock reference (no functional).",
+                )
 
     if td_prop:
         report.add(
