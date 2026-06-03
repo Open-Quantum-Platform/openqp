@@ -16,7 +16,7 @@ module cphf_mod
 !>   nuclear-perturbation response). cphf_polarizability_selftest validates the
 !>   solver end to end against a known property: it solves with the dipole
 !>   right-hand side and forms the static dipole polarizability, written to a file
-!>   for comparison with PySCF (no libint, no geometry derivatives required).
+!>   for comparison against an external reference (no geometry derivatives required).
 
   use precision, only: dp
   use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
@@ -385,7 +385,7 @@ contains
   end subroutine cphf_static_polarizability
 
 !> @brief Validate the CPHF solver via the reusable static dipole polarizability.
-!>   Writes the 3x3 tensor to /tmp/cphf_polar.out for comparison with PySCF.
+!>   Writes the 3x3 tensor to /tmp/cphf_polar.out for comparison with a reference.
   subroutine cphf_polarizability_selftest(infos)
     type(information), target, intent(inout) :: infos
 

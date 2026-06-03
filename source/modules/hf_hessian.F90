@@ -261,7 +261,7 @@ contains
 
     call cphf_solve(infos, ncart, bvec, uvec)
 
-    ! ===== CPHF orbital-relaxation response (PySCF hessian/rhf.hess_elec) =====
+    ! ===== CPHF orbital-relaxation response =====
     ! H^resp_xy = 4 Tr[F^x dm1^y] - 4 Tr[S^x (eps.dm1^y)] - 2 Tr[s1oo^x mo_e1^y]
     !   dm1^y_pq      = sum_k dC^y_pk C_qk                       (one-sided)
     !   mo_e1^y_kl    = (h^y + G[P]^y + G[dP^y])^MO_kl - 1/2 (eps_k+eps_l) s1oo^y_kl
@@ -407,9 +407,9 @@ contains
           real(dp) :: hx, tele, tkin, eexc
           integer :: yy2, ccy, kcy, nang, x2, kk2, ll2
           hx = 1.0d-3; nang = maxval(basis%am) + 2
-          ! XC contribution split exactly as PySCF hessian/rks but realised through
-          ! the OpenQP moving-grid XC machinery so it stays consistent with the
-          ! OpenQP numerical Hessian:
+          ! XC contribution split into a skeleton+density-response term and an
+          ! energy-weighting term, realised through the OpenQP moving-grid XC
+          ! machinery so it stays consistent with the OpenQP numerical Hessian:
           !   dHse : skeleton + density-response (term1).  Central FD of the analytic
           !          XC gradient (derexc) along the relaxed path R+lambda, P+lambda*dP.
           !          This is the genuine total derivative d/dR[g_XC(R,P(R))] of the
