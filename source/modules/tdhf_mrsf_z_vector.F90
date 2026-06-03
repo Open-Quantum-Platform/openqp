@@ -1067,6 +1067,9 @@ contains
       , 'Solver method      is', trim(solver_name)
     call flush(iw)
 
+    ! ======================================================================
+    ! Step 1: assemble the z-vector right-hand side and Fock/density pieces.
+    ! ======================================================================
     call build_mrsf_zvector_rhs()
 
     write(*,'(/3x,25("-")&
@@ -1077,7 +1080,9 @@ contains
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
     call sanitize_zvector_preconditioner(xm, xminv, iw, MRSF_ZVEC_DENOMINATOR_FLOOR, "MRSF")
 
-    ! Choose solver based on input option (0=CG, 1=MINRES, 2=GMRES)
+    ! ======================================================================
+    ! Step 2: solve the z-vector linear system (0=CG, 1=MINRES, 2=GMRES).
+    ! ======================================================================
     if (infos%tddft%z_solver == 2) then
 
       ! ============================================
@@ -1204,6 +1209,9 @@ contains
 
     call flush(iw)
 
+    ! ======================================================================
+    ! Step 3: build the relaxed density (td_p) and energy-weighted density (wao).
+    ! ======================================================================
     call build_mrsf_relaxed_density_and_w()
 
     call int2_driver%clean()
