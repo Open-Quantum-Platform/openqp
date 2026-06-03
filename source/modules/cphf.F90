@@ -73,21 +73,23 @@ module cphf_mod
   !> Opaque data for the open-shell (ROHF) orbital-Hessian action.  ROHF uses a
   !> SINGLE MO set with a docc / socc / virt partition, so the rotation vector is
   !> laid out over the three non-redundant blocks (socc-docc, virt-docc,
-  !> virt-socc) exactly as scf_converger::pack_rohf_trial.  The action mirrors
-  !> the validated TRAH ROHF orbital Hessian (scf_converger::calc_h_op):
-  !>   y = pack( Fvv^a xa - xa Foo^a + [C^a^T G^a C^a]_vo ,
-  !>             Fvv^b xb - xb Foo^b + [C^b^T G^b C^b]_vo )
-  !> with Foo/Fvv the occ-occ / vir-vir blocks of the converged spin Fock
-  !> matrices in the MO basis and G^s the response Fock from get_response_packed.
+  !> virt-socc) exactly as scf_converger::pack_rohf_trial.  The action is the
+  !> EXACT ROHF orbital Hessian: the Fock-transform part is the full commutator
+  !>   y = pack( [F^a_MO, K]_vo + [C^T G^a C]_vo ,  [F^b_MO, K]_vo + [C^T G^b C]_vo )
+  !> where K is the antisymmetric MO rotation built from the packed trial vector
+  !> (vir-occ blocks plus the socc-docc occ-occ block), F^s_MO the converged spin
+  !> Fock in the MO basis (full matrix), and G^s the response Fock from
+  !> get_response_packed.  The commutator [F_MO,K] (not the canonical Fvv K - K
+  !> Foo) is required because the raw spin-Fock vir-occ blocks are nonzero for the
+  !> non-canonical ROHF orbitals; their coupling to the socc-docc/virt-socc
+  !> rotations is exactly the term the canonical form drops.
   type :: cphf_cg_data_rohf
     type(information), pointer :: infos => null()
     type(basis_set), pointer :: basis => null()
     type(dft_grid_t), pointer :: molgrid => null()
     real(kind=dp), pointer :: mo(:,:) => null()
-    real(kind=dp), pointer :: foo(:,:) => null()     ! alpha occ-occ Fock (MO)
-    real(kind=dp), pointer :: fvv(:,:) => null()     ! alpha vir-vir Fock (MO)
-    real(kind=dp), pointer :: foo_b(:,:) => null()   ! beta  occ-occ Fock (MO)
-    real(kind=dp), pointer :: fvv_b(:,:) => null()   ! beta  vir-vir Fock (MO)
+    real(kind=dp), pointer :: famo(:,:) => null()    ! alpha Fock (full, MO basis)
+    real(kind=dp), pointer :: fbmo(:,:) => null()    ! beta  Fock (full, MO basis)
     real(kind=dp), pointer :: xminv(:) => null()     ! diagonal preconditioner
     integer :: nbf = 0
     integer :: nocca = 0, noccb = 0, nvira = 0, nvirb = 0, offset = 0, ltot = 0
@@ -808,7 +810,7 @@ contains
     type(pcg_t) :: pcg
 
     real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
-    real(kind=dp), allocatable, target :: foo(:,:), fvv(:,:), foo_b(:,:), fvv_b(:,:)
+    real(kind=dp), allocatable, target :: famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable, target :: xminv(:)
     real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
     integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
@@ -836,39 +838,40 @@ contains
 
     if (dft) call dft_initialize(infos, basis, molGrid)
 
-    ! MO-basis occ-occ / vir-vir blocks of the converged spin Fock matrices
-    allocate(foo(nocca,nocca), fvv(nvira,nvira), foo_b(noccb,noccb), fvv_b(nvirb,nvirb))
+    ! converged spin Fock matrices in the MO basis (FULL matrices; the operator
+    ! needs the off-diagonal vir-occ blocks for the non-canonical commutator)
+    allocate(famo(nbf,nbf), fbmo(nbf,nbf))
     allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf))
     call unpack_matrix(focka, fao)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, w3, nbf)
-    foo = w3(1:nocca,1:nocca); fvv = w3(nocca+1:nbf,nocca+1:nbf)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, famo, nbf)
     call unpack_matrix(fockb, fao)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, w3, nbf)
-    foo_b = w3(1:noccb,1:noccb); fvv_b = w3(noccb+1:nbf,noccb+1:nbf)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, fbmo, nbf)
 
-    ! diagonal preconditioner (orbital-energy-difference gaps, response neglected)
+    ! diagonal preconditioner (orbital-energy-difference gaps from the Fock diag)
     allocate(xminv(ltot))
     k = 0
     if (offset > 0) then
-      do i = 1, offset                       ! socc-docc
+      do i = 1, offset                       ! socc-docc (beta gap)
         do a = 1, noccb
-          k = k + 1; d = fvv_b(i,i) - foo_b(a,a); xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
+          k = k + 1; d = fbmo(noccb+i,noccb+i) - fbmo(a,a)
+          xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
         end do
       end do
     end if
     do i = 1, nvira                          ! virt-docc (alpha + beta share)
       do a = 1, noccb
         k = k + 1
-        d = (fvv(i,i) - foo(a,a)) + (fvv_b(offset+i,offset+i) - foo_b(a,a))
+        d = (famo(nocca+i,nocca+i) - famo(a,a)) + (fbmo(noccb+offset+i,noccb+offset+i) - fbmo(a,a))
         xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
       end do
     end do
     if (offset > 0) then
-      do i = 1, nvira                        ! virt-socc
+      do i = 1, nvira                        ! virt-socc (alpha gap)
         do a = 1, offset
-          k = k + 1; d = fvv(i,i) - foo(noccb+a,noccb+a); xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
+          k = k + 1; d = famo(nocca+i,nocca+i) - famo(noccb+a,noccb+a)
+          xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
         end do
       end do
     end if
@@ -880,8 +883,7 @@ contains
     cgdata%basis => basis
     cgdata%molgrid => molgrid
     cgdata%mo => mo
-    cgdata%foo => foo; cgdata%fvv => fvv
-    cgdata%foo_b => foo_b; cgdata%fvv_b => fvv_b
+    cgdata%famo => famo; cgdata%fbmo => fbmo
     cgdata%xminv => xminv
     cgdata%nbf = nbf
     cgdata%nocca = nocca; cgdata%noccb = noccb
@@ -910,7 +912,7 @@ contains
       call pcg%clean()
     end do
 
-    deallocate(foo, fvv, foo_b, fvv_b, xminv, fao, w2, w3)
+    deallocate(famo, fbmo, xminv, fao, w2, w3)
   end subroutine cphf_solve_rohf
 
 !###############################################################################
@@ -926,24 +928,45 @@ contains
 
     real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
     real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
-    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:)
-    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, i, j
+    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:), kmat(:,:), ck(:,:)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, i, j, a, s
 
     call c_f_pointer(dat, p)
     nbf = p%nbf; nbf2 = nbf*(nbf+1)/2
     nocca = p%nocca; noccb = p%noccb; nvira = p%nvira; nvirb = p%nvirb
+    offset = p%offset
 
     allocate(xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb))
     allocate(work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), v(nbf,nbf))
+    allocate(kmat(nbf,nbf), ck(nbf,nbf))
     allocate(dm_tri(nbf2,2), pfock(nbf2,2), source=0.0_dp)
 
     call rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
 
-    ! orbital-energy-difference part:  Fvv x - x Foo  (per spin)
-    call dgemm('n','n', nvira, nocca, nvira, 1.0_dp, p%fvv, nvira, xa, nvira, 0.0_dp, x2a, nvira)
-    call dgemm('n','n', nvira, nocca, nocca, -1.0_dp, xa, nvira, p%foo, nocca, 1.0_dp, x2a, nvira)
-    call dgemm('n','n', nvirb, noccb, nvirb, 1.0_dp, p%fvv_b, nvirb, xb, nvirb, 0.0_dp, x2b, nvirb)
-    call dgemm('n','n', nvirb, noccb, noccb, -1.0_dp, xb, nvirb, p%foo_b, noccb, 1.0_dp, x2b, nvirb)
+    ! Fock-transform part: exact commutator [F^s_MO, K]_vo per spin, where K is the
+    ! antisymmetric MO rotation (vir-occ_alpha from xa; socc-docc occ-occ from xb).
+    ! This reduces to Fvv x - x Foo only for canonical orbitals (F_MO vir-occ = 0);
+    ! for ROHF the raw vir-occ Fock blocks are nonzero and their coupling to the
+    ! socc rotations is the term the canonical form drops.
+    kmat = 0.0_dp
+    do i = 1, nocca
+      do a = 1, nvira
+        kmat(nocca+a, i) = xa(a,i)
+        kmat(i, nocca+a) = -xa(a,i)
+      end do
+    end do
+    do j = 1, noccb
+      do s = 1, offset
+        kmat(noccb+s, j) = kmat(noccb+s, j) + xb(s,j)
+        kmat(j, noccb+s) = kmat(j, noccb+s) - xb(s,j)
+      end do
+    end do
+    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%famo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
+    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%famo, nbf, 1.0_dp, ck, nbf)
+    x2a = ck(nocca+1:nbf, 1:nocca)
+    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%fbmo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
+    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%fbmo, nbf, 1.0_dp, ck, nbf)
+    x2b = ck(noccb+1:nbf, 1:noccb)
 
     ! orbital-rotation density (alpha):  dm = Cv xa Co^T + (Cv xa Co^T)^T
     work2 = 0.0_dp
@@ -982,7 +1005,7 @@ contains
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
-    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock)
+    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat, ck)
   end subroutine cphf_apbx_rohf
 
 !###############################################################################
