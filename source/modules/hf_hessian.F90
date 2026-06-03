@@ -168,6 +168,21 @@ contains
       deallocate(wlag, pden, hcc)
     end block
 
+    ! --- Two-electron (ERI) second-derivative skeleton (fixed density) --------
+    ! d^2/dR^2 of the analytic 2e gradient contraction at the converged density,
+    ! i.e. sum P P d^2/dR^2 [ (ij|kl) - 1/4 c_x (ik|jl) ]. Validated against a
+    ! finite difference of grd2_driver (see grd2_hess_selftest). Additive to the
+    ! CPHF response and 1e skeleton above.
+    block
+      use grd2, only: grd2_hess_driver, grd2_compute_data_t
+      use hf_gradient_mod, only: grd2_rhf_compute_data_t
+      class(grd2_compute_data_t), allocatable :: gcomp
+      gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = hfscale, nbf = nbf )
+      call gcomp%init()
+      call grd2_hess_driver(infos, basis, hess_native, gcomp)
+      call gcomp%clean()
+    end block
+
     call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
       comment='Native OpenQP HF/DFT analytic Hessian matrix')
     call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
