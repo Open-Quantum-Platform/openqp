@@ -102,10 +102,10 @@ reference values for all 30 rows. These references are hard pass/fail regression
 targets for the stabilized diagnostic convention; they are still not literature
 benchmarks or independent physical references.
 
-The PySCF vacuum validation snapshot is stored in
+The an independent ddPCM reference vacuum validation snapshot is stored in
 `tests/data/pcm_vacuum_pyscf_validation.json`. HF rows are the strict cross-code
 gate. DFT rows are protocol-near because OpenQP's LibXC+SG1/MHL grid path is not
-bit-identical to the PySCF grid used by the validation script.
+bit-identical to the an independent ddPCM reference grid used by the validation script.
 
 ## Deferred before production status
 

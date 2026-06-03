@@ -138,7 +138,7 @@ literature/trusted-reference H₂O comparison.
 # toolchain (root; apt main archive — ignore the deadsnakes/ondrej PPA 403s,
 # or delete /etc/apt/sources.list.d/{deadsnakes,ondrej}*.list first)
 apt-get install -y --no-install-recommends gfortran libopenblas-dev liblapack-dev
-python -m pip install numpy cffi scipy basis_set_exchange libdlfind   # pyoqp runtime deps (pyscf NOT needed to run)
+python -m pip install numpy cffi scipy basis_set_exchange libdlfind   # pyoqp runtime deps (the independent ddPCM reference NOT needed to run)
 
 # ddX v0.8.0
 git clone --depth 1 https://github.com/ddsolvation/ddX.git /tmp/ddx

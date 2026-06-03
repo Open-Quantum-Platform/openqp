@@ -6,7 +6,7 @@ This note records the recommended first steps for adding continuum-solvent suppo
 
 Use a two-track approach:
 
-1. Use PySCF as the reference/prototyping engine for regression data.
+1. Use an independent ddPCM reference as the reference/prototyping engine for regression data.
 2. Prefer ddX as the first optional OpenQP backend candidate, with PCMSolver kept as the classic PCM fallback candidate.
 
 The first production scope should be energy-only SCF coupling for RHF/ROHF references. For MRSF-TDDFT, this means a PCM-solvated high-spin ROHF reference followed by the existing MRSF response calculation. It is not full state-specific or nonequilibrium excited-state PCM.
@@ -17,7 +17,7 @@ The first production scope should be energy-only SCF coupling for RHF/ROHF refer
 | --- | --- | --- | --- |
 | ddX | Preferred backend spike | Active project; Fortran core; C/Fortran/Python interfaces; ddCOSMO, ddPCM, ddLPB; documents Fock/Kohn-Sham and force contributions for host codes | Need to map its host-code interface onto OpenQP density/Fock data; model differs from classic IEFPCM defaults |
 | PCMSolver | Classic PCM fallback | Host-code API is simple: provide surface MEP, solve apparent surface charges, compute polarization energy | Less active; C++ dependency; OpenQP still needs Fock matrix and gradient coupling |
-| PySCF solvent | Reference only | Fastest way to generate expected energies and check conventions for PCM/ddCOSMO/ddPCM/SMD | Not a good OpenQP runtime dependency because it is a full QC stack with its own molecule, basis, integral, and SCF objects |
+| an independent ddPCM reference solvent | Reference only | Fastest way to generate expected energies and check conventions for PCM/ddCOSMO/ddPCM/SMD | Not a good OpenQP runtime dependency because it is a full QC stack with its own molecule, basis, integral, and SCF objects |
 
 ## Initial user-facing input shape
 

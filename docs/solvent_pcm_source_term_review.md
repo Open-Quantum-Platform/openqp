@@ -43,7 +43,7 @@ requested "H₂O first".
   sign was corrected to `phin + phi_elec` with rationale.
 - **No out-of-scope code.** `docs/mrsf_pcm_design_note.md` is explicitly
   "design gate only, do not implement"; no MRSF/TDDFT/gradient code was added.
-  Python (pyscf scripts) is reference/diagnostic only.
+  Python (the independent ddPCM reference scripts) is reference/diagnostic only.
 
 ## Concerns (do not treat the matrix as validated)
 
@@ -52,7 +52,7 @@ requested "H₂O first".
    ddX output recorded at `1e-7` tolerance. Honestly labeled ("not an
    independent literature value"), but it is a **regression lock**, not a check
    against literature or a trusted external code. A protocol-matched independent
-   reference is still missing (the pyscf path is explicitly "protocol-near, not
+   reference is still missing (the independent ddPCM reference path is explicitly "protocol-near, not
    identical").
 
 2. **Physically wrong values marked `verified`.** `e_pcm` is **positive** for
