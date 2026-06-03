@@ -154,25 +154,6 @@ contains
       deallocate(dVecp)
     end block
 
-    ! der_* matrices are returned in the UNNORMALIZED basis; bring them into the
-    ! same normalized (bfnrm) convention as the MO coefficients / density so the
-    ! CPHF RHS and the response contractions are correct for d/f functions
-    ! (bfnrm /= 1). Invisible for s/p-only bases (e.g. STO-3G).
-    block
-      integer :: kc2, cc2, mu2, nu2
-      do kc2 = 1, natom
-        do cc2 = 1, 3
-          do nu2 = 1, nbf
-            do mu2 = 1, nbf
-              dSa(mu2,nu2,cc2,kc2) = dSa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-              dTa(mu2,nu2,cc2,kc2) = dTa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-              dVa(mu2,nu2,cc2,kc2) = dVa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-            end do
-          end do
-        end do
-      end do
-    end block
-
     allocate(scr(nbf,nbf), col(nbf,nbf))
     allocate(Sx(nbf,nbf), hx(nbf,nbf), F0x(nbf,nbf), Gd0(nbf,nbf))
     allocate(probe(nbf,nbf), gx(3,natom))
