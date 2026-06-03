@@ -952,14 +952,19 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
     if method == "hf":
         if state != 0:
             return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
-        if scf_type != "rhf":
-            return "unsupported_scf_type", "Native HF/DFT analytic Hessian currently supports closed-shell RHF/RKS references only."
-        return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
+        if scf_type == "rhf":
+            return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
+        if scf_type == "uhf":
+            if functional:
+                return "unsupported_scf_type", "Native open-shell (UHF) analytic Hessian currently supports HF only; the UKS f_xc response is not finite-difference validated. Use [hess] type=numerical for UKS references."
+            return "supported", "Native OpenQP open-shell (UHF) HF ground-state analytic Hessian dispatch is enabled."
+        return "unsupported_scf_type", "Native HF analytic Hessian supports RHF/RKS and UHF (HF) references; ROHF analytic Hessian is not yet wired. Use [hess] type=numerical for ROHF references."
 
     if method == "tdhf":
         if td_type == "mrsf":

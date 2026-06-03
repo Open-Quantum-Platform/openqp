@@ -57,35 +57,49 @@ normalization. See `tests/test_cphf_uhf_polarizability.py`. The UKS `f_xc`
 coupling compiles via `utddft_fxc` but is **not yet** finite-difference
 validated.
 
-## Stage 3 — UHF CPHF response assembly (TODO)
+## Stage 3 — UHF CPHF response assembly (DONE, HF validated)
 
-Mirror the validated closed-shell response block in `hf_hessian` per spin and
-sum over `s in {alpha, beta}`, with **single** (not doubled) occupation
-factors. Per spin `s`:
+`hf_hessian_mod::hf_hessian_uhf` (dispatched from `hf_hessian` for
+`scftype == 2`, HF only) mirrors the validated closed-shell response block per
+spin and sums over `s in {alpha, beta}` with **single** (not doubled)
+occupation factors. Per spin `s`:
 
   * `S^x,s`, `h^x,s` MO transforms with `C^s`; occ-occ blocks `s1oo^s`.
-  * CPHF RHS `B^s_ia = -F0x^s_ia + e^s_i S^x,s_ia - G[d0]^s_ia`, where
-    `F0x^s = h^x + (dG/dx)^s`, `d0^s = -sum_ij S^x,s_ij C^s_i C^s_j^T`
+  * CPHF RHS `B^s_ia = -(h^x_ia + G^{s,x}[P]_ia) + e^s_i S^x,s_ia - G^s[d0]_ia`,
+    where `G^{s,x}[P]_ia` is the 2e response-Fock skeleton (probe
+    `C^s_a C^s_i^T`), `d0^s = -sum_ij S^x,s_ij C^s_i C^s_j^T`
     (reorthonormalization, factor 1, not the closed-shell 2), and
-    `G[d0]^s = J[d0^a + d0^b] - c_x K[d0^s]` from `fock_jk` (2-column).
+    `G^s[d0] = J[d0^a + d0^b] - c_x K[d0^s]` from `fock_jk` (2-column).
   * Solve all `3N` RHS with `cphf_solve_uhf` -> `U^s`.
-  * Relaxed `dC^s`, `dP^s`, `mo_e1^s`; assemble
-    `H_resp = sum_s ( Tr[dP^s,y h^x] + Tr[dP^s,y G^s,x] - 2 e^s-weighted overlap
-    - energy-weighted occ-occ )`, symmetrized.
+  * Relaxed `dC^s`, `dP^s` (occupation 1), `moe1^s`; assemble
+    ```
+    H_resp_xy = sum_s [ Tr[dP^s,y h^x] + Tr[dP^s,y G^{s,x}[P]] ]
+              - 2 sum_s sum_i e^s_i (dC^s,y_i . S^x . C^s_i)
+              -   sum_s sum_kl s1oo^s,x_kl moe1^s,y_kl
+              -   sum_s Tr[Mi^s,x G^{s,y}[P]]
+    ```
+    symmetrized.  The closed-shell global factors {4,4,2} on
+    {Tr[dP h^x]+A2, eps-overlap, occ-occ} become the per-spin {1,2,1} sums here
+    (the closed-shell 2x came from double occupancy).
 
-**Key missing building block:** a *two-density* derivative-Fock contraction.
-`fock_deriv_mod::fock_deriv_contract` is closed-shell-specific — it uses one
-density `P` for **both** the Coulomb and exchange derivative ERIs and carries
-the closed-shell `1/2 K` factor. The UHF `(dG/dx)^s` needs Coulomb from
-`P_total` and exchange from `P^s` with the open-shell `K` factor. Extend
-`grd2_fockprobe_data_t` to hold separate `pmat_coul` and `pmat_exch` densities
-(equal for RHF) and adjust the exchange prefactor for the open-shell
-convention. Validate the extended contraction by the trace identity against the
-open-shell 2e gradient before using it in the response.
+**Key building block (DONE):** the *two-density* derivative-Fock contraction
+`fock_deriv_mod::fock_deriv_contract_os` (type `grd2_fockprobe_os_data_t`). It
+takes a separate Coulomb density (total `Pa+Pb`) and exchange density (spin
+`P^s`) and uses the full (not `1/2`) open-shell exchange factor, returning the
+genuine `g_x = sum_uv M_uv ( J^x[pcoul] - c_x K^x[pexch] )`. Validated by
+`fockx_os_selftest` against a frozen-density finite difference of
+`Tr[M . fock_jk_spin]` (OH / 6-31g*, `max|an-FD| ~ 6.5e-9`, ratio 1.0); see
+`tests/test_fockx_os_selftest.py`.
 
-Validation target for the full UHF Hessian: the OpenQP numerical Hessian (FD of
-the validated UHF analytic gradient). OH / STO-3G reference (dx=0.005) has
-`H_zz = 0.75866` (bond axis), `H_xx = H_yy = -0.0311`.
+Validation of the full UHF Hessian: the OpenQP numerical Hessian (central FD of
+the validated UHF analytic gradient).  Agreement at the FD-truncation level with
+an exactly symmetric analytic matrix:
+  * OH / STO-3G (dx=0.005): `max|analytic - numerical| ~ 6.7e-5`,
+    `H_zz ~ 0.7545` (bond axis);
+  * bent H2O+ / STO-3G (doublet): `~ 6.0e-5`;
+  * bent H2O+ / cc-pVDZ (d functions, bfnrm != 1): `~ 1.3e-4`.
+See `tests/test_uhf_hessian.py`.  Open-shell DFT (UKS) is still gated off: the
+UKS `f_xc` response compiles but is not finite-difference validated.
 
 ## Stage 4 — ROHF CPHF response (TODO, hardest)
 

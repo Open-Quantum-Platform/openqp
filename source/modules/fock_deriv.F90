@@ -40,9 +40,32 @@ module fock_deriv_mod
     procedure :: get_density => grd2_fockprobe_get_density
   end type
 
+  !> Open-shell (UHF/ROHF) extension: the probe M is contracted against a
+  !> Coulomb density (the spin-summed total) and a SEPARATE exchange density
+  !> (one spin), so the contraction returns the genuine open-shell derivative-
+  !> Fock trace
+  !>    g_x = sum_uv M_uv ( J^x_uv[pcoul] - c_x K^x_uv[pexch] )
+  !> with the full (not 1/2) open-shell exchange factor, matching the spin-s
+  !> Fock that scf_addons::fock_jk assembles for scftype>=2.  Setting
+  !> pcoul == pexch == P does NOT reduce to the closed-shell grd2_fockprobe_data_t
+  !> (which carries the closed-shell 1/2 K factor); this object is for the
+  !> open-shell response only.
+  type, extends(grd2_compute_data_t) :: grd2_fockprobe_os_data_t
+    real(kind=dp), pointer :: pcoul(:,:) => null()  !< Coulomb density (total = Pa+Pb)
+    real(kind=dp), pointer :: pexch(:,:) => null()  !< exchange density (one spin)
+    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe M (nbf,nbf), full (symmetric)
+    integer :: nbf = 0
+  contains
+    procedure :: init => grd2_fockprobe_os_init
+    procedure :: clean => grd2_fockprobe_os_clean
+    procedure :: get_density => grd2_fockprobe_os_get_density
+  end type
+
   private
   public :: grd2_fockprobe_data_t
+  public :: grd2_fockprobe_os_data_t
   public :: fock_deriv_contract
+  public :: fock_deriv_contract_os
 
 contains
 
@@ -151,5 +174,117 @@ contains
       end do
     end do
   end subroutine grd2_fockprobe_get_density
+
+!###############################################################################
+!  Open-shell (UHF/ROHF) two-density derivative-Fock contraction
+!###############################################################################
+
+!> @brief Compute g_x = sum_uv M_uv ( J^x_uv[pcoul] - c_x K^x_uv[pexch] ) for
+!>   every nuclear coordinate, i.e. the trace of the probe M against the
+!>   open-shell spin-s derivative Fock with Coulomb from the total density and
+!>   exchange from the spin density.
+!> @param[in]  infos    system info (converged SCF)
+!> @param[in]  basis    basis set
+!> @param[in]  pcoul    Coulomb density (total Pa+Pb), full (nbf,nbf), AO basis
+!> @param[in]  pexch    exchange density (one spin), full (nbf,nbf), AO basis
+!> @param[in]  mmat     probe M (nbf,nbf) full, symmetric, AO basis
+!> @param[in]  hfscale  HF exchange scale (1.0 for HF; HFscale for hybrids)
+!> @param[out] gx       (3, natom) contraction per nuclear coordinate
+  subroutine fock_deriv_contract_os(infos, basis, pcoul, pexch, mmat, hfscale, gx)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pcoul(:,:), pexch(:,:), mmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: gx(:,:)
+
+    type(grd2_fockprobe_os_data_t) :: gcomp
+
+    gcomp%pcoul => pcoul
+    gcomp%pexch => pexch
+    gcomp%mmat => mmat
+    gcomp%nbf = basis%nbf
+    gcomp%coulscale = 1.0_dp
+    gcomp%hfscale = hfscale
+    gcomp%hfscale2 = hfscale
+
+    gx = 0.0_dp
+    call grd2_driver(infos, basis, gx, gcomp)
+  end subroutine fock_deriv_contract_os
+
+!###############################################################################
+
+  subroutine grd2_fockprobe_os_init(this)
+    class(grd2_fockprobe_os_data_t), target, intent(inout) :: this
+    ! densities/probe are full matrices supplied by the caller; nothing to do.
+  end subroutine grd2_fockprobe_os_init
+
+!###############################################################################
+
+  subroutine grd2_fockprobe_os_clean(this)
+    class(grd2_fockprobe_os_data_t), target, intent(inout) :: this
+    this%pcoul => null()
+    this%pexch => null()
+    this%mmat => null()
+  end subroutine grd2_fockprobe_os_clean
+
+!###############################################################################
+
+!> @brief Open-shell mixed-density product for the shell quartet.
+!>   The closed-shell grd2_fockprobe_get_density forms
+!>     2 c (M_ij P_kl + M_kl P_ij) - x_hf/2 (M_ik P_jl + M_il P_jk
+!>                                            + P_ik M_jl + P_il M_jk),
+!>   which the validated builder maps to  1/2 Tr[M J^x[P]] - 1/4 c_x Tr[M K^x[P]]
+!>   (the closed-shell Fock J - 1/2 K).  Here we want the FULL open-shell trace
+!>     Tr[M J^x[pcoul]] - c_x Tr[M K^x[pexch]],
+!>   i.e. twice the Coulomb coefficient and four times the exchange coefficient,
+!>   with Coulomb taking the total density (pcoul) and exchange the spin density
+!>   (pexch).  Validated by fock_deriv_os_selftest against a finite difference of
+!>   Tr[M . fock_jk_spin] at frozen densities.
+  subroutine grd2_fockprobe_os_get_density(this, basis, id, dab, dabmax)
+    class(grd2_fockprobe_os_data_t), target, intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: id(4)
+    real(kind=dp), target, intent(out) :: dab(*)
+    real(kind=dp), intent(out) :: dabmax
+
+    real(kind=dp) :: ccoef, xcoef, df1, dq1
+    integer :: i, j, k, l, i1, j1, k1, l1
+    integer :: loc(4), nbf(4)
+    real(kind=dp), pointer :: ab(:,:,:,:)
+
+    ccoef = 4*this%coulscale     ! 2x the closed-shell Coulomb -> full Tr[M J^x[pcoul]]
+    xcoef = 2*this%hfscale       ! 4x the closed-shell exchange -> full c_x Tr[M K^x[pexch]]
+
+    dabmax = 0
+    loc = basis%ao_offset(id)-1
+    nbf = basis%naos(id)
+    ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
+
+    do i = 1, nbf(1)
+      i1 = loc(1) + i
+      do j = 1, nbf(2)
+        j1 = loc(2) + j
+        do k = 1, nbf(3)
+          k1 = loc(3) + k
+          do l = 1, nbf(4)
+            l1 = loc(4) + l
+            ! Coulomb: M against the TOTAL density (symmetrized over (ij)<->(kl)).
+            df1 = ccoef*( this%mmat(i1,j1)*this%pcoul(k1,l1) &
+                        + this%mmat(k1,l1)*this%pcoul(i1,j1) )
+            if (xcoef/=0.0_dp) then
+              ! Exchange: M against the SPIN density (4-term symmetrized).
+              dq1 = this%mmat(i1,k1)*this%pexch(j1,l1) &
+                  + this%mmat(i1,l1)*this%pexch(j1,k1) &
+                  + this%pexch(i1,k1)*this%mmat(j1,l1) &
+                  + this%pexch(i1,l1)*this%mmat(j1,k1)
+              df1 = df1 - xcoef*dq1
+            end if
+            dabmax = max(dabmax, abs(df1))
+            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+          end do
+        end do
+      end do
+    end do
+  end subroutine grd2_fockprobe_os_get_density
 
 end module fock_deriv_mod
