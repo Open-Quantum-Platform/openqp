@@ -1346,6 +1346,154 @@ contains
 
     else
 
+      ! Default solver: preconditioned conjugate gradient.
+      call run_mrsf_cg_zvector()
+
+    end if  ! End solver selection
+
+! -----------------------------------------------
+    if (mrsf_zvector_breakdown) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector breakdown"&
+             &/3x,24("-")/)')
+       call flush(iw)
+       call int2_data%clean()
+       call int2_driver%clean()
+       if (dft) call dftclean(infos)
+       call measure_time(print_total=1, log_unit=iw)
+       call cleanup_gmres_work()
+       close(iw)
+       return
+    end if
+
+    if (error>cnvtol) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector not converged"&
+             &/3x,24("-")/)')
+       write(iw,'(" MRSF z-vector solver reached the maximum iterations; solver = ",A)') trim(solver_name)
+       write(iw,'(" final residual = ",1p,e13.6)') error
+    else
+       infos%mol_energy%Z_Vector_converged=.true.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector converged"&
+             &/3x,24("-")/)')
+    endif
+
+    call flush(iw)
+
+    if (mrst==1 .or. mrst==3) then
+
+      call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
+
+    else if (mrst==5) then
+
+      call mrsfqropcal(wrk1, wrk2, tab, tij, xk, nocca, noccb)
+
+    end if
+
+ !  Update density for alpha
+    call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+
+ !  Update density for beta
+    call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+    call int2_data%clean()
+    deallocate(int2_data)
+    int2_data = int2_tdgrd_data_t( &
+        d2 = pa, &
+        int_apb = .true., &
+        int_amb = .false., &
+        tamm_dancoff = .false., &
+        scale_exchange = scale_exch)
+
+    call int2_driver%run(int2_data, &
+            cam=dft.and.infos%dft%cam_flag, &
+            alpha=infos%dft%cam_alpha, &
+            beta=infos%dft%cam_beta,&
+            mu=infos%dft%cam_mu)
+    ab1 => int2_data%apb(:,:,:,1)
+
+    call symmetrize_matrix(pa(:,:,1), nbf)
+    call symmetrize_matrix(pa(:,:,2), nbf)
+    call pack_matrix(pa(:,:,1), td_p(:,1))
+    call pack_matrix(pa(:,:,2), td_p(:,2))
+
+    td_p = 0.5_dp*td_p
+
+    call utddft_fxc( &
+        basis = basis, &
+        molGrid = molGrid, &
+        isVecs = .true., &
+        wfa = mo_a, &
+        wfb = mo_b, &
+        fxa = ab1(:,:,1:1), &
+        fxb = ab1(:,:,2:2), &
+        dxa = pa(:,:,1:1), &
+        dxb = pa(:,:,2:2), &
+        nmtx = 1, &
+        threshold = 1.0d-15, &
+        infos = infos)
+
+!   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
+    call dgemm('n', 'n', nbf, nocca, nbf,  &
+               1.0_dp, ab1(:,:,1), nbf,  &
+                       mo_a, nbf,  &
+               0.0_dp, wrk2, nbf)
+    call dgemm('t', 'n', nocca, nocca, nbf,  &
+               1.0_dp, mo_a,  nbf,  &
+                       wrk2,  nbf,  &
+               0.0_dp, ppija, nocca)
+!   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
+    call dgemm('n', 'n', nbf, noccb, nbf,  &
+               1.0_dp, ab1(:,:,2), nbf,  &
+                       mo_b, nbf,  &
+               0.0_dp, wrk2, nbf)
+    call dgemm('t', 'n', noccb, noccb, nbf,  &
+               1.0_dp, mo_b,  nbf,  &
+                       wrk2,  nbf,  &
+               0.0_dp, ppijb, noccb)
+
+!   Calculate W (in MO basis)
+    wmo => wrk3
+    wmo = 0
+    if (mrst==1 .or. mrst==3) then
+
+      call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
+                      hxa, hxb, ppija, ppijb, &
+                      nocca, noccb)
+
+    else if (mrst==5) then
+
+      call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, &
+                       hxa, hxb, ppija, ppijb, &
+                       nocca, noccb)
+
+    end if
+
+    call orthogonal_transform('t', nbf, mo_a, wmo, wrk2, wrk1)
+    call symmetrize_matrix(wrk2, nbf)
+    call pack_matrix(wrk2, wao)
+    wao = wao*0.5_dp
+!   ROHF, half one more time:
+    wao = wao*0.5_dp
+
+    call int2_driver%clean()
+
+    if (dft) call dftclean(infos)
+
+    call measure_time(print_total=1, log_unit=iw)
+    ! Clean up GMRES work arrays
+    call cleanup_gmres_work()
+
+    close(iw)
+
+  contains
+
+    ! Preconditioned CG z-vector solve (default path).  All state is
+    ! reached by host association, matching the inline version exactly.
+    subroutine run_mrsf_cg_zvector()
+
       ! ============================================
       ! ORIGINAL CONJUGATE GRADIENT SOLVER
       ! ============================================
@@ -1520,147 +1668,7 @@ contains
         end if
 
       end do
-      
-    end if  ! End solver selection
-
-! -----------------------------------------------
-    if (mrsf_zvector_breakdown) then
-       infos%mol_energy%Z_Vector_converged=.false.
-       write(*,'(/3x,24("-")&
-             &/6x,"Z-Vector breakdown"&
-             &/3x,24("-")/)')
-       call flush(iw)
-       call int2_data%clean()
-       call int2_driver%clean()
-       if (dft) call dftclean(infos)
-       call measure_time(print_total=1, log_unit=iw)
-       call cleanup_gmres_work()
-       close(iw)
-       return
-    end if
-
-    if (error>cnvtol) then
-       infos%mol_energy%Z_Vector_converged=.false.
-       write(*,'(/3x,24("-")&
-             &/6x,"Z-Vector not converged"&
-             &/3x,24("-")/)')
-       write(iw,'(" MRSF z-vector solver reached the maximum iterations; solver = ",A)') trim(solver_name)
-       write(iw,'(" final residual = ",1p,e13.6)') error
-    else
-       infos%mol_energy%Z_Vector_converged=.true.
-       write(*,'(/3x,24("-")&
-             &/6x,"Z-Vector converged"&
-             &/3x,24("-")/)')
-    endif
-
-    call flush(iw)
-
-    if (mrst==1 .or. mrst==3) then
-
-      call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
-
-    else if (mrst==5) then
-
-      call mrsfqropcal(wrk1, wrk2, tab, tij, xk, nocca, noccb)
-
-    end if
-
- !  Update density for alpha
-    call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-
- !  Update density for beta
-    call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
-    call int2_data%clean()
-    deallocate(int2_data)
-    int2_data = int2_tdgrd_data_t( &
-        d2 = pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
-
-    call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-    ab1 => int2_data%apb(:,:,:,1)
-
-    call symmetrize_matrix(pa(:,:,1), nbf)
-    call symmetrize_matrix(pa(:,:,2), nbf)
-    call pack_matrix(pa(:,:,1), td_p(:,1))
-    call pack_matrix(pa(:,:,2), td_p(:,2))
-
-    td_p = 0.5_dp*td_p
-
-    call utddft_fxc( &
-        basis = basis, &
-        molGrid = molGrid, &
-        isVecs = .true., &
-        wfa = mo_a, &
-        wfb = mo_b, &
-        fxa = ab1(:,:,1:1), &
-        fxb = ab1(:,:,2:2), &
-        dxa = pa(:,:,1:1), &
-        dxb = pa(:,:,2:2), &
-        nmtx = 1, &
-        threshold = 1.0d-15, &
-        infos = infos)
-
-!   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
-    call dgemm('n', 'n', nbf, nocca, nbf,  &
-               1.0_dp, ab1(:,:,1), nbf,  &
-                       mo_a, nbf,  &
-               0.0_dp, wrk2, nbf)
-    call dgemm('t', 'n', nocca, nocca, nbf,  &
-               1.0_dp, mo_a,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppija, nocca)
-!   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
-    call dgemm('n', 'n', nbf, noccb, nbf,  &
-               1.0_dp, ab1(:,:,2), nbf,  &
-                       mo_b, nbf,  &
-               0.0_dp, wrk2, nbf)
-    call dgemm('t', 'n', noccb, noccb, nbf,  &
-               1.0_dp, mo_b,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppijb, noccb)
-
-!   Calculate W (in MO basis)
-    wmo => wrk3
-    wmo = 0
-    if (mrst==1 .or. mrst==3) then
-
-      call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                      hxa, hxb, ppija, ppijb, &
-                      nocca, noccb)
-
-    else if (mrst==5) then
-
-      call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                       hxa, hxb, ppija, ppijb, &
-                       nocca, noccb)
-
-    end if
-
-    call orthogonal_transform('t', nbf, mo_a, wmo, wrk2, wrk1)
-    call symmetrize_matrix(wrk2, nbf)
-    call pack_matrix(wrk2, wao)
-    wao = wao*0.5_dp
-!   ROHF, half one more time:
-    wao = wao*0.5_dp
-
-    call int2_driver%clean()
-
-    if (dft) call dftclean(infos)
-
-    call measure_time(print_total=1, log_unit=iw)
-    ! Clean up GMRES work arrays
-    call cleanup_gmres_work()
-
-    close(iw)
-
-  contains
+          end subroutine run_mrsf_cg_zvector
 
     ! Lambda wrapper for preconditioner
     subroutine lambda_precond(x_in, x_out)
