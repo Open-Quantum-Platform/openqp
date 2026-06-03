@@ -101,7 +101,7 @@ an exactly symmetric analytic matrix:
 See `tests/test_uhf_hessian.py`.  Open-shell DFT (UKS) is still gated off: the
 UKS `f_xc` response compiles but is not finite-difference validated.
 
-## Stage 4 — ROHF CPHF response (PARTIAL: solver done, Hessian socc-block WIP)
+## Stage 4 — ROHF CPHF response (DONE, validated)
 
 ROHF uses a single MO set with a doubly-occupied / singly-occupied / virtual
 partition, so the rotation space and coupling differ from UHF; it is **not** a
@@ -113,12 +113,18 @@ response differs.
 `cphf_mod::cphf_solve_rohf` solves `H theta = B` over the docc/socc/virt rotation
 space (`rohf_pack_trial`/`rohf_unpack_trial`, the layout of
 `scf_converger::pack_rohf_trial`: socc-docc, virt-docc, virt-socc blocks). The
-orbital-Hessian action replicates the validated TRAH ROHF operator
-(`scf_converger::calc_h_op`): per spin `Fvv x - x Foo` with `Foo`/`Fvv` the
-occ-occ / vir-vir blocks of the converged spin Fock matrices (`OQP_FOCK_A/B`) in
-the MO basis (full blocks, so non-canonical orbitals are handled), plus the
-response Fock from `scf_addons::get_response_packed`. Diagonal
-orbital-energy-gap preconditioner.
+Fock-transform part of the orbital-Hessian action is the EXACT commutator
+`[F^s_MO, K]_vo` per spin, where `K` is the antisymmetric MO rotation built from
+the packed trial vector (vir-occ_alpha from `xa`, socc-docc occ-occ from `xb`)
+and `F^s_MO` the converged spin Fock in the MO basis (full matrix, `OQP_FOCK_A/B`),
+plus the response Fock from `scf_addons::get_response_packed`. The canonical form
+`Fvv x - x Foo` (used by the TRAH operator `scf_converger::calc_h_op`) is NOT
+sufficient: the raw spin-Fock vir-occ blocks are nonzero (~0.03 Ha) for the
+non-canonical ROHF orbitals -- even though the *packed* orbital gradient is zero
+at convergence -- and their commutator coupling to the socc rotations is the term
+the canonical form drops. Validated in PySCF against a finite difference of the
+packed orbital gradient: canonical form `max err ~7e-2`, commutator form `~3e-6`.
+Diagonal orbital-energy-gap preconditioner.
 
 Validated by `cphf_rohf_polarizability_selftest`: a closed-shell molecule run as
 ROHF (offset = n_socc = 0) reduces the rotation space to virt-docc and the ROHF
@@ -126,7 +132,7 @@ orbital Hessian to (twice) the RHF one; the ROHF isotropic polarizability is
 4.02713548 vs the validated RHF 4.02713607 (~6e-7). See
 `tests/test_cphf_rohf_polarizability.py`.
 
-### Stage 4b — ROHF analytic Hessian (WIP, gated)
+### Stage 4b — ROHF analytic Hessian (DONE, validated)
 
 `hf_hessian_mod::hf_hessian_rohf` (dispatched for `scftype == 3`, HF only)
 assembles the Hessian as `E_nn'' + skeleton + response`. The ROHF energy has the
@@ -140,41 +146,33 @@ relaxed orbital path, of the electronic gradient
 (`grad_ee_overlap(W') + grad_ee_kinetic(P') + grad_en(P') + grad_2e(Pa',Pb')`,
 with `W' = -(Pa' Fa' Pa' + Pb' Fb' Pb')`, `Fa'/Fb'` rebuilt as `Hcore' +
 fock_jk` at the displaced geometry). Nuclear repulsion is added analytically
-(`hess_nn`). The non-canonical CPHF RHS replaces the orbital energies by the full
-Fock occ-occ blocks (`Foo^s`), reducing to the validated UHF RHS in the
-canonical limit.
+(`hess_nn`).
 
-**Status / validation.** The closed-shell (offset=0) limit is EXACT: H2O run as
-ROHF reproduces the RHF numerical Hessian to ~3e-5. For a genuine open shell the
-analytic Hessian carries a small residual: OH/STO-3G `max|an - num| ~ 3e-3` and
-bent H2O+/STO-3G `~ 2e-3` (~0.3%).
+The non-canonical CPHF right-hand side is the Pulay form
+`B^s_ai = -(h^x + G2e + G[d0])_ai + sum_{j in occ} ( S^x_aj F^s_ji + F^s_aj S^x_ji )`,
+i.e. the *occupied-projected anticommutator* of the overlap derivative and the
+spin Fock. The first sum is the usual `eps_i S^x_ai` in the canonical limit; the
+second (`F^s_aj` is a vir-occ Fock element, zero canonically) is the
+non-canonical correction the socc rotations need. Both the operator commutator
+and this RHS term are required: with the canonical operator + canonical RHS the
+ROHF Hessian is off by ~3e-3; the commutator operator alone leaves ~6e-4; both
+together reach the finite-difference floor.
 
-Diagnosis (per-perturbation density-derivative isolation, on non-degenerate
-H2O+/STO-3G, calibrated against re-SCF `dPa`/`dPb`):
-  * the bond-axis (z) perturbation gives EXACT relaxed `dPa`/`dPb` (`max|an -
-    num| ~ 1e-6`), confirming the CPHF solver, RHS, operator, `dCa`/`dCb` build
-    and the geometry+orbital FD response are all correct for non-socc modes;
-  * the in-plane (x,y) perturbations give `dPa` AND `dPb` errors of ~4e-3 -> the
-    residual is entirely in the **CPHF amplitudes for socc-coupled
-    perturbations** (not in the `resp_grad` response, which would also corrupt z).
+**Status / validation.** Validated against the OpenQP numerical Hessian (central
+FD of the analytic ROHF gradient), exactly symmetric, at the FD-truncation level:
+  * OH / STO-3G (degenerate pi socc): `max|analytic - numerical| ~ 2.5e-5`;
+  * bent H2O+ / STO-3G (doublet): `~ 1.3e-4`;
+  * bent H2O+ / cc-pVDZ (d functions): `~ 1.4e-4`.
+A per-perturbation density-derivative isolation (non-degenerate H2O+/STO-3G,
+calibrated against re-SCF `dPa`/`dPb`) shows the CPHF-relaxed `dPa`/`dPb` match to
+~2e-5 for every Cartesian perturbation. See `tests/test_rohf_hessian.py`. The
+Python input checker enables ROHF (HF) analytic Hessians. Open-shell DFT (ROKS)
+remains gated (the ROKS `f_xc` response is not finite-difference validated).
 
-What was ruled OUT as the cause:
-  * the CPHF right-hand side convention -- it matches PySCF's `cphf.solve_withs1`
-    (`hs = h1 - s1 * e_i`, i.e. `B = -h1 + sum_j S^x_aj F_ji` non-canonically);
-    an empirical scan of extra non-canonical coupling terms did not help;
-  * the `dCb` reorthonormalization range -- noccb (docc only) is correct;
-    extending it over the socc makes `dPb` worse (PySCF convention confirmed).
-
-Note: PySCF (2.13) itself has NO analytic ROHF Hessian (`mf.Hessian()` raises
-`NotImplementedError`); mature codes compute ROHF frequencies numerically (FD of
-the analytic ROHF gradient), which is what OpenQP's `[hess] type=numerical` does.
-The most likely remaining cause is that the reused TRAH ROHF orbital-Hessian
-operator (`scf_converger::calc_h_op`) is not the EXACT analytic orbital Hessian on
-the socc blocks: a slightly inexact Hessian still converges the SCF (just more
-slowly), so "validated by TRAH convergence" does not certify those blocks for
-CPHF. Remaining work: validate `calc_h_op`'s socc blocks against a finite
-difference of the ROHF orbital gradient (or replace them with a from-the-Lagrangian
-operator), then re-enable the input-checker capability and add a
-`test_rohf_hessian` regression. Until then the Python input checker gates ROHF
-analytic Hessians to `type=numerical`; the kernel remains reachable (dispatched)
-for development.
+Note: PySCF (2.13) has NO analytic ROHF Hessian (`mf.Hessian()` raises
+`NotImplementedError`) -- mature codes compute ROHF frequencies numerically -- so
+this native analytic ROHF HF Hessian goes beyond the common reference
+implementations. The key correctness tools were (a) a PySCF finite-difference
+validation of the orbital-Hessian *operator* (which exposed the missing
+commutator coupling) and (b) the per-perturbation re-SCF density-derivative
+isolation (which localized and then confirmed the fixes).

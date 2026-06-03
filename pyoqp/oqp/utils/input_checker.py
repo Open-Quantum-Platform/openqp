@@ -960,17 +960,11 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
         if scf_type == "rhf":
             return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
-        if scf_type == "uhf":
+        if scf_type in ("uhf", "rohf"):
             if functional:
-                return "unsupported_scf_type", "Native open-shell (UHF) analytic Hessian currently supports HF only; the UKS f_xc response is not finite-difference validated. Use [hess] type=numerical for UKS references."
-            return "supported", "Native OpenQP open-shell (UHF) HF ground-state analytic Hessian dispatch is enabled."
-        # ROHF: the native ROHF CPHF solver (cphf_solve_rohf) is validated, and
-        # the ROHF analytic-Hessian kernel (hf_hessian_rohf) reproduces the RHF
-        # Hessian exactly in the closed-shell (offset=0) limit, but the
-        # singly-occupied (socc) rotation blocks of the response are still being
-        # finite-difference validated. Keep ROHF analytic Hessians gated to
-        # numerical for production until the socc-block response lands.
-        return "unsupported_scf_type", "Native ROHF analytic Hessian is still being finite-difference validated (the singly-occupied rotation blocks of the orbital response); the ROHF CPHF solver is validated. Use [hess] type=numerical for ROHF references."
+                return "unsupported_scf_type", f"Native open-shell ({scf_type.upper()}) analytic Hessian currently supports HF only; the open-shell f_xc response is not finite-difference validated. Use [hess] type=numerical for KS references."
+            return "supported", f"Native OpenQP open-shell ({scf_type.upper()}) HF ground-state analytic Hessian dispatch is enabled."
+        return "unsupported_scf_type", "Native HF analytic Hessian supports RHF/RKS, UHF (HF) and ROHF (HF) references for this scftype. Use [hess] type=numerical."
 
     if method == "tdhf":
         if td_type == "mrsf":

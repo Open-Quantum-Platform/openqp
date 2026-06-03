@@ -945,7 +945,7 @@ contains
     real(dp), contiguous, pointer :: hess_store(:,:)
     real(dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
     real(dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
-    real(dp), allocatable :: foo(:,:), foo_b(:,:), faMO(:,:), fbMO(:,:)
+    real(dp), allocatable :: faMO(:,:), fbMO(:,:)
     real(dp), allocatable :: scr(:,:), tmp(:,:), SxMO(:,:), hxMO(:,:), probe(:,:)
     real(dp), allocatable :: ga2e(:,:,:), gb2e(:,:,:)
     real(dp), allocatable :: d0a(:,:), d0b(:,:), dpck(:,:), fpck(:,:), gfull(:,:), Gd0(:,:)
@@ -1015,10 +1015,9 @@ contains
 
     ! occ-occ Fock blocks (MO) of the converged spin Fock matrices (non-canonical)
     allocate(scr(nbf,nbf), tmp(nbf,nbf), SxMO(nbf,nbf), hxMO(nbf,nbf))
-    allocate(faMO(nbf,nbf), fbMO(nbf,nbf), foo(nocca,nocca), foo_b(noccb,noccb))
+    allocate(faMO(nbf,nbf), fbMO(nbf,nbf))
     call unpack_matrix(focka, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, faMO)
     call unpack_matrix(fockb, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, fbMO)
-    foo = faMO(1:nocca,1:nocca); foo_b = fbMO(1:noccb,1:noccb)
 
     ! 2e response-Fock skeleton  G^{s,x}[P]_ai  for all coordinates (per spin)
     allocate(ga2e(nvira,nocca,ncart), gb2e(nvirb,noccb,ncart), source=0.0_dp)
@@ -1084,13 +1083,20 @@ contains
         fpck = 0.0_dp
         call fock_jk(basis, d=dpck, f=fpck, scale_exch=hfscale, infos=infos)
 
-        ! alpha block:  B^a_ai = -(h^x + G2e + G[d0])_ai + sum_j S^x_aj foo_ji
+        ! Non-canonical Pulay RHS.  The reorthonormalization Fock-coupling is the
+        ! occupied-projected anticommutator of S^x and the spin Fock:
+        !   B^s_ai = -(h^x + G2e + G[d0])_ai
+        !            + sum_{j in occ} ( S^x_aj F^s_ji + F^s_aj S^x_ji ) .
+        ! The first sum is the usual eps_i S^x_ai in the canonical (diagonal-Fock)
+        ! limit; the second vanishes there (F^s_aj is a vir-occ Fock element) and
+        ! supplies the non-canonical correction needed for the socc rotations.
         call unpack_from_packed(fpck(:,1), gfull, nbf)
         call mo_transform(mo, gfull, nbf, scr, tmp, Gd0)
         do i = 1, nocca
           do a = 1, nvira
             ba(a,i) = -(hxMO(i,nocca+a) + ga2e(a,i,icart) + Gd0(i,nocca+a)) &
-                    + dot_product(SxMO(nocca+a,1:nocca), foo(1:nocca,i))
+                    + dot_product(SxMO(nocca+a,1:nocca), faMO(1:nocca,i)) &
+                    + dot_product(faMO(nocca+a,1:nocca), SxMO(1:nocca,i))
           end do
         end do
         ! beta block
@@ -1099,7 +1105,8 @@ contains
         do i = 1, noccb
           do a = 1, nvirb
             bb(a,i) = -(hxMO(i,noccb+a) + gb2e(a,i,icart) + Gd0(i,noccb+a)) &
-                    + dot_product(SxMO(noccb+a,1:noccb), foo_b(1:noccb,i))
+                    + dot_product(SxMO(noccb+a,1:noccb), fbMO(1:noccb,i)) &
+                    + dot_product(fbMO(noccb+a,1:noccb), SxMO(1:noccb,i))
           end do
         end do
         call rohf_pack_trial(bvec(:,icart), ba, bb, nbf, nocca, noccb)
@@ -1161,7 +1168,7 @@ contains
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
 
-    deallocate(pa, pb, ptot, dSa, dTa, dVa, foo, foo_b, faMO, fbMO, scr, tmp, &
+    deallocate(pa, pb, ptot, dSa, dTa, dVa, faMO, fbMO, scr, tmp, &
                SxMO, hxMO, probe, ga2e, gb2e, d0a, d0b, dpck, fpck, gfull, Gd0, &
                ba, bb, bvec, uvec, xa, xb, dCa, dCb, gp, gm, hresp, zneff, &
                hess_native, faop, fbop)
