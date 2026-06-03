@@ -205,6 +205,9 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("OQP::mrsf_ekt_eigenvalues", molecule)
         self.assertIn("def compare_data", molecule)
         self.assertIn("isinstance(data_1, dict)", molecule)
+        self.assertIn("arr_1.shape != arr_2.shape", molecule)
+        self.assertIn("np.max(np.abs(arr_1 - arr_2))", molecule)
+        self.assertIn("key == 'orbitals_mo'", molecule)
 
 
 if __name__ == "__main__":

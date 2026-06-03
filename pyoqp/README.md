@@ -6,7 +6,7 @@
 
 - Geometry optimization for arbitrary state local minimum, MECI, MEP with Scipy library
 - Geometry optimization with geomeTRIC for state-specific optimization, MECI, MECP, TS, constrained optimizations, and IRC paths
-- Native PySCF-backed initial guesses: `pyscf`, `sad`, and `sap`
+- Native Fortran initial guesses: `hcore`, `huckel`, `modhuckel`, `minao`, and `sap` (no external quantum-chemistry package required at runtime)
 - Energy gradient calculations interface for nonadiabatic molecular dynamics
 
 ## Prerequisite
@@ -220,18 +220,14 @@ guess section handle the guess orbitals
 
 - type // choose the type of guess orbital
 
-      huckel     huckel guess (default)
-      hcore      hcore guess
+      sap        superposition of atomic potentials (default, native Fortran)
+      minao      projected atomic minimal-basis densities (native Fortran)
+      huckel     extended Huckel guess (native Fortran)
+      modhuckel  modified (weighted Wolfsberg-Helmholz) Huckel (native Fortran)
+      hcore      bare core-Hamiltonian guess
       model      read orbital from molden
       json       load data from json
       auto       load json if the requested file exists; otherwise use huckel
-      pyscf      run a PySCF SCF calculation and import the converged orbitals
-      sad        build a PySCF superposition-of-atomic-density initial guess
-      sap        build a PySCF superposition-of-atomic-potential initial guess
-
-      pyscf, sad, and sap use the native OpenQP JSON restart exporter.
-      PySCF is installed with OpenQP's Python dependencies. MOKIT is not
-      required for these initial guesses.
 
 - file // set the guess orbital or data file
 

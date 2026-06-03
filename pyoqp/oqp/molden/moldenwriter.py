@@ -109,7 +109,7 @@ def write_frequency(mol, freqs, modes):
     xyz = mol.get_system().reshape((natom, 3))
     nmode = len(modes)
     modes = modes.reshape((nmode, natom, 3))
-    freqs = freqs.reshape((-1, 1))
+    freqs = freqs.reshape(-1)
 
     frequency = '\n'.join(['%10.2f' % x for x in freqs])
     coord = ''

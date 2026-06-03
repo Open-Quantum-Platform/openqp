@@ -1,0 +1,155 @@
+module fock_deriv_mod
+!> @brief Two-electron derivative-Fock contraction  tr(M . F^x[P])  for the
+!>   CPHF nuclear right-hand side, built natively on top of the validated 2e
+!>   gradient driver (grd2_driver) with no changes to the Rys internals and no
+!>   libint.
+!>
+!>   The 2e gradient driver contracts the derivative ERIs d(uv|ls)/dx with a
+!>   four-index density product supplied by a grd2_compute_data_t extension. The
+!>   standard (energy-gradient) extension forms D (x) D. Here we instead form a
+!>   MIXED product M (x) P, so the same driver returns, for each nuclear
+!>   coordinate x,
+!>     g_x = sum_{uvls} d(uv|ls)/dx * [ 4 c M_uv P_ls - x_hf ( M_ul P_vs + M_us P_vl ) ]
+!>   which is exactly  sum_uv M_uv F^x_uv[P]  for the closed-shell response Fock
+!>   F^x[P] = J^x[P] - 1/2 K^x[P] (Coulomb scaled by c, exchange by x_hf=HFscale),
+!>   summed over the two equivalent index orderings that the driver already
+!>   exploits. M is the "probe" matrix; for a CPHF RHS element B^x_{ia} the probe
+!>   is the symmetric AO matrix C_{.,i} C_{.,a}^T + C_{.,a} C_{.,i}^T.
+!>
+!>   This is the F^x building block of the native CPHF chain. It is validated by
+!>   the trace identity tr(P . F^x[P]) = (2e part of dE/dx), i.e. against the
+!>   already-validated grd2_driver energy gradient (exact, non-iterative).
+
+  use precision, only: dp
+  use grd2, only: grd2_driver, grd2_compute_data_t
+  use basis_tools, only: basis_set
+  use types, only: information
+
+  implicit none
+
+  character(len=*), parameter :: module_name = "fock_deriv_mod"
+
+  !> grd2 compute-data extension forming the mixed two-density product M (x) P.
+  type, extends(grd2_compute_data_t) :: grd2_fockprobe_data_t
+    real(kind=dp), pointer :: pmat(:,:) => null()   !< density P (nbf,nbf), full
+    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe  M (nbf,nbf), full (symmetric)
+    integer :: nbf = 0
+  contains
+    procedure :: init => grd2_fockprobe_init
+    procedure :: clean => grd2_fockprobe_clean
+    procedure :: get_density => grd2_fockprobe_get_density
+  end type
+
+  private
+  public :: grd2_fockprobe_data_t
+  public :: fock_deriv_contract
+
+contains
+
+!###############################################################################
+
+!> @brief Compute g_x = sum_uv M_uv F^x_uv[P] for every nuclear coordinate.
+!> @param[in]  infos    system info (converged SCF)
+!> @param[in]  basis    basis set
+!> @param[in]  pmat     density P (nbf,nbf) full, AO basis (alpha density for RHF)
+!> @param[in]  mmat     probe M (nbf,nbf) full, symmetric, AO basis
+!> @param[in]  hfscale  HF exchange scale (1.0 for HF; HFscale for hybrids)
+!> @param[out] gx       (3, natom) contraction per nuclear coordinate
+  subroutine fock_deriv_contract(infos, basis, pmat, mmat, hfscale, gx)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:), mmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: gx(:,:)
+
+    type(grd2_fockprobe_data_t) :: gcomp
+
+    gcomp%pmat => pmat
+    gcomp%mmat => mmat
+    gcomp%nbf = basis%nbf
+    gcomp%coulscale = 1.0_dp
+    gcomp%hfscale = hfscale
+    gcomp%hfscale2 = hfscale
+
+    gx = 0.0_dp
+    call grd2_driver(infos, basis, gx, gcomp)
+  end subroutine fock_deriv_contract
+
+!###############################################################################
+
+  subroutine grd2_fockprobe_init(this)
+    class(grd2_fockprobe_data_t), target, intent(inout) :: this
+    ! pmat/mmat are full matrices supplied by the caller; nothing to unpack.
+  end subroutine grd2_fockprobe_init
+
+!###############################################################################
+
+  subroutine grd2_fockprobe_clean(this)
+    class(grd2_fockprobe_data_t), target, intent(inout) :: this
+    this%pmat => null()
+    this%mmat => null()
+  end subroutine grd2_fockprobe_clean
+
+!###############################################################################
+
+!> @brief Mixed two-density product for the shell quartet, matching the layout
+!>   and normalization of grd2_rhf_compute_data_t_get_density but replacing the
+!>   second density factor with the probe M.  The energy-gradient routine forms
+!>     4 c D_ij D_kl - x_hf ( D_ik D_jl + D_il D_jk ).
+!>   To contract d(uv|ls)/dx with M on the (i,j)=(u,v) pair and P on the
+!>   (k,l)=(l,s) pair (Coulomb), and M/P spread across the exchange index
+!>   pairings symmetrically, we form
+!>     4 c M_ij P_kl
+!>     - x_hf/2 ( M_ik P_jl + M_il P_jk + P_ik M_jl + P_il M_jk ).
+!>   The 1/2 with the four symmetric exchange terms reproduces the same total as
+!>   the energy routine's x_hf ( D_ik D_jl + D_il D_jk ) when M = P, so the trace
+!>   identity tr(P . F^x[P]) = (2e gradient) holds exactly.
+  subroutine grd2_fockprobe_get_density(this, basis, id, dab, dabmax)
+    class(grd2_fockprobe_data_t), target, intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: id(4)
+    real(kind=dp), target, intent(out) :: dab(*)
+    real(kind=dp), intent(out) :: dabmax
+
+    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    integer :: i, j, k, l, i1, j1, k1, l1
+    integer :: loc(4), nbf(4)
+    real(kind=dp), pointer :: ab(:,:,:,:)
+
+    coulfact = 4*this%coulscale
+    xcfact = this%hfscale
+
+    dabmax = 0
+    loc = basis%ao_offset(id)-1
+    nbf = basis%naos(id)
+    ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
+
+    do i = 1, nbf(1)
+      i1 = loc(1) + i
+      do j = 1, nbf(2)
+        j1 = loc(2) + j
+        do k = 1, nbf(3)
+          k1 = loc(3) + k
+          do l = 1, nbf(4)
+            l1 = loc(4) + l
+            ! Coulomb: symmetrized over the (ij)<->(kl) permutation the driver
+            ! exploits: 2 c (M_ij P_kl + M_kl P_ij) (reduces to 4 c P_ij P_kl at M=P).
+            df1 = 0.5_dp*coulfact*( this%mmat(i1,j1)*this%pmat(k1,l1) &
+                                  + this%mmat(k1,l1)*this%pmat(i1,j1) )
+            if (xcfact/=0.0_dp) then
+              ! Exchange: symmetrized 4-term (reduces to x(P_ik P_jl+P_il P_jk) at M=P).
+              dq1 = 0.5_dp*( this%mmat(i1,k1)*this%pmat(j1,l1) &
+                          + this%mmat(i1,l1)*this%pmat(j1,k1) &
+                          + this%pmat(i1,k1)*this%mmat(j1,l1) &
+                          + this%pmat(i1,l1)*this%mmat(j1,k1) )
+              df1 = df1 - xcfact*dq1
+            end if
+            dabmax = max(dabmax, abs(df1))
+            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+          end do
+        end do
+      end do
+    end do
+  end subroutine grd2_fockprobe_get_density
+
+end module fock_deriv_mod

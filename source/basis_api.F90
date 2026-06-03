@@ -17,8 +17,8 @@ module basis_api
         integer :: id
         integer :: element_id
         integer, pointer :: n_exponents(:)
-        real, pointer :: exponents(:)
-        real, pointer :: coefficient(:)
+        real(real64), pointer :: exponents(:)
+        real(real64), pointer :: coefficient(:)
     contains
         procedure(base_shell_clear), deferred, pass :: clear
     end type base_shell
@@ -46,7 +46,7 @@ module basis_api
         integer, pointer :: ecp_zn(:)
         integer, pointer :: ecp_r_expo(:)
         integer, pointer :: ecp_am(:)
-        real, pointer :: ecp_coord(:)
+        real(real64), pointer :: ecp_coord(:)
    contains
       procedure :: clear => ecpdata_clear
     end type ecpdata
@@ -221,7 +221,7 @@ contains
         integer :: nbf, nshell, nprim, mxcontr, mxam, ii
         integer :: n1,n2
         integer :: f_expo_len
-        real, dimension(:), allocatable :: ex
+        real(real64), dimension(:), allocatable :: ex
 
         infos%control%basis_set_issue = .false.
         if (infos%control%active_basis == 0) then

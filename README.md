@@ -2,28 +2,19 @@
 
 Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
-### Key Features
+### Current Functionality
 
-- **Autonomous Modules of Quantum Chemistry Theories for Easy Interoperability**
-- **Flexible prototyping through a Python wrapper, PyOQP**
-- **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
-- **Ionization Potential/Electron Affinity spectra** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494), including ground- and excited-state response targets through `tdhf.type=mrsf_ekt_ip` / `mrsf_ekt_ea` and `tdhf.target`
-- **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
-- **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
-- **Ground State Properties** by HF and DFT theories
-- [geomeTRIC](https://github.com/leeping/geomeTRIC) optimizer backend for state-specific optimization, MECI, MECP, transition-state searches, constrained optimizations, and IRC paths
-- [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
-- [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
-- [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) Integration to support a variety of basis sets
-- [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
-- **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
-- [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
-- **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
-- [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
-- Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
-- Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
-- [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
-  
+| Area | What OpenQP can do now | Notes |
+| --- | --- | --- |
+| Electronic structure | <small>HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations</small> | <small>MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis.</small> |
+| Derivative properties | <small>Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic Hessians</small> | <small>Native CPHF/CPKS response, integral-derivative kernels, and final Hessian assembly are implemented for supported closed-shell HF/DFT paths.</small> |
+| Vibrational analysis | <small>Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly</small> | <small>IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels.</small> |
+| Nonadiabatic dynamics data | <small>MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows</small> | <small>NAC support uses the TLF-based MRSF-TDDFT machinery.</small> |
+| Geometry/path optimization | <small>Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows</small> | <small>SciPy and geomeTRIC backends are available depending on the requested job.</small> |
+| Initial guesses and SCF stability | <small>Native initial guesses (`hcore`, `huckel`, `modhuckel`, `minao`, `sap`), JSON restart/auto guesses, and OpenTrustRegion SCF stabilization</small> | <small>Native guess paths avoid external runtime dependencies and are suitable for MPI execution.</small> |
+| Integrations | <small>LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView</small> | <small>External viewers and workflow integrations are available around the native OpenQP electronic-structure engines.</small> |
+| Performance and deployment | <small>OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images</small> | <small>MPI requires an MPI implementation such as OpenMPI.</small> |
+
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
@@ -53,11 +44,30 @@ git clone https://github.com/Open-Quantum-Platform/openqp.git
 cd openqp
 pip install .
 ```
-This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
+This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Native initial guesses such as `huckel`, `modhuckel`, `minao`, and `sap` work without external guess-generation dependencies.
 
-#### Detailed compile for developers
+or 
+#### Detailed Compile
 
-The `pip install .` command above is the normal and recommended source install path. The manual CMake commands below are intended for developers who need to inspect or debug the native build directly. After changing build options, run `pip install .` again from the repository root so the installed `openqp` command uses the same source tree and installed native library.
+##### macOS with Homebrew GCC and native BLAS
+
+On macOS, use the Homebrew GCC toolchain for C/C++/Fortran and the native Accelerate BLAS/LAPACK provider. Replace `gcc-15`, `g++-15`, and `gfortran-15` with the installed Homebrew GCC version if needed.
+
+```bash
+cd openqp
+cmake -B build -G Ninja \
+  -DUSE_LIBINT=OFF \
+  -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 \
+  -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 \
+  -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
+  -DCMAKE_INSTALL_PREFIX=. \
+  -DENABLE_OPENMP=ON \
+  -DLINALG_LIB=auto \
+  -DLINALG_LIB_INT64=OFF
+ninja -C build install
+cd pyoqp
+pip install .
+```
 
 ##### OpenMP Support
 
@@ -65,6 +75,7 @@ The `pip install .` command above is the normal and recommended source install p
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 ninja -C build install
+cd pyoqp
 pip install .
 ```
 
@@ -74,6 +85,7 @@ pip install .
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 ninja -C build install
+cd pyoqp
 pip install .
 ```
 
@@ -83,24 +95,18 @@ pip install .
 cd openqp
 cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 make -C build install
+cd pyoqp
 pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- OpenQP requires ILP64 BLAS/LAPACK. The compile examples above pass `-DLINALG_LIB_INT64=ON`; this is also the default, and `-DLINALG_LIB_INT64=OFF` is rejected at configure time. Ensure the selected BLAS/LAPACK library uses 8-byte integers, for example MKL ILP64 or an ILP64 OpenBLAS/LAPACK build.
+- The Linux/manual examples above use ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default). The macOS example uses native Accelerate BLAS/LAPACK with `-DLINALG_LIB_INT64=OFF`.
 
-#### Runtime environment
-
-A package installed with `pip install .` does not require `OPENQP_ROOT` for normal `openqp` command-line use. Set only runtime tuning variables as needed:
+#### Environmental Settings
 
 ```bash
+export OPENQP_ROOT=/path/to/openqp                           # Path to the Root of openqp
 export OMP_NUM_THREADS=4                                     # The number of cores to be used for OpenMP runs
-```
-
-If you are running directly from an uninstalled manual CMake tree, set `OPENQP_ROOT` and the library path for that tree:
-
-```bash
-export OPENQP_ROOT=/path/to/openqp                           # Path to the root of an uninstalled OpenQP tree
 export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
 ```
 
