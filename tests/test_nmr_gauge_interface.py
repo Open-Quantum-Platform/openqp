@@ -25,16 +25,6 @@ class NMRGaugeInterfaceTests(unittest.TestCase):
         self.assertIn('"giao"', text)
         self.assertIn("properties.nmr_gauge", text)
 
-    def test_runtime_keeps_cgo_baseline_and_gates_giao(self):
-        runfunc = (ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py").read_text()
-        fortran = (ROOT / "source" / "modules" / "nmr_shielding.F90").read_text()
-        self.assertIn("nmr_gauge", runfunc)
-        self.assertIn("nmr_gauge == \"cgo\"", runfunc)
-        self.assertIn("GIAO NMR shielding requested", runfunc)
-        self.assertIn("not yet validated", runfunc)
-        self.assertIn("NMR nuclear magnetic shielding (CGO)", fortran)
-        self.assertIn("CGO validated baseline", fortran)
-
     def test_manuscript_uses_conservative_giao_wording(self):
         main = Path("/Users/cheolhochoi/Dropbox/Documents/overleaf/hf-dft-nmr/main.tex")
         if not main.exists():

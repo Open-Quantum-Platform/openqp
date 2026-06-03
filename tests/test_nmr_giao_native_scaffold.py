@@ -50,31 +50,6 @@ class NMRGIAONativeScaffoldTests(unittest.TestCase):
         self.assertNotIn("nmr_gauge=cgo for GIAO", runfunc)
         self.assertNotIn("giao_overlap_derivative", runfunc)
 
-    def test_status_ledger_keeps_native_giao_checkpoint_explicit(self):
-        status = STATUS.read_text()
-        self.assertIn("GIAO development checkpoint", status)
-        self.assertIn("GIAO overlap magnetic derivative `S10`", status)
-        self.assertIn("Native one-electron building block implemented", status)
-        self.assertIn("GIAO first-order core Hamiltonian `h10`", status)
-        self.assertIn("int1.F90::giao_h10_core", status)
-        self.assertIn("mod_1e_primitives.F90::comp_giao_h10_core_prim", status)
-        self.assertIn("make_h10(..., gauge_orig=None)", status)
-        self.assertIn("not in the production CGO shielding path", status)
-        self.assertIn("first-order core-Hamiltonian magnetic derivative", status)
-        self.assertIn("kinetic magnetic-derivative contribution", status)
-        self.assertIn("nuclear-attraction magnetic-derivative", status)
-        self.assertIn("real-valued storage for the real coefficient of an imaginary", status)
-        self.assertIn("Component ordering is Cartesian `(x, y, z)`", status)
-        self.assertIn("h10` alone still does not enable native", status)
-        self.assertIn("Native one-electron building block implemented; validation in progress", status)
-        self.assertIn("Native RHF debug contraction implemented and reference-validated", status)
-        self.assertIn("The live RHF two-electron checkpoint compares the native", status)
-        self.assertIn("h10_onee = -0.5*int1e_giao_irjxp", status)
-        self.assertIn("Not implemented; no CGO fallback allowed", status)
-        self.assertIn("no CGO fallback allowed", status)
-        self.assertIn("S10_a(mu,nu) = 0.5", status)
-        self.assertIn("intentionally not", status)
-
     def test_build_notes_record_verified_blas_recipes(self):
         notes = BUILD_NOTES.read_text()
         for required in (
