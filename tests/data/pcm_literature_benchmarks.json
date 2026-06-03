@@ -156,7 +156,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "H2O RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -76.3677708433,
@@ -187,7 +187,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "h2o_rhf_pbe_631gs_water",
@@ -212,7 +214,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "H2O RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -76.3208569,
@@ -243,7 +245,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "nh3_rhf_hf_631gs_water",
@@ -325,7 +329,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "NH3 RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -56.5084728487,
@@ -356,7 +360,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "nh3_rhf_pbe_631gs_water",
@@ -382,7 +388,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "NH3 RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -56.4702120312,
@@ -413,7 +419,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "hf_rhf_hf_631gs_water",
@@ -491,7 +499,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "HF RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -100.3835191013,
@@ -522,7 +530,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "hf_rhf_pbe_631gs_water",
@@ -546,7 +556,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "HF RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -100.3195935261,
@@ -577,7 +587,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "ch4_rhf_hf_631gs_water",
@@ -661,7 +673,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "CH4 RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -40.4829671314,
@@ -692,7 +704,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "ch4_rhf_pbe_631gs_water",
@@ -719,7 +733,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "CH4 RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -40.4443971483,
@@ -750,7 +764,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "co_rhf_hf_631gs_water",
@@ -828,7 +844,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "CO RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -113.2534392682,
@@ -859,7 +875,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "co_rhf_pbe_631gs_water",
@@ -883,7 +901,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "CO RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -113.1822914453,
@@ -914,7 +932,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "co2_rhf_hf_631gs_water",
@@ -1167,7 +1187,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "HCN RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -93.3647788829,
@@ -1198,7 +1218,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "hcn_rhf_pbe_631gs_water",
@@ -1223,7 +1245,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "HCN RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -93.3071474327,
@@ -1254,7 +1276,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "h2co_rhf_hf_631gs_water",
@@ -1336,7 +1360,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "H2CO RHF/BHHLYP/6-31g* ddPCM water",
       "functional": "bhhlyp",
       "vacuum_total_energy": -114.4339196639,
@@ -1367,7 +1391,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "h2co_rhf_pbe_631gs_water",
@@ -1393,7 +1419,7 @@
       "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
       "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_out_of_scope_dft",
       "benchmark_label": "H2CO RHF/PBE/6-31g* ddPCM water",
       "functional": "pbe",
       "vacuum_total_energy": -114.3665280474,
@@ -1424,7 +1450,9 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "prior_status": "verified",
+      "scope_review": "Deferred from 'verified': closed-shell DFT (BHHLYP/PBE) PCM is beyond the handoff's RHF-energy-first scope. Physically sound (negative e_pcm, passes self-consistency gate) and retained as a regression baseline, but not a verified gate until DFT-PCM scope is opened and an independent reference exists."
     },
     {
       "id": "ch3oh_rhf_hf_631gs_water",
@@ -1805,6 +1833,22 @@
       "ch3cn_rhf_hf_631gs_water",
       "ch3cn_rhf_bhhlyp_631gs_water",
       "ch3cn_rhf_pbe_631gs_water"
+    ],
+    "deferred_out_of_scope_dft": [
+      "h2o_rhf_bhhlyp_631gs_water",
+      "h2o_rhf_pbe_631gs_water",
+      "nh3_rhf_bhhlyp_631gs_water",
+      "nh3_rhf_pbe_631gs_water",
+      "hf_rhf_bhhlyp_631gs_water",
+      "hf_rhf_pbe_631gs_water",
+      "ch4_rhf_bhhlyp_631gs_water",
+      "ch4_rhf_pbe_631gs_water",
+      "co_rhf_bhhlyp_631gs_water",
+      "co_rhf_pbe_631gs_water",
+      "hcn_rhf_bhhlyp_631gs_water",
+      "hcn_rhf_pbe_631gs_water",
+      "h2co_rhf_bhhlyp_631gs_water",
+      "h2co_rhf_pbe_631gs_water"
     ]
   }
 }

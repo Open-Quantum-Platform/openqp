@@ -135,3 +135,15 @@ demoted entries **skip** with an explanatory message, and the Tier-1 adapter
 regression still **passes**. A protocol-matched independent reference is still
 the outstanding requirement for true Tier-2 validation; a stricter trim to the
 H₂O/NH₃-only scope is available if desired.
+
+### DFT deferral
+
+The closed-shell **DFT** entries (BHHLYP/PBE × the 7 sound molecules, 14 rows)
+were demoted `verified → deferred_out_of_scope_dft` with a `scope_review` field.
+They are physically sound (negative `e_pcm`, pass the self-consistency gate) and
+kept as regression baselines, but DFT-PCM is beyond the handoff's
+RHF-energy-first scope and the values remain self-baselines. After this, the
+`verified` gates are: the Tier-1 point-charge adapter regression **plus 7
+RHF/HF closed-shell rows** (H₂O, NH₃, HF, CH₄, CO, HCN, H₂CO). Confirmed with a
+real ddX build: a DFT row now skips, the RHF H₂O row still passes, Tier-1 still
+passes.
