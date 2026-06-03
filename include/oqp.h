@@ -218,6 +218,7 @@ void vibrational_intensities_native(struct oqp_handle_t *inf, int64_t nmode, int
         double *infrared_intensities, double *mode_dipole_derivatives,
         double *raman_activities, double *mode_polarizability_derivatives);
 void cphf_polarizability_selftest(struct oqp_handle_t *inf);
+void cphf_uhf_polarizability_selftest(struct oqp_handle_t *inf);
 void fockx_selftest(struct oqp_handle_t *inf);
 void cphf_f0x_selftest(struct oqp_handle_t *inf);
 void cphf_dpdx_selftest(struct oqp_handle_t *inf);

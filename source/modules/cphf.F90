@@ -48,12 +48,37 @@ module cphf_mod
     logical :: dft = .false.
   end type
 
+  !> Opaque data for the open-shell (UHF) A-matrix action.  The rotation vector
+  !> is the concatenation of the alpha occ-vir block (length la = nocca*nvira)
+  !> and the beta occ-vir block (length lb = noccb*nvirb).
+  type :: cphf_cg_data_uhf
+    type(information), pointer :: infos => null()
+    type(basis_set), pointer :: basis => null()
+    type(dft_grid_t), pointer :: molgrid => null()
+    real(kind=dp), pointer :: moa(:,:) => null()
+    real(kind=dp), pointer :: mob(:,:) => null()
+    real(kind=dp), pointer :: xm(:) => null()      ! (e_a - e_i) for [alpha; beta]
+    real(kind=dp), pointer :: xminv(:) => null()   ! 1/(e_a - e_i)
+    real(kind=dp), pointer :: wrka(:,:) => null()  ! nbf x nbf scratch (alpha)
+    real(kind=dp), pointer :: wrkb(:,:) => null()  ! nbf x nbf scratch (beta)
+    integer :: nbf = 0
+    integer :: nocca = 0
+    integer :: noccb = 0
+    integer :: la = 0
+    integer :: lb = 0
+    real(kind=dp) :: scale_exch = 1.0_dp
+    logical :: dft = .false.
+  end type
+
   private
   public :: cphf_solve
+  public :: cphf_solve_uhf
   public :: cphf_static_polarizability
   public :: cphf_static_polarizability_C
   public :: cphf_polarizability_selftest
   public :: cphf_polarizability_selftest_C
+  public :: cphf_uhf_polarizability_selftest
+  public :: cphf_uhf_polarizability_selftest_C
 
 contains
 
@@ -346,5 +371,313 @@ contains
     write(u,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
     close(u)
   end subroutine cphf_polarizability_selftest
+
+!###############################################################################
+!  Open-shell (UHF) CPHF solver
+!###############################################################################
+
+!> @brief Solve the open-shell (UHF) CPHF equations  M U = B.
+!>
+!>   The unknown/RHS vectors are laid out as the concatenation of the alpha
+!>   occ-vir block (length la = nocca*nvira) followed by the beta occ-vir block
+!>   (length lb = noccb*nvirb), each in the iatogen/mntoia (occ-major) order.
+!>
+!>   The UHF orbital-Hessian action on a trial rotation U is
+!>       (M U)^sigma_ia = (e^sigma_a - e^sigma_i) U^sigma_ia
+!>                        + [ C^sigma^T  dF^sigma  C^sigma ]_ia ,
+!>       dF^sigma = J[dP^alpha + dP^beta] - c_x K[dP^sigma]  (+ f_xc for KS),
+!>       dP^sigma_mn = sum_ia ( C^s_mi U^s_ia C^s_na + C^s_ma U^s_ia C^s_ni ).
+!>   The Coulomb response is built from the spin-summed trial density and the
+!>   exchange response from the same-spin trial density, exactly the open-shell
+!>   two-electron Fock that scf_addons::fock_jk assembles for scftype>=2.
+!>
+!>   This is the genuine static CPHF operator (not the TDDFT A+B), so it serves
+!>   the open-shell analytic Hessian nuclear-perturbation response and the
+!>   open-shell static dipole polarizability on the same footing.
+  subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit)
+    use oqp_tagarray_driver, only: tagarray_get_data, &
+        OQP_E_MO_A, OQP_VEC_MO_A, OQP_E_MO_B, OQP_VEC_MO_B
+    use dft, only: dft_initialize
+    real(kind=dp), parameter :: default_tol = 1.0d-9
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nrhs
+    real(kind=dp), intent(in) :: bvec(:,:)
+    real(kind=dp), intent(out) :: uvec(:,:)
+    real(kind=dp), intent(in), optional :: tol
+    integer, intent(in), optional :: maxit
+
+    type(basis_set), pointer :: basis
+    type(dft_grid_t), target :: molgrid
+    type(cphf_cg_data_uhf), target :: cgdata
+    type(pcg_t) :: pcg
+
+    real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:), epsa(:), epsb(:)
+    real(kind=dp), allocatable, target :: wrka(:,:), wrkb(:,:), xm(:), xminv(:)
+    real(kind=dp), pointer :: pxm(:,:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, la, lb, ltot
+    integer :: i, j, irhs, iter, mxit, off
+    logical :: dft
+    real(kind=dp) :: cnv, scale_exch
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    la = nocca*nvira
+    lb = noccb*nvirb
+    ltot = la + lb
+    dft = infos%control%hamilton == 20
+    cnv = default_tol; if (present(tol)) cnv = tol
+    mxit = 100; if (present(maxit)) mxit = maxit
+    if (mxit < ltot + 5) mxit = ltot + 5
+
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, epsa)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, moa)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, epsb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mob)
+
+    if (dft) call dft_initialize(infos, basis, molGrid)
+
+    allocate(wrka(nbf,nbf), wrkb(nbf,nbf), xm(ltot), xminv(ltot), source=0.0_dp)
+
+    ! orbital-energy difference diagonal (e_a - e_i), occ-vir (occ-major) layout
+    if (la > 0) then
+      pxm(1:nocca,1:nvira) => xm(1:la)
+      do i = 1, nvira
+        do j = 1, nocca
+          pxm(j,i) = epsa(nocca+i) - epsa(j)
+        end do
+      end do
+    end if
+    if (lb > 0) then
+      pxm(1:noccb,1:nvirb) => xm(la+1:ltot)
+      do i = 1, nvirb
+        do j = 1, noccb
+          pxm(j,i) = epsb(noccb+i) - epsb(j)
+        end do
+      end do
+    end if
+    xminv = 1.0_dp/xm
+
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%dft%HFscale
+
+    cgdata%infos => infos
+    cgdata%basis => basis
+    cgdata%molgrid => molgrid
+    cgdata%moa => moa
+    cgdata%mob => mob
+    cgdata%xm => xm
+    cgdata%xminv => xminv
+    cgdata%wrka => wrka
+    cgdata%wrkb => wrkb
+    cgdata%nbf = nbf
+    cgdata%nocca = nocca
+    cgdata%noccb = noccb
+    cgdata%la = la
+    cgdata%lb = lb
+    cgdata%scale_exch = scale_exch
+    cgdata%dft = dft
+
+    write(iw,'(/3x,60("-"))')
+    write(iw,'(6x,"open-shell (UHF) CPHF iterative solver")')
+    write(iw,'(6x,"right-hand sides =",I5,3x,"la =",I6,3x,"lb =",I6)') nrhs, la, lb
+    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+    write(iw,'(3x,60("-"))')
+
+    off = 0
+    do irhs = 1, nrhs
+      call pcg%init(b=bvec(:,irhs), update=cphf_apbx_uhf, precond=cphf_precond_uhf, &
+                    dat=cgdata, tol=sqrt(abs(cnv)))
+      do iter = 1, mxit
+        if (pcg%errcode /= PCG_OK) exit
+        call pcg%step()
+      end do
+      write(iw,'(" UHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+              irhs, iter - 1, pcg%error**2
+      call flush(iw)
+      uvec(:,irhs) = pcg%x
+      call pcg%clean()
+    end do
+
+    deallocate(wrka, wrkb, xm, xminv)
+  end subroutine cphf_solve_uhf
+
+!###############################################################################
+
+!> @brief Open-shell (UHF) A-matrix action  y = M x  (see cphf_solve_uhf).
+  subroutine cphf_apbx_uhf(y, x, dat)
+    use mathlib, only: symmetrize_matrix, orthogonal_transform, pack_matrix, unpack_matrix
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    use scf_addons, only: fock_jk
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_uhf), pointer :: p
+
+    real(kind=dp), allocatable :: pa_ao(:,:), pb_ao(:,:), dpack(:,:), fpack(:,:)
+    real(kind=dp), allocatable :: ga(:,:,:), gb(:,:,:), dxa(:,:,:), dxb(:,:,:)
+    integer :: nbf, nbf2, nocca, noccb, la, lb
+
+    call c_f_pointer(dat, p)
+    nbf = p%nbf; nbf2 = nbf*(nbf+1)/2
+    nocca = p%nocca; noccb = p%noccb; la = p%la; lb = p%lb
+
+    allocate(pa_ao(nbf,nbf), pb_ao(nbf,nbf), source=0.0_dp)
+    allocate(ga(nbf,nbf,1), gb(nbf,nbf,1), source=0.0_dp)
+    allocate(dpack(nbf2,2), fpack(nbf2,2), source=0.0_dp)
+
+    ! Trial AO densities from the occ-vir rotation amplitudes (per spin).
+    if (la > 0) then
+      call iatogen(x(1:la), p%wrka, nocca, nocca)
+      call symmetrize_matrix(p%wrka, nbf)
+      call orthogonal_transform('t', nbf, p%moa, p%wrka, pa_ao)
+    end if
+    if (lb > 0) then
+      call iatogen(x(la+1:la+lb), p%wrkb, noccb, noccb)
+      call symmetrize_matrix(p%wrkb, nbf)
+      call orthogonal_transform('t', nbf, p%mob, p%wrkb, pb_ao)
+    end if
+
+    call pack_matrix(pa_ao, dpack(:,1))
+    call pack_matrix(pb_ao, dpack(:,2))
+
+    ! Open-shell two-electron response Fock: dF^s = J[dPa+dPb] - cx K[dP^s].
+    call fock_jk(p%basis, d=dpack, f=fpack, scale_exch=p%scale_exch, infos=p%infos)
+    call unpack_matrix(fpack(:,1), ga(:,:,1))
+    call unpack_matrix(fpack(:,2), gb(:,:,1))
+
+    ! XC response kernel (UKS): spin-resolved f_xc on the trial spin densities.
+    if (p%dft) then
+      allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1))
+      dxa(:,:,1) = pa_ao; dxb(:,:,1) = pb_ao
+      call utddft_fxc(basis=p%infos%basis, molGrid=p%molgrid, isVecs=.true., &
+                      wfa=p%moa, wfb=p%mob, fxa=ga, fxb=gb, dxa=dxa, dxb=dxb, &
+                      nmtx=1, threshold=0.0d0, infos=p%infos)
+      deallocate(dxa, dxb)
+    end if
+
+    ! Project back to MO occ-vir and add the orbital-energy diagonal.
+    if (la > 0) call mntoia(ga(:,:,1), y(1:la), p%moa, p%moa, nocca, nocca)
+    if (lb > 0) call mntoia(gb(:,:,1), y(la+1:la+lb), p%mob, p%mob, noccb, noccb)
+    y = y + p%xm*x
+
+    deallocate(pa_ao, pb_ao, ga, gb, dpack, fpack)
+  end subroutine cphf_apbx_uhf
+
+!###############################################################################
+
+  subroutine cphf_precond_uhf(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_uhf), pointer :: p
+    call c_f_pointer(dat, p)
+    y = p%xminv*x
+  end subroutine cphf_precond_uhf
+
+!###############################################################################
+
+  subroutine cphf_uhf_polarizability_selftest_C(c_handle) bind(C, name="cphf_uhf_polarizability_selftest")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call cphf_uhf_polarizability_selftest(inf)
+  end subroutine cphf_uhf_polarizability_selftest_C
+
+!> @brief Validate the open-shell CPHF solver via the static dipole
+!>   polarizability.  Built per spin: B^sigma_ia = -<i|q|a>^sigma, solve
+!>   M U^q = B^q, and alpha_pq = -2 sum_sigma sum_ia mu^p,sigma_ia U^q,sigma_ia.
+!>   For a closed-shell system run as UHF (multiplicity 1) the tensor must equal
+!>   the closed-shell (RHF) cphf_static_polarizability, which is the unambiguous
+!>   correctness check for the spin coupling and normalization.  Written to
+!>   /tmp/cphf_uhf_polar.out.
+  subroutine cphf_uhf_polarizability_selftest(infos)
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_VEC_MO_B
+    use int1, only: multipole_integrals
+    use mathlib, only: unpack_matrix
+    type(information), target, intent(inout) :: infos
+
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:)
+    real(kind=dp), allocatable :: mints(:,:), dipfull(:,:), dmo(:,:), scr(:,:)
+    real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), mua(:,:), mub(:,:)
+    real(kind=dp) :: origin(3), alpha(3,3)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, la, lb, ltot
+    integer :: q, i, a, ia, pq, uu
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    la = nocca*nvira
+    lb = noccb*nvirb
+    ltot = la + lb
+
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, moa)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mob)
+
+    allocate(mints(nbf2,19), source=0.0_dp)
+    origin = 0.0_dp
+    call multipole_integrals(basis, mints, origin, 3)
+
+    allocate(dipfull(nbf,nbf), dmo(nbf,nbf), scr(nbf,nbf))
+    allocate(bvec(ltot,3), uvec(ltot,3), source=0.0_dp)
+    allocate(mua(la,3), mub(lb,3), source=0.0_dp)
+
+    do q = 1, 3
+      call unpack_matrix(mints(:,q), dipfull)
+      ! alpha MO dipole and RHS
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, moa, nbf, dipfull, nbf, 0.0_dp, scr, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, scr, nbf, moa, nbf, 0.0_dp, dmo, nbf)
+      ia = 0
+      do a = 1, nvira
+        do i = 1, nocca
+          ia = ia + 1
+          mua(ia,q) = dmo(i, nocca+a)
+          bvec(ia,q) = -dmo(i, nocca+a)
+        end do
+      end do
+      ! beta MO dipole and RHS
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mob, nbf, dipfull, nbf, 0.0_dp, scr, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, scr, nbf, mob, nbf, 0.0_dp, dmo, nbf)
+      ia = 0
+      do a = 1, nvirb
+        do i = 1, noccb
+          ia = ia + 1
+          mub(ia,q) = dmo(i, noccb+a)
+          bvec(la+ia,q) = -dmo(i, noccb+a)
+        end do
+      end do
+    end do
+
+    call cphf_solve_uhf(infos, 3, bvec, uvec)
+
+    alpha = 0.0_dp
+    do q = 1, 3
+      do pq = 1, 3
+        alpha(pq,q) = -2.0_dp*( sum(mua(:,pq)*uvec(1:la,q)) &
+                              + sum(mub(:,pq)*uvec(la+1:ltot,q)) )
+      end do
+    end do
+
+    open(newunit=uu, file='/tmp/cphf_uhf_polar.out', status='replace', action='write')
+    write(uu,'(a)') 'open-shell (UHF) CPHF static dipole polarizability (a.u.):'
+    do i = 1, 3
+      write(uu,'(3f16.8)') alpha(i,1:3)
+    end do
+    write(uu,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
+    close(uu)
+
+    deallocate(mints, dipfull, dmo, scr, bvec, uvec, mua, mub)
+  end subroutine cphf_uhf_polarizability_selftest
 
 end module cphf_mod
