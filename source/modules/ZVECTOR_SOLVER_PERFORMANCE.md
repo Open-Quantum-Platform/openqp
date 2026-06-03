@@ -9,11 +9,38 @@ These notes accompany the numerical-stability hardening on this branch and recor
 where the *time* actually goes, what has been optimized, and what the remaining
 high-value (but compiler-gated) opportunities are.
 
-> Status of this environment: no Fortran compiler (`gfortran`) was available, so
-> none of the items below were rebuilt, run, or timed here. The implemented
-> change is a provable dead-work elimination; everything listed under
-> "Recommended follow-ups" must be benchmarked on a Fortran-capable machine / CI
-> before it is trusted.
+> Build status: `gfortran` is available, but the **full** OpenQP build is not
+> reproducible here — Libint is fetched from `qchemlab.knu.ac.kr`, which the
+> network policy blocks (`403 host_not_allowed`). So the integrated z-vector
+> files (which pull in the Libint-backed ERI engine, DFT grids, tagarray, ...)
+> cannot be compiled or run in this environment; only the self-contained solver
+> modules (`pcg.F90`, `minres.F90`) can. Those were compiled and benchmarked via
+> `tests/solver_microbench/` (see results below). Anything touching the
+> integrated files still needs CI / a Fortran-capable machine to validate.
+
+## Measured results (gfortran 13.3, -O2, tests/solver_microbench)
+
+PCG optimization (carried `rz` + scalar-reduction guards), SPD system,
+n = 200000, 300 solves:
+
+| build | iters/solve | final residual | wall time |
+|---|---|---|---|
+| old (recompute rz + full per-iter scans) | 18 | 2.69556e-11 | 19.9 s |
+| new (carried rz + scalar-reduction guards) | 18 | 2.69556e-11 | 12.3 s |
+
+→ ~1.6x faster with **identical iteration count and residual** (equivalence
+preserved). This is the cheap-matvec upper bound; real z-vector solves are
+Fock-build-bound, so the wall-clock effect there is small — the value is the
+proven equivalence + preserved fail-closed stability (NaN/Inf -> PCG_BREAKDOWN,
+verified by injection).
+
+MINRES validation (`source/minres.F90`):
+
+| test | result |
+|---|---|
+| SPD system | matches PCG, max\|Δx\| = 4.7e-10 |
+| indefinite (Laplacian − 2I) | converges, ‖b−Ax‖/‖b‖ = 1.9e-12 |
+| A = diag(+1,−1), b = (1,1) | **MINRES solves in 2 iters; CG breaks down (pᵀAp=0)** |
 
 ## 1. Where the cost is
 
@@ -118,6 +145,12 @@ tests updated in lockstep.
    short 3-term recurrence (constant memory, ~CG cost per iteration) while
    remaining robust where plain CG breaks down. This is the closest thing to
    "GMRES-robustness at CG speed" and is the recommended fallback.
+   *Status:* implemented and validated as the self-contained `source/minres.F90`
+   module (see results above). Planned z-vector selection once integrated:
+   `z_solver` = 0 → CG (default), **1 → MINRES**, 2 → GMRES. The integration into
+   `tdhf_mrsf_z_vector.F90` (operator/preconditioner adapters + breakdown
+   handling) and the input plumbing are the remaining steps and must be
+   CI-compiled, since the integrated file cannot be built in this environment.
 3. **BiCGStab for genuinely non-symmetric A.** Short recurrence, constant memory,
    ~2 matvecs/iter, no growing orthogonalization — far cheaper per iteration than
    restarted GMRES, when a truly non-symmetric operator must be solved.
