@@ -732,6 +732,29 @@ class Hessian(Calculator):
         else:
             self.hess_mult = td_mult
 
+    def _collect_native_fort6_logs(self, mol=None, append_to_log=True):
+        """Append and remove Fortran unit-6 scratch logs left by native kernels."""
+
+        mol = mol or self.mol
+        native_cphf_logs = []
+        for log_dir in (getattr(mol, 'log_path', os.getcwd()), os.getcwd()):
+            native_cphf_log = os.path.abspath(os.path.join(log_dir, 'fort.6'))
+            if native_cphf_log not in native_cphf_logs:
+                native_cphf_logs.append(native_cphf_log)
+        for native_cphf_log in native_cphf_logs:
+            if not os.path.exists(native_cphf_log):
+                continue
+            if append_to_log and hasattr(mol, 'log'):
+                with open(native_cphf_log, 'r', encoding='utf-8', errors='replace') as source:
+                    native_text = source.read()
+                if native_text.strip():
+                    with open(mol.log, 'a', encoding='utf-8') as target:
+                        target.write('\n\n')
+                        target.write('PyOQP: Native Fortran HF/DFT analytic Hessian log\n')
+                        target.write(native_text)
+                        target.write('\n')
+            os.remove(native_cphf_log)
+
     def hessian(self):
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
 
@@ -823,6 +846,7 @@ class Hessian(Calculator):
         alpha = np.zeros((3, 3), dtype=np.float64)
         oqp.electric_dipole_au(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole)))
         oqp.cphf_static_polarizability(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(alpha)))
+        self._collect_native_fort6_logs(runner.mol, append_to_log=False)
         return dipole, alpha
 
     def _compute_vibrational_intensities(self, modes):
@@ -912,16 +936,7 @@ class Hessian(Calculator):
         if native_hess_func is None:
             raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
         native_hess_func(self.mol)
-        native_cphf_log = os.path.join(getattr(self.mol, 'log_path', os.getcwd()), 'fort.6')
-        if os.path.exists(native_cphf_log) and hasattr(self.mol, 'log'):
-            with open(native_cphf_log, 'r', encoding='utf-8', errors='replace') as source:
-                native_text = source.read()
-            if native_text.strip():
-                with open(self.mol.log, 'a', encoding='utf-8') as target:
-                    target.write('\n\n')
-                    target.write('PyOQP: Native Fortran HF/DFT analytic Hessian log\n')
-                    target.write(native_text)
-                    target.write('\n')
+        self._collect_native_fort6_logs(self.mol)
 
         try:
             raw_hessian = self.mol.data['OQP::hf_hessian']
