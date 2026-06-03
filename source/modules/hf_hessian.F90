@@ -60,16 +60,15 @@ contains
     integer :: i, j, a, mu, nu, ia, icart, kc, cc
 
     ! Unsupported-feature guards (apply to ALL references, RHF/RKS included).
-    ! The native analytic Hessian derivative-integral machinery (der_nucattr,
-    ! hess_en, the Rys 2e second-derivative kernel, fock_deriv_contract) does NOT
-    ! include effective-core-potential second derivatives, nor the range-separated
-    ! (CAM/LC) screening of the 2e derivative integrals.  Both silently return a
-    ! wrong matrix (validated: ECP ~1e2-1e18, CAM ~1e-1 vs the numerical Hessian,
-    ! for closed- and open-shell alike).  Abort to the numerical Hessian instead.
-    if (any(infos%basis%ecp_zn_num /= 0)) then
-      call show_message('Native analytic Hessian does not support effective core '// &
-        'potentials (ECP). Use [hess] type=numerical for ECP basis sets.', WITH_ABORT)
-    end if
+    ! Effective-core-potential (ECP) second derivatives ARE supported: RHF/UHF
+    ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, libecpint
+    ! deriv order 2) plus the ECP core-derivative in the CPHF response; ROHF folds
+    ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.  The
+    ! remaining gap is the range-separated (CAM/LC) screening of the 2e derivative
+    ! integrals, which the native skeleton/response assembly does not yet split
+    ! into the long-range Coulomb + short-range erfc-exchange passes; it silently
+    ! returns a wrong matrix (validated: CAM ~1e-1 vs the numerical Hessian).
+    ! Abort to the numerical Hessian for CAM instead.
     if (infos%control%hamilton >= 20 .and. infos%dft%cam_flag) then
       call show_message('Native analytic Hessian does not support range-separated '// &
         '(CAM/LC) functionals. Use [hess] type=numerical for these functionals.', WITH_ABORT)
@@ -120,7 +119,8 @@ contains
     allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
     call der_overlap_matrix(basis, dSa)
     call der_kinetic_matrix(basis, dTa)
-    call der_nucattr_matrix(basis, basis%atoms%xyz, basis%atoms%zn, dVa)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, &
+                            basis%atoms%zn - basis%ecp_zn_num, dVa)  ! ECP-screened point charge
 
     ! der_* matrices are returned in the UNNORMALIZED basis; bring them into the
     ! same normalized (bfnrm) convention as the MO coefficients / density so the
@@ -139,6 +139,21 @@ contains
           end do
         end do
       end do
+    end block
+
+    ! ECP first-derivative integrals enter the core-Hamiltonian derivative
+    ! dHcore/dR (added into dVa, the nuclear-attraction derivative tensor), so the
+    ! ECP contributes to the CPHF right-hand side and the orbital-relaxation
+    ! response exactly as point-charge nuclear attraction does.  libecpint returns
+    ! these already in the OpenQP normalized convention, hence added AFTER the
+    ! bfnrm scaling above.  No-op for non-ECP bases.
+    block
+      use ecp_tool, only: ecp_deriv_ints
+      real(kind=dp), allocatable :: dVecp(:,:,:,:)
+      allocate(dVecp(nbf,nbf,3,natom))
+      call ecp_deriv_ints(basis, basis%atoms%xyz, dVecp)
+      dVa = dVa + dVecp
+      deallocate(dVecp)
     end block
 
     allocate(scr(nbf,nbf), col(nbf,nbf))
@@ -469,6 +484,7 @@ contains
     ! term above; the 2e ERI second-derivative skeleton is added separately.
     block
       use grd1, only: eijden, hess_ee_overlap, hess_ee_kinetic, hess_en
+      use ecp_tool, only: add_ecphess
       real(kind=dp), allocatable :: wlag(:), pden(:), hcc(:,:)
       allocate(wlag(nbf2), pden(nbf2), hcc(ncart,ncart), source=0.0_dp)
       call eijden(wlag, nbf, infos)                 ! energy-weighted (Lagrangian) density
@@ -477,6 +493,7 @@ contains
       call hess_ee_kinetic(basis, pden, hess_native)            ! kinetic
       call hess_en(basis, basis%atoms%xyz, &
                    basis%atoms%zn - basis%ecp_zn_num, pden, hess_native, hess_cc=hcc)
+      call add_ecphess(basis, basis%atoms%xyz, pden, hess_native) ! ECP skeleton (if any)
       deallocate(wlag, pden, hcc)
     end block
 
@@ -631,7 +648,8 @@ contains
     allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
     call der_overlap_matrix(basis, dSa)
     call der_kinetic_matrix(basis, dTa)
-    call der_nucattr_matrix(basis, basis%atoms%xyz, basis%atoms%zn, dVa)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, &
+                            basis%atoms%zn - basis%ecp_zn_num, dVa)  ! ECP-screened point charge
     block
       integer :: kc2, cc2, mu2, nu2
       do kc2 = 1, natom
@@ -645,6 +663,18 @@ contains
           end do
         end do
       end do
+    end block
+
+    ! ECP first-derivative integrals -> core-Hamiltonian derivative dHcore/dR (see
+    ! the RHF kernel for the rationale).  Already in the normalized convention, so
+    ! added after the bfnrm scaling.  No-op for non-ECP bases.
+    block
+      use ecp_tool, only: ecp_deriv_ints
+      real(dp), allocatable :: dVecp(:,:,:,:)
+      allocate(dVecp(nbf,nbf,3,natom))
+      call ecp_deriv_ints(basis, basis%atoms%xyz, dVecp)
+      dVa = dVa + dVecp
+      deallocate(dVecp)
     end block
 
     ! flat (ncart) AO views of S^x and h^x = (T+V)^x
@@ -1021,6 +1051,7 @@ contains
     ! --- one-electron + Pulay second-derivative skeleton (fixed density) ------
     block
       use grd1, only: eijden, hess_ee_overlap, hess_ee_kinetic, hess_en
+      use ecp_tool, only: add_ecphess
       real(dp), allocatable :: wlag(:), pden(:), hcc(:,:)
       allocate(wlag(nbf2), pden(nbf2), hcc(ncart,ncart), source=0.0_dp)
       call eijden(wlag, nbf, infos)                 ! open-shell Lagrangian W
@@ -1029,6 +1060,7 @@ contains
       call hess_ee_kinetic(basis, pden, hess_native)
       call hess_en(basis, basis%atoms%xyz, &
                    basis%atoms%zn - basis%ecp_zn_num, pden, hess_native, hess_cc=hcc)
+      call add_ecphess(basis, basis%atoms%xyz, pden, hess_native) ! ECP skeleton (if any)
       deallocate(wlag, pden, hcc)
     end block
 
@@ -1113,9 +1145,10 @@ contains
     real(dp), allocatable :: xa(:,:), xb(:,:), dCa(:,:), dCb(:,:), gp(:,:), gm(:,:)
     real(dp), allocatable :: zneff(:), hess_native(:,:), hresp(:,:)
     real(dp), allocatable :: faop(:), fbop(:)
+    integer, allocatable :: iecp_atom(:)
     real(dp) :: hfscale, hstep, gx(3, size(infos%atoms%xyz,2))
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, offset, ltot
-    integer :: i, j, a, icart, kc, cc, x, mu, nu
+    integer :: i, j, a, icart, kc, cc, x, mu, nu, ie, nec
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1154,11 +1187,31 @@ contains
     call unpack_matrix(dma, pa); call unpack_matrix(dmb, pb); ptot = pa + pb
     allocate(zneff(natom)); zneff = basis%atoms%zn - basis%ecp_zn_num
 
+    ! Map each atom to its ECP-centre index in ecp_coord (which is sized
+    ! 3*num_ecps, i.e. one (x,y,z) triple per ECP centre, NOT per atom).  The
+    ! semi-numerical resp_grad displaces atoms one Cartesian at a time and must
+    ! move the matching ECP centre in lockstep; iecp_atom(kc)=0 means atom kc
+    ! carries no ECP (its centre must not be touched).
+    allocate(iecp_atom(natom)); iecp_atom = 0
+    if (basis%ecp_params%is_ecp) then
+      nec = size(basis%ecp_params%n_expo)
+      do ie = 1, nec
+        do i = 1, natom
+          if (all(abs(basis%ecp_params%ecp_coord(3*(ie-1)+1:3*ie) &
+                      - basis%atoms%xyz(:,i)) < 1.0e-6_dp)) then
+            iecp_atom(i) = ie
+            exit
+          end if
+        end do
+      end do
+    end if
+
     ! derivative integrals (normalized into the bfnrm/MO convention)
     allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
     call der_overlap_matrix(basis, dSa)
     call der_kinetic_matrix(basis, dTa)
-    call der_nucattr_matrix(basis, basis%atoms%xyz, basis%atoms%zn, dVa)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, &
+                            basis%atoms%zn - basis%ecp_zn_num, dVa)  ! ECP-screened point charge
     block
       integer :: kc2, cc2, mu2, nu2
       do kc2 = 1, natom
@@ -1172,6 +1225,19 @@ contains
           end do
         end do
       end do
+    end block
+
+    ! ECP first-derivative integrals -> core-Hamiltonian derivative dHcore/dR,
+    ! feeding the non-canonical CPHF RHS (hxMO below).  The ECP skeleton + response
+    ! is then completed by add_ecpder inside resp_grad (semi-numerical).  Already
+    ! normalized, so added after the bfnrm scaling.  No-op for non-ECP bases.
+    block
+      use ecp_tool, only: ecp_deriv_ints
+      real(dp), allocatable :: dVecp(:,:,:,:)
+      allocate(dVecp(nbf,nbf,3,natom))
+      call ecp_deriv_ints(basis, basis%atoms%xyz, dVecp)
+      dVa = dVa + dVecp
+      deallocate(dVecp)
     end block
 
     ! occ-occ Fock blocks (MO) of the converged spin Fock matrices (non-canonical)
@@ -1407,7 +1473,7 @@ contains
     deallocate(pa, pb, ptot, dSa, dTa, dVa, faMO, fbMO, scr, tmp, &
                SxMO, hxMO, probe, ga2e, gb2e, d0a, d0b, dpck, fpck, gfull, Gd0, &
                ba, bb, bvec, uvec, xa, xb, dCa, dCb, gp, gm, hresp, zneff, &
-               hess_native, faop, fbop)
+               hess_native, faop, fbop, iecp_atom)
 
   contains
 
@@ -1435,12 +1501,24 @@ contains
       allocate(paP_tri(nbf2), pbP_tri(nbf2), ptP_tri(nbf2), wlag(nbf2), ta(nbf2))
       allocate(hc(nbf2), sm(nbf2), tm(nbf2))
 
-      ! displace geometry and rebuild the one-electron Hamiltonian there
+      ! displace geometry and rebuild the one-electron Hamiltonian there.  The ECP
+      ! center (ecp_coord) is a separate array from atoms%xyz, so it must be moved
+      ! in lockstep or the displaced add_ecpint/add_ecpder would see the basis and
+      ! the ECP at mismatched centers (catastrophic for the ECP atom).
       basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + sgn*hstep
+      if (iecp_atom(kc) > 0) &
+        basis%ecp_params%ecp_coord(3*(iecp_atom(kc)-1)+cc) = &
+          basis%ecp_params%ecp_coord(3*(iecp_atom(kc)-1)+cc) + sgn*hstep
       call basis%init_shell_centers()
       tol = log(10.0d0)*20.0_dp
       call omp_hst(basis, basis%atoms%xyz, basis%atoms%zn - basis%ecp_zn_num, &
                    hc, sm, tm, logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
+      ! NB: the ECP one-electron potential is deliberately NOT added to hc here.
+      ! The full ECP gradient (operator + basis-centre/Pulay derivatives) is the
+      ! analytic add_ecpder below; folding the ECP into the spin Fock used to build
+      ! the energy-weighted density W' would double-count its Pulay contribution
+      ! (verified: doing so gives ~1.5e-2 vs the numerical Hessian, omitting it
+      ! gives ~2e-5).
 
       ! relaxed orbitals -> perturbed densities and spin Fock matrices
       cocc(:,1:nocca) = mo(:,1:nocca) + sgn*hstep*dCa
@@ -1500,13 +1578,23 @@ contains
       call grad_ee_kinetic(basis, ptP_tri, gout)
       call grad_en_hellman_feynman(basis, basis%atoms%xyz, zneff, ptP_tri, gout)
       call grad_en_pulay(basis, basis%atoms%xyz, zneff, ptP_tri, gout)
+      ! ECP gradient at the displaced geometry/density: central FD over the
+      ! geometry+orbital path then yields BOTH the ECP skeleton second derivative
+      ! and the ECP orbital-relaxation response.  No-op for non-ECP bases.
+      block
+        use ecp_tool, only: add_ecpder
+        call add_ecpder(basis, basis%atoms%xyz, ptP_tri, gout)
+      end block
       gc = grd2_uhf_compute_data_t( da = paP_tri, db = pbP_tri, hfscale = hfscale, nbf = nbf )
       call gc%init()
       call grd2_driver(infos, basis, gout, gc)
       call gc%clean()
 
-      ! restore geometry
+      ! restore geometry (and the ECP center moved above)
       basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - sgn*hstep
+      if (iecp_atom(kc) > 0) &
+        basis%ecp_params%ecp_coord(3*(iecp_atom(kc)-1)+cc) = &
+          basis%ecp_params%ecp_coord(3*(iecp_atom(kc)-1)+cc) - sgn*hstep
       call basis%init_shell_centers()
 
       deallocate(cocc, pap, pbp, paP_tri, pbP_tri, ptP_tri, wlag, ta, hc, sm, tm)

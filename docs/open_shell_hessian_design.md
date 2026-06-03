@@ -263,3 +263,60 @@ wrong matrix:
 
 Supported analytic-Hessian scope (validated): RHF/RKS, UHF/UKS, ROHF/ROKS, with
 LDA/GGA/hybrid/meta-GGA functionals and standard (incl. f-function) basis sets.
+
+## Stage 7 — ECP (effective core potential) second derivatives
+
+ECP is no longer a limitation: the analytic Hessian now contracts the ECP
+second derivatives directly from **libecpint** (which already implements them up
+to derivative order 2 — only the C wrapper was missing).
+
+Wiring:
+  * `source/wrapper/libecpint_wrapper.cpp` — new `compute_second_derivs` C entry
+    point (mirrors `compute_first_derivs`), concatenating the
+    `3N(3N+1)/2` packed `ncart x ncart` derivative matrices;
+  * `ecpint.F90` — Fortran interface for `compute_second_derivs`;
+  * `ecp.F90`
+    - `add_ecphess(basis, coord, denab, hess)` — the ECP **skeleton**
+      `sum_uv P_uv d^2 V_ECP_uv/dR_I dR_J`, decoded from libecpint's atom-pair
+      packing (`H_START(I,J,N)`; diagonal blocks store 6 components
+      `{xx,xy,xz,yy,yz,zz}`, off-diagonal blocks 9 row-major `{xx..zz}`) and
+      scattered symmetrically into the `(3N,3N)` Hessian;
+    - `ecp_deriv_ints(basis, coord, dVecp)` — the ECP **first**-derivative
+      integrals `dV_ECP/dR` (uncontracted), added into the core-Hamiltonian
+      derivative so the ECP drives the CPHF RHS and the orbital relaxation.
+
+Assembly per reference (`hf_hessian.F90`):
+  * **RHF/UHF** (analytic CPHF): `add_ecphess` supplies the skeleton; `dVecp` is
+    added into `dVa` (the nuclear-attraction derivative tensor) so the ECP enters
+    the RHS, the energy-weighted term and `F^x` — the exact parallel of how
+    point-charge nuclear attraction is split into `hess_en` (skeleton) + `dVa`
+    (response);
+  * **ROHF/ROKS** (semi-numerical `resp_grad`): the ECP gradient `add_ecpder` is
+    folded into the displaced gradient, so the central FD over geometry+orbital
+    path yields both the ECP skeleton and response. The ECP centre `ecp_coord`
+    (sized `3*num_ecps`, indexed per ECP centre, **not** per atom) is moved in
+    lockstep with its atom via an `iecp_atom` map; the ECP is **not** added to the
+    Fock used for `W'` (that would double-count the ECP Pulay term already in
+    `add_ecpder`).
+
+Latent bug fixed along the way: the CPHF response built `dVa` from
+`der_nucattr_matrix(..., basis%atoms%zn, ...)` — the **full** nuclear charge —
+while the SCF, `hess_en` and `hess_nn` use the **ECP-screened** charge
+`zn - ecp_zn_num`. Harmless when `ecp_zn_num = 0`, this made the response see a
++Z core the valence never feels and blew the ECP Hessian up by ~1e2-1e25. All
+three kernels now pass the screened charge.
+
+Validation (`max|analytic - numerical|`, LANL2DZ, exactly symmetric):
+
+| system | reference | result |
+|--------|-----------|--------|
+| HBr | RHF, RKS/bhhlyp | 3.8e-5 / 1.5e-4 ✅ |
+| HBr+ | UHF, UKS/bhhlyp | 1.2e-5 / 3.0e-5 ✅ |
+| HBr+ | ROHF, ROKS/bhhlyp | 1.9e-5 / 1.2e-5 ✅ |
+| NaCl (two ECP centres) | RHF, ROHF | 1.1e-6 / 8.7e-7 ✅ |
+| BrH2+ (3 atoms) | RHF | 3.1e-5 ✅ |
+
+Test: `tests/test_ecp_hessian.py`. The ECP gate is removed from the runtime guard
+and the Python input checker; **range-separated (CAM/LC) remains gated** to the
+numerical Hessian (Stage 8 candidate: split the 2e derivative-integral assembly
+into long-range Coulomb + short-range erfc-exchange passes).

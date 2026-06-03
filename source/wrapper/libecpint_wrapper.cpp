@@ -77,6 +77,29 @@ extern "C" {
         return result;
     }
 
+    //Compute second derivs
+    ResultArray compute_second_derivs(void* integrator) {
+        libecpint::ECPIntegrator* factory = static_cast<libecpint::ECPIntegrator*>(integrator);
+        factory->compute_second_derivs();
+        std::vector<std::shared_ptr<std::vector<double>>> second_derivs = factory->get_second_derivs();
+
+        int total_size = 0;
+        for (const auto& vec : second_derivs) {
+            total_size += vec->size();
+        }
+
+        ResultArray result;
+        result.size = total_size;
+        result.data = new double[total_size];
+        int index = 0;
+        for (const auto& vec : second_derivs) {
+            std::copy(vec->begin(), vec->end(), result.data + index);
+            index += vec->size();
+        }
+
+        return result;
+    }
+
     // Clean up
     void free_integrator(void* integrator) {
         delete static_cast<libecpint::ECPIntegrator*>(integrator);

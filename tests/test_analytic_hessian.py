@@ -174,7 +174,9 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_rohf_hf_analytical_hessian_is_rejected_before_dispatch(self):
+    def test_rohf_hf_analytical_hessian_is_supported(self):
+        # ROHF (and UHF) HF/DFT analytic Hessians are implemented and
+        # finite-difference validated, so the capability matrix accepts them.
         config = {
             "input": {"method": "hf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rohf", "multiplicity": 3},
@@ -184,8 +186,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertFalse(report.ok)
-        self.assertIn("closed-shell RHF/RKS", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
 
     def test_hf_analytical_hessian_allows_openqp_library_basis_mapping(self):
         config = {

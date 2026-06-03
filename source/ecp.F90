@@ -18,6 +18,8 @@ module ecp_tool
     private
     public add_ecpint
     public add_ecpder
+    public add_ecphess
+    public ecp_deriv_ints
 
 contains
     !> @brief Add ECP one-electron contribution to the AO-core Hamiltonian (packed).
@@ -159,6 +161,186 @@ contains
         call free_result(result_ptr)
 
     end subroutine add_ecpder
+
+    !> @brief Return ECP one-electron first-derivative integrals (uncontracted).
+    !> @detail Computes dV_ECP_{mu,nu}/dR_{I,c} for every atom I and Cartesian
+    !>         direction c using libecpint (deriv order 1), transforms each block
+    !>         to OpenQP AO ordering, and stores the full-square AO matrices into
+    !>         `dVecp(mu,nu,c,I)`.  These are the response counterpart of
+    !>         @ref add_ecpder (which contracts the same integrals with a density);
+    !>         the analytic Hessian adds them into the core-Hamiltonian derivative
+    !>         dHcore/dR so the ECP enters the CPHF right-hand side and the
+    !>         orbital-relaxation response, exactly as nuclear attraction does.
+    !>         Like @ref add_ecpint, the integrals are returned in the OpenQP
+    !>         normalized (density/Hcore) convention, so callers must NOT apply an
+    !>         additional bfnrm scaling.
+    !> @param[in]  basis  Basis set (with ECP params).
+    !> @param[in]  coord  Nuclear coordinates (3 x natm).
+    !> @param[out] dVecp  ECP derivative integrals (nbf x nbf x 3 x natm).
+    !> @note Returns zeros if basis%ecp_params%is_ecp == .false.
+    subroutine ecp_deriv_ints(basis, coord, dVecp)
+
+        real(real64), contiguous, intent(in) :: coord(:,:)
+        type(basis_set), intent(in) :: basis
+        real(kind=dp), intent(out) :: dVecp(:,:,:,:)
+
+        type(ecp_result) :: result_ptr
+        type(c_ptr) :: integrator
+        real(c_double), pointer :: libecp_res(:)
+        real(real64), allocatable :: res_c(:)
+        integer :: nbf, full_size, natm, n, cc, i, j
+        integer(c_int) :: driv_order
+
+        dVecp = 0.0_dp
+        if (.not.(basis%ecp_params%is_ecp)) then
+            return
+        end if
+
+        driv_order = 1
+        nbf = basis%nbf
+        full_size = nbf * nbf
+        natm = size(coord, dim=2)
+        allocate(res_c(full_size))
+
+        call set_integrator(integrator, basis, coord, driv_order)
+
+        result_ptr = compute_first_derivs(integrator)
+        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+
+        do n = 1, natm
+            do cc = 1, 3
+                res_c = libecp_res(full_size*(3*(n - 1) + cc - 1) + 1 : &
+                                   full_size*(3*(n - 1) + cc))
+                call transform_matrix(basis, res_c)
+                do j = 1, nbf
+                    do i = 1, nbf
+                        dVecp(i, j, cc, n) = res_c((i - 1)*nbf + j)
+                    end do
+                end do
+            end do
+        end do
+
+        result_ptr%data = c_null_ptr
+        result_ptr%size = 0
+        nullify(libecp_res)
+
+        call free_integrator(integrator)
+        call free_result(result_ptr)
+        deallocate(res_c)
+
+    end subroutine ecp_deriv_ints
+
+    !> @brief Add ECP second-derivative contribution to the nuclear Hessian.
+    !> @detail Computes d^2 V_ECP/dR_I dR_J in AO full-square form for every atom
+    !>         pair using libecpint (deriv order 2), transforms each block to
+    !>         OpenQP AO ordering, and contracts with the symmetric density
+    !>         `denab` (packed) to accumulate the fixed-density ECP skeleton into
+    !>         the Cartesian Hessian `hess` (3*natm x 3*natm, atom-major layout
+    !>         hess(3*(I-1)+a, 3*(J-1)+b)).
+    !>
+    !>         libecpint returns the packed upper triangle of atom-coordinate
+    !>         pairs: matrix index H_START(I,J,natm) (0-based) starts each (I<=J)
+    !>         atom block.  Diagonal blocks (I==J) store 6 matrices in the order
+    !>         {xx,xy,xz,yy,yz,zz}; off-diagonal blocks (I<J) store 9 matrices in
+    !>         row-major {xx,xy,xz,yx,yy,yz,zx,zy,zz} (first index = coordinate of
+    !>         atom I, second = coordinate of atom J).  Each block is the AO matrix
+    !>         packed M(k,l) = (k-1)*nbf + l.  We scatter symmetrically so the
+    !>         returned Hessian is exactly symmetric.
+    !> @param[in]    basis  Basis set (with ECP params).
+    !> @param[in]    coord  Nuclear coordinates (3 x natm).
+    !> @param[in]    denab  Packed AO density (size nbf*(nbf+1)/2), upper triangle.
+    !> @param[inout] hess   Cartesian Hessian (3*natm x 3*natm), incremented by ECP.
+    !> @note No-op if basis%ecp_params%is_ecp == .false.
+    subroutine add_ecphess(basis, coord, denab, hess)
+
+        real(real64), contiguous, intent(in) :: coord(:,:)
+        type(basis_set), intent(in) :: basis
+        real(kind=dp), intent(in) :: denab(:)
+        real(kind=dp), intent(inout) :: hess(:,:)
+
+        type(ecp_result) :: result_ptr
+        type(c_ptr) :: integrator
+        real(c_double), pointer :: libecp_res(:)
+        real(real64), allocatable :: blk(:)
+        integer :: nbf, mat_sz, natm
+        integer :: iat, jat, ia0, ja0, hstart, base, ncomp, n
+        integer :: a, b, i, j, c, prim
+        integer(c_int) :: driv_order
+        integer :: amap(9), bmap(9)
+        real(real64) :: val
+
+        if (.not.(basis%ecp_params%is_ecp)) then
+            return
+        end if
+
+        driv_order = 2
+        nbf = basis%nbf
+        mat_sz = nbf * nbf
+        natm = size(coord, dim=2)
+        allocate(blk(mat_sz))
+
+        call set_integrator(integrator, basis, coord, driv_order)
+
+        result_ptr = compute_second_derivs(integrator)
+        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+
+        do iat = 1, natm
+            do jat = iat, natm
+                ia0 = iat - 1
+                ja0 = jat - 1
+                ! 0-based starting matrix index of the (iat,jat) atom block
+                hstart = 9*ja0 + 3*(3*natm - 1)*ia0 - (9*ia0*(ia0 + 1))/2 - 3
+                if (iat == jat) then
+                    base = hstart + 3
+                    ncomp = 6
+                    amap(1:6) = [1, 1, 1, 2, 2, 3]
+                    bmap(1:6) = [1, 2, 3, 2, 3, 3]
+                else
+                    base = hstart
+                    ncomp = 9
+                    amap(1:9) = [1, 1, 1, 2, 2, 2, 3, 3, 3]
+                    bmap(1:9) = [1, 2, 3, 1, 2, 3, 1, 2, 3]
+                end if
+
+                do n = 1, ncomp
+                    blk = libecp_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
+                    call transform_matrix(basis, blk)
+
+                    val = 0.0_dp
+                    do j = 1, nbf
+                        do i = 1, j
+                            c = j*(j - 1)/2 + i
+                            if (i == j) then
+                                prim = 1
+                            else
+                                prim = 2
+                            end if
+                            val = val + prim * blk((i - 1)*nbf + j) * denab(c)
+                        end do
+                    end do
+
+                    a = amap(n)
+                    b = bmap(n)
+                    hess(3*(iat - 1) + a, 3*(jat - 1) + b) = &
+                        hess(3*(iat - 1) + a, 3*(jat - 1) + b) + val
+                    ! symmetric partner (skip if it is the same matrix element)
+                    if (.not. (iat == jat .and. a == b)) then
+                        hess(3*(jat - 1) + b, 3*(iat - 1) + a) = &
+                            hess(3*(jat - 1) + b, 3*(iat - 1) + a) + val
+                    end if
+                end do
+            end do
+        end do
+
+        result_ptr%data = c_null_ptr
+        result_ptr%size = 0
+        nullify(libecp_res)
+
+        call free_integrator(integrator)
+        call free_result(result_ptr)
+        deallocate(blk)
+
+    end subroutine add_ecphess
 
     !> @brief Construct and initialize a libecpint integrator instance.
     !> @detail Marshals Gaussian basis (centers, exponents, contractions, AMs) and
