@@ -68,11 +68,6 @@ contains
     ! finite-difference validated).  ROHF (scftype==3) and open-shell DFT are not
     ! yet wired; abort rather than return a partial matrix.
     if (infos%control%scftype == 2) then
-      if (infos%control%hamilton >= 20) then
-        call show_message('Native open-shell (UHF) DFT analytic Hessian is not '// &
-          'yet available (the UKS f_xc response is not finite-difference '// &
-          'validated). Use [hess] type=numerical for UKS references.', WITH_ABORT)
-      end if
       call hf_hessian_uhf(infos)
       return
     else if (infos%control%scftype == 3) then
@@ -594,6 +589,7 @@ contains
     lb = noccb*nvirb
     ltot = la + lb
     hfscale = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
 
     write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian CPHF response prepass'
     write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
@@ -735,6 +731,80 @@ contains
             end do
           end do
         end do
+
+        ! --- XC contribution to the CPKS right-hand side (UKS only) -------------
+        ! Mirror the closed-shell RKS RHS XC: one central FD of the spin XC Fock
+        ! matrices (open-shell dftexcor) along R +/- h AND occupied MOs reorthonor-
+        ! malized by dmoR^s = -1/2 sum_j C^s_j S^x,s_ji captures both the XC
+        ! skeleton dVxc/dR and f_xc[d0]; subtract the vir-occ MO blocks from B
+        ! (which carries -F0x).
+        if (infos%control%hamilton >= 20) then
+          block
+            use dft, only: dft_initialize, dftclean, dftexcor
+            use mod_dft_molgrid, only: dft_grid_t
+            type(dft_grid_t) :: mgr
+            real(dp), allocatable :: dmoa(:,:), dmob(:,:), mopa(:,:), mopb(:,:)
+            real(dp), allocatable :: SxMOa(:,:), SxMOb(:,:)
+            real(dp), allocatable :: frap(:), frbp(:), fram(:), frbm(:), dvx(:,:), hxc(:,:)
+            real(dp) :: hxr, exr, telr, tknr
+            integer :: ir, jr
+            allocate(dmoa(nbf,nocca), dmob(nbf,noccb), mopa(nbf,nbf), mopb(nbf,nbf))
+            allocate(SxMOa(nbf,nbf), SxMOb(nbf,nbf))
+            allocate(frap(nbf2), frbp(nbf2), fram(nbf2), frbm(nbf2), dvx(nbf,nbf), hxc(nbf,nbf))
+            hxr = 1.0d-3
+            call mo_transform(sp(1)%mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMOa)
+            call mo_transform(sp(2)%mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMOb)
+            dmoa = 0.0_dp
+            do ir = 1, nocca
+              do jr = 1, nocca
+                dmoa(:,ir) = dmoa(:,ir) - 0.5_dp*SxMOa(jr,ir)*sp(1)%mo(:,jr)
+              end do
+            end do
+            dmob = 0.0_dp
+            do ir = 1, noccb
+              do jr = 1, noccb
+                dmob(:,ir) = dmob(:,ir) - 0.5_dp*SxMOb(jr,ir)*sp(2)%mo(:,jr)
+              end do
+            end do
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mgr)
+            mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) + hxr*dmoa
+            mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) + hxr*dmob
+            frap = 0.0_dp; frbp = 0.0_dp
+            call dftexcor(basis, mgr, infos%control%scftype, frap, frbp, mopa, mopb, &
+                          nbf, nbf2, exr, telr, tknr, infos)
+            call dftclean(infos)
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - 2*hxr
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mgr)
+            mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) - hxr*dmoa
+            mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) - hxr*dmob
+            fram = 0.0_dp; frbm = 0.0_dp
+            call dftexcor(basis, mgr, infos%control%scftype, fram, frbm, mopa, mopb, &
+                          nbf, nbf2, exr, telr, tknr, infos)
+            call dftclean(infos)
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
+            call basis%init_shell_centers()
+            call unpack_from_packed((frap - fram)/(2*hxr), dvx, nbf)
+            call mo_transform(sp(1)%mo, dvx, nbf, scr, tmp, hxc)
+            do a = 1, nvira
+              do i = 1, nocca
+                ia = (a-1)*nocca + i
+                bvec(ia,icart) = bvec(ia,icart) - hxc(i,nocca+a)
+              end do
+            end do
+            call unpack_from_packed((frbp - frbm)/(2*hxr), dvx, nbf)
+            call mo_transform(sp(2)%mo, dvx, nbf, scr, tmp, hxc)
+            do a = 1, nvirb
+              do i = 1, noccb
+                ia = (a-1)*noccb + i
+                bvec(la+ia,icart) = bvec(la+ia,icart) - hxc(i,noccb+a)
+              end do
+            end do
+            deallocate(dmoa, dmob, mopa, mopb, SxMOa, SxMOb, frap, frbp, fram, frbm, dvx, hxc)
+          end block
+        end if
       end do
     end do
 
@@ -854,6 +924,88 @@ contains
 
     allocate(hess_native(ncart,ncart))
     hess_native = 0.5_dp*(hresp + transpose(hresp))
+
+    ! --- DFT (UKS) exchange-correlation second-derivative contribution --------
+    ! Open-shell analog of the closed-shell RKS XC block:
+    !   dHse : XC skeleton + density-response, central FD of the analytic
+    !          open-shell XC gradient (derexc_blk) along R +/- h, P^s +/- h dP^s.
+    !   dHt3 : -2 sum_s sum_kl s1oo^s,x_kl (vxc^s,y + fxc[dP^s,y])_kl, the XC part
+    !          of the energy-weighted term, from the FD of the spin XC Fock
+    !          (dftexcor) along R, C^s +/- h dC^s.
+    ! The HF-exchange fraction is already in the Coulomb/exchange terms (hfscale).
+    if (infos%control%hamilton >= 20) then
+      block
+        use dft, only: dft_initialize, dftclean, dftexcor
+        use mod_dft_gridint_grad, only: derexc_blk
+        use mod_dft_molgrid, only: dft_grid_t
+        type(dft_grid_t) :: mg
+        real(dp), allocatable :: dapa(:,:), dapb(:,:), dedp(:,:), dedm(:,:)
+        real(dp), allocatable :: mopa(:,:), mopb(:,:), frap(:), frbp(:), fram(:), frbm(:)
+        real(dp), allocatable :: dFxc(:,:), tmpn(:,:), dHse(:,:), dHt3(:,:), dFoo(:,:)
+        real(dp) :: hx, exr, telr, tknr
+        integer :: yy2, ccy, kcy, nang, x2, kk2, ll2, ss
+        hx = 1.0d-3; nang = maxval(basis%am) + 2
+        allocate(dapa(nbf,nbf), dapb(nbf,nbf), dedp(3,natom), dedm(3,natom))
+        allocate(mopa(nbf,nbf), mopb(nbf,nbf), frap(nbf2), frbp(nbf2), fram(nbf2), frbm(nbf2))
+        allocate(dFxc(nbf,nbf), dHse(ncart,ncart), dHt3(ncart,ncart))
+        dHse = 0.0_dp; dHt3 = 0.0_dp
+        call dft_initialize(infos, basis, mg); call dftclean(infos)   ! warm-up
+        do yy2 = 1, ncart
+          ccy = mod(yy2-1,3)+1; kcy = (yy2-1)/3+1
+          basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          dapa = sp(1)%p + hx*sp(1)%dPx(:,:,yy2); dapb = sp(2)%p + hx*sp(2)%dPx(:,:,yy2)
+          dedp = 0.0_dp
+          call derexc_blk(basis, mg, dapa, dapb, dedp, telr, tknr, nang, nbf, &
+                          infos%dft%grid_density_cutoff, .true., infos)
+          mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) + hx*sp(1)%dCx(:,:,yy2)
+          mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) + hx*sp(2)%dCx(:,:,yy2)
+          frap = 0.0_dp; frbp = 0.0_dp
+          call dftexcor(basis, mg, infos%control%scftype, frap, frbp, mopa, mopb, &
+                        nbf, nbf2, exr, telr, tknr, infos)
+          call dftclean(infos)
+          basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) - 2*hx
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          dapa = sp(1)%p - hx*sp(1)%dPx(:,:,yy2); dapb = sp(2)%p - hx*sp(2)%dPx(:,:,yy2)
+          dedm = 0.0_dp
+          call derexc_blk(basis, mg, dapa, dapb, dedm, telr, tknr, nang, nbf, &
+                          infos%dft%grid_density_cutoff, .true., infos)
+          mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) - hx*sp(1)%dCx(:,:,yy2)
+          mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) - hx*sp(2)%dCx(:,:,yy2)
+          fram = 0.0_dp; frbm = 0.0_dp
+          call dftexcor(basis, mg, infos%control%scftype, fram, frbm, mopa, mopb, &
+                        nbf, nbf2, exr, telr, tknr, infos)
+          call dftclean(infos)
+          basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
+          call basis%init_shell_centers()
+          dHse(:,yy2) = reshape((dedp - dedm)/(2*hx), [ncart])
+          ! dHt3: -2 sum_s s1oo^s,x (dVxc^s,y + fxc[dP^s,y])_oo
+          do ss = 1, 2
+            if (ss == 1) then
+              call unpack_from_packed((frap - fram)/(2*hx), dFxc, nbf)
+            else
+              call unpack_from_packed((frbp - frbm)/(2*hx), dFxc, nbf)
+            end if
+            allocate(tmpn(nbf,sp(ss)%nocc), dFoo(sp(ss)%nocc,sp(ss)%nocc))
+            call dgemm('n','n', nbf, sp(ss)%nocc, nbf, 1.0_dp, dFxc, nbf, sp(ss)%mo, nbf, 0.0_dp, tmpn, nbf)
+            call dgemm('t','n', sp(ss)%nocc, sp(ss)%nocc, nbf, 1.0_dp, sp(ss)%mo, nbf, tmpn, nbf, 0.0_dp, dFoo, sp(ss)%nocc)
+            do x2 = 1, ncart
+              do ll2 = 1, sp(ss)%nocc
+                do kk2 = 1, sp(ss)%nocc
+                  dHt3(x2,yy2) = dHt3(x2,yy2) - 1.0_dp*sp(ss)%s1oo(kk2,ll2,x2)*dFoo(kk2,ll2)
+                end do
+              end do
+            end do
+            deallocate(tmpn, dFoo)
+          end do
+        end do
+        hess_native = hess_native + 0.5_dp*(dHse + transpose(dHse)) &
+                                  + 0.5_dp*(dHt3 + transpose(dHt3))
+        deallocate(dapa, dapb, dedp, dedm, mopa, mopb, frap, frbp, fram, frbm, dFxc, dHse, dHt3)
+      end block
+    end if
 
     ! nuclear repulsion
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
