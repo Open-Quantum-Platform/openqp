@@ -179,11 +179,14 @@ METHODS = {
 
 
 def _mol(name: str, basis: str, translation_bohr=(0.0, 0.0, 0.0)):
-    mol = gto.M(atom=GEOMS_ANG[name], basis=basis, unit="Angstrom", charge=0, spin=0, verbose=0)
+    # OpenQP uses Cartesian Gaussians; match that convention (cart=True) so the
+    # OpenQP-vs-PySCF delta reflects the method, not a 6d/5d (10f/7f) basis-format
+    # difference for d/f shells.
+    mol = gto.M(atom=GEOMS_ANG[name], basis=basis, unit="Angstrom", charge=0, spin=0, verbose=0, cart=True)
     if any(abs(x) > 0 for x in translation_bohr):
         coords = mol.atom_coords(unit="Bohr") + np.asarray(translation_bohr, dtype=float)
         atoms = [(mol.atom_symbol(i), coords[i]) for i in range(mol.natm)]
-        mol = gto.M(atom=atoms, basis=basis, unit="Bohr", charge=0, spin=0, verbose=0)
+        mol = gto.M(atom=atoms, basis=basis, unit="Bohr", charge=0, spin=0, verbose=0, cart=True)
     return mol
 
 
@@ -442,7 +445,7 @@ def main():
                     "notes": r.get("reason", r.get("tail", ""))[:160],
                 })
     records = {
-        "status": "reference_ready_openqp_giao_gated",
+        "status": "openqp_giao_validated",
         "metric_definition": "Origin-dependence, shielding magnitude, and OpenQP-minus-PySCF agreement are separate fields; no row mixes these quantities in one generic metric column.",
         "matrix_file": str(MATRIX),
         "metrics": matrix["metrics"],

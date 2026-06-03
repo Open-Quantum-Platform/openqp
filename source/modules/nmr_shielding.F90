@@ -108,7 +108,8 @@ contains
     write(iw,'(4x,a)') '======================================'
     write(iw,'(4x,a)') 'NMR nuclear magnetic shielding (CGO)'
     write(iw,'(4x,a)') '======================================'
-    write(iw,'(4x,a)') 'Gauge formulation: CGO validated baseline; GIAO is gated until validated.'
+    write(iw,'(4x,a)') 'Gauge formulation: CGO (common gauge origin). For gauge-origin-'// &
+      'independent results use properties.nmr_gauge=giao.'
     call flush(iw)
 
     if (urohf) then

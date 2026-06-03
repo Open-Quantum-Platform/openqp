@@ -602,6 +602,7 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
     nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
 
     for prop in scf_prop:
         if prop not in SCF_PROPS:
