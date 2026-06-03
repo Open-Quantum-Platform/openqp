@@ -14,6 +14,39 @@ ROOT = Path(__file__).resolve().parents[1]
 TDHF_LIB_SRC = ROOT / "source" / "tdhf_lib.F90"
 TDHF_SF_LIB_SRC = ROOT / "source" / "tdhf_sf_lib.F90"
 TDHF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_energy.F90"
+TDHF_SF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_sf_energy.F90"
+TDHF_MRSF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+
+
+class DavidsonAutoRestartTests(unittest.TestCase):
+    """Each excited-state C entry must auto-restart Davidson with a larger
+    subspace (maxvec) + more iterations (maxit_dav) on non-convergence."""
+
+    CASES = [
+        (TDHF_ENERGY_SRC, "tdhf_energy"),
+        (TDHF_SF_ENERGY_SRC, "tdhf_sf_energy"),
+        (TDHF_MRSF_ENERGY_SRC, "tdhf_mrsf_energy"),
+    ]
+
+    def test_c_entry_wraps_davidson_with_auto_restart(self):
+        for src_path, base in self.CASES:
+            src = src_path.read_text()
+            wrapper = base + "_with_restart"
+            with self.subTest(module=base):
+                # C entry delegates to the restart wrapper, not the bare driver.
+                self.assertRegex(src, r'bind\(C, name="' + base + r'"\)')
+                self.assertIn("call " + wrapper + "(inf)", src)
+                # The wrapper loops, checks convergence, doubles subspace + iters.
+                block = re.search(r"subroutine\s+" + wrapper + r"\(infos\).*?end subroutine\s+" + wrapper,
+                                  src, re.S | re.I)
+                self.assertIsNotNone(block, "missing " + wrapper)
+                b = block.group(0)
+                self.assertIn("call " + base + "(infos)", b)
+                self.assertIn("infos%mol_energy%Davidson_converged", b)
+                self.assertRegex(b, r"infos%tddft%maxvec\s*=\s*2\s*\*\s*infos%tddft%maxvec")
+                self.assertRegex(b, r"infos%control%maxit_dav\s*=\s*2\s*\*\s*infos%control%maxit_dav")
+                # User settings restored after the retries.
+                self.assertIn("infos%tddft%maxvec      = maxvec0", b)
 
 
 class DavidsonSolverStabilityTests(unittest.TestCase):
