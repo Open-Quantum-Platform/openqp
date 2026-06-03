@@ -167,6 +167,52 @@ small/positive (very different from CGO's), so the **diamagnetic GIAO term carri
 the bulk of the total** and is the remaining piece before the total shielding and
 `nmr_gauge=giao` ungating.
 
+### Remaining diamagnetic GIAO term — precise spec for the next coding gate
+
+The GIAO diamagnetic shielding (per nucleus N, contracted with the ground-state
+density `dm0`, no response) follows `pyscf.prop.nmr.rhf.dia(gauge_orig=None)`:
+
+```
+e11_{ab} = sum_{mu,nu} dm0_{mu,nu} <mu| A11part_{ab} |nu>      (a,b = 1..3, 9 comp)
+e11      = e11 - I*trace(e11)                                  (trace correction)
+e11_{ab} += sum_{mu,nu} dm0_{mu,nu} <mu| A01gp_{ab} |nu>
+sigma_dia(N) = e11 * alpha^2 * 1e6     [ppm]
+```
+
+Two new second-order GIAO one-electron integral blocks are required (libcint
+operator strings, both 9-component, `rinv` origin at nucleus N):
+
+- `int1e_giao_a11part` = `(-.5 | nabla-rinv | r)` — GIAO diamagnetic.
+  **Verified NOT equal to** the existing CGO `int1e_cg_a11part` at common origin 0
+  (`||giao - cg(O=0)|| = 0.80` on H2O/STO-3G), i.e. the London-orbital prefix adds
+  genuine structure; it cannot be obtained by calling `nmr_dia_shielding` with the
+  gauge origin at 0.  A native kernel is needed.
+- `int1e_a01gp` = `(g | nabla-rinv cross p |)` — GIAO gauge-correction: the
+  London-derivative-weighted PSO operator `nabla(1/r_N) x nabla` (per-component
+  mixed symmetry in mu,nu).
+
+Magnitudes (H2O/STO-3G, isotropic, ppm) to target during validation, from the
+PySCF oracle decomposition:
+
+| atom | a11part iso | a01gp iso | GIAO dia total | (CGO dia for reference) |
+|------|-------------|-----------|----------------|--------------------------|
+| O | 386.94 | -8.95 | 377.99 | 411.42 |
+| H | 26.76 |  4.22 |  30.98 |  28.06 |
+
+Reusable building blocks: the GIAO position-raising trick already used in
+`giao_h10_twoe_matrix` (raise the bra Cartesian power by one, combine with the
+shell-center to form `r`-weighted integrals), the `rinv`/PSO primitive path
+(`comp_pso_int1_prim`), and the CGO diamagnetic primitive
+(`comp_nmr_dia_int1_prim`).  Validation oracle:
+`tests/fixtures/nmr/pyscf_giao_reference.json` (`sigma_dia*`,
+`sigma_total_*` tensors) and `generate_pyscf_giao_reference.py`.
+
+Once both integrals are implemented and `sigma_dia + sigma_para` matches the GIAO
+oracle total to the CGO-grade tolerance (HF ~1e-4 ppm; DFT Delta ≤ ~0.1 ppm),
+wire the total into `nmr_giao_shielding.F90`, route `nmr_gauge=giao` through it in
+`runfunc.py`, and remove the `NotImplementedError` gate.  Until then, the gate
+**stays closed**: no CGO fallback, no partial-dia totals.
+
 The implemented `S10` block returns the real coefficient of the imaginary first
 magnetic-field derivative of the AO overlap matrix,
 `S10_a(mu,nu) = 0.5 * [(R_mu - R_nu) x <mu|r|nu>]_a`, and is intentionally not
