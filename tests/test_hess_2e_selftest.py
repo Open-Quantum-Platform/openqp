@@ -34,10 +34,11 @@ multiplicity=1
 type=rhf
 """
 
+CAM_INPUT = INPUT.replace("method=hf", "functional=cam-b3lyp\nmethod=hf")
+
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -69,6 +70,28 @@ class Hess2eSelfTest(unittest.TestCase):
         result = SELFTEST_OUT.read_text()
         self.assertIn("GRD2_HESS_SELFTEST PASS", result,
                       "analytic 2e Hessian disagrees with finite difference:\n" + result)
+
+    def test_cam_two_electron_hessian_matches_finite_difference(self):
+        import oqp
+        from oqp.pyoqp import Runner
+
+        workdir = Path("/tmp/oqp_hess2e_cam_test")
+        workdir.mkdir(exist_ok=True)
+        inp = workdir / "h2o_cam.inp"
+        inp.write_text(CAM_INPUT)
+        log = workdir / "h2o_cam.log"
+
+        if SELFTEST_OUT.exists():
+            SELFTEST_OUT.unlink()
+
+        runner = Runner(project="h2o_hess2e_cam", input_file=str(inp), log=str(log))
+        runner.run()
+        oqp.grd2_hess_selftest(runner.mol)
+
+        self.assertTrue(SELFTEST_OUT.exists(), "CAM self-test produced no output file")
+        result = SELFTEST_OUT.read_text()
+        self.assertIn("GRD2_HESS_SELFTEST PASS", result,
+                      "CAM analytic 2e Hessian disagrees with finite difference:\n" + result)
 
 
 if __name__ == "__main__":

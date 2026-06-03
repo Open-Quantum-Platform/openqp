@@ -325,7 +325,8 @@ contains
 !>        with a fixed two-body density). Mirrors grd2_driver_gen but builds the
 !>        per-quartet second-derivative block fd2(3,4,3,4) and scatters it into
 !>        the (3*natom,3*natom) Hessian by atom pair.
-  subroutine grd2_hess_driver(infos, basis, hess, gcomp)
+  recursive subroutine grd2_hess_driver(infos, basis, hess, gcomp, &
+                                        cam, alpha, beta, mu)
 
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
@@ -339,9 +340,12 @@ contains
     type(basis_set), intent(in) :: basis
     class(grd2_compute_data_t), intent(inout) :: gcomp
     real(kind=dp), intent(inout) :: hess(:,:)
+    logical, optional, intent(in) :: cam
+    real(kind=dp), optional, intent(in) :: alpha, beta, mu
 
     real(dp), dimension(:), allocatable :: dab
     real(dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp), allocatable :: hess_internal(:,:)
 
     real(kind=dp) :: emu2
     real(kind=dp) :: cutoff, cutoff2, dabcut
@@ -358,9 +362,46 @@ contains
     type(int2_cutoffs_t) :: cutoffs
 
     type(par_env_t) :: pe
+
+    logical :: do_cam = .false.
+
+    do_cam = infos%dft%cam_flag
+    if (present(cam)) do_cam = cam
+
+    if (do_cam) then
+      allocate(hess_internal, mold=hess)
+
+      gcomp%cur_pass = 1
+      ! Regular Coulomb and exchange.
+      hess_internal = 0.0_dp
+      gcomp%attenuated = .false.
+      gcomp%coulscale = 1.0_dp
+      gcomp%hfscale = infos%dft%cam_alpha
+      gcomp%hfscale2 = infos%tddft%cam_alpha
+      if (present(alpha)) gcomp%hfscale2 = alpha
+      call grd2_hess_driver(infos, basis, hess_internal, gcomp, cam=.false.)
+      hess = hess + hess_internal
+
+      gcomp%cur_pass = 2
+      ! Short-range exchange.
+      hess_internal = 0.0_dp
+      gcomp%attenuated = .true.
+      gcomp%coulscale = 0.0_dp
+      gcomp%hfscale = infos%dft%cam_beta
+      gcomp%hfscale2 = infos%tddft%cam_beta
+      if (present(beta)) gcomp%hfscale2 = beta
+      gcomp%mu = infos%dft%cam_mu
+      if (present(mu)) gcomp%mu = mu
+      call grd2_hess_driver(infos, basis, hess_internal, gcomp, cam=.false.)
+      hess = hess + hess_internal
+
+      deallocate(hess_internal)
+      return
+    end if
+
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
-    if (infos%control%hamilton >= 20) then
+    if (infos%control%hamilton >= 20 .and. .not. present(cam)) then
       gcomp%hfscale = infos%dft%hfscale
       gcomp%hfscale2 = infos%tddft%hfscale
     end if
