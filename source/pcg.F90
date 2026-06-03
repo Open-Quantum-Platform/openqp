@@ -59,6 +59,7 @@ module pcg_mod
     real(kind=dp), allocatable :: r(:)
     real(kind=dp), allocatable :: y(:)
     real(kind=dp) :: error = huge(1.0_dp)
+    real(kind=dp) :: rz = 0.0_dp     !< carried r.M^-1.r = dot_product(r, y)
     real(kind=dp) :: tol = 0.0_dp
     procedure(pcg_matvec), nopass, pointer :: precond => null()
     procedure(pcg_matvec), nopass, pointer :: update => null()
@@ -150,6 +151,14 @@ contains
     end if
     this%p(:) = this%y
 
+    ! Seed the carried numerator rz = r.M^-1.r so pcg_step never has to
+    ! recompute dot_product(r, y) for the current residual.
+    this%rz = dot_product(this%r, this%y)
+    if (.not. ieee_is_finite(this%rz)) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
+
     this%error = norm2(this%r)
     if (.not. ieee_is_finite(this%error)) then
       this%errcode = PCG_BREAKDOWN
@@ -182,6 +191,7 @@ contains
     this%dat = c_null_ptr
 
     this%error = huge(1.0_dp)
+    this%rz = 0.0_dp
     this%tol = 0.0_dp
 
     this%errcode = 0
@@ -202,16 +212,26 @@ contains
       return
     end if
 
-    if (any(.not. ieee_is_finite(this%x)) .or. any(.not. ieee_is_finite(this%b)) .or. &
-        any(.not. ieee_is_finite(this%p)) .or. any(.not. ieee_is_finite(this%r)) .or. &
-        any(.not. ieee_is_finite(this%y))) then
-      this%errcode = PCG_BREAKDOWN
-      return
-    end if
-
     associate(x  => this%x, Ap => this%Ap, &
               p  => this%p, r  => this%r, y  => this%y, &
               error => this%error)
+
+      ! Invariant on entry: r, y and the carried rz = dot_product(r, y) were
+      ! already validated finite by pcg_init (or the previous step's
+      ! preconditioner update), and p = y + beta*p was built from finite
+      ! operands.  Rather than rescanning every state vector each iteration
+      ! (which costs several O(n) passes on top of the matvec), we let the
+      ! scalar reductions pap, error and rz_new act as the fail-closed
+      ! detectors: a NaN/Inf anywhere in p, Ap, r or y propagates into one of
+      ! them, so a single finiteness test on each scalar is sufficient.
+      rz = this%rz
+
+      ! Guard p before the (expensive) operator apply so a corrupted search
+      ! direction never triggers a wasted matvec.
+      if (any(.not. ieee_is_finite(p))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       call this%update(Ap, p, this%dat)
       if (any(.not. ieee_is_finite(Ap))) then
@@ -219,12 +239,6 @@ contains
         return
       end if
 
-      if (any(.not. ieee_is_finite(p))) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
-
-      rz = dot_product(r, y)
       pap = dot_product(p, Ap)
       if (.not. ieee_is_finite(pap) .or. .not. ieee_is_finite(rz)) then
         this%errcode = PCG_BREAKDOWN
@@ -243,19 +257,7 @@ contains
       end if
 
       x(:) = x(:) + alpha*p(:)
-      if (.not. ieee_is_finite(x(1))) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
-      if (.not. all(ieee_is_finite(x))) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
       r(:) = r(:) - alpha*Ap(:)
-      if (any(.not. ieee_is_finite(r))) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
 
       error = norm2(r)
       if (.not. ieee_is_finite(error)) then
@@ -264,6 +266,13 @@ contains
       end if
 
       if (error<this%tol) then
+        ! Only scan the full solution vector once, at the point we are about
+        ! to hand it back as converged, so a finite residual can never mask a
+        ! non-finite entry that escaped via a zero in Ap.
+        if (.not. all(ieee_is_finite(x))) then
+          this%errcode = PCG_BREAKDOWN
+          return
+        end if
         this%errcode = PCG_CONVERGED
         return
       end if
@@ -279,12 +288,7 @@ contains
         return
       end if
       rz_new = dot_product(r, y)
-      if (.not. ieee_is_finite(rz_new)) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
-      if (.not. pcg_safe_positive_denominator(rz_new) .or. &
-          .not. ieee_is_finite(rz_new) .or. any(.not. ieee_is_finite(y))) then
+      if (.not. pcg_safe_positive_denominator(rz_new)) then
         this%errcode = PCG_BREAKDOWN
         return
       end if
@@ -294,10 +298,10 @@ contains
         return
       end if
       p(:) = y(:) + beta*p(:)
-      if (any(.not. ieee_is_finite(p))) then
-        this%errcode = PCG_BREAKDOWN
-        return
-      end if
+
+      ! Carry rz forward so the next iteration reuses r.M^-1.r instead of
+      ! recomputing dot_product(r, y).
+      this%rz = rz_new
 
     end associate
 

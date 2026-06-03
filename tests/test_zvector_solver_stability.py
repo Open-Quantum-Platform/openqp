@@ -89,6 +89,31 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (.not. ieee_is_finite(error)", block)
         self.assertIn("if (.not. all(ieee_is_finite(x)))", block)
 
+    def test_pcg_step_carries_rz_instead_of_recomputing_each_iteration(self):
+        """pcg_step must reuse the carried rz = r.M^-1.r, not recompute dot_product(r, y).
+
+        Recomputing the numerator every iteration is a redundant O(n) reduction:
+        the value equals the previous iteration's rz_new.  This pins the carry so
+        the optimization cannot silently regress while keeping the breakdown guard.
+        """
+        src = PCG_SRC.read_text()
+
+        # The carried numerator is solver state, seeded at init and updated per step.
+        self.assertRegex(src, r"real\(kind=dp\)\s*::\s*rz\b")  # pcg_t component
+        init = re.search(r"subroutine pcg_init\(.*?end subroutine", src, re.S | re.I).group(0)
+        self.assertIn("this%rz = dot_product(this%r, this%y)", init)
+
+        step = re.search(r"subroutine pcg_step\(this\).*?end subroutine", src, re.S | re.I).group(0)
+        self.assertIn("rz = this%rz", step)
+        self.assertIn("this%rz = rz_new", step)
+        # Only rz_new is formed from a residual dot product; rz is carried.  Strip
+        # Fortran comments first so prose mentioning the formula is not matched.
+        step_code = "\n".join(line.split("!", 1)[0] for line in step.splitlines())
+        self.assertNotRegex(step_code, r"\brz\s*=\s*dot_product\(r,\s*y\)")
+        # The blanket per-iteration scan of every state vector is gone; fail-closed
+        # detection now rides on the scalar reductions plus the targeted guards.
+        self.assertNotIn("any(.not. ieee_is_finite(this%b))", step_code)
+
     def test_pcg_optimize_only_writes_optional_outputs_when_present(self):
         """Reusable PCG driver must not assign absent optional err/cgiters outputs."""
         src = PCG_SRC.read_text()
