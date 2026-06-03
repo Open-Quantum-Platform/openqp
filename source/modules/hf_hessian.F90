@@ -298,15 +298,31 @@ contains
       ! supplies the remaining DFT exchange-correlation functional.
       if (infos%control%hamilton == 20) then
         block
-          use dft, only: dft_initialize, dftclean
+          use dft, only: dft_initialize, dftclean, dftexcor
           use mod_dft_gridint_grad, only: derexc_blk
           use mod_dft_molgrid, only: dft_grid_t
           type(dft_grid_t) :: mg
-          real(dp), allocatable :: dap(:,:), dedp(:,:), dedm(:,:), dHxc(:,:)
-          real(dp) :: hx, tele, tkin
-          integer :: yy2, ccy, kcy, nang
+          real(dp), allocatable :: dap(:,:), dedp(:,:), dedm(:,:)
+          real(dp), allocatable :: mop(:,:), frp(:), frm(:), dFxc(:,:), dFoo(:,:)
+          real(dp), allocatable :: tmpn(:,:), dHse(:,:), dHt3(:,:)
+          real(dp) :: hx, tele, tkin, eexc
+          integer :: yy2, ccy, kcy, nang, x2, kk2, ll2
           hx = 1.0d-3; nang = maxval(basis%am) + 2
-          allocate(dap(nbf,nbf), dedp(3,natom), dedm(3,natom), dHxc(ncart,ncart))
+          ! XC contribution split exactly as PySCF hessian/rks but realised through
+          ! the OpenQP moving-grid XC machinery so it stays consistent with the
+          ! OpenQP numerical Hessian:
+          !   dHse : skeleton + density-response (term1).  Central FD of the analytic
+          !          XC gradient (derexc) along the relaxed path R+lambda, P+lambda*dP.
+          !          This is the genuine total derivative d/dR[g_XC(R,P(R))] of the
+          !          OpenQP XC gradient, so the moving-grid weight derivatives are
+          !          handled identically to the SCF/numerical-gradient convention.
+          !   dHt3 : -2 Tr[s1oo^x (vxc^y+fxc[dP^y])_oo], the XC part of the
+          !          energy-weighted (mo_e1) term, from the FD of the XC Fock
+          !          matrix (dftexcor) along the same relaxed orbital path.
+          allocate(dap(nbf,nbf), dedp(3,natom), dedm(3,natom))
+          allocate(mop(nbf,nbf), frp(nbf2), frm(nbf2), dFxc(nbf,nbf), dFoo(nocc,nocc))
+          allocate(tmpn(nbf,nocc), dHse(ncart,ncart), dHt3(ncart,ncart))
+          dHt3 = 0.0_dp
           ! warm-up to flush any stale grid state left by the CPHF solver
           call dft_initialize(infos, basis, mg); call dftclean(infos)
           do yy2 = 1, ncart
@@ -314,9 +330,11 @@ contains
             basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
             call basis%init_shell_centers()
             call dft_initialize(infos, basis, mg)
-            dap = pfull + hx*dPx(:,:,yy2); dedp = 0.0_dp
+            dap = pfull + hx*dPx(:,:,yy2); dedp = 0.0_dp            ! skeleton + density response
             call derexc_blk(basis, mg, dap, dap, dedp, tele, tkin, nang, nbf, &
                             infos%dft%grid_density_cutoff, .false., infos)
+            mop = mo_a; mop(:,1:nocc) = mo_a(:,1:nocc) + hx*dCx(:,:,yy2)
+            call dftexcor(basis, mg, 1, frp, frp, mop, mop, nbf, nbf2, eexc, tele, tkin, infos)
             call dftclean(infos)
             basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) - 2*hx
             call basis%init_shell_centers()
@@ -324,13 +342,27 @@ contains
             dap = pfull - hx*dPx(:,:,yy2); dedm = 0.0_dp
             call derexc_blk(basis, mg, dap, dap, dedm, tele, tkin, nang, nbf, &
                             infos%dft%grid_density_cutoff, .false., infos)
+            mop = mo_a; mop(:,1:nocc) = mo_a(:,1:nocc) - hx*dCx(:,:,yy2)
+            call dftexcor(basis, mg, 1, frm, frm, mop, mop, nbf, nbf2, eexc, tele, tkin, infos)
             call dftclean(infos)
             basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
             call basis%init_shell_centers()
-            dHxc(:,yy2) = reshape((dedp - dedm)/(2*hx), [ncart])
+            dHse(:,yy2) = reshape((dedp - dedm)/(2*hx), [ncart])
+            ! term3: -2 s1oo^x (vxc^y + fxc[dP^y])_oo
+            call unpack_from_packed((frp - frm)/(2*hx), dFxc, nbf)
+            call dgemm('n','n',nbf,nocc,nbf,1.0_dp,dFxc,nbf,mo_a,nbf,0.0_dp,tmpn,nbf)
+            call dgemm('t','n',nocc,nocc,nbf,1.0_dp,mo_a,nbf,tmpn,nbf,0.0_dp,dFoo,nocc)
+            do x2 = 1, ncart
+              do ll2 = 1, nocc
+                do kk2 = 1, nocc
+                  dHt3(x2,yy2) = dHt3(x2,yy2) + 2.0_dp*s1oo(kk2,ll2,x2)*dFoo(kk2,ll2)
+                end do
+              end do
+            end do
           end do
-          hess_native = hess_native + 0.5_dp*(dHxc + transpose(dHxc))
-          deallocate(dap, dedp, dedm, dHxc)
+          hess_native = hess_native + 0.5_dp*(dHse + transpose(dHse)) &
+                                    + 0.5_dp*(dHt3 + transpose(dHt3))
+          deallocate(dap, dedp, dedm, mop, frp, frm, dFxc, dFoo, tmpn, dHse, dHt3)
         end block
       end if
 

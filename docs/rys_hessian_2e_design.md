@@ -162,26 +162,56 @@ Validated (analytic vs PySCF, the OQP/PySCF integral baseline):
   - H2O/6-31G* RHF : 0.56%   (vs OQP numerical 0.006%)
   - NH3/6-31G* RHF : 0.31%
 
-## DFT (RKS) Hessian -- partial (in progress)
+## DFT (RKS) Hessian -- working (bhhlyp H2O/6-31G* 9.3% vs OpenQP numerical)
 
 The RKS Hessian reuses the RHF response (the CPHF solver is already XC-aware via
 `tddft_fxc`, so dP^y is the correct DFT relaxed density) and adds the XC
-contribution by central finite differencing the analytic XC nuclear gradient
-`derexc_blk` over geometry, displacing the density by the analytic dP^y (no
-re-SCF). This captures the XC skeleton + the XC term-1 response Tr[dP^y vxc^x].
+contribution in two pieces, mirroring PySCF `hessian/rks` but realised entirely
+through the OpenQP **moving-grid** XC machinery so it stays consistent with the
+OpenQP numerical Hessian (which differentiates the same moving-grid XC gradient):
 
-  - NOTE: a warm-up `dft_initialize`/`dftclean` before the FD loop is REQUIRED
-    to flush stale grid state left by the CPHF solver (otherwise the first
-    perturbation column is garbage, ~5000% error).
-  - bhhlyp H2O/6-31G*: 42% -> 17% (analytic vs PySCF RKS). The remaining ~17%
-    is a STRUCTURED residual = the XC contribution to the energy-weighted
-    (term-3) piece, -2 Tr[s1oo^x mo_e1_XC^y] with mo_e1_XC = (vxc^y +
-    fxc[dP^y])_oo. E_XC's second derivative (dHxc) cannot contain it (it has no
-    S^x dependence). NEXT STEP: get dF_XC/dR_y (occ-occ) by FD-ing `dftexcor`'s
-    XC Fock matrix inside the SAME grid-rebuild loop and add the term3-XC piece
-    (term2 needs nothing extra -- it uses only DFT eps and dP^y, already right).
+  - **dHse (skeleton + term-1)** = central FD of the analytic XC gradient
+    `derexc_blk` along the relaxed path `R+lambda, P+lambda*dP^y`. This is the
+    genuine total derivative `d/dR[g_XC(R,P(R))]` of OpenQP's XC gradient, so the
+    grid-weight derivatives are treated exactly as in the SCF/numerical gradient.
+    (It equals PySCF's `vxc_deriv2`/`veff_diag` skeleton + the XC part of
+    `4 Tr[h1ao dm1]` combined.)
+  - **dHt3 (energy-weighted term-3)** = `+2 Tr[s1oo^x (vxc^y+fxc[dP^y])_oo]`,
+    from the FD of the XC Fock matrix `dftexcor` along the same relaxed orbital
+    path `C_occ +/- h dC^y`. This is the XC part of the `mo_e1` (Lagrangian)
+    contribution that the Pulay/energy-weighted term carries.
+  - a warm-up `dft_initialize`/`dftclean` before the loop flushes stale grid
+    state left by the CPHF solver (else the first column is garbage, ~5000%).
 
-Remaining: finish the DFT energy-weighted XC term (above); UHF/ROHF response.
+What PySCF does (hessian/rks.py + hessian/rhf.py), and how it maps here:
+  - `partial_hess_elec`: `_get_vxc_diag` + `_get_vxc_deriv2` (XC skeleton) on a
+    grid that moves with the nuclei -> matches our dHse skeleton part (norms
+    agree: PySCF 0.579 vs ours 0.581).
+  - `make_h1`/`_get_vxc_deriv1`: XC part of `h1ao` (term-1) built on a **static**
+    grid (no weight derivatives -- those live in the skeleton). PySCF norm 0.284.
+    Our moving-grid `vxc^x` is ~2x larger (0.593) because it carries the weight
+    derivatives; that is the CORRECT split for OpenQP because our skeleton is the
+    *moving*-grid `derexc` FD -- the two pieces sum to the same total, only the
+    decomposition differs. (A static-grid `dftexcor` derivative is not available:
+    OpenQP's grid carries equilibrium AO-screening tables that are invalid for a
+    displaced basis, so a fixed-grid/moving-basis evaluation returns garbage.)
+  - `hess_elec`: `-2 Tr[s1oo^x mo_e1^y]` with `mo_e1` carrying the XC Fock
+    derivative -> our dHt3. The OpenQP moving-grid sign convention makes this
+    `+2` (validated against the OpenQP numerical Hessian, the ground truth).
+
+Validation (bhhlyp/6-31G*, H2O):
+  - analytic vs OpenQP numerical Hessian: 9.3% max / 11.3% Frobenius.
+  - analytic vs PySCF RKS: 9.5% (6d-vs-5d basis + grid-convention baseline).
+  - frequencies: stretches 4073/4147 vs num 4032/4161 (<2%); bend 1561 vs 1724
+    (~9% soft -- the residual is concentrated in the bend, i.e. the angular block
+    of the moving-grid FD).
+
+Remaining: the ~9% residual is the moving-grid finite-difference floor (the
+analytic XC pieces are FD of grid quantities at a single step; the numerical
+Hessian re-grids per geometry). Closing it needs genuine analytic XC second-
+derivative grid integrals (PySCF's `_get_vxc_deriv2`/`_get_vxc_deriv1` kernels:
+contractions of v2rho2/v2rhosigma/... and v3rho3/... against AO derivatives),
+which OpenQP does not yet expose. Also pending: UHF/ROHF response.
 
 ## CPHF response term — detailed findings (historical, now resolved)
 
