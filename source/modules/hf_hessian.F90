@@ -287,6 +287,53 @@ contains
       end do
 
       hess_native = 0.5_dp*(hresp + transpose(hresp))
+
+      ! --- DFT exchange-correlation second-derivative contribution -----------
+      ! The XC part of the Hessian is obtained by central finite differencing the
+      ! analytic XC nuclear gradient (derexc_blk) over geometry while displacing
+      ! the density by the analytic relaxed density derivative dP^y. This adds
+      ! both the XC skeleton (d2Exc/dR2 at fixed density) and the XC response
+      ! (through dP^y) in one shot, with no re-SCF. The HF-exchange fraction is
+      ! already in the Coulomb/exchange terms above (hfscale); derexc_blk
+      ! supplies the remaining DFT exchange-correlation functional.
+      if (infos%control%hamilton == 20) then
+        block
+          use dft, only: dft_initialize, dftclean
+          use mod_dft_gridint_grad, only: derexc_blk
+          use mod_dft_molgrid, only: dft_grid_t
+          type(dft_grid_t) :: mg
+          real(dp), allocatable :: dap(:,:), dedp(:,:), dedm(:,:), dHxc(:,:)
+          real(dp) :: hx, tele, tkin
+          integer :: yy2, ccy, kcy, nang
+          hx = 1.0d-3; nang = maxval(basis%am) + 2
+          allocate(dap(nbf,nbf), dedp(3,natom), dedm(3,natom), dHxc(ncart,ncart))
+          ! warm-up to flush any stale grid state left by the CPHF solver
+          call dft_initialize(infos, basis, mg); call dftclean(infos)
+          do yy2 = 1, ncart
+            ccy = mod(yy2-1,3)+1; kcy = (yy2-1)/3+1
+            basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mg)
+            dap = pfull + hx*dPx(:,:,yy2); dedp = 0.0_dp
+            call derexc_blk(basis, mg, dap, dap, dedp, tele, tkin, nang, nbf, &
+                            infos%dft%grid_density_cutoff, .false., infos)
+            call dftclean(infos)
+            basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) - 2*hx
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mg)
+            dap = pfull - hx*dPx(:,:,yy2); dedm = 0.0_dp
+            call derexc_blk(basis, mg, dap, dap, dedm, tele, tkin, nang, nbf, &
+                            infos%dft%grid_density_cutoff, .false., infos)
+            call dftclean(infos)
+            basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
+            call basis%init_shell_centers()
+            dHxc(:,yy2) = reshape((dedp - dedm)/(2*hx), [ncart])
+          end do
+          hess_native = hess_native + 0.5_dp*(dHxc + transpose(dHxc))
+          deallocate(dap, dedp, dedm, dHxc)
+        end block
+      end if
+
       deallocate(sflat, hflat, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
                  Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
     end block

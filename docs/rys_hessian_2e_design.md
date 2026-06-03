@@ -156,8 +156,32 @@ OQP/PySCF integral-convention baseline, not a Hessian error). Frequencies match
 to <0.1 cm^-1.
 
 Implemented in `hf_hessian` using `fock_deriv_contract` (=1/2 Tr[M G[P]^x]) and
-`fock_jk` (G[dP^y]) for all 2e traces. Remaining: UHF/ROHF response, and the
-XC second-derivative skeleton (DFT/bhhlyp).
+`fock_jk` (G[dP^y]) for all 2e traces.
+
+Validated (analytic vs PySCF, the OQP/PySCF integral baseline):
+  - H2O/6-31G* RHF : 0.56%   (vs OQP numerical 0.006%)
+  - NH3/6-31G* RHF : 0.31%
+
+## DFT (RKS) Hessian -- partial (in progress)
+
+The RKS Hessian reuses the RHF response (the CPHF solver is already XC-aware via
+`tddft_fxc`, so dP^y is the correct DFT relaxed density) and adds the XC
+contribution by central finite differencing the analytic XC nuclear gradient
+`derexc_blk` over geometry, displacing the density by the analytic dP^y (no
+re-SCF). This captures the XC skeleton + the XC term-1 response Tr[dP^y vxc^x].
+
+  - NOTE: a warm-up `dft_initialize`/`dftclean` before the FD loop is REQUIRED
+    to flush stale grid state left by the CPHF solver (otherwise the first
+    perturbation column is garbage, ~5000% error).
+  - bhhlyp H2O/6-31G*: 42% -> 17% (analytic vs PySCF RKS). The remaining ~17%
+    is a STRUCTURED residual = the XC contribution to the energy-weighted
+    (term-3) piece, -2 Tr[s1oo^x mo_e1_XC^y] with mo_e1_XC = (vxc^y +
+    fxc[dP^y])_oo. E_XC's second derivative (dHxc) cannot contain it (it has no
+    S^x dependence). NEXT STEP: get dF_XC/dR_y (occ-occ) by FD-ing `dftexcor`'s
+    XC Fock matrix inside the SAME grid-rebuild loop and add the term3-XC piece
+    (term2 needs nothing extra -- it uses only DFT eps and dP^y, already right).
+
+Remaining: finish the DFT energy-weighted XC term (above); UHF/ROHF response.
 
 ## CPHF response term — detailed findings (historical, now resolved)
 
