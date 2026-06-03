@@ -75,12 +75,18 @@ contains
       end if
       call hf_hessian_uhf(infos)
       return
-    else if (infos%control%scftype >= 3) then
-      call show_message('Native ROHF HF/DFT analytic Hessian is not yet '// &
-        'available: the open-shell skeleton and the UHF CPHF solver are '// &
-        'validated, but the ROHF orbital-response assembly (which uses a '// &
-        'different rotation space) is still being wired. Use [hess] '// &
-        'type=numerical for ROHF references.', WITH_ABORT)
+    else if (infos%control%scftype == 3) then
+      if (infos%control%hamilton >= 20) then
+        call show_message('Native ROHF DFT (ROKS) analytic Hessian is not yet '// &
+          'available (the open-shell f_xc response is not finite-difference '// &
+          'validated). Use [hess] type=numerical for ROKS references.', WITH_ABORT)
+      end if
+      call hf_hessian_rohf(infos)
+      return
+    else if (infos%control%scftype > 3) then
+      call show_message('Native analytic Hessian supports RHF/RKS, UHF (HF) '// &
+        'and ROHF (HF) references only for this scftype. Use [hess] '// &
+        'type=numerical.', WITH_ABORT)
     end if
 
     basis => infos%basis
@@ -887,6 +893,350 @@ contains
                probe, gx, d0a, d0b, gfull, Gd0, dpck, fpck, &
                A2, tGP, Mi, hresp, hess_native)
   end subroutine hf_hessian_uhf
+
+!###############################################################################
+
+  subroutine hf_hessian_rohf(infos)
+    ! Native open-shell (ROHF) analytic HF Hessian (HF only).
+    !
+    ! ROHF uses a SINGLE MO set with a docc/socc/virt partition, so the orbital
+    ! response is solved over the ROHF rotation space (cphf_solve_rohf) rather
+    ! than the UHF spin blocks.  The ROHF energy has the same functional form as
+    ! UHF in terms of (Pa, Pb), so the Hessian decomposes identically into
+    !   H = E_nn'' + skeleton(1e total density + open-shell W, 2e via grd2_uhf)
+    !       + response(orbital relaxation),
+    ! where the skeleton + nuclear repulsion are exactly hess_skel_open.
+    !
+    ! The orbital-relaxation response is evaluated SEMI-NUMERICALLY, reusing the
+    ! validated analytic open-shell gradient: with the relaxed orbital derivative
+    ! dC^b (from the ROHF CPHF amplitudes) the response is the central finite
+    ! difference, AT FIXED GEOMETRY, of the density/Lagrangian-dependent gradient
+    ! along the orbital path C_occ +/- h dC^b:
+    !   H^resp(:,b) = [ g(C + h dC^b) - g(C - h dC^b) ] / 2h ,
+    !   g(C') = grad_ee_overlap(W') + grad_ee_kinetic(P') + grad_en(P')
+    !           + grad_2e(Pa', Pb') ,  W' = -(Pa' Fa' Pa' + Pb' Fb' Pb') ,
+    ! with Fa'/Fb' rebuilt from the perturbed densities (Hcore + fock_jk).  This
+    ! captures BOTH the relaxed-density and the energy-weighted (W) response
+    ! through the gradient's own W build (eijden convention), so no ROHF-specific
+    ! Lagrangian-derivative algebra is required.  The CPHF right-hand side is the
+    ! non-canonical Pulay form (orbital energies replaced by the full Fock occ-occ
+    ! blocks), reducing to the validated UHF RHS in the canonical limit.
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+      OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, OQP_Hcore, OQP_hf_hessian, TA_TYPE_REAL64
+    use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
+    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn, &
+      grad_ee_overlap, grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
+    use grd2, only: grd2_driver, grd2_compute_data_t
+    use hf_gradient_mod, only: grd2_uhf_compute_data_t
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
+    use io_constants, only: iw
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+
+    type(basis_set), pointer :: basis
+    real(dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), focka(:), fockb(:), hcore(:)
+    real(dp), contiguous, pointer :: hess_store(:,:)
+    real(dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
+    real(dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
+    real(dp), allocatable :: foo(:,:), foo_b(:,:), faMO(:,:), fbMO(:,:)
+    real(dp), allocatable :: scr(:,:), tmp(:,:), SxMO(:,:), hxMO(:,:), probe(:,:)
+    real(dp), allocatable :: ga2e(:,:,:), gb2e(:,:,:)
+    real(dp), allocatable :: d0a(:,:), d0b(:,:), dpck(:,:), fpck(:,:), gfull(:,:), Gd0(:,:)
+    real(dp), allocatable :: ba(:,:), bb(:,:), bvec(:,:), uvec(:,:)
+    real(dp), allocatable :: xa(:,:), xb(:,:), dCa(:,:), dCb(:,:), gp(:,:), gm(:,:)
+    real(dp), allocatable :: zneff(:), hess_native(:,:), hresp(:,:)
+    real(dp), allocatable :: faop(:), fbop(:)
+    real(dp) :: hfscale, hstep, gx(3, size(infos%atoms%xyz,2))
+    integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: i, j, a, icart, kc, cc, x, mu, nu
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2)
+    ncart = 3*natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    hfscale = 1.0_dp
+    hstep = 1.0d-3
+
+    write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian CPHF response prepass'
+    write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
+      ' noccb=', noccb, ' rhs=', ncart, ' rotdim=', ltot
+    write(iw,'(A)') '  Storing native OpenQP open-shell (ROHF) HF analytic Hessian in OQP::hf_hessian.'
+
+    if (ncart <= 0 .or. ltot <= 0) then
+      write(iw,'(A)') '  ROHF CPHF prepass skipped: empty rotation/nuclear space.'
+      return
+    end if
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
+    call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf))
+    call unpack_matrix(dma, pa); call unpack_matrix(dmb, pb); ptot = pa + pb
+    allocate(zneff(natom)); zneff = basis%atoms%zn - basis%ecp_zn_num
+
+    ! derivative integrals (normalized into the bfnrm/MO convention)
+    allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
+    call der_overlap_matrix(basis, dSa)
+    call der_kinetic_matrix(basis, dTa)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, basis%atoms%zn, dVa)
+    block
+      integer :: kc2, cc2, mu2, nu2
+      do kc2 = 1, natom
+        do cc2 = 1, 3
+          do nu2 = 1, nbf
+            do mu2 = 1, nbf
+              dSa(mu2,nu2,cc2,kc2) = dSa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dTa(mu2,nu2,cc2,kc2) = dTa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dVa(mu2,nu2,cc2,kc2) = dVa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+            end do
+          end do
+        end do
+      end do
+    end block
+
+    ! occ-occ Fock blocks (MO) of the converged spin Fock matrices (non-canonical)
+    allocate(scr(nbf,nbf), tmp(nbf,nbf), SxMO(nbf,nbf), hxMO(nbf,nbf))
+    allocate(faMO(nbf,nbf), fbMO(nbf,nbf), foo(nocca,nocca), foo_b(noccb,noccb))
+    call unpack_matrix(focka, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, faMO)
+    call unpack_matrix(fockb, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, fbMO)
+    foo = faMO(1:nocca,1:nocca); foo_b = fbMO(1:noccb,1:noccb)
+
+    ! 2e response-Fock skeleton  G^{s,x}[P]_ai  for all coordinates (per spin)
+    allocate(ga2e(nvira,nocca,ncart), gb2e(nvirb,noccb,ncart), source=0.0_dp)
+    allocate(probe(nbf,nbf))
+    do a = 1, nvira
+      do i = 1, nocca
+        do mu = 1, nbf
+          do nu = 1, nbf
+            probe(mu,nu) = 0.5_dp*( mo(mu,nocca+a)*mo(nu,i) + mo(mu,i)*mo(nu,nocca+a) )
+          end do
+        end do
+        gx = 0.0_dp
+        call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
+        ga2e(a,i,:) = reshape(gx, [ncart])
+      end do
+    end do
+    do a = 1, nvirb
+      do i = 1, noccb
+        do mu = 1, nbf
+          do nu = 1, nbf
+            probe(mu,nu) = 0.5_dp*( mo(mu,noccb+a)*mo(nu,i) + mo(mu,i)*mo(nu,noccb+a) )
+          end do
+        end do
+        gx = 0.0_dp
+        call fock_deriv_contract_os(infos, basis, ptot, pb, probe, hfscale, gx)
+        gb2e(a,i,:) = reshape(gx, [ncart])
+      end do
+    end do
+
+    ! ===== CPHF right-hand sides (non-canonical Pulay form), packed =====
+    allocate(d0a(nbf,nbf), d0b(nbf,nbf), gfull(nbf,nbf), Gd0(nbf,nbf))
+    allocate(dpck(nbf2,2), fpck(nbf2,2))
+    allocate(ba(nvira,nocca), bb(nvirb,noccb))
+    allocate(bvec(ltot,ncart), uvec(ltot,ncart), source=0.0_dp)
+    icart = 0
+    do kc = 1, natom
+      do cc = 1, 3
+        icart = icart + 1
+        call mo_transform(mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMO)
+        call mo_transform(mo, dTa(:,:,cc,kc)+dVa(:,:,cc,kc), nbf, scr, tmp, hxMO)
+
+        ! reorthonormalization densities d0^s = -sum_ij S^x_ij C_i C_j (per spin occ)
+        d0a = 0.0_dp; d0b = 0.0_dp
+        do i = 1, nocca
+          do j = 1, nocca
+            do mu = 1, nbf
+              do nu = 1, nbf
+                d0a(mu,nu) = d0a(mu,nu) - SxMO(i,j)*mo(mu,i)*mo(nu,j)
+              end do
+            end do
+          end do
+        end do
+        do i = 1, noccb
+          do j = 1, noccb
+            do mu = 1, nbf
+              do nu = 1, nbf
+                d0b(mu,nu) = d0b(mu,nu) - SxMO(i,j)*mo(mu,i)*mo(nu,j)
+              end do
+            end do
+          end do
+        end do
+        call pack_matrix(d0a, dpck(:,1)); call pack_matrix(d0b, dpck(:,2))
+        fpck = 0.0_dp
+        call fock_jk(basis, d=dpck, f=fpck, scale_exch=hfscale, infos=infos)
+
+        ! alpha block:  B^a_ai = -(h^x + G2e + G[d0])_ai + sum_j S^x_aj foo_ji
+        call unpack_from_packed(fpck(:,1), gfull, nbf)
+        call mo_transform(mo, gfull, nbf, scr, tmp, Gd0)
+        do i = 1, nocca
+          do a = 1, nvira
+            ba(a,i) = -(hxMO(i,nocca+a) + ga2e(a,i,icart) + Gd0(i,nocca+a)) &
+                    + dot_product(SxMO(nocca+a,1:nocca), foo(1:nocca,i))
+          end do
+        end do
+        ! beta block
+        call unpack_from_packed(fpck(:,2), gfull, nbf)
+        call mo_transform(mo, gfull, nbf, scr, tmp, Gd0)
+        do i = 1, noccb
+          do a = 1, nvirb
+            bb(a,i) = -(hxMO(i,noccb+a) + gb2e(a,i,icart) + Gd0(i,noccb+a)) &
+                    + dot_product(SxMO(noccb+a,1:noccb), foo_b(1:noccb,i))
+          end do
+        end do
+        call rohf_pack_trial(bvec(:,icart), ba, bb, nbf, nocca, noccb)
+      end do
+    end do
+
+    call cphf_solve_rohf(infos, ncart, bvec, uvec)
+
+    ! ===== semi-numerical orbital-relaxation response =====
+    ! Build the relaxed alpha/beta orbital derivatives independently, UHF-style:
+    !   dCa_i = sum_a C^{vir_a}_a xa(a,i) - 1/2 sum_{j in docc+socc} S^x_ji C_j
+    !   dCb_i = sum_a C^{vir_b}_a xb(a,i) - 1/2 sum_{j in docc}      S^x_ji C_j
+    ! The socc-docc rotation lives in xb (socc is beta-virtual), so it relaxes Pb
+    ! and leaves Pa invariant (it is an alpha occ-occ rotation) -- exactly the
+    ! ROHF physics, with no socc-docc cross term needed in dCa.
+    allocate(xa(nvira,nocca), xb(nvirb,noccb), dCa(nbf,nocca), dCb(nbf,noccb))
+    allocate(gp(3,natom), gm(3,natom), hresp(ncart,ncart), source=0.0_dp)
+    allocate(faop(nbf2), fbop(nbf2))
+    do x = 1, ncart
+      cc = mod(x-1,3)+1; kc = (x-1)/3+1
+      call rohf_unpack_trial(uvec(:,x), xa, xb, nbf, nocca, noccb)
+      call mo_transform(mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMO)
+
+      dCa = 0.0_dp
+      do i = 1, nocca
+        do a = 1, nvira
+          dCa(:,i) = dCa(:,i) + mo(:,nocca+a)*xa(a,i)
+        end do
+        do j = 1, nocca
+          dCa(:,i) = dCa(:,i) - 0.5_dp*SxMO(j,i)*mo(:,j)
+        end do
+      end do
+      dCb = 0.0_dp
+      do i = 1, noccb
+        do a = 1, nvirb
+          dCb(:,i) = dCb(:,i) + mo(:,noccb+a)*xb(a,i)
+        end do
+        do j = 1, noccb
+          dCb(:,i) = dCb(:,i) - 0.5_dp*SxMO(j,i)*mo(:,j)
+        end do
+      end do
+
+      call resp_grad( 1.0_dp, gp)
+      call resp_grad(-1.0_dp, gm)
+      hresp(:,x) = reshape((gp - gm)/(2.0_dp*hstep), [ncart])
+    end do
+
+    ! The central difference of the ELECTRONIC gradient over geometry AND the
+    ! relaxed orbital path already contains the full electronic Hessian (skeleton
+    ! + orbital-relaxation response); only the (orbital-independent) nuclear
+    ! repulsion second derivative is added analytically.
+    allocate(hess_native(ncart,ncart))
+    hess_native = 0.5_dp*(hresp + transpose(hresp))
+    call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
+
+    call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
+      comment='Native OpenQP open-shell (ROHF) HF analytic Hessian matrix')
+    call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
+    hess_store = hess_native
+    write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
+
+    deallocate(pa, pb, ptot, dSa, dTa, dVa, foo, foo_b, faMO, fbMO, scr, tmp, &
+               SxMO, hxMO, probe, ga2e, gb2e, d0a, d0b, dpck, fpck, gfull, Gd0, &
+               ba, bb, bvec, uvec, xa, xb, dCa, dCb, gp, gm, hresp, zneff, &
+               hess_native, faop, fbop)
+
+  contains
+
+    !> Electronic gradient (1e + 2e + Pulay-W; NO nuclear repulsion) at the
+    !> geometry displaced by sgn*hstep in coordinate (cc,kc) AND the alpha-occ
+    !> MOs displaced by sgn*hstep*dC (host-associated cc,kc,dC,hstep).  Central
+    !> differencing over sgn therefore captures the electronic skeleton AND the
+    !> orbital-relaxation response together: the one-electron Hamiltonian, all
+    !> gradient integrals, the densities Pa'/Pb' and the energy-weighted density
+    !> W' = -(Pa' Fa' Pa' + Pb' Fb' Pb') (eijden convention, Fock rebuilt as
+    !> Hcore' + fock_jk) are all evaluated at the displaced point, so no
+    !> ROHF-specific Lagrangian-derivative algebra is needed.
+    subroutine resp_grad(sgn, gout)
+      use int1, only: omp_hst
+      real(dp), intent(in) :: sgn
+      real(dp), intent(out) :: gout(:,:)
+      real(dp), allocatable :: cocc(:,:), pap(:,:), pbp(:,:)
+      real(dp), allocatable, target :: paP_tri(:), pbP_tri(:)
+      real(dp), allocatable :: ptP_tri(:), wlag(:), ta(:), hc(:), sm(:), tm(:)
+      real(dp) :: tol
+      integer :: ii, ij
+      class(grd2_compute_data_t), allocatable :: gc
+
+      allocate(cocc(nbf,nocca), pap(nbf,nbf), pbp(nbf,nbf))
+      allocate(paP_tri(nbf2), pbP_tri(nbf2), ptP_tri(nbf2), wlag(nbf2), ta(nbf2))
+      allocate(hc(nbf2), sm(nbf2), tm(nbf2))
+
+      ! displace geometry and rebuild the one-electron Hamiltonian there
+      basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + sgn*hstep
+      call basis%init_shell_centers()
+      tol = log(10.0d0)*20.0_dp
+      call omp_hst(basis, basis%atoms%xyz, basis%atoms%zn - basis%ecp_zn_num, &
+                   hc, sm, tm, logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
+
+      ! relaxed orbitals -> perturbed densities and spin Fock matrices
+      cocc(:,1:nocca) = mo(:,1:nocca) + sgn*hstep*dCa
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, cocc, nbf, cocc, nbf, 0.0_dp, pap, nbf)
+      cocc(:,1:noccb) = mo(:,1:noccb) + sgn*hstep*dCb
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, cocc, nbf, cocc, nbf, 0.0_dp, pbp, nbf)
+      call pack_matrix(pap, paP_tri); call pack_matrix(pbp, pbP_tri)
+      ptP_tri = paP_tri + pbP_tri
+      dpck(:,1) = paP_tri; dpck(:,2) = pbP_tri
+      fpck = 0.0_dp
+      call fock_jk(basis, d=dpck, f=fpck, scale_exch=hfscale, infos=infos)
+      faop = hc + fpck(:,1); fbop = hc + fpck(:,2)
+      call orthogonal_transform_sym(nbf, nbf, faop, pap, nbf, ta)
+      call orthogonal_transform_sym(nbf, nbf, fbop, pbp, nbf, wlag)
+      wlag = -wlag - ta
+      ij = 0
+      do ii = 1, nbf
+        ij = ij + ii
+        wlag(ij) = 0.5_dp*wlag(ij)
+      end do
+
+      gout = 0.0_dp
+      call grad_ee_overlap(basis, wlag, gout)
+      call grad_ee_kinetic(basis, ptP_tri, gout)
+      call grad_en_hellman_feynman(basis, basis%atoms%xyz, zneff, ptP_tri, gout)
+      call grad_en_pulay(basis, basis%atoms%xyz, zneff, ptP_tri, gout)
+      gc = grd2_uhf_compute_data_t( da = paP_tri, db = pbP_tri, hfscale = hfscale, nbf = nbf )
+      call gc%init()
+      call grd2_driver(infos, basis, gout, gc)
+      call gc%clean()
+
+      ! restore geometry
+      basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - sgn*hstep
+      call basis%init_shell_centers()
+
+      deallocate(cocc, pap, pbp, paP_tri, pbP_tri, ptP_tri, wlag, ta, hc, sm, tm)
+    end subroutine resp_grad
+
+  end subroutine hf_hessian_rohf
 
 !###############################################################################
 

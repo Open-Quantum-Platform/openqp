@@ -964,7 +964,13 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             if functional:
                 return "unsupported_scf_type", "Native open-shell (UHF) analytic Hessian currently supports HF only; the UKS f_xc response is not finite-difference validated. Use [hess] type=numerical for UKS references."
             return "supported", "Native OpenQP open-shell (UHF) HF ground-state analytic Hessian dispatch is enabled."
-        return "unsupported_scf_type", "Native HF analytic Hessian supports RHF/RKS and UHF (HF) references; ROHF analytic Hessian is not yet wired. Use [hess] type=numerical for ROHF references."
+        # ROHF: the native ROHF CPHF solver (cphf_solve_rohf) is validated, and
+        # the ROHF analytic-Hessian kernel (hf_hessian_rohf) reproduces the RHF
+        # Hessian exactly in the closed-shell (offset=0) limit, but the
+        # singly-occupied (socc) rotation blocks of the response are still being
+        # finite-difference validated. Keep ROHF analytic Hessians gated to
+        # numerical for production until the socc-block response lands.
+        return "unsupported_scf_type", "Native ROHF analytic Hessian is still being finite-difference validated (the singly-occupied rotation blocks of the orbital response); the ROHF CPHF solver is validated. Use [hess] type=numerical for ROHF references."
 
     if method == "tdhf":
         if td_type == "mrsf":

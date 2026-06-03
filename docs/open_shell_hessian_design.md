@@ -101,13 +101,63 @@ an exactly symmetric analytic matrix:
 See `tests/test_uhf_hessian.py`.  Open-shell DFT (UKS) is still gated off: the
 UKS `f_xc` response compiles but is not finite-difference validated.
 
-## Stage 4 — ROHF CPHF response (TODO, hardest)
+## Stage 4 — ROHF CPHF response (PARTIAL: solver done, Hessian socc-block WIP)
 
 ROHF uses a single MO set with a doubly-occupied / singly-occupied / virtual
 partition, so the rotation space and coupling differ from UHF; it is **not** a
-relabelled UHF path (cf. the MRSF caveat in the original design note). The
-skeleton (Stage 1) already covers ROHF; only the response differs. Plan: build
-the ROHF orbital Hessian on the docc-socc, docc-virt, socc-virt rotation blocks
-(or a semicanonical UHF-like effective-Fock formulation), validate the solver
-against a static property, then assemble and validate against the ROHF
-numerical Hessian.
+relabelled UHF path. The skeleton (Stage 1) already covers ROHF; only the
+response differs.
+
+### Stage 4a — ROHF CPHF solver (DONE, validated)
+
+`cphf_mod::cphf_solve_rohf` solves `H theta = B` over the docc/socc/virt rotation
+space (`rohf_pack_trial`/`rohf_unpack_trial`, the layout of
+`scf_converger::pack_rohf_trial`: socc-docc, virt-docc, virt-socc blocks). The
+orbital-Hessian action replicates the validated TRAH ROHF operator
+(`scf_converger::calc_h_op`): per spin `Fvv x - x Foo` with `Foo`/`Fvv` the
+occ-occ / vir-vir blocks of the converged spin Fock matrices (`OQP_FOCK_A/B`) in
+the MO basis (full blocks, so non-canonical orbitals are handled), plus the
+response Fock from `scf_addons::get_response_packed`. Diagonal
+orbital-energy-gap preconditioner.
+
+Validated by `cphf_rohf_polarizability_selftest`: a closed-shell molecule run as
+ROHF (offset = n_socc = 0) reduces the rotation space to virt-docc and the ROHF
+orbital Hessian to (twice) the RHF one; the ROHF isotropic polarizability is
+4.02713548 vs the validated RHF 4.02713607 (~6e-7). See
+`tests/test_cphf_rohf_polarizability.py`.
+
+### Stage 4b — ROHF analytic Hessian (WIP, gated)
+
+`hf_hessian_mod::hf_hessian_rohf` (dispatched for `scftype == 3`, HF only)
+assembles the Hessian as `E_nn'' + skeleton + response`. The ROHF energy has the
+same functional form as UHF in (Pa, Pb), so the response is evaluated
+**semi-numerically**, reusing the validated analytic open-shell gradient: with
+the CPHF-relaxed alpha/beta orbital derivatives `dCa`/`dCb` (built UHF-style from
+the unpacked rotation `xa`/`xb`; the socc-docc rotation lives in `xb` since socc
+is beta-virtual, relaxing Pb and leaving Pa invariant), the full electronic
+Hessian column is the central finite difference, over BOTH geometry and the
+relaxed orbital path, of the electronic gradient
+(`grad_ee_overlap(W') + grad_ee_kinetic(P') + grad_en(P') + grad_2e(Pa',Pb')`,
+with `W' = -(Pa' Fa' Pa' + Pb' Fb' Pb')`, `Fa'/Fb'` rebuilt as `Hcore' +
+fock_jk` at the displaced geometry). Nuclear repulsion is added analytically
+(`hess_nn`). The non-canonical CPHF RHS replaces the orbital energies by the full
+Fock occ-occ blocks (`Foo^s`), reducing to the validated UHF RHS in the
+canonical limit.
+
+**Status / validation.** The closed-shell (offset=0) limit is EXACT: H2O run as
+ROHF reproduces the RHF numerical Hessian to ~3e-5 (so the virt-docc RHS,
+response, `dCa`/`dCb` build and the geometry+orbital FD are all correct). For a
+genuine open shell the singly-occupied rotation blocks of the **CPHF
+right-hand side** (socc-docc and virt-socc, via the non-canonical Foo-coupling /
+reorthonormalization terms) still carry a residual error: OH/STO-3G `max|an -
+num| ~ 3e-3` (localized to the degenerate-pi in-plane component) and bent
+H2O+/STO-3G `~ 8e-3` (~1%, in-plane block; the bond-axis/z block is exact to
+~1e-5). The bug is isolated to the socc-block RHS terms (the solver and the
+offset=0 path are exact). Until those are corrected and finite-difference
+validated, the Python input checker gates ROHF analytic Hessians to
+`type=numerical`; the kernel remains reachable (dispatched) for development.
+
+Remaining work: derive/validate the exact non-canonical CPHF RHS for the
+socc-docc and virt-socc blocks (the Foo-coupling and reorthonormalization-density
+terms), then re-enable the input-checker capability and add a `test_rohf_hessian`
+finite-difference regression mirroring `test_uhf_hessian`.
