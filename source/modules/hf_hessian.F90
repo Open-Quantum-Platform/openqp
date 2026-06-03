@@ -134,6 +134,60 @@ contains
           end do
         end do
 
+        ! --- XC contribution to the CPKS right-hand side (DFT only) -------------
+        ! The A-matrix (cphf_apbx) includes the XC kernel fxc, so the perturbation
+        ! RHS must carry BOTH XC pieces or the relaxed response dPx is wrong (the
+        ! HF response, ~2x too large for DFT):
+        !   (i)  skeleton  dVxc/dR  (fixed orbitals, basis+grid move)  -> in F0x
+        !   (ii) fxc[d0], d0 = reorthonormalization density            -> in Gd0
+        ! Both enter B_ai with the SAME (minus) sign as the other Fock terms, so
+        ! they are captured together by ONE central FD of the XC Fock matrix
+        ! (dftexcor) along the combined path: geometry R +/- h AND occupied MOs
+        ! reorthonormalized by dmo_i = -1/2 sum_j C_j S^x_ji.  dftexcor handles all
+        ! density/spin scale factors internally, so no manual convention factors.
+        if (infos%control%hamilton == 20) then
+          block
+            use dft, only: dft_initialize, dftclean, dftexcor
+            use mod_dft_molgrid, only: dft_grid_t
+            type(dft_grid_t) :: mgr
+            real(dp), allocatable :: dmoR(:,:), mop(:,:), frp(:), frm(:), dVxcR(:,:), hxcR(:,:)
+            real(dp) :: hxr, telr, tknr, exr
+            integer :: ir, jr
+            allocate(dmoR(nbf,nocc), mop(nbf,nbf), frp(nbf2), frm(nbf2), dVxcR(nbf,nbf), hxcR(nbf,nbf))
+            hxr = 1.0d-3
+            dmoR = 0.0_dp
+            do ir = 1, nocc
+              do jr = 1, nocc
+                dmoR(:,ir) = dmoR(:,ir) - 0.5_dp*mo_a(:,jr)*Sx(jr,ir)
+              end do
+            end do
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mgr)
+            mop = mo_a; mop(:,1:nocc) = mo_a(:,1:nocc) + hxr*dmoR
+            frp = 0.0_dp
+            call dftexcor(basis, mgr, 1, frp, frp, mop, mop, nbf, nbf2, exr, telr, tknr, infos)
+            call dftclean(infos)
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - 2*hxr
+            call basis%init_shell_centers()
+            call dft_initialize(infos, basis, mgr)
+            mop = mo_a; mop(:,1:nocc) = mo_a(:,1:nocc) - hxr*dmoR
+            frm = 0.0_dp
+            call dftexcor(basis, mgr, 1, frm, frm, mop, mop, nbf, nbf2, exr, telr, tknr, infos)
+            call dftclean(infos)
+            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
+            call basis%init_shell_centers()
+            call unpack_from_packed((frp - frm)/(2*hxr), dVxcR, nbf)
+            call mo_transform(mo_a, dVxcR, nbf, scr, col, hxcR)
+            do a = 1, nvir
+              do i = 1, nocc
+                F0x(i,nocc+a) = F0x(i,nocc+a) + hxcR(i,nocc+a)
+              end do
+            end do
+            deallocate(dmoR, mop, frp, frm, dVxcR, hxcR)
+          end block
+        end if
+
         d0 = 0.0_dp
         do i = 1, nocc
           do j = 1, nocc
@@ -355,7 +409,7 @@ contains
             do x2 = 1, ncart
               do ll2 = 1, nocc
                 do kk2 = 1, nocc
-                  dHt3(x2,yy2) = dHt3(x2,yy2) + 2.0_dp*s1oo(kk2,ll2,x2)*dFoo(kk2,ll2)
+                  dHt3(x2,yy2) = dHt3(x2,yy2) - 2.0_dp*s1oo(kk2,ll2,x2)*dFoo(kk2,ll2)
                 end do
               end do
             end do
