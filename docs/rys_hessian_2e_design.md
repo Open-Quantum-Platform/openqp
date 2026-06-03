@@ -130,3 +130,40 @@ A few-percent error in either large term explains the 0.37 residual.
 - Resolve the assembly factor above (focused: instrument each term vs a
   reference decomposition, e.g. PySCF skeleton/response split).
 - XC ∂² skeleton (DFT/bhhlyp only).
+
+## CPHF response term — detailed findings (the remaining ~27%)
+
+The skeleton (1e + 2e + nn) is now **proven exact**: `hess_skel_selftest`
+finite-differences the full frozen-density gradient (physical energy-weighted
+density W, not a placeholder) and matches the analytic skeleton to 1.9e-7. So
+the entire residual error of the total HF Hessian is localised to the **CPHF
+orbital-relaxation response** term in `hf_hessian` (`matmul(bvec,uvec)`).
+
+Established facts:
+- `bvec`/`uvec` are correct: `cphf_dpdx_selftest` validates that U^y
+  reproduces the relaxed density derivative dP^y (O(h²), ~1e-6).
+- `cphf_solve` is `(A+B)U=B` with `A_diag=(e_a−e_i)`; calibrated by the
+  polarizability path `α=−4 Σ μ U` (factor 4 for this solver).
+- `fock_deriv_contract(P,M)` returns **½·Tr[M G[P]^x]** (the validated `bvec`
+  uses `2*gx`); any full trace built from it needs a factor 2.
+- `eijden` (OQP energy-weighted density): `W_OQP = −2 Σ_i ε_i C_iμ C_iν`, and
+  the gradient overlap term is `+Tr[W_OQP S^x]`.
+
+The correct closed-shell form is the density-derivative interchange
+    H^resp_xy = Tr[dP^y F^x] + Tr[dW^y S^x],   F^x = h^x + G[P]^x
+(derived from differentiating the converged gradient
+ G^x = Tr[P h^x] + ½Tr[P G[P]^x] + Vnn^x + Tr[W_OQP S^x] through P and W).
+This was implemented (build dP^y, dW^y from the validated dC^y; all 2e traces
+via fock_deriv_contract×2 and fock_jk) and reproduces the individual pieces,
+but a least-squares fit of the **known** target response (Hn − exact skeleton)
+to all six computed sub-pieces still leaves a **21% structural residual** — i.e.
+a 7th term, orthogonal to every U/dP-based piece, is missing. The pieces are
+each ≈ a multiple of `sym(bvec^T uvec)` (e.g. `Tr[dP^y F^x] ≈ −4·R`), and the
+target ≈ `+2.5·R` with corr 0.81, so neither the bare `matmul(bvec,uvec)`
+(currently shipped, ~27%) nor the density-derivative form (~37%) is complete.
+
+Next step: identify the missing structural term (candidate: a pure
+overlap-derivative reorthonormalization contribution Σ_ij ε_i S^x_ik S^y_kj not
+captured by dW^y, or the second-order dP^x·dP^y coupling through the orbital
+Hessian). The numerical target response is fully available
+(`Hn − hess_skel_selftest`), so this is a bounded reverse-engineering task.

@@ -143,6 +143,14 @@ contains
 
     call cphf_solve(infos, ncart, bvec, uvec)
 
+    ! CPHF orbital-relaxation response (interchange form). NOTE: this term is
+    ! still approximate -- see docs/rys_hessian_2e_design.md. The skeleton
+    ! (1e+2e+nn) is exact (validated by hess_skel_selftest); the remaining
+    ! analytic-vs-numerical error (~27% on H2O/6-31G*) is localised entirely to
+    ! this response contraction. bvec/uvec themselves are validated
+    ! (cphf_dpdx_selftest); the open item is the correct closed-shell Hessian
+    ! contraction of them (the density-derivative form Tr[dP^y F^x]+Tr[dW^y S^x]
+    ! reproduces the validated pieces but is missing a structural contribution).
     allocate(hess_native(ncart,ncart), source=0.0_dp)
     hess_native = matmul(transpose(bvec), uvec)
     hess_native = 0.5_dp*(hess_native + transpose(hess_native))
