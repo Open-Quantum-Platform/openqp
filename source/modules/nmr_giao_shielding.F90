@@ -47,7 +47,17 @@ contains
 !>  coupled response is exchange-only for the imaginary/antisymmetric first-order
 !>  density, scaled by the exact-exchange fraction c_x), and contracts the
 !>  resulting first-order density with the PSO operator to form the paramagnetic
-!>  shielding.  Results are written as machine-parseable records to the log so
+!>  shielding.
+!>
+!>  DFT (RKS/UKS/ROKS): the first-order Hamiltonian uses the exact-exchange-scaled
+!>  (c_x) two-electron GIAO derivative and the exchange-only coupled response (the
+!>  semilocal XC kernel does not contribute to the imaginary/antisymmetric
+!>  magnetic response).  The explicit London derivative of the semilocal XC
+!>  potential (the PySCF "vxc_giao" term in h1) is NOT included -- a common
+!>  approximation; for high-c_x hybrids it is small.  Pure-exchange (HF, c_x=1)
+!>  is exact.
+!>
+!>  Results are written as machine-parseable records to the log so
 !>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT
 !>  ungating production nmr_gauge=giao.
 !>
