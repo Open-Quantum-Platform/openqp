@@ -70,15 +70,44 @@ module cphf_mod
     logical :: dft = .false.
   end type
 
+  !> Opaque data for the open-shell (ROHF) orbital-Hessian action.  ROHF uses a
+  !> SINGLE MO set with a docc / socc / virt partition, so the rotation vector is
+  !> laid out over the three non-redundant blocks (socc-docc, virt-docc,
+  !> virt-socc) exactly as scf_converger::pack_rohf_trial.  The action mirrors
+  !> the validated TRAH ROHF orbital Hessian (scf_converger::calc_h_op):
+  !>   y = pack( Fvv^a xa - xa Foo^a + [C^a^T G^a C^a]_vo ,
+  !>             Fvv^b xb - xb Foo^b + [C^b^T G^b C^b]_vo )
+  !> with Foo/Fvv the occ-occ / vir-vir blocks of the converged spin Fock
+  !> matrices in the MO basis and G^s the response Fock from get_response_packed.
+  type :: cphf_cg_data_rohf
+    type(information), pointer :: infos => null()
+    type(basis_set), pointer :: basis => null()
+    type(dft_grid_t), pointer :: molgrid => null()
+    real(kind=dp), pointer :: mo(:,:) => null()
+    real(kind=dp), pointer :: foo(:,:) => null()     ! alpha occ-occ Fock (MO)
+    real(kind=dp), pointer :: fvv(:,:) => null()     ! alpha vir-vir Fock (MO)
+    real(kind=dp), pointer :: foo_b(:,:) => null()   ! beta  occ-occ Fock (MO)
+    real(kind=dp), pointer :: fvv_b(:,:) => null()   ! beta  vir-vir Fock (MO)
+    real(kind=dp), pointer :: xminv(:) => null()     ! diagonal preconditioner
+    integer :: nbf = 0
+    integer :: nocca = 0, noccb = 0, nvira = 0, nvirb = 0, offset = 0, ltot = 0
+    real(kind=dp) :: scale_exch = 1.0_dp
+    logical :: dft = .false.
+  end type
+
   private
   public :: cphf_solve
   public :: cphf_solve_uhf
+  public :: cphf_solve_rohf
+  public :: rohf_pack_trial, rohf_unpack_trial
   public :: cphf_static_polarizability
   public :: cphf_static_polarizability_C
   public :: cphf_polarizability_selftest
   public :: cphf_polarizability_selftest_C
   public :: cphf_uhf_polarizability_selftest
   public :: cphf_uhf_polarizability_selftest_C
+  public :: cphf_rohf_polarizability_selftest
+  public :: cphf_rohf_polarizability_selftest_C
 
 contains
 
@@ -679,5 +708,383 @@ contains
 
     deallocate(mints, dipfull, dmo, scr, bvec, uvec, mua, mub)
   end subroutine cphf_uhf_polarizability_selftest
+
+!###############################################################################
+!  Open-shell (ROHF) CPHF solver
+!###############################################################################
+
+!> @brief Pack ROHF alpha/beta vir-occ rotation matrices into a single vector.
+!>   Layout (nocc_a >= nocc_b, offset = nocc_a - nocc_b = n_socc):
+!>     block 1 (socc-docc): xb(1:offset, 1:noccb)
+!>     block 2 (virt-docc): xa(1:nvira, 1:noccb) + xb(offset+1:, 1:noccb)
+!>     block 3 (virt-socc): xa(1:nvira, noccb+1:nocca)
+!>   Mirrors scf_converger::pack_rohf_trial.
+  subroutine rohf_pack_trial(x, xa, xb, nbf, nocca, noccb)
+    real(kind=dp), intent(out) :: x(:)
+    real(kind=dp), intent(in)  :: xa(:,:), xb(:,:)
+    integer, intent(in) :: nbf, nocca, noccb
+    integer :: nvira, offset, k, iv, a
+    nvira = nbf - nocca
+    offset = nocca - noccb
+    x = 0.0_dp
+    k = 0
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, noccb
+          k = k + 1; x(k) = xb(iv, a)
+        end do
+      end do
+    end if
+    do iv = 1, nvira
+      do a = 1, noccb
+        k = k + 1; x(k) = xa(iv, a) + xb(offset + iv, a)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvira
+        do a = 1, offset
+          k = k + 1; x(k) = xa(iv, noccb + a)
+        end do
+      end do
+    end if
+  end subroutine rohf_pack_trial
+
+!> @brief Inverse of rohf_pack_trial (scf_converger::unpack_rohf_trial).
+  subroutine rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
+    real(kind=dp), intent(in)  :: x(:)
+    real(kind=dp), intent(out) :: xa(:,:), xb(:,:)
+    integer, intent(in) :: nbf, nocca, noccb
+    integer :: nvira, offset, k, iv, a
+    nvira = nbf - nocca
+    offset = nocca - noccb
+    xa = 0.0_dp; xb = 0.0_dp
+    k = 0
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, noccb
+          k = k + 1; xb(iv, a) = x(k)
+        end do
+      end do
+    end if
+    do iv = 1, nvira
+      do a = 1, noccb
+        k = k + 1
+        xa(iv, a) = x(k)
+        xb(offset + iv, a) = x(k)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvira
+        do a = 1, offset
+          k = k + 1; xa(iv, noccb + a) = x(k)
+        end do
+      end do
+    end if
+  end subroutine rohf_unpack_trial
+
+!> @brief Solve the open-shell (ROHF) CPHF equations  H theta = B  over the
+!>   docc/socc/virt rotation space (layout: rohf_pack_trial).  The orbital
+!>   Hessian action replicates the validated TRAH ROHF operator
+!>   (scf_converger::calc_h_op): per spin the orbital-energy-difference part
+!>   Fvv x - x Foo (full MO Fock blocks, so non-canonical orbitals are handled)
+!>   plus the response Fock from the trial rotation density (get_response_packed,
+!>   scftype>=2 -> Coulomb from the spin-summed density, exchange same-spin).
+  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit)
+    use oqp_tagarray_driver, only: tagarray_get_data, &
+        OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
+    use mathlib, only: unpack_matrix
+    use dft, only: dft_initialize
+    real(kind=dp), parameter :: default_tol = 1.0d-9
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nrhs
+    real(kind=dp), intent(in) :: bvec(:,:)
+    real(kind=dp), intent(out) :: uvec(:,:)
+    real(kind=dp), intent(in), optional :: tol
+    integer, intent(in), optional :: maxit
+
+    type(basis_set), pointer :: basis
+    type(dft_grid_t), target :: molgrid
+    type(cphf_cg_data_rohf), target :: cgdata
+    type(pcg_t) :: pcg
+
+    real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
+    real(kind=dp), allocatable, target :: foo(:,:), fvv(:,:), foo_b(:,:), fvv_b(:,:)
+    real(kind=dp), allocatable, target :: xminv(:)
+    real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: i, a, k, irhs, iter, mxit
+    logical :: dft
+    real(kind=dp) :: cnv, scale_exch, d
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    dft = infos%control%hamilton == 20
+    cnv = default_tol; if (present(tol)) cnv = tol
+    mxit = 100; if (present(maxit)) mxit = maxit
+    if (mxit < ltot + 5) mxit = ltot + 5
+
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
+
+    if (dft) call dft_initialize(infos, basis, molGrid)
+
+    ! MO-basis occ-occ / vir-vir blocks of the converged spin Fock matrices
+    allocate(foo(nocca,nocca), fvv(nvira,nvira), foo_b(noccb,noccb), fvv_b(nvirb,nvirb))
+    allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf))
+    call unpack_matrix(focka, fao)
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, w3, nbf)
+    foo = w3(1:nocca,1:nocca); fvv = w3(nocca+1:nbf,nocca+1:nbf)
+    call unpack_matrix(fockb, fao)
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, w3, nbf)
+    foo_b = w3(1:noccb,1:noccb); fvv_b = w3(noccb+1:nbf,noccb+1:nbf)
+
+    ! diagonal preconditioner (orbital-energy-difference gaps, response neglected)
+    allocate(xminv(ltot))
+    k = 0
+    if (offset > 0) then
+      do i = 1, offset                       ! socc-docc
+        do a = 1, noccb
+          k = k + 1; d = fvv_b(i,i) - foo_b(a,a); xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
+        end do
+      end do
+    end if
+    do i = 1, nvira                          ! virt-docc (alpha + beta share)
+      do a = 1, noccb
+        k = k + 1
+        d = (fvv(i,i) - foo(a,a)) + (fvv_b(offset+i,offset+i) - foo_b(a,a))
+        xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
+      end do
+    end do
+    if (offset > 0) then
+      do i = 1, nvira                        ! virt-socc
+        do a = 1, offset
+          k = k + 1; d = fvv(i,i) - foo(noccb+a,noccb+a); xminv(k) = 1.0_dp/sign(max(abs(d),1.0d-8), d)
+        end do
+      end do
+    end if
+
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%dft%HFscale
+
+    cgdata%infos => infos
+    cgdata%basis => basis
+    cgdata%molgrid => molgrid
+    cgdata%mo => mo
+    cgdata%foo => foo; cgdata%fvv => fvv
+    cgdata%foo_b => foo_b; cgdata%fvv_b => fvv_b
+    cgdata%xminv => xminv
+    cgdata%nbf = nbf
+    cgdata%nocca = nocca; cgdata%noccb = noccb
+    cgdata%nvira = nvira; cgdata%nvirb = nvirb
+    cgdata%offset = offset; cgdata%ltot = ltot
+    cgdata%scale_exch = scale_exch
+    cgdata%dft = dft
+
+    write(iw,'(/3x,60("-"))')
+    write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+    write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
+    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+    write(iw,'(3x,60("-"))')
+
+    do irhs = 1, nrhs
+      call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
+                    dat=cgdata, tol=sqrt(abs(cnv)))
+      do iter = 1, mxit
+        if (pcg%errcode /= PCG_OK) exit
+        call pcg%step()
+      end do
+      write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+              irhs, iter - 1, pcg%error**2
+      call flush(iw)
+      uvec(:,irhs) = pcg%x
+      call pcg%clean()
+    end do
+
+    deallocate(foo, fvv, foo_b, fvv_b, xminv, fao, w2, w3)
+  end subroutine cphf_solve_rohf
+
+!###############################################################################
+
+!> @brief ROHF orbital-Hessian action y = H x (see cphf_solve_rohf).
+  subroutine cphf_apbx_rohf(y, x, dat)
+    use mathlib, only: pack_matrix, unpack_matrix
+    use scf_addons, only: get_response_packed
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_rohf), pointer :: p
+
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
+    real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
+    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, i, j
+
+    call c_f_pointer(dat, p)
+    nbf = p%nbf; nbf2 = nbf*(nbf+1)/2
+    nocca = p%nocca; noccb = p%noccb; nvira = p%nvira; nvirb = p%nvirb
+
+    allocate(xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb))
+    allocate(work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), v(nbf,nbf))
+    allocate(dm_tri(nbf2,2), pfock(nbf2,2), source=0.0_dp)
+
+    call rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
+
+    ! orbital-energy-difference part:  Fvv x - x Foo  (per spin)
+    call dgemm('n','n', nvira, nocca, nvira, 1.0_dp, p%fvv, nvira, xa, nvira, 0.0_dp, x2a, nvira)
+    call dgemm('n','n', nvira, nocca, nocca, -1.0_dp, xa, nvira, p%foo, nocca, 1.0_dp, x2a, nvira)
+    call dgemm('n','n', nvirb, noccb, nvirb, 1.0_dp, p%fvv_b, nvirb, xb, nvirb, 0.0_dp, x2b, nvirb)
+    call dgemm('n','n', nvirb, noccb, noccb, -1.0_dp, xb, nvirb, p%foo_b, noccb, 1.0_dp, x2b, nvirb)
+
+    ! orbital-rotation density (alpha):  dm = Cv xa Co^T + (Cv xa Co^T)^T
+    work2 = 0.0_dp
+    call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, p%mo(:,nocca+1:nbf), nbf, xa, nvira, 0.0_dp, work2, nbf)
+    call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, work2, nbf, p%mo(:,1:nocca), nbf, 0.0_dp, work3, nbf)
+    do i = 1, nbf
+      do j = 1, nbf
+        dm(i,j) = work3(i,j) + work3(j,i)
+      end do
+    end do
+    call pack_matrix(dm, dm_tri(:,1))
+    ! beta
+    work2 = 0.0_dp
+    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, p%mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, work2, nbf)
+    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, work2, nbf, p%mo(:,1:noccb), nbf, 0.0_dp, work3, nbf)
+    do i = 1, nbf
+      do j = 1, nbf
+        dm(i,j) = work3(i,j) + work3(j,i)
+      end do
+    end do
+    call pack_matrix(dm, dm_tri(:,2))
+
+    ! response Fock from the trial density (open-shell: J[dPa+dPb] - cx K[dP^s])
+    call get_response_packed(p%basis, p%infos, p%molgrid, p%mo, dm_tri, pfock, p%mo)
+
+    ! add the MO vir-occ block of the response Fock (alpha)
+    call unpack_matrix(pfock(:,1), v)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
+    x2a = x2a + work3(nocca+1:nbf, 1:nocca)
+    ! beta
+    call unpack_matrix(pfock(:,2), v)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
+    x2b = x2b + work3(noccb+1:nbf, 1:noccb)
+
+    call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
+
+    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock)
+  end subroutine cphf_apbx_rohf
+
+!###############################################################################
+
+  subroutine cphf_precond_rohf(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_rohf), pointer :: p
+    call c_f_pointer(dat, p)
+    y = p%xminv*x
+  end subroutine cphf_precond_rohf
+
+!###############################################################################
+
+  subroutine cphf_rohf_polarizability_selftest_C(c_handle) bind(C, name="cphf_rohf_polarizability_selftest")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call cphf_rohf_polarizability_selftest(inf)
+  end subroutine cphf_rohf_polarizability_selftest_C
+
+!> @brief Validate the ROHF CPHF solver via the static dipole polarizability.
+!>   For a closed-shell molecule run as ROHF (multiplicity 1, offset=0) the
+!>   rotation space reduces to the virt-docc block and the ROHF orbital Hessian
+!>   reduces to (twice) the RHF one; the resulting static polarizability must
+!>   equal the validated closed-shell cphf_static_polarizability.  This is the
+!>   unambiguous check for the solver plumbing, the operator and the packing.
+!>   Written to /tmp/cphf_rohf_polar.out.
+  subroutine cphf_rohf_polarizability_selftest(infos)
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
+    use int1, only: multipole_integrals
+    use mathlib, only: unpack_matrix
+    type(information), target, intent(inout) :: infos
+
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: mo(:,:)
+    real(kind=dp), allocatable :: mints(:,:), dipfull(:,:), dmo(:,:), scr(:,:)
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), bvec(:,:), uvec(:,:)
+    real(kind=dp) :: origin(3), alpha(3,3)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: q, pq, i, a, uu
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+
+    allocate(mints(nbf2,19), source=0.0_dp)
+    origin = 0.0_dp
+    call multipole_integrals(basis, mints, origin, 3)
+
+    allocate(dipfull(nbf,nbf), dmo(nbf,nbf), scr(nbf,nbf))
+    allocate(xa(nvira,nocca), xb(nvirb,noccb))
+    allocate(bvec(ltot,3), uvec(ltot,3), source=0.0_dp)
+
+    ! dipole RHS over the rotation space (single ROHF MO set; vir-occ blocks)
+    do q = 1, 3
+      call unpack_matrix(mints(:,q), dipfull)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, dipfull, nbf, 0.0_dp, scr, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, scr, nbf, mo, nbf, 0.0_dp, dmo, nbf)
+      do i = 1, nocca
+        do a = 1, nvira
+          xa(a,i) = -dmo(nocca+a, i)
+        end do
+      end do
+      do i = 1, noccb
+        do a = 1, nvirb
+          xb(a,i) = -dmo(noccb+a, i)
+        end do
+      end do
+      call rohf_pack_trial(bvec(:,q), xa, xb, nbf, nocca, noccb)
+    end do
+
+    call cphf_solve_rohf(infos, 3, bvec, uvec)
+
+    ! alpha_pq = -2 sum over rotation space of mu^p . theta^q  (mu = -bvec)
+    alpha = 0.0_dp
+    do q = 1, 3
+      do pq = 1, 3
+        alpha(pq,q) = -2.0_dp*sum( (-bvec(:,pq)) * uvec(:,q) )
+      end do
+    end do
+
+    open(newunit=uu, file='/tmp/cphf_rohf_polar.out', status='replace', action='write')
+    write(uu,'(a)') 'open-shell (ROHF) CPHF static dipole polarizability (a.u.):'
+    do i = 1, 3
+      write(uu,'(3f16.8)') alpha(i,1:3)
+    end do
+    write(uu,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
+    close(uu)
+
+    deallocate(mints, dipfull, dmo, scr, xa, xb, bvec, uvec)
+  end subroutine cphf_rohf_polarizability_selftest
 
 end module cphf_mod
