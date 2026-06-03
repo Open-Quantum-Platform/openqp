@@ -251,8 +251,15 @@ contains
       f(:, ii) = f(:, ii) + vpcm(:)
     end do
 
-    ! Provisional PCM energy term reported to the SCF total energy.
-    e_pcm = esolv
+    ! PCM reaction-field (solvation) energy. The apparent surface charges q_cav
+    ! (from the consistent multipole-source ddX solve) are contracted with the
+    ! EXACT total solute potential at the cavity points (phi_cav = nuclear +
+    ! electronic), not with ddX's truncated multipole esolv. This recovers an
+    ! independent ddPCM reaction-field energy to <0.5 kcal/mol for H2O and NH3
+    ! (see docs/solvent_pcm_independent_validation.md). The -0.5 factor is the
+    ! linear-response polarization factor, consistent with the finite-difference
+    ! relation dE/dphi = -0.5*q_cav verified by pcm_fock_scale_fd_diagnostic.
+    e_pcm = PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
 
     ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --
     ! Exposes, in Fortran, the quantities needed to validate the QM SCF PCM
@@ -288,7 +295,8 @@ contains
       phi_source_delta_rms = huge(1.0_dp)
       phi_source_delta_max = huge(1.0_dp)
     end if
-    write(iw,'(1x,"PCM diag e_pcm=",ES22.14)') esolv
+    write(iw,'(1x,"PCM diag e_pcm=",ES22.14)') e_pcm
+    write(iw,'(1x,"PCM diag esolv_multipole=",ES22.14)') esolv
     write(iw,'(1x,"PCM diag half_tr_dv=",ES22.14)') half_tr_dv
     write(iw,'(1x,"PCM diag q_cav_sum=",ES22.14)') q_cav_sum
     write(iw,'(1x,"PCM diag q_cav_absnorm=",ES22.14)') q_cav_absnorm

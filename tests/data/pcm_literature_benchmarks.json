@@ -96,10 +96,10 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.009401191,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.017415,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
       "status": "verified",
       "benchmark_label": "H2O RHF/HF/6-31g* ddPCM water",
@@ -131,7 +131,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.017456,
+      "diff_kcal_per_mol": -0.026,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "h2o_rhf_bhhlyp_631gs_water",
@@ -268,10 +271,10 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.0123825685,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.014255,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
       "status": "verified",
       "benchmark_label": "NH3 RHF/HF/6-31g* ddPCM water",
@@ -303,7 +306,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.01504,
+      "diff_kcal_per_mol": -0.493,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "nh3_rhf_bhhlyp_631gs_water",
@@ -440,10 +446,10 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.0042004457,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.012881,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
       "status": "verified",
       "benchmark_label": "HF RHF/HF/6-31g* ddPCM water",
@@ -475,7 +481,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.012499,
+      "diff_kcal_per_mol": 0.24,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "hf_rhf_bhhlyp_631gs_water",
@@ -611,10 +620,10 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.0030256125,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.000495,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
       "status": "verified",
       "benchmark_label": "CH4 RHF/HF/6-31g* ddPCM water",
@@ -646,7 +655,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.000972,
+      "diff_kcal_per_mol": -0.299,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "ch4_rhf_bhhlyp_631gs_water",
@@ -785,10 +797,10 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.0011016781,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.003072,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
       "status": "verified",
       "benchmark_label": "CO RHF/HF/6-31g* ddPCM water",
@@ -820,7 +832,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.003092,
+      "diff_kcal_per_mol": -0.013,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "co_rhf_bhhlyp_631gs_water",
@@ -954,12 +969,12 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": 0.0007106327,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.010584,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "diagnostic_unphysical_pending",
+      "status": "verified",
       "benchmark_label": "CO2 RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -187.6328313431,
       "empirical_verification": {
@@ -990,8 +1005,9 @@
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
       "phi_source_vs_exact_max_threshold": 0.1,
-      "prior_status": "verified",
-      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
+      "openqp_e_pcm": -0.010077,
+      "diff_kcal_per_mol": 0.318,
+      "independent_validation": "pass (<=0.6 kcal/mol vs PySCF ddPCM)"
     },
     {
       "id": "co2_rhf_bhhlyp_631gs_water",
@@ -1127,12 +1143,12 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.013087215,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.01944,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_source_truncation_residual",
       "benchmark_label": "HCN RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -92.8736934472,
       "empirical_verification": {
@@ -1162,7 +1178,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.015314,
+      "diff_kcal_per_mol": 2.589,
+      "independent_validation": "residual +2.59 kcal/mol vs PySCF ddPCM; l<=2 multipole-source q_cav truncation"
     },
     {
       "id": "hcn_rhf_bhhlyp_631gs_water",
@@ -1299,12 +1318,12 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": -0.0110473513,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.017194,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "verified",
+      "status": "deferred_source_truncation_residual",
       "benchmark_label": "H2CO RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -113.864905684,
       "empirical_verification": {
@@ -1334,7 +1353,10 @@
         }
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
-      "phi_source_vs_exact_max_threshold": 0.1
+      "phi_source_vs_exact_max_threshold": 0.1,
+      "openqp_e_pcm": -0.013534,
+      "diff_kcal_per_mol": 2.297,
+      "independent_validation": "residual +2.30 kcal/mol vs PySCF ddPCM; l<=2 multipole-source q_cav truncation"
     },
     {
       "id": "h2co_rhf_bhhlyp_631gs_water",
@@ -1475,12 +1497,12 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": 0.0145377463,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.014412,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "diagnostic_unphysical_pending",
+      "status": "deferred_source_truncation_residual",
       "benchmark_label": "CH3OH RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -115.0324298273,
       "empirical_verification": {
@@ -1511,8 +1533,9 @@
       },
       "phi_source_vs_exact_rms_threshold": 0.06591791347,
       "phi_source_vs_exact_max_threshold": 0.162861406576,
-      "prior_status": "verified",
-      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
+      "openqp_e_pcm": -0.018533,
+      "diff_kcal_per_mol": -2.586,
+      "independent_validation": "residual -2.59 kcal/mol vs PySCF ddPCM; l<=2 multipole-source q_cav truncation"
     },
     {
       "id": "ch3oh_rhf_bhhlyp_631gs_water",
@@ -1657,12 +1680,12 @@
       "basis": "6-31g*",
       "epsilon": 78.3553,
       "quantity": "e_pcm",
-      "reference_value": 0.0337703743,
-      "tolerance": 1e-07,
-      "reference_kind": "openqp_ddx_closed_shell_diagnostic_baseline",
-      "reference_source": "OpenQP/ddX closed-shell diagnostic baseline generated on feat/solvent-backend-spike at 4e14577e810e; same Fortran/C ddX protocol as the regression test. This is a trusted regression baseline, not an independent literature value.",
+      "reference_value": -0.02097,
+      "tolerance": 0.001,
+      "reference_kind": "pyscf_ddpcm_independent_with_solvent_e",
+      "reference_source": "PySCF native ddPCM with_solvent.e at matched protocol (ddPCM, eps=78.3553, lmax=8, Lebedev 302, eta=0.1, Bondi-by-Z radii; spherical 6-31g*). Independent code, not OpenQP self-baseline. See scripts/pcm_validate_all.py.",
       "doi_or_url": "n/a; OpenQP/ddX same-branch trusted regression baseline, not a literature value",
-      "status": "diagnostic_unphysical_pending",
+      "status": "deferred_source_truncation_residual",
       "benchmark_label": "CH3CN RHF/HF/6-31g* ddPCM water",
       "vacuum_total_energy": -131.9256090613,
       "empirical_verification": {
@@ -1693,8 +1716,9 @@
       },
       "phi_source_vs_exact_rms_threshold": 0.05,
       "phi_source_vs_exact_max_threshold": 0.1,
-      "prior_status": "verified",
-      "physical_review": "Demoted from 'verified': positive e_pcm is unphysical for the electrostatic solvation of a neutral molecule (the l=2 atom-centered Mulliken-multipole source is inadequate here). Not a valid regression baseline until the source term is improved (higher l / density-projected psi)."
+      "openqp_e_pcm": -0.016806,
+      "diff_kcal_per_mol": 2.613,
+      "independent_validation": "residual +2.61 kcal/mol vs PySCF ddPCM; l<=2 multipole-source q_cav truncation"
     },
     {
       "id": "ch3cn_rhf_bhhlyp_631gs_water",
@@ -1852,26 +1876,23 @@
     ]
   },
   "_independent_validation": {
-    "description": "Independent ddPCM validation via PySCF native ddPCM at matched protocol (model=ddPCM, eps=78.3553, lmax=8, Lebedev order 29 / 302 pts, eta=0.1, Bondi-by-Z radii). Observable: total SCF shift E_solv-E_vac. See docs/solvent_pcm_independent_validation.md and scripts/pcm_independent_ddpcm_validation.py.",
-    "reference_code": "pyscf 2.13 solvent.ddPCM (independent implementation; spherical 6-31g* vs OpenQP cartesian, negligible for the shift)",
-    "results": {
-      "H2O_rhf_631gs_water": {
-        "openqp_shift_hartree": -0.008846,
-        "pyscf_ddpcm_shift_hartree": -0.015343,
-        "gap_kcal_per_mol": 4.08,
-        "ratio_openqp_over_pyscf": 0.577,
-        "physically_validated": false,
-        "note": "~42% too small; l<=2 Mulliken source under-represents water reaction field"
-      },
-      "NH3_rhf_631gs_water": {
-        "openqp_shift_hartree": -0.011821,
-        "pyscf_ddpcm_shift_hartree": -0.012478,
-        "gap_kcal_per_mol": 0.41,
-        "ratio_openqp_over_pyscf": 0.947,
-        "physically_validated": "marginal (within ~5%)",
-        "note": "consistent with independent ddPCM; confirms protocol match + coupling"
-      }
-    },
-    "verdict": "OpenQP ddPCM NOT physically validated: H2O disagrees with independent PySCF ddPCM by 4 kcal/mol. tier2 'verified' rows are regression baselines only."
+    "method": "OpenQP/ddX e_pcm = -0.5*<phi_exact, q_cav> vs PySCF native ddPCM with_solvent.e, matched protocol. See scripts/pcm_validate_all.py and docs/solvent_pcm_independent_validation.md.",
+    "energy_fix": "e_pcm is now the apparent charges contracted with the EXACT solute potential, not ddX's truncated multipole esolv (source/solvent_pcm.F90).",
+    "tolerance_hartree": 0.001,
+    "passed": [
+      "H2O",
+      "NH3",
+      "HF",
+      "CH4",
+      "CO",
+      "CO2"
+    ],
+    "residual": [
+      "HCN 2.589 kcal/mol",
+      "H2CO 2.297 kcal/mol",
+      "CH3OH -2.586 kcal/mol",
+      "CH3CN 2.613 kcal/mol"
+    ],
+    "verdict": "6/10 closed-shell molecules now match an independent ddPCM code to <=0.5 kcal/mol (H2O,NH3,HF,CH4,CO,CO2). Larger/polar molecules (HCN,H2CO,CH3OH,CH3CN) retain ~2.5 kcal/mol from the l<=2 multipole-source q_cav truncation."
   }
 }

@@ -94,7 +94,7 @@ Further investigation changes the recommended fix. Three results:
    error is larger for the compact H₂O cavity than for NH₃ is consistent with
    this near-field explanation.
 
-### Revised recommendation
+### PRIOR recommendation (now partly resolved — see "Resolution" below)
 
 Abandon the multipole-source route; do **not** pursue higher-`l` multipoles
 (they will not converge at the near cavity). The correct fix is the
@@ -108,3 +108,50 @@ Fortran work, not a small source-term tweak; it was therefore **not** attempted
 here in preference to shipping an unvalidated change. The PySCF ddPCM/ddCOSMO
 gate above is the acceptance test for it (ratio ∈ [0.95, 1.05]).
 
+
+## Resolution (energy fix applied)
+
+The root cause was simpler than feared and did **not** require a density-projected
+`psi`. OpenQP had been reporting ddX's **multipole** `esolv` as the PCM energy.
+The apparent surface charges `q_cav` are actually fine; the fix is to report the
+reaction-field energy as the apparent charges contracted with the **exact** total
+solute potential OpenQP already computes:
+
+```
+e_pcm = -0.5 * <phi_cav_exact, q_cav>        (source/solvent_pcm.F90)
+```
+
+This is the standard linear-response PCM polarization energy and is consistent
+with the finite-difference relation `dE/dphi = -0.5*q_cav`. No new integrals, no
+density projection — only arrays already in scope.
+
+### Result (OpenQP `e_pcm` vs PySCF ddPCM `with_solvent.e`, matched protocol)
+
+| molecule | OpenQP | PySCF | diff (kcal/mol) |
+| --- | --- | --- | --- |
+| H₂O | −0.01746 | −0.01742 | −0.03 |
+| CO | −0.00309 | −0.00307 | −0.01 |
+| HF | −0.01250 | −0.01288 | +0.24 |
+| CH₄ | −0.00097 | −0.00050 | −0.30 |
+| CO₂ | −0.01008 | −0.01058 | +0.32 |
+| NH₃ | −0.01504 | −0.01426 | −0.49 |
+| HCN | −0.01531 | −0.01944 | +2.59 |
+| H₂CO | −0.01353 | −0.01719 | +2.30 |
+| CH₃OH | −0.01853 | −0.01441 | −2.59 |
+| CH₃CN | −0.01681 | −0.02097 | +2.61 |
+
+**6 of 10 closed-shell molecules now match an independent ddPCM code to ≤0.5
+kcal/mol** (H₂O, NH₃, HF, CH₄, CO, CO₂) — up from ~45 % error / wrong sign. These
+are promoted to **independent pyscf-validated gates** (`reference_value` = PySCF
+`with_solvent.e`, tolerance 0.001 Eh) in `tests/data/pcm_literature_benchmarks.json`.
+The fix also corrected the previously **positive (unphysical)** CO₂/CH₃CN/CH₃OH
+energies to negative.
+
+### Remaining residual (deferred, separate item)
+
+HCN, H₂CO, CH₃OH, CH₃CN retain a ~2.5 kcal/mol residual. These are larger/more
+extended molecules where the `l ≤ 2` atom-centered multipole **source** (which
+determines `q_cav`) is still too truncated. Improving `q_cav` for them is the
+next step (higher-`l` or exact-density-driven primal solve); the energy
+bookkeeping itself is now correct. Reproduce all of the above with
+`scripts/pcm_validate_all.py`.
