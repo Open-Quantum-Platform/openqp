@@ -100,7 +100,33 @@ Then add `grd2_hess_driver` into `hf_hessian` and validate the **total**
 analytic Hessian against the numerical reference (pure HF first, then DFT once
 the XC ∂² skeleton is added).
 
-## Remaining after this kernel
-- Finish `hess_en` (1e nuclear-attraction ∂²; integrals validated vs PySCF,
-  assembly WIP).
+## Status after wiring into hf_hessian (H2O/6-31G*, pure HF)
+
+Total analytic-vs-numerical HF Hessian error dropped **627% → 27%** once the
+2e skeleton was added. Contribution norms (‖·‖_F) reveal heavy physical
+cancellation:
+
+    response            0.205
+    + nn                9.30      (nuclear repulsion ∂²)
+    + 1e skeleton      10.24      (overlap·W + kinetic·P + en·P)
+    + 2e skeleton       1.40      (ERI ∂², this kernel)  vs numerical 1.77
+
+All four integral second-derivative pieces are individually validated against
+finite difference:
+  - overlap ∂²   1e-10   (hess1_selftest)
+  - kinetic ∂²   4e-9
+  - nucattr ∂²   1.9e-8  (hess_en — NOT WIP after all; matches FD of grad_en)
+  - 2e ERI ∂²    1.4e-7  (grd2_hess_selftest)
+
+So the residual 27% is **not** in the integral kernels — it is an assembly
+issue surfacing after the ~10→1.4 cancellation. Prime suspects, in order:
+  1. CPHF **response** scale/sign — norm 0.205 looks small for H2O; check the
+     closed-shell occupancy factor (2/4) and sign of matmul(bvecᵀ,uvec).
+  2. Energy-weighted (Lagrangian) density **W** from `eijden`, and the sign
+     convention of `hess_ee_overlap(W)` (Pulay term −Σ W d²S).
+A few-percent error in either large term explains the 0.37 residual.
+
+## Remaining
+- Resolve the assembly factor above (focused: instrument each term vs a
+  reference decomposition, e.g. PySCF skeleton/response split).
 - XC ∂² skeleton (DFT/bhhlyp only).
