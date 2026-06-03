@@ -70,19 +70,16 @@ contains
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
-    integer :: nbf, nbf2, nat, nocc, nmo, nvir
+    integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
     integer(4) :: status
-    logical :: is_dft
+    logical :: is_dft, open_shell
     real(kind=dp) :: tol, scale_exch
 
     real(kind=dp), allocatable :: h10p(:,:), s10p(:,:)            ! packed (nbf2,3)
-    real(kind=dp), allocatable :: twoe(:,:,:), vj(:,:,:), vk(:,:,:)
-    real(kind=dp), allocatable :: dm(:,:), dmp(:)
-    real(kind=dp), allocatable :: h1ao(:,:,:), s1ao(:,:,:)        ! full (nbf,nbf,3)
-    real(kind=dp), allocatable :: h1mo(:,:,:), s1mo(:,:,:)        ! (nmo,nocc,3)
-    real(kind=dp), allocatable :: mo1u(:,:,:), mo1c(:,:,:)        ! (nmo,nocc,3)
-    real(kind=dp), allocatable :: pso(:,:,:)                      ! (nbf,nbf,3)
+    real(kind=dp), allocatable :: twoe(:,:,:), twoe2(:,:,:), vj(:,:,:), vk(:,:,:), vkb(:,:,:)
+    real(kind=dp), allocatable :: dm(:,:), dmp(:), dm_b(:,:)
+    real(kind=dp), allocatable :: h1ao(:,:,:), h1ao_b(:,:,:), s1ao(:,:,:) ! (nbf,nbf,3)
     real(kind=dp), allocatable :: coords(:,:), zq(:)
     real(kind=dp), allocatable :: sig_u(:,:,:), sig_c(:,:,:)      ! (3,3,nat)
     real(kind=dp), allocatable :: gdia0(:,:,:), corrpre(:,:,:)    ! GIAO dia pieces
@@ -90,9 +87,9 @@ contains
     real(kind=dp), allocatable :: sig_dia(:,:,:), sig_tot(:,:,:)  ! (3,3,nat)
     real(kind=dp) :: trg0, trc, o0(3)
 
-    real(kind=dp), contiguous, pointer :: dmat_a(:)
-    real(kind=dp), contiguous, pointer :: mo_a(:,:)
-    real(kind=dp), contiguous, pointer :: mo_e(:)
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:)
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
+    real(kind=dp), contiguous, pointer :: mo_e(:), mo_e_b(:)
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -108,8 +105,22 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_e, status)
     call check_status(status, module_name, subroutine_name, OQP_E_MO_A)
 
-    nocc = int(infos%mol_prop%nocc)
+    ! scftype: 1=RHF (closed shell), 2=UHF, 3=ROHF
+    open_shell = infos%control%scftype == 2 .or. infos%control%scftype == 3
     nmo  = size(mo_e)
+    if (open_shell) then
+      nocc   = int(infos%mol_prop%nelec_A)
+      nocc_b = int(infos%mol_prop%nelec_B)
+      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b, status)
+      call check_status(status, module_name, subroutine_name, OQP_DM_B)
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b, status)
+      call check_status(status, module_name, subroutine_name, OQP_VEC_MO_B)
+      call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_e_b, status)
+      call check_status(status, module_name, subroutine_name, OQP_E_MO_B)
+    else
+      nocc   = int(infos%mol_prop%nocc)
+      nocc_b = nocc
+    end if
     nvir = nmo - nocc
 
     is_dft = infos%control%hamilton == 20
@@ -122,51 +133,67 @@ contains
     end do
     zq = infos%atoms%zn - infos%basis%ecp_zn_num
 
-    ! --- Density (full, symmetric) ---
+    ! --- Total density (full + packed).  For RHF OQP_DM_A is already the total
+    !     (closed-shell) density; for UHF/ROHF total = D_alpha + D_beta. ---
     allocate(dm(nbf,nbf), dmp(nbf2), source=0.0d0)
-    dmp = dmat_a
-    call unpack_sym(dmp, dm, nbf)
+    if (open_shell) then
+      allocate(dm_b(nbf,nbf), source=0.0d0)
+      dmp = dmat_a + dmat_b
+      call unpack_sym(dmat_a, dm, nbf)        ! D_alpha
+      call unpack_sym(dmat_b, dm_b, nbf)      ! D_beta
+    else
+      dmp = dmat_a
+      call unpack_sym(dmp, dm, nbf)           ! D_total (closed shell)
+    end if
 
-    ! --- First-order GIAO Hamiltonian h1ao = h10(1e) + h10(2e) ---
+    ! --- One-electron GIAO Hamiltonian h10(1e) and overlap derivative S10 ---
     allocate(h10p(nbf2,3), s10p(nbf2,3), source=0.0d0)
     call giao_h10_core(basis, coords, zq, h10p, debug=.false., logtol=tol)
     call giao_overlap_derivative(basis, s10p, debug=.false., logtol=tol)
-
-    allocate(twoe(3,nbf,nbf), vj(3,nbf,nbf), vk(3,nbf,nbf), source=0.0d0)
-    call giao_h10_twoe_matrix(basis, infos, dm, vj, vk, twoe)
 
     allocate(h1ao(nbf,nbf,3), s1ao(nbf,nbf,3), source=0.0d0)
     do c = 1, 3
       call expand_antisym(h10p(:,c), h1ao(:,:,c), nbf)
       call expand_antisym(s10p(:,c), s1ao(:,:,c), nbf)
-      do i = 1, nbf
-        do j = 1, nbf
-          h1ao(i,j,c) = h1ao(i,j,c) + twoe(c,i,j)
+    end do
+
+    ! --- Two-electron GIAO Fock derivative ---
+    allocate(twoe(3,nbf,nbf), twoe2(3,nbf,nbf), vj(3,nbf,nbf), vk(3,nbf,nbf), source=0.0d0)
+    allocate(sig_u(3,3,nat), sig_c(3,3,nat), source=0.0d0)
+    if (open_shell) then
+      ! Spin-resolved: h1_sigma = h10(1e) + J[D_tot] - cx*K[D_sigma].  giao_h10_
+      ! twoe_matrix returns (vj=J, vk=K, h10) for its input density; call it once
+      ! per density, using a throwaway 'twoe' for the unused J/h10 outputs.
+      allocate(vkb(3,nbf,nbf), h1ao_b(nbf,nbf,3), source=0.0d0)
+      call giao_h10_twoe_matrix(basis, infos, dm+dm_b, vj,  twoe, twoe2) ! vj  = J[D_tot]
+      call giao_h10_twoe_matrix(basis, infos, dm,      twoe, vk,  twoe2) ! vk  = K[D_a]
+      call giao_h10_twoe_matrix(basis, infos, dm_b,    twoe, vkb, twoe2) ! vkb = K[D_b]
+      do c = 1, 3
+        do i = 1, nbf
+          do j = 1, nbf
+            h1ao_b(i,j,c) = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vkb(c,i,j)
+            h1ao(i,j,c)   = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vk(c,i,j)
+          end do
         end do
       end do
-    end do
-
-    ! --- MO transform: h1mo(p,i,x) = sum_mn C(m,p) h1ao(m,n,x) C(n,i_occ) ---
-    allocate(h1mo(nmo,nocc,3), s1mo(nmo,nocc,3), source=0.0d0)
-    do c = 1, 3
-      call ao_to_mo_occ(h1ao(:,:,c), mo_a, h1mo(:,:,c), nbf, nmo, nocc)
-      call ao_to_mo_occ(s1ao(:,:,c), mo_a, s1mo(:,:,c), nbf, nmo, nocc)
-    end do
-
-    ! --- Solve first-order equation (uncoupled and coupled) ---
-    allocate(mo1u(nmo,nocc,3), mo1c(nmo,nocc,3), source=0.0d0)
-    call solve_mo1_uncoupled(h1mo, s1mo, mo_e, nocc, nmo, mo1u)
-    call solve_mo1_coupled(infos, basis, mo_a, h1mo, s1mo, mo_e, nocc, nmo, &
-                           scale_exch, mo1c)
-
-    ! --- Paramagnetic shielding for each nucleus ---
-    allocate(pso(nbf,nbf,3), source=0.0d0)
-    allocate(sig_u(3,3,nat), sig_c(3,3,nat), source=0.0d0)
-    do iat = 1, nat
-      call pso_integrals(basis, coords(:,iat), pso)
-      call para_tensor(mo1u, mo_a, pso, nbf, nmo, nocc, sig_u(:,:,iat))
-      call para_tensor(mo1c, mo_a, pso, nbf, nmo, nocc, sig_c(:,:,iat))
-    end do
+      ! Two independent spin channels (same-spin exchange), each occ_factor = 1.
+      call giao_para_channel(infos, basis, mo_a, mo_e,   nocc,   nmo, nbf, nat, &
+                             coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+      call giao_para_channel(infos, basis, mo_b, mo_e_b, nocc_b, nmo, nbf, nat, &
+                             coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+    else
+      ! Closed shell: h1 = h10(1e) + (J - 0.5 K)[D_tot] (twoe), single channel.
+      call giao_h10_twoe_matrix(basis, infos, dm, vj, vk, twoe)
+      do c = 1, 3
+        do i = 1, nbf
+          do j = 1, nbf
+            h1ao(i,j,c) = h1ao(i,j,c) + twoe(c,i,j)
+          end do
+        end do
+      end do
+      call giao_para_channel(infos, basis, mo_a, mo_e, nocc, nmo, nbf, nat, &
+                             coords, h1ao, s1ao, scale_exch, 2.0d0, sig_u, sig_c)
+    end if
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
 
@@ -177,9 +204,9 @@ contains
     o0 = 0.0d0
     allocate(gdia0(3,3,nat), corrpre(3,3,nat), a01(3,3,nat), &
              sig_dia(3,3,nat), sig_tot(3,3,nat), source=0.0d0)
-    call nmr_dia_shielding(basis, dmat_a, o0, coords, nat, gdia0, logtol=tol)
-    call giao_a11part_corr(basis, dmat_a, coords, nat, corrpre, logtol=tol)
-    call giao_a01gp_contract(basis, dmat_a, coords, nat, a01, logtol=tol)
+    call nmr_dia_shielding(basis, dmp, o0, coords, nat, gdia0, logtol=tol)
+    call giao_a11part_corr(basis, dmp, coords, nat, corrpre, logtol=tol)
+    call giao_a01gp_contract(basis, dmp, coords, nat, a01, logtol=tol)
     do iat = 1, nat
       trg0 = gdia0(1,1,iat)+gdia0(2,2,iat)+gdia0(3,3,iat)
       trc  = corrpre(1,1,iat)+corrpre(2,2,iat)+corrpre(3,3,iat)
@@ -222,8 +249,11 @@ contains
     close(iw)
 
     deallocate(gdia0, corrpre, a01, sig_dia, sig_tot)
-    deallocate(h10p, s10p, twoe, vj, vk, dm, dmp, h1ao, s1ao, h1mo, s1mo)
-    deallocate(mo1u, mo1c, pso, coords, zq, sig_u, sig_c)
+    deallocate(h10p, s10p, twoe, twoe2, vj, vk, dm, dmp, h1ao, s1ao)
+    deallocate(coords, zq, sig_u, sig_c)
+    if (allocated(vkb))    deallocate(vkb)
+    if (allocated(h1ao_b)) deallocate(h1ao_b)
+    if (allocated(dm_b))   deallocate(dm_b)
 
   end subroutine nmr_giao_shielding_debug
 
@@ -390,16 +420,55 @@ contains
 !> Paramagnetic shielding tensor for one nucleus (PySCF para convention):
 !>   dm10(a,b,x) = 2 sum_{p,i} C(a,p) mo1(p,i,x) C(b,i) ;
 !>   sigma_para[x,y] = 2 sum_{a,b} dm10(a,b,x) * h01i(b,a,y).
-  subroutine para_tensor(mo1, mo, h01i, nbf, nmo, nocc, sig)
+  !> Paramagnetic shielding contribution from one spin channel: MO transform,
+  !> CPHF (uncoupled + coupled), and PSO contraction, ACCUMULATED into sig_u/sig_c.
+  !> occ_factor = 2 for RHF (closed shell), 1 for each UHF spin channel.
+  subroutine giao_para_channel(infos, basis, mo, e, nocc, nmo, nbf, nat, coords, &
+                               h1ao, s1ao, scale_exch, occ_factor, sig_u, sig_c)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: pso_integrals
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: mo(:,:), e(:), coords(:,:)
+    real(kind=dp), intent(in) :: h1ao(:,:,:), s1ao(:,:,:), scale_exch, occ_factor
+    integer, intent(in) :: nocc, nmo, nbf, nat
+    real(kind=dp), intent(inout) :: sig_u(:,:,:), sig_c(:,:,:)
+    real(kind=dp), allocatable :: h1mo(:,:,:), s1mo(:,:,:), mo1u(:,:,:), mo1c(:,:,:)
+    real(kind=dp), allocatable :: pso(:,:,:), st(:,:)
+    integer :: c, iat
+
+    allocate(h1mo(nmo,nocc,3), s1mo(nmo,nocc,3), mo1u(nmo,nocc,3), mo1c(nmo,nocc,3), &
+             pso(nbf,nbf,3), st(3,3), source=0.0d0)
+    do c = 1, 3
+      call ao_to_mo_occ(h1ao(:,:,c), mo, h1mo(:,:,c), nbf, nmo, nocc)
+      call ao_to_mo_occ(s1ao(:,:,c), mo, s1mo(:,:,c), nbf, nmo, nocc)
+    end do
+    call solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1u)
+    call solve_mo1_coupled(infos, basis, mo, h1mo, s1mo, e, nocc, nmo, scale_exch, mo1c)
+    do iat = 1, nat
+      call pso_integrals(basis, coords(:,iat), pso)
+      call para_tensor(mo1u, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      sig_u(:,:,iat) = sig_u(:,:,iat) + st
+      call para_tensor(mo1c, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      sig_c(:,:,iat) = sig_c(:,:,iat) + st
+    end do
+    deallocate(h1mo, s1mo, mo1u, mo1c, pso, st)
+  end subroutine giao_para_channel
+
+  subroutine para_tensor(mo1, mo, h01i, nbf, nmo, nocc, sig, occ_factor)
     real(kind=dp), intent(in) :: mo1(:,:,:), mo(:,:), h01i(:,:,:)
     integer, intent(in) :: nbf, nmo, nocc
     real(kind=dp), intent(out) :: sig(:,:)
+    real(kind=dp), intent(in), optional :: occ_factor
     integer :: x, y, a, b
     real(kind=dp), allocatable :: dm10(:,:,:)
-    real(kind=dp) :: acc
+    real(kind=dp) :: acc, ofac
+    ofac = 2.0d0                 ! RHF closed-shell occupation; UHF per spin = 1
+    if (present(occ_factor)) ofac = occ_factor
     allocate(dm10(nbf,nbf,3))
     do x = 1, 3
-      dm10(:,:,x) = 2.0d0*matmul(mo(:,1:nmo), matmul(mo1(:,:,x), transpose(mo(:,1:nocc))))
+      dm10(:,:,x) = ofac*matmul(mo(:,1:nmo), matmul(mo1(:,:,x), transpose(mo(:,1:nocc))))
     end do
     do x = 1, 3
       do y = 1, 3
