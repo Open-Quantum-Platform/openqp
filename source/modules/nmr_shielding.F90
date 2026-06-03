@@ -248,6 +248,21 @@ contains
              siso_dia(i), siso_para(i), siso_para_c(i), siso_tot(i), siso_tot_c(i)
     end do
 
+    ! ---- Store isotropic shielding (ppm) to a tagarray for JSON output ----
+    block
+      real(kind=8), contiguous, pointer :: nmrout(:)
+      call infos%dat%reserve_data(OQP_nmr_shielding, TA_TYPE_REAL64, 5*nat, &
+                                  comment=OQP_nmr_shielding_comment)
+      call tagarray_get_data(infos%dat, OQP_nmr_shielding, nmrout)
+      do i = 1, nat
+        nmrout(5*(i-1)+1) = siso_dia(i)
+        nmrout(5*(i-1)+2) = siso_para(i)
+        nmrout(5*(i-1)+3) = siso_para_c(i)
+        nmrout(5*(i-1)+4) = siso_tot(i)
+        nmrout(5*(i-1)+5) = siso_tot_c(i)
+      end do
+    end block
+
     ! ---- Phase-0 validation gates (reported as diagnostics) ----
     write(iw,'(/4x,a)') 'Phase-0 magnetic-response gates:'
     write(iw,'(4x,a,es12.3)') '  gate0  max|P^B + (P^B)^T|        = ', pb_asym

@@ -19,6 +19,16 @@ contains
     call nmr_giao_shielding_debug(inf)
   end subroutine nmr_giao_shielding_debug_C
 
+  !> Production entry point for GIAO NMR shielding (RHF/UHF/ROHF).
+  subroutine nmr_giao_shielding_C(c_handle) bind(C, name="nmr_giao_shielding")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call nmr_giao_shielding_debug(inf)
+  end subroutine nmr_giao_shielding_C
+
 !> @brief Test-only/debug emitter for native GIAO (London-orbital) NMR shielding.
 !> @details Computes the GIAO paramagnetic nuclear magnetic shielding tensor for
 !>  RHF/UHF/ROHF (and the corresponding DFT) references.  Open-shell support:
@@ -97,6 +107,7 @@ contains
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
     real(kind=dp), contiguous, pointer :: mo_e(:), mo_e_b(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
+    real(kind=dp), contiguous, pointer :: nmrout(:)
     real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
 
     basis => infos%basis
@@ -246,6 +257,20 @@ contains
       end do
     end do
 
+    ! --- Store isotropic shielding (ppm) to a tagarray for JSON output ---
+    !     rows: dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled
+    !     stored atom-major (flat): atom a occupies entries 5*(a-1)+1 .. 5*a.
+    call infos%dat%reserve_data(OQP_nmr_shielding, TA_TYPE_REAL64, 5*nat, &
+                                comment=OQP_nmr_shielding_comment)
+    call tagarray_get_data(infos%dat, OQP_nmr_shielding, nmrout)
+    do iat = 1, nat
+      nmrout(5*(iat-1)+1) = (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0
+      nmrout(5*(iat-1)+2) = (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0
+      nmrout(5*(iat-1)+3) = (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0
+      nmrout(5*(iat-1)+4) = nmrout(5*(iat-1)+1) + nmrout(5*(iat-1)+2)
+      nmrout(5*(iat-1)+5) = nmrout(5*(iat-1)+1) + nmrout(5*(iat-1)+3)
+    end do
+
     ! --- Emit parseable records ---
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao shielding (ppm)'
@@ -271,6 +296,30 @@ contains
         (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
     end do
     write(iw,'(A)') 'GIAO_SHIELDING_DEBUG_END'
+
+    ! --- Human-readable production table (GIAO isotropic shielding) ---
+    write(iw,'(2/)')
+    write(iw,'(4x,a)') '========================================'
+    write(iw,'(4x,a)') 'NMR nuclear magnetic shielding (GIAO)'
+    write(iw,'(4x,a)') '========================================'
+    write(iw,'(4x,a)') 'Gauge formulation: GIAO (London) atomic orbitals; gauge-origin independent.'
+    if (open_shell) then
+      write(iw,'(4x,a)') 'Reference: open shell (UHF/ROHF); diamagnetic from total density, '// &
+        'paramagnetic summed over spin channels.'
+    end if
+    write(iw,'(/4x,a,f8.4,a)') 'Isotropic shielding (GIAO, ppm)   [exact-exchange c_x =', &
+           scale_exch, ']'
+    write(iw,'(4x,a)')  '   Atom    Z   sigma_dia   para_uncoupled   para_coupled'// &
+           '   total_uncoupled   total_coupled'
+    do iat = 1, nat
+      write(iw,'(4x,i6,f6.1,5f16.6)') iat, basis%atoms%zn(iat), &
+        (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0, &
+        (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
+        (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0, &
+        (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0 + &
+        (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
+        (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
+    end do
     close(iw)
 
     deallocate(gdia0, corrpre, a01, sig_dia, sig_tot)

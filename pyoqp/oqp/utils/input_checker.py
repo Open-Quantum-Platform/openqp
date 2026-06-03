@@ -622,15 +622,16 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown NMR shielding gauge formulation.",
                 value=nmr_gauge,
                 expected=", ".join(sorted(NMR_GAUGES)),
-                action="Use nmr_gauge=cgo for the validated common gauge-origin path, or nmr_gauge=giao for the gated development path.",
+                action="Use nmr_gauge=giao (gauge-origin independent; RHF/UHF/ROHF) "
+                       "or nmr_gauge=cgo (common gauge origin; closed-shell RHF).",
             )
-        elif nmr_gauge == "giao":
+        elif nmr_gauge == "cgo" and scf_type in ("uhf", "rohf"):
             report.add(
-                "WARNING",
+                "ERROR",
                 "properties.nmr_gauge",
-                "GIAO NMR shielding is an explicit development option and is not yet validated for production benchmarks.",
-                value=nmr_gauge,
-                action="Use nmr_gauge=cgo for validated results until GIAO benchmarks pass.",
+                "CGO NMR shielding supports closed-shell RHF references only.",
+                value=f"{nmr_gauge} with scf.type={scf_type}",
+                action="Use nmr_gauge=giao for open-shell (UHF/ROHF) NMR shielding.",
             )
 
     if td_prop:

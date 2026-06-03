@@ -29,6 +29,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_nmr_shielding = OQP_prefix // "nmr_shielding"
+  character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
+    "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
+    "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
