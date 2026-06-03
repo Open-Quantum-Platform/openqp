@@ -12,8 +12,36 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call tdhf_sf_energy(inf)
+    call tdhf_sf_energy_with_restart(inf)
   end subroutine tdhf_sf_energy_C
+
+  ! Run the SF Davidson and auto-restart with a larger subspace (maxvec) and
+  ! more iterations (maxit_dav) if it fails to converge.  Re-invoking the driver
+  ! reallocates a fresh, larger subspace; user settings are restored afterwards.
+  subroutine tdhf_sf_energy_with_restart(infos)
+    use types, only: information
+    use io_constants, only: iw
+    type(information), intent(inout) :: infos
+    integer, parameter :: max_restarts = 2
+    integer :: attempt, maxvec0, maxit0
+    maxvec0 = infos%tddft%maxvec
+    maxit0  = infos%control%maxit_dav
+    do attempt = 0, max_restarts
+      call tdhf_sf_energy(infos)
+      if (infos%mol_energy%Davidson_converged) exit
+      if (attempt < max_restarts) then
+        infos%tddft%maxvec      = 2 * infos%tddft%maxvec
+        infos%control%maxit_dav = 2 * infos%control%maxit_dav
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/,2X,"SF Davidson not converged; auto-restart #",I0, &
+                 &" with larger subspace (maxvec=",I0,", maxit_dav=",I0,")"/)') &
+          attempt + 1, infos%tddft%maxvec, infos%control%maxit_dav
+        close(iw)
+      end if
+    end do
+    infos%tddft%maxvec      = maxvec0
+    infos%control%maxit_dav = maxit0
+  end subroutine tdhf_sf_energy_with_restart
 
   subroutine tdhf_sf_energy(infos)
     use io_constants, only: iw

@@ -1,5 +1,6 @@
 """OQP single point class"""
 import os
+import sys
 import oqp
 import copy
 import time
@@ -162,6 +163,7 @@ class SinglePoint(Calculator):
         super().__init__(mol)
         self.mol = mol
         self.method = mol.config['input']['method']
+        self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
         self.library = mol.config['input']['library']
@@ -169,6 +171,8 @@ class SinglePoint(Calculator):
         self.scf_maxit = mol.config['scf']['maxit']
         self.forced_attempt = mol.config['scf']['forced_attempt']
         self.alternative_scf = mol.config["scf"]["alternative_scf"]
+        self.converger_type = mol.config["scf"]["converger_type"]
+        self.stability = mol.config["scf"]["stability"]
         self.scf_mult = mol.config['scf']['multiplicity']
         self.init_scf = mol.config['scf']['init_scf']
         self.init_it = mol.config['scf']['init_it']
@@ -186,6 +190,8 @@ class SinglePoint(Calculator):
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
             'umrsf': oqp.tdhf_umrsf_energy,
+            'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
+            'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
         }
 
         # initialize state sign
@@ -327,10 +333,11 @@ class SinglePoint(Calculator):
         if ixcore == "-1":  # if default
             return
         ixcore_array = np.array(ixcore.split(','), dtype=np.int32)
-        # shift MO energies 
+        # Shift occupied MO energies before building the TD trial vectors, leaving
+        # the requested core orbital(s) available for ixcore excitations.
         noccB = self.mol.data['nelec_B']
         tmp = self.mol.data["OQP::E_MO_A"]
-        for i in range(noccB + 1):  # up to HOMO-1
+        for i in range(1, noccB + 1):  # 1-based occupied MO indices
             if i not in ixcore_array:
                 tmp[i - 1] = -100000  # shift the MO energy down
 
@@ -383,24 +390,7 @@ class SinglePoint(Calculator):
 
         self.swapmo()
 
-        scf_flag = False
-        itr = 0
-        energy = 0
-        for itr in range(self.forced_attempt):
-            self.scf()
-            energy = [self.mol.mol_energy.energy]
-
-            # check convergence
-            scf_flag = self.mol.mol_energy.SCF_converged
-
-            if scf_flag:
-                dump_log(self.mol, title='PyOQP: SCF energy is converged after %s attempts' % (itr + 1), section='')
-                break
-            else:
-                dump_log(self.mol, title='PyOQP: SCF energy is not converged after %s attempts' % (itr + 1), section='')
-                self.mol.data.set_scf_converger_type(self.alternative_scf)
-                self.mol.data.set_sd_scf(False)
-                dump_log(self.mol, title=f'PyOQP: Enable the {self.alternative_scf} in SCF to improve convergence.', section='input')
+        scf_flag = self._run_scf()
 
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
@@ -413,9 +403,156 @@ class SinglePoint(Calculator):
             guess_file = self.pack_molden_name('scf', self.scf_type, self.functional)
             self.mol.write_molden(guess_file)
 
+        energy = [self.mol.mol_energy.energy]
         self.mol.energies = energy
 
         return energy
+
+    def _run_scf(self):
+        """Unified robust SCF driver.
+
+        Replaces the old ``forced_attempt`` / ``alternative_scf`` retry loop
+        with a single coherent robustness ladder:
+
+          1. **Primary converger** (``scf.converger_type``, default DIIS) —
+             fast, gets most cases.
+          2. **Escalation** — if the primary converger does not converge,
+             switch to ``scf.alternative_scf`` (default TRAH, a globally
+             convergent trust-region method), warm-started from the current
+             orbitals.
+          3. **Stability safeguard** (``scf.stability``, default on) — seed a
+             stability-following TRAH pass from the converged orbitals.  At a
+             genuine minimum this is a ~0-iteration no-op; when the converged
+             point is an unstable saddle it relaxes to the lowest solution.
+             This catches the case where DIIS *converges* to a non-aufbau /
+             non-lowest open-shell (UHF/ROHF) solution and would otherwise be
+             returned silently.
+
+        Returns
+        -------
+        bool
+            True if a converged SCF solution was obtained.
+        """
+        data = self.mol.data
+        scf_config = self.mol.config.get('scf', {})
+        primary = getattr(self, 'converger_type', scf_config.get('converger_type', 'diis'))
+        fallback = getattr(self, 'alternative_scf', scf_config.get('alternative_scf', 'trah'))
+        stability = getattr(self, 'stability', scf_config.get('stability', False))
+        trah_stab_default = scf_config.get('trh_stab', False)
+
+        # --- Stage 1: primary converger ---
+        data.set_scf_converger_type(primary)
+        self.scf()
+        converged = self.mol.mol_energy.SCF_converged
+        if converged:
+            dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
+
+        # --- Stage 2: escalate the converger on non-convergence ---
+        if not converged and fallback and fallback != primary:
+            dump_log(self.mol,
+                     title='PyOQP: SCF not converged with %s; escalating to %s' % (primary, fallback),
+                     section='input')
+            data.set_scf_converger_type(fallback)
+            data.set_sd_scf(False)
+            self.scf()
+            converged = self.mol.mol_energy.SCF_converged
+
+        # --- Stage 3: stability safeguard ---
+        # Applied to ground-state targets (method='hf'), where a non-lowest SCF
+        # solution would be the returned result.  Skipped for excited-state
+        # (tdhf) runs: there the SCF is an intermediate reference and the extra
+        # TRAH pass can energy-invariantly re-canonicalize orbitals, perturbing
+        # sensitive (e.g. range-separated MRSF) excited-state gradients.
+        if converged and stability and primary != 'trah' and self.method == 'hf':
+            e_pre = self.mol.mol_energy.energy
+            mol_energy_snapshot = self._snapshot_mol_energy_state()
+            # Snapshot the converged orbitals so the safeguard is a true no-op
+            # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
+            # energy-invariantly, which would otherwise perturb sensitive
+            # downstream quantities such as range-separated excited gradients).
+            snapshot = self._snapshot_scf_state()
+            dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
+            data.set_scf_converger_type('trah')
+            data.set_trah_stability(True)
+            data.set_sd_scf(False)
+            self.scf()
+            trah_ok = self.mol.mol_energy.SCF_converged
+            e_post = self.mol.mol_energy.energy
+
+            if trah_ok and e_post < e_pre - 1.0e-7:
+                # The converged point was unstable: keep the lower solution.
+                dump_log(self.mol,
+                         title='PyOQP: SCF point was unstable; relaxed to a lower '
+                               'solution (dE = %.3e Hartree)' % (e_post - e_pre),
+                         section='')
+            else:
+                # Stable (no lower solution found) or the verification did not
+                # converge: restore the original converged orbitals unchanged.
+                self._restore_scf_state(snapshot)
+                for attr, value in mol_energy_snapshot.items():
+                    try:
+                        setattr(self.mol.mol_energy, attr, value)
+                    except Exception:
+                        pass
+                if not trah_ok:
+                    # Re-run the primary converger (warm-started) so mol_energy
+                    # is consistent with the restored orbitals.
+                    data.set_scf_converger_type(primary)
+                    self.scf()
+                    converged = self.mol.mol_energy.SCF_converged
+
+            # restore the user-configured stability flag for later SCF calls
+            data.set_trah_stability(trah_stab_default)
+
+        # restore the primary converger for any subsequent reference() calls
+        data.set_scf_converger_type(primary)
+        return converged
+
+    # Wavefunction tags that define an SCF solution (alpha + beta channels).
+    _scf_state_tags = (
+        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+        'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
+    )
+
+    def _snapshot_scf_state(self):
+        """Deep-copy the tags that define the current converged SCF solution."""
+        snap = {}
+        for tag in self._scf_state_tags:
+            try:
+                snap[tag] = np.array(self.mol.data[tag]).copy()
+            except Exception:
+                pass
+        return snap
+
+    def _restore_scf_state(self, snap):
+        """Write a previously captured SCF solution back into the molecule."""
+        for tag, value in snap.items():
+            try:
+                self.mol.data[tag] = value
+            except Exception:
+                pass
+
+    _mol_energy_state_attrs = (
+        'energy',
+        'SCF_converged',
+        'Davidson_converged',
+    )
+
+    def _snapshot_mol_energy_state(self):
+        """Capture scalar energy/convergence metadata that must match SCF tags."""
+        mol_energy = self.mol.mol_energy
+        snap = {}
+        try:
+            snap.update(getattr(mol_energy, '__dict__', {}))
+        except Exception:
+            pass
+        for attr in self._mol_energy_state_attrs:
+            if attr not in snap and hasattr(mol_energy, attr):
+                try:
+                    snap[attr] = getattr(mol_energy, attr)
+                except Exception:
+                    pass
+        return snap
 
     def excitation(self, ref_energy):
         self.tddft()
@@ -442,8 +579,22 @@ class SinglePoint(Calculator):
         self.energy_func['hf'](self.mol)
 
     def tddft(self):
+        if self.runtype == 'ekt':
+            if self.td != 'mrsf':
+                raise ValueError('EKT runtype only supports MRSF-TDDFT: set [tdhf] type=mrsf')
+            ekt_ip = self.mol.config['ekt']['ip']
+            ekt_ea = self.mol.config['ekt']['ea']
+            if not ekt_ip and not ekt_ea:
+                raise ValueError('EKT runtype requires [ekt] ip=True and/or ea=True')
+            dump_log(self.mol, title='PyOQP: MRSF-EKT steps', section='tdhf')
+            if ekt_ip:
+                self.energy_func['mrsf_ekt_ip'](self.mol)
+            if ekt_ea:
+                self.energy_func['mrsf_ekt_ea'](self.mol)
+            return
+
         # check td type
-        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf']:
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 
         # do TDDFT
@@ -515,10 +666,6 @@ class Gradient(Calculator):
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
 
-        if self.nstate == max(self.grads):
-            print(f'\nGradient requested state {max(self.grads)} == the highest computed state {self.nstate}')
-            print(f'It is recommended to compute {self.nstate + 1} states to avoid missing degenerate states\n')
-
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
             dump_log(self.mol, title='PyOQP: Gradient of Root %s' % i)
@@ -567,6 +714,16 @@ class Hessian(Calculator):
         else:
             self.hess_func = self.numerical_hess
 
+        # Native Hessian ABI placeholders (oqp.hf_hessian, oqp.tdhf_hessian,
+        # oqp.tdhf_sf_hessian). These entries are intentionally not used as a
+        # numerical fallback while kernels/storage are still being implemented.
+        self.native_hess_func = {
+            'hf': getattr(oqp, 'hf_hessian', None),
+            'rpa': getattr(oqp, 'tdhf_hessian', None),
+            'tda': getattr(oqp, 'tdhf_hessian', None),
+            'sf': getattr(oqp, 'tdhf_sf_hessian', None),
+        }
+
         method = mol.config['input']['method']
         scf_mult = mol.config['scf']['multiplicity']
         td_mult = mol.config['tdhf']['multiplicity']
@@ -574,6 +731,29 @@ class Hessian(Calculator):
             self.hess_mult = scf_mult
         else:
             self.hess_mult = td_mult
+
+    def _collect_native_fort6_logs(self, mol=None, append_to_log=True):
+        """Append and remove Fortran unit-6 scratch logs left by native kernels."""
+
+        mol = mol or self.mol
+        native_cphf_logs = []
+        for log_dir in (getattr(mol, 'log_path', os.getcwd()), os.getcwd()):
+            native_cphf_log = os.path.abspath(os.path.join(log_dir, 'fort.6'))
+            if native_cphf_log not in native_cphf_logs:
+                native_cphf_logs.append(native_cphf_log)
+        for native_cphf_log in native_cphf_logs:
+            if not os.path.exists(native_cphf_log):
+                continue
+            if append_to_log and hasattr(mol, 'log'):
+                with open(native_cphf_log, 'r', encoding='utf-8', errors='replace') as source:
+                    native_text = source.read()
+                if native_text.strip():
+                    with open(mol.log, 'a', encoding='utf-8') as target:
+                        target.write('\n\n')
+                        target.write('PyOQP: Native Fortran HF/DFT analytic Hessian log\n')
+                        target.write(native_text)
+                        target.write('\n')
+            os.remove(native_cphf_log)
 
     def hessian(self):
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
@@ -596,6 +776,7 @@ class Hessian(Calculator):
                 self.mol.hessian = hessian
                 self.mol.modes = modes
                 self.mol.inertia = inertia
+                self._compute_vibrational_intensities(modes)
 
                 self.mol.save_freqs(self.state)
                 dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
@@ -605,6 +786,12 @@ class Hessian(Calculator):
                     self.mol.save_data()
 
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
+        dump_log(
+            self.mol,
+            title='PyOQP: Frequency Normal Mode Eigenvectors',
+            section='freq_modes',
+            info=(self.mol.get_atoms(), freqs, modes),
+        )
 
         for t in self.temperature:
             thermal_data = thermal_analysis(
@@ -618,8 +805,175 @@ class Hessian(Calculator):
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
 
+    def _native_property_tensors_at(self, coord_bohr):
+        """Return native OpenQP dipole (a.u.) and static polarizability at displaced geometry."""
+
+        from oqp.pyoqp import Runner
+
+        def _config_value(value):
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, (list, tuple)):
+                if len(value) == 1 and not isinstance(value[0], (list, tuple)):
+                    return str(value[0])
+                return ','.join(
+                    ' '.join(str(item) for item in entry) if isinstance(entry, (list, tuple)) else str(entry)
+                    for entry in value
+                )
+            return str(value)
+
+        raw_config = copy.deepcopy(self.mol.config)
+        config = {
+            section: {key: _config_value(value) for key, value in values.items()}
+            for section, values in raw_config.items()
+        }
+        config['input']['runtype'] = 'energy'
+        if config.get('guess', {}).get('type') == 'json':
+            config['guess']['type'] = 'huckel'
+        config['guess']['save_mol'] = 'false'
+        project = f"{self.mol.project_name}_vibprop"
+        runner = Runner(
+            project=project,
+            input_dict=config,
+            log=os.devnull,
+            silent=1,
+            usempi=False,
+        )
+        runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        runner.run()
+
+        dipole = np.zeros(3, dtype=np.float64)
+        alpha = np.zeros((3, 3), dtype=np.float64)
+        oqp.electric_dipole_au(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole)))
+        oqp.cphf_static_polarizability(runner.mol, oqp.ffi.cast("double *", oqp.ffi.from_buffer(alpha)))
+        self._collect_native_fort6_logs(runner.mol, append_to_log=False)
+        return dipole, alpha
+
+    def _compute_vibrational_intensities(self, modes):
+        """Compute IR/Raman intensities using native OpenQP property kernels."""
+
+        modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
+        coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
+        ncoord = coord0.size
+        if modes.ndim != 2 or modes.shape[1] != ncoord:
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'failed',
+                'reason': f'Expected modes with shape (nmode, {ncoord}), got {modes.shape}',
+            }
+            return
+
+        displacement = 1.0e-3
+        dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
+        polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)
+        flat0 = coord0.reshape(-1)
+        for idx in range(ncoord):
+            disp = np.zeros(ncoord, dtype=float)
+            disp[idx] = displacement
+            try:
+                dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
+                dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
+            except Exception as exc:
+                self.mol.vibrational_intensity_metadata = {
+                    'status': 'failed',
+                    'backend': 'native_openqp_finite_difference',
+                    'reason': str(exc),
+                }
+                return
+            dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
+            polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
+
+        nmode = modes.shape[0]
+        ir = np.zeros(nmode, dtype=np.float64)
+        mode_dipoles = np.zeros((nmode, 3), dtype=np.float64)
+        raman = np.zeros(nmode, dtype=np.float64)
+        mode_polars = np.zeros((nmode, 3, 3), dtype=np.float64)
+        oqp.vibrational_intensities_native(
+            self.mol,
+            np.int64(nmode),
+            np.int64(ncoord),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(modes)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(dipole_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(polar_derivs)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(ir)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_dipoles)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(raman)),
+            oqp.ffi.cast("double *", oqp.ffi.from_buffer(mode_polars)),
+        )
+
+        self.mol.infrared_intensities = ir
+        self.mol.raman_activities = raman
+        self.mol.infrared_mode_dipole_derivatives = mode_dipoles
+        self.mol.raman_mode_polarizability_derivatives = mode_polars
+        self.mol.vibrational_intensity_metadata = {
+            'status': 'computed',
+            'backend': 'native_openqp_finite_difference',
+            'property_kernels': 'electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native',
+            'displacement_bohr': float(displacement),
+            'ir_units': 'km/mol',
+            'raman_units': 'a.u.',
+        }
+
     def analytical_hess(self):
-        exit('analytical hessian is not available yet, choose numerical')
+        method = self.mol.config['input']['method']
+        td_type = self.mol.config['tdhf']['type']
+
+        if method == 'hf':
+            return self.analytical_ground_state_hess()
+        if method == 'tdhf' and td_type in {'tda', 'rpa'}:
+            return self.analytical_tddft_hess()
+        if method == 'tdhf' and td_type == 'sf':
+            return self.analytical_sf_hess()
+        if method == 'tdhf' and td_type in {'mrsf', 'umrsf'}:
+            return self.analytical_mrsf_hess()
+        raise NotImplementedError(
+            f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
+        )
+
+    def analytical_ground_state_hess(self):
+        """Run the native OpenQP HF/DFT analytic Hessian kernel and return its stored matrix."""
+
+        native_hess_func = self.native_hess_func['hf']
+        if native_hess_func is None:
+            raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
+        native_hess_func(self.mol)
+        self._collect_native_fort6_logs(self.mol)
+
+        try:
+            raw_hessian = self.mol.data['OQP::hf_hessian']
+        except (AttributeError, KeyError) as exc:
+            raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
+
+        hessian = self.mol.set_hessian_result(raw_hessian)
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp',
+            'native_openqp_kernel': True,
+            'native_openqp_cphf_solver_exercised': True,
+            'native_openqp_final_assembly': True,
+            'no_external_hessian_backend': True,
+            'no_numerical_fallback': True,
+            'shape': list(hessian.shape),
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp']
+
+    def analytical_tddft_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        raise NotImplementedError(
+            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
+        )
+
+    def analytical_sf_hess(self):
+        raise NotImplementedError(
+            'SF-TDDFT analytic Hessian is not implemented yet; no numerical fallback will be used.'
+        )
+
+    def analytical_mrsf_hess(self):
+        td_type = self.mol.config['tdhf']['type']
+        label = 'MRSF-TDDFT' if td_type == 'mrsf' else td_type.upper()
+        raise NotImplementedError(
+            f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
+        )
 
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
@@ -701,6 +1055,19 @@ class Hessian(Calculator):
         return hessian, flags
 
 
+def _run_oqp_external(inp):
+    # Run a calculation in a fresh process. Prefer the installed `openqp`
+    # console script; fall back to invoking the same entry point
+    # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
+    # is run from source without a pip install.
+    openqp_exe = shutil.which('openqp')
+    if openqp_exe:
+        cmd = [openqp_exe, inp, '--silent']
+    else:
+        cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
+    subprocess.run(cmd)
+
+
 def grad_wrapper(key_dict):
     start_time = time.time()
     rank = MPIManager().rank
@@ -753,7 +1120,7 @@ def grad_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run grad calculation externally
-            subprocess.run(['openqp', inp, '--silent'])
+            _run_oqp_external(inp)
         else:
             # run grad calculation internally
             start_time = time.time()
@@ -1251,7 +1618,7 @@ def nacme_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run nac calculation externally
-            subprocess.run(['openqp', inp, '--silent'])
+            _run_oqp_external(inp)
         else:
             # run nac calculation internally
             start_time = time.time()

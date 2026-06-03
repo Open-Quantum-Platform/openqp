@@ -54,6 +54,18 @@ MODULE mod_1e_primitives
  PUBLIC comp_coulomb_helfeyder1
  PUBLIC comp_kinetic_der1
  PUBLIC comp_overlap_der1
+ PUBLIC comp_overlap_der1_block
+ PUBLIC comp_kinetic_der1_block
+ PUBLIC comp_coulomb_der1_block
+ PUBLIC comp_coulomb_helfeyder1_block
+ PUBLIC comp_kinetic_der2
+ PUBLIC comp_overlap_der2
+ PUBLIC der_kinovl_xyz
+ PUBLIC der2_kinovl_xyz
+ PUBLIC der_coul_xyz
+ PUBLIC der2_coul_xyz
+ PUBLIC comp_coulomb_der2_braC
+ PUBLIC comp_coulomb_der2_blocks
  PUBLIC comp_ewaldlr_der1
  PUBLIC comp_ewaldlr_helfeyder1
 
@@ -1484,6 +1496,38 @@ END SUBROUTINE
     END DO
  END SUBROUTINE
 
+!> @brief Bra-center first derivative of the overlap integral, returned as an
+!>   (inao, jnao, 3) block (NOT contracted with a density). Used to assemble the
+!>   AO derivative-overlap matrix dS/dR for the CPHF right-hand side.
+!> @param[in]    cp     shell pair data
+!> @param[inout] dblk   (inao, jnao, 3) accumulated bra-center derivatives
+ SUBROUTINE comp_overlap_der1_block(cp, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+3,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+1, jang, ovl_int)
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+            dblk(i,j,1) = dblk(i,j,1) + ovl_der(jx,ix,1)*ovl_int(jy,iy,2)*ovl_int(jz,iz,3)*pp%expfac
+            dblk(i,j,2) = dblk(i,j,2) + ovl_int(jx,ix,1)*ovl_der(jy,iy,2)*ovl_int(jz,iz,3)*pp%expfac
+            dblk(i,j,3) = dblk(i,j,3) + ovl_int(jx,ix,1)*ovl_int(jy,iy,2)*ovl_der(jz,iz,3)*pp%expfac
+        END DO
+    END DO
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
 !> @brief Compute 1e kinetic contribution to the gradient
 !> @param[in]       cp          shell pair data
 !> @param[in]       dij         density matrix block
@@ -1549,6 +1593,194 @@ END SUBROUTINE
     END DO
     ! add scaled contribution to gradient
     de = de + de_loc*pp%expfac
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Bra-center first derivative of the kinetic-energy integral, returned as
+!>   an (inao, jnao, 3) block (not contracted), for the dT/dR matrix used in the
+!>   CPHF right-hand side. Mirrors comp_kinetic_der1.
+ SUBROUTINE comp_kinetic_der1_block(cp, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+3,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_int(0:max_ang,0:max_ang+1,3)
+    real(real64) :: kin_der(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+3, jang, ovl_int)
+    CALL kinetic_xyz_i(kin_int, ovl_int, iang+1, jang, pp%ai)
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    CALL der_kinovl_xyz(kin_der, kin_int, iang, jang, pp%ai)
+    DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+            dblk(i,j,1) = dblk(i,j,1) + ( &
+                kin_der(jx,ix,1)*ovl_int(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_der(jx,ix,1)*kin_int(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_der(jx,ix,1)*ovl_int(jy,iy,2)*kin_int(jz,iz,3) )*pp%expfac
+            dblk(i,j,2) = dblk(i,j,2) + ( &
+                kin_int(jx,ix,1)*ovl_der(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_int(jx,ix,1)*kin_der(jy,iy,2)*ovl_int(jz,iz,3) + &
+                ovl_int(jx,ix,1)*ovl_der(jy,iy,2)*kin_int(jz,iz,3) )*pp%expfac
+            dblk(i,j,3) = dblk(i,j,3) + ( &
+                kin_int(jx,ix,1)*ovl_int(jy,iy,2)*ovl_der(jz,iz,3) + &
+                ovl_int(jx,ix,1)*kin_int(jy,iy,2)*ovl_der(jz,iz,3) + &
+                ovl_int(jx,ix,1)*ovl_int(jy,iy,2)*kin_der(jz,iz,3) )*pp%expfac
+        END DO
+    END DO
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Bra-center second derivative of the 1e overlap contribution.
+!> @details Accumulates the symmetric 3x3 block of second derivatives of
+!>  sum_ij dij*S_ij with respect to the bra (center i) Cartesian coordinates,
+!>  i.e. d2/dA_a dA_b. The full Hessian's other blocks (A-B, B-B) follow from
+!>  translational invariance of the two-center integral.
+!> @param[in]    cp    shell pair data
+!> @param[in]    dij   density (or energy-weighted density) matrix block
+!> @param[inout] de2   dimension(3,3), accumulated bra-center 2nd derivatives
+ SUBROUTINE comp_overlap_der2(cp, dij, de2)
+!dir$ attributes inline :: comp_overlap_der2
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: de2(:,:)
+
+    REAL(REAL64) :: de_loc(3,3), w
+    REAL(REAL64) :: sx, sy, sz, dx, dy, dz, d2x, d2y, d2z
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+4,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: ovl_der2(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    ! compute overlap [i+2|j]
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+2, jang, ovl_int)
+
+    ! compute 1D overlap 1st and 2nd derivatives [i|j]
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(ovl_der2, ovl_int, iang, jang, pp%ai)
+
+    de_loc = 0.0
+    DO i = 1, inao
+        ix = CART_X(i,iang)
+        iy = CART_Y(i,iang)
+        iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang)
+            jy = CART_Y(j,jang)
+            jz = CART_Z(j,jang)
+            sx = ovl_int(jx,ix,1); sy = ovl_int(jy,iy,2); sz = ovl_int(jz,iz,3)
+            dx = ovl_der(jx,ix,1); dy = ovl_der(jy,iy,2); dz = ovl_der(jz,iz,3)
+            d2x = ovl_der2(jx,ix,1); d2y = ovl_der2(jy,iy,2); d2z = ovl_der2(jz,iz,3)
+            w = dij(i,j)
+            de_loc(1,1) = de_loc(1,1) + w * d2x*sy*sz
+            de_loc(2,2) = de_loc(2,2) + w * sx*d2y*sz
+            de_loc(3,3) = de_loc(3,3) + w * sx*sy*d2z
+            de_loc(2,1) = de_loc(2,1) + w * dx*dy*sz
+            de_loc(3,1) = de_loc(3,1) + w * dx*sy*dz
+            de_loc(3,2) = de_loc(3,2) + w * sx*dy*dz
+        END DO
+    END DO
+    de2(1,1) = de2(1,1) + de_loc(1,1)*pp%expfac
+    de2(2,2) = de2(2,2) + de_loc(2,2)*pp%expfac
+    de2(3,3) = de2(3,3) + de_loc(3,3)*pp%expfac
+    de2(2,1) = de2(2,1) + de_loc(2,1)*pp%expfac
+    de2(1,2) = de2(1,2) + de_loc(2,1)*pp%expfac
+    de2(3,1) = de2(3,1) + de_loc(3,1)*pp%expfac
+    de2(1,3) = de2(1,3) + de_loc(3,1)*pp%expfac
+    de2(3,2) = de2(3,2) + de_loc(3,2)*pp%expfac
+    de2(2,3) = de2(2,3) + de_loc(3,2)*pp%expfac
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Bra-center second derivative of the 1e kinetic-energy contribution.
+!> @details Accumulates the symmetric 3x3 block d2/dA_a dA_b of
+!>  sum_ij dij*T_ij. As with comp_kinetic_der1, the kinetic operator factorizes
+!>  across the three Cartesian directions as T = Tx*Sy*Sz + Sx*Ty*Sz + Sx*Sy*Tz.
+!> @param[in]    cp    shell pair data
+!> @param[in]    dij   density (or energy-weighted density) matrix block
+!> @param[inout] de2   dimension(3,3), accumulated bra-center 2nd derivatives
+ SUBROUTINE comp_kinetic_der2(cp, dij, de2)
+!dir$ attributes inline :: comp_kinetic_der2
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: de2(:,:)
+
+    REAL(REAL64) :: de_loc(3,3), w
+    REAL(REAL64) :: sx, sy, sz, dsx, dsy, dsz, d2sx, d2sy, d2sz
+    REAL(REAL64) :: tx, ty, tz, dtx, dty, dtz, d2tx, d2ty, d2tz
+    INTEGER :: i, j, k, ix, iy, iz, jx, jy, jz
+    real(real64) :: ovl_int(0:max_ang,0:max_ang+4,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: ovl_der2(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_int(0:max_ang,0:max_ang+2,3)
+    real(real64) :: kin_der(0:max_ang,0:max_ang,3)
+    real(real64) :: kin_der2(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    ! compute overlap [i+4|j]
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+4, jang, ovl_int)
+
+    ! compute 1D kinetic [i+2|j]
+    CALL kinetic_xyz_i(kin_int, ovl_int, iang+2, jang, pp%ai)
+
+    ! 1st and 2nd bra-center derivatives of 1D overlap and kinetic
+    CALL der_kinovl_xyz(ovl_der,  ovl_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(ovl_der2, ovl_int, iang, jang, pp%ai)
+    CALL der_kinovl_xyz(kin_der,  kin_int, iang, jang, pp%ai)
+    CALL der2_kinovl_xyz(kin_der2, kin_int, iang, jang, pp%ai)
+
+    de_loc = 0.0
+    DO i = 1, inao
+        ix = CART_X(i,iang)
+        iy = CART_Y(i,iang)
+        iz = CART_Z(i,iang)
+        DO j = 1, jnao
+            jx = CART_X(j,jang)
+            jy = CART_Y(j,jang)
+            jz = CART_Z(j,jang)
+            sx = ovl_int(jx,ix,1);  sy = ovl_int(jy,iy,2);  sz = ovl_int(jz,iz,3)
+            dsx = ovl_der(jx,ix,1); dsy = ovl_der(jy,iy,2); dsz = ovl_der(jz,iz,3)
+            d2sx = ovl_der2(jx,ix,1); d2sy = ovl_der2(jy,iy,2); d2sz = ovl_der2(jz,iz,3)
+            tx = kin_int(jx,ix,1);  ty = kin_int(jy,iy,2);  tz = kin_int(jz,iz,3)
+            dtx = kin_der(jx,ix,1); dty = kin_der(jy,iy,2); dtz = kin_der(jz,iz,3)
+            d2tx = kin_der2(jx,ix,1); d2ty = kin_der2(jy,iy,2); d2tz = kin_der2(jz,iz,3)
+            w = dij(i,j)
+            ! diagonal: d2/dA_a^2 of (Tx Sy Sz + Sx Ty Sz + Sx Sy Tz)
+            de_loc(1,1) = de_loc(1,1) + w*( d2tx*sy*sz + d2sx*ty*sz + d2sx*sy*tz )
+            de_loc(2,2) = de_loc(2,2) + w*( tx*d2sy*sz + sx*d2ty*sz + sx*d2sy*tz )
+            de_loc(3,3) = de_loc(3,3) + w*( tx*sy*d2sz + sx*ty*d2sz + sx*sy*d2tz )
+            ! off-diagonal: d2/dA_a dA_b
+            de_loc(2,1) = de_loc(2,1) + w*( dtx*dsy*sz + dsx*dty*sz + dsx*dsy*tz )
+            de_loc(3,1) = de_loc(3,1) + w*( dtx*sy*dsz + dsx*ty*dsz + dsx*sy*dtz )
+            de_loc(3,2) = de_loc(3,2) + w*( tx*dsy*dsz + sx*dty*dsz + sx*dsy*dtz )
+        END DO
+    END DO
+    de2(1,1) = de2(1,1) + de_loc(1,1)*pp%expfac
+    de2(2,2) = de2(2,2) + de_loc(2,2)*pp%expfac
+    de2(3,3) = de2(3,3) + de_loc(3,3)*pp%expfac
+    de2(2,1) = de2(2,1) + de_loc(2,1)*pp%expfac
+    de2(1,2) = de2(1,2) + de_loc(2,1)*pp%expfac
+    de2(3,1) = de2(3,1) + de_loc(3,1)*pp%expfac
+    de2(1,3) = de2(1,3) + de_loc(3,1)*pp%expfac
+    de2(3,2) = de2(3,2) + de_loc(3,2)*pp%expfac
+    de2(2,3) = de2(2,3) + de_loc(3,2)*pp%expfac
     END ASSOCIATE
     END DO
  END SUBROUTINE
@@ -1712,6 +1944,241 @@ END SUBROUTINE
     END DO
 
  END SUBROUTINE
+
+!> @brief Bra-center first derivative of the nuclear-attraction integral for one
+!>   charge, returned as an (inao, jnao, 3) block (not contracted). Mirrors
+!>   comp_coulomb_der1; used to assemble the dV/dR matrix for the CPHF RHS.
+ SUBROUTINE comp_coulomb_der1_block(cp, c, znuc, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    REAL(REAL64) :: xx, fac, der(3)
+    type(rys_root_t) :: ryscomp
+    INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
+    real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
+
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+        xx = pp%aa*sum((pp%r-c)**2)
+        ryscomp%nroots = cp%nroots
+        ryscomp%x = xx
+        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 1)
+        CALL der_coul_xyz(dxyzc, xyzin, iang, jang, pp%ai, cp%nroots)
+        fac = pp%expfac*TWOPI*pp%aa1
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+                der(1) = sum(dxyzc(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(2) = sum(xyzin(jx,ix,1,1:cp%nroots)*dxyzc(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(3) = sum(xyzin(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*dxyzc(jz,iz,3,1:cp%nroots))
+                dblk(i,j,1) = dblk(i,j,1) + der(1)*fac
+                dblk(i,j,2) = dblk(i,j,2) + der(2)*fac
+                dblk(i,j,3) = dblk(i,j,3) + der(3)*fac
+            END DO
+        END DO
+        END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Charge-center (Hellmann-Feynman) first derivative of the
+!>   nuclear-attraction integral for one charge, returned as an (inao, jnao, 3)
+!>   block (not contracted). Mirrors comp_coulomb_helfeyder1.
+ SUBROUTINE comp_coulomb_helfeyder1_block(cp, c, znuc, dblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:)
+
+    REAL(REAL64) :: xx, fac, der(3), ric(3)
+    type(rys_root_t) :: ryscomp
+    INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
+    real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
+
+    ric = cp%ri(:3) - c(:3)
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+        xx = pp%aa*sum((pp%r-c)**2)
+        fac = pp%expfac*TWOPI*2
+        ryscomp%nroots = cp%nroots
+        ryscomp%x = xx
+        CALL DQGaussRys(ryscomp, cp, id, c, znuc, xyzin)
+        CALL der_helfey_xyz(dxyzc, xyzin, iang, jang, ric, cp%nroots)
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+                der(1) = sum(dxyzc(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(2) = sum(xyzin(jx,ix,1,1:cp%nroots)*dxyzc(jy,iy,2,1:cp%nroots)*xyzin(jz,iz,3,1:cp%nroots))
+                der(3) = sum(xyzin(jx,ix,1,1:cp%nroots)*xyzin(jy,iy,2,1:cp%nroots)*dxyzc(jz,iz,3,1:cp%nroots))
+                dblk(i,j,1) = dblk(i,j,1) + der(1)*fac
+                dblk(i,j,2) = dblk(i,j,2) + der(2)*fac
+                dblk(i,j,3) = dblk(i,j,3) + der(3)*fac
+            END DO
+        END DO
+        END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+!> @brief Uncontracted per-AO basis-center second-derivative blocks of the
+!>   nuclear-attraction integral for one charge center c (Gate 2 shared kernel).
+!> @details For a shell pair (bra X on atom A, ket Y on atom B) and charge centre
+!>   c this returns, for every cartesian AO pair (i in bra, j in ket):
+!>     pAA(a,b,i,j) = d2/dA_a dA_b <i| znuc/|r-c| |j>   (bra-bra, symmetric in a,b)
+!>     pAB(a,b,i,j) = d2/dA_a dB_b <i| znuc/|r-c| |j>   (bra-ket mixed, NOT symmetric)
+!>
+!>   The production basis-basis second derivative uses angular-momentum (AM) shift
+!>   identities and therefore does NOT differentiate the Rys roots/weights: the
+!>   bra second derivative is der2_coul_xyz (the bra raise/lower recursion applied
+!>   twice), the ket first derivative and the mixed bra-ket second derivative are
+!>   the analogous explicit index recurrences. The roots/weights are merely
+!>   recomputed for the shifted integral class at the corrected second-derivative
+!>   count nroots_der2 = floor((Li+Lj+2)/2)+1 (set here; NOT inherited from
+!>   cp%nroots). The validated rys_deriv.F90 layer is not used on this path.
+!>
+!>   Blocks are returned in the unnormalized cartesian convention (apply the
+!>   bfnrm shell normalization at contraction time, exactly as comp_coulomb_der1
+!>   does for the gradient). Only s/p/d/f shells (nroots_der2 <= 5, i.e. the
+!>   closed-form rys_rt1..rys_rt5 regime) are supported; larger shells abort.
+ SUBROUTINE comp_coulomb_der2_blocks(cp, c, znuc, pAA, pAB)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), INTENT(OUT) :: pAA(:,:,:,:), pAB(:,:,:,:)   ! (3,3,inao,jnao)
+
+    INTEGER :: id, i, j, nr, ix, iy, iz, jx, jy, jz
+    INTEGER :: nroots_der2
+    REAL(REAL64) :: xx, fac, aj
+    type(rys_root_t) :: ryscomp
+    real(real64) :: xyzin(0:2*max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDA (0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: gDAA(0:max_ang+2, 0:max_ang+2, 3, max_nroots)
+    real(real64) :: dket(3, max_nroots)   ! per-root ket (B-center) 1D first derivatives
+    real(real64) :: d2ab(3, max_nroots)   ! per-root mixed bra-ket 1D second derivatives
+
+    nroots_der2 = (cp%iang + cp%jang + 2)/2 + 1
+    if (nroots_der2 > 5) &
+        error stop 'comp_coulomb_der2_blocks: shell L>=4 not supported (nroots_der2>5)'
+
+    pAA = 0.0_real64
+    pAB = 0.0_real64
+
+    DO id = 1, cp%numpairs
+        ASSOCIATE (pp => cp%p(id), &
+                   iang => cp%iang, jang => cp%jang, &
+                   inao => cp%inao, jnao => cp%jnao)
+
+        xx = pp%aa * sum((pp%r - c)**2)
+        ryscomp%nroots = nroots_der2
+        ryscomp%x = xx
+        CALL QGaussRys(ryscomp, cp, id, c, znuc, xyzin, 2)
+
+        ! Bra first and second derivatives at the correct quadrature order
+        CALL der_coul_xyz (gDA,  xyzin, iang, jang, pp%ai, nroots_der2)
+        CALL der2_coul_xyz(gDAA, xyzin, iang, jang, pp%ai, nroots_der2)
+
+        fac = pp%expfac * TWOPI * pp%aa1
+        aj = pp%aj
+        nr = nroots_der2
+
+        DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+                jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+
+                ! Ket (B-center) first derivative per root: d/dB_q = 2*aj*[j+1,...] - j*[j-1,...]
+                dket(1,1:nr) = 2*aj*xyzin(jx+1,ix,1,1:nr)
+                if (jx > 0) dket(1,1:nr) = dket(1,1:nr) - jx*xyzin(jx-1,ix,1,1:nr)
+                dket(2,1:nr) = 2*aj*xyzin(jy+1,iy,2,1:nr)
+                if (jy > 0) dket(2,1:nr) = dket(2,1:nr) - jy*xyzin(jy-1,iy,2,1:nr)
+                dket(3,1:nr) = 2*aj*xyzin(jz+1,iz,3,1:nr)
+                if (jz > 0) dket(3,1:nr) = dket(3,1:nr) - jz*xyzin(jz-1,iz,3,1:nr)
+
+                ! Mixed bra-ket second derivative per root:
+                ! d2/dA_q dB_q = 2*ai*(2*aj*f(j+1,i+1)-j*f(j-1,i+1)) - i*(2*aj*f(j+1,i-1)-j*f(j-1,i-1))
+                d2ab(1,1:nr) = 2*pp%ai * 2*aj * xyzin(jx+1,ix+1,1,1:nr)
+                if (jx > 0)          d2ab(1,1:nr) = d2ab(1,1:nr) - 2*pp%ai*jx*xyzin(jx-1,ix+1,1,1:nr)
+                if (ix > 0)          d2ab(1,1:nr) = d2ab(1,1:nr) - ix*2*aj*xyzin(jx+1,ix-1,1,1:nr)
+                if (ix > 0 .and. jx > 0) d2ab(1,1:nr) = d2ab(1,1:nr) + ix*jx*xyzin(jx-1,ix-1,1,1:nr)
+
+                d2ab(2,1:nr) = 2*pp%ai * 2*aj * xyzin(jy+1,iy+1,2,1:nr)
+                if (jy > 0)          d2ab(2,1:nr) = d2ab(2,1:nr) - 2*pp%ai*jy*xyzin(jy-1,iy+1,2,1:nr)
+                if (iy > 0)          d2ab(2,1:nr) = d2ab(2,1:nr) - iy*2*aj*xyzin(jy+1,iy-1,2,1:nr)
+                if (iy > 0 .and. jy > 0) d2ab(2,1:nr) = d2ab(2,1:nr) + iy*jy*xyzin(jy-1,iy-1,2,1:nr)
+
+                d2ab(3,1:nr) = 2*pp%ai * 2*aj * xyzin(jz+1,iz+1,3,1:nr)
+                if (jz > 0)          d2ab(3,1:nr) = d2ab(3,1:nr) - 2*pp%ai*jz*xyzin(jz-1,iz+1,3,1:nr)
+                if (iz > 0)          d2ab(3,1:nr) = d2ab(3,1:nr) - iz*2*aj*xyzin(jz+1,iz-1,3,1:nr)
+                if (iz > 0 .and. jz > 0) d2ab(3,1:nr) = d2ab(3,1:nr) + iz*jz*xyzin(jz-1,iz-1,3,1:nr)
+
+                ! p_AA = d2/dA^2 (symmetric; fill then mirror a<->b)
+                pAA(1,1,i,j) = pAA(1,1,i,j) + fac*sum(gDAA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(2,2,i,j) = pAA(2,2,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*gDAA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(3,3,i,j) = pAA(3,3,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDAA(jz,iz,3,1:nr))
+                pAA(2,1,i,j) = pAA(2,1,i,j) + fac*sum(gDA(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAA(3,1,i,j) = pAA(3,1,i,j) + fac*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAA(3,2,i,j) = pAA(3,2,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAA(1,2,i,j) = pAA(2,1,i,j)
+                pAA(1,3,i,j) = pAA(3,1,i,j)
+                pAA(2,3,i,j) = pAA(3,2,i,j)
+
+                ! p_AB = d2/dA_a dB_b (NOT symmetric; pAB(a,b) = d2/dA_a dB_b)
+                pAB(1,1,i,j) = pAB(1,1,i,j) + fac*sum(d2ab(1,1:nr)*xyzin(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(2,2,i,j) = pAB(2,2,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*d2ab(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(3,3,i,j) = pAB(3,3,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*d2ab(3,1:nr))
+                pAB(1,2,i,j) = pAB(1,2,i,j) + fac*sum(gDA(jx,ix,1,1:nr)*dket(2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(2,1,i,j) = pAB(2,1,i,j) + fac*sum(dket(1,1:nr)*gDA(jy,iy,2,1:nr)*xyzin(jz,iz,3,1:nr))
+                pAB(1,3,i,j) = pAB(1,3,i,j) + fac*sum(gDA(jx,ix,1,1:nr)*xyzin(jy,iy,2,1:nr)*dket(3,1:nr))
+                pAB(3,1,i,j) = pAB(3,1,i,j) + fac*sum(dket(1,1:nr)*xyzin(jy,iy,2,1:nr)*gDA(jz,iz,3,1:nr))
+                pAB(2,3,i,j) = pAB(2,3,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*gDA(jy,iy,2,1:nr)*dket(3,1:nr))
+                pAB(3,2,i,j) = pAB(3,2,i,j) + fac*sum(xyzin(jx,ix,1,1:nr)*dket(2,1:nr)*gDA(jz,iz,3,1:nr))
+
+            END DO
+        END DO
+        END ASSOCIATE
+    END DO
+
+  END SUBROUTINE
+
+!> @brief Bra-bra and bra-charge second derivatives of the nuclear-attraction
+!>   integral for a single charge center c, contracted with a density block.
+!> @details Thin contraction wrapper over comp_coulomb_der2_blocks (the shared
+!>   production AM-shift kernel). On output:
+!>     p_XX += sum_ij dij(i,j) * d2/dX^2 <i|znuc/|r-c||j>        (bra-bra)
+!>     p_XC += -sum_ij dij(i,j) * (d2/dX^2 + d2/dX dY) <i|...|j> (bra-charge)
+!>   The bra-charge block uses single-center translational invariance
+!>   d/dc = -(d/dX + d/dY); no Rys root/weight differentiation is involved
+!>   (see comp_coulomb_der2_blocks). The caller (hess_en) obtains p_YY, p_YC by
+!>   calling again with the shell pair swapped, then assembles the 9 atom blocks.
+ SUBROUTINE comp_coulomb_der2_braC(cp, c, znuc, dij, p_XX, p_XC)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), znuc
+    REAL(REAL64), INTENT(IN) :: dij(:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: p_XX(:,:), p_XC(:,:)
+
+    REAL(REAL64) :: pAA(3,3,cp%inao,cp%jnao), pAB(3,3,cp%inao,cp%jnao)
+    REAL(REAL64) :: bAA(3,3), bAB(3,3)
+    INTEGER :: i, j
+
+    CALL comp_coulomb_der2_blocks(cp, c, znuc, pAA, pAB)
+
+    bAA = 0.0_real64
+    bAB = 0.0_real64
+    DO i = 1, cp%inao
+        DO j = 1, cp%jnao
+            bAA = bAA + dij(i,j)*pAA(:,:,i,j)
+            bAB = bAB + dij(i,j)*pAB(:,:,i,j)
+        END DO
+    END DO
+
+    p_XX = p_XX + bAA
+    ! p_XC = d2/dA dC = -(d2/dA^2 + d2/dA dB) by translational invariance
+    p_XC = p_XC - (bAA + bAB)
+
+  END SUBROUTINE
 
 !> @brief Compute 1e Ewald long-range contribution to the gradient (v.r.t. shifts of
 !>  shell's centers)
@@ -2091,6 +2558,43 @@ END SUBROUTINE
 
  END SUBROUTINE
 
+!> @brief Second derivative of the 1D Coulomb (nuclear-attraction) integrals
+!>  with respect to the bra center, obtained by applying the bra-center
+!>  derivative recursion (der_coul_xyz) twice:
+!>    d2[j,i] = 4 ai^2 [j,i+2] - 2 ai (2i+1) [j,i] + i(i-1) [j,i-2]
+!>  per Rys root. The input array must be available up to bra index lit+2
+!>  (build QGaussRys with igrd=2 and a correspondingly sized xyzin).
+!>
+!>  Together with the analogous ket-center derivatives, this provides the
+!>  basis-center second-derivative blocks (AA, AB, BB) of the nuclear-attraction
+!>  Hessian. The charge-center (Hellmann-Feynman) and mixed blocks follow from
+!>  translational invariance, d/dC = -(d/dA + d/dB), so no second-derivative Rys
+!>  root machinery is required.
+ SUBROUTINE der2_coul_xyz(d2xyz,xyzin,lit,ljt,ai,nroots)
+!dir$ attributes forceinline :: der2_coul_xyz
+    REAL(REAL64), INTENT(IN) ::  ai
+    REAL(REAL64), CONTIGUOUS, INTENT(IN) ::  xyzin(0:,0:,:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: d2xyz(0:,0:,:,:)
+    INTEGER, INTENT(IN) :: lit, ljt, nroots
+
+    INTEGER :: i
+!dir$ assume_aligned xyzin : 64
+!dir$ assume_aligned d2xyz : 64
+
+    d2xyz(0:ljt,0:lit,1:3,1:nroots) = 4*ai*ai * xyzin(0:ljt,2:lit+2,1:3,1:nroots)
+
+    DO i = 0, lit
+        d2xyz(0:ljt,i,1:3,1:nroots) = d2xyz(0:ljt,i,1:3,1:nroots) &
+            - 2*ai*(2*i+1)*xyzin(0:ljt,i,1:3,1:nroots)
+    END DO
+
+    DO i = 2, lit
+        d2xyz(0:ljt,i,1:3,1:nroots) = d2xyz(0:ljt,i,1:3,1:nroots) &
+            + i*(i-1)*xyzin(0:ljt,i-2,1:3,1:nroots)
+    END DO
+
+ END SUBROUTINE
+
 !> @brief Compute derivatives of 1D Coulomb integrals v.r.t. shifts of the nuclei
 !>  (Hellman-Feynman term)
 !>  Derivatives are computed using following equation:
@@ -2145,6 +2649,31 @@ END SUBROUTINE
 
     DO i = 1, lit
         dxyz(0:ljt,i,:) = dxyz(0:ljt,i,:) - i*xyz(0:ljt,i-1,:)
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Second derivative of 1D overlap/kinetic integrals w.r.t. the bra
+!>  center, obtained by applying the bra-center derivative operator twice:
+!>    d2[j,i] = 4 ai^2 [j,i+2] - 2 ai (2i+1) [j,i] + i(i-1) [j,i-2]
+!>  This is identical to der_kinovl_xyz composed with itself; the input array
+!>  must therefore be available up to bra index lit+2.
+ SUBROUTINE der2_kinovl_xyz(d2xyz,xyz,lit,ljt,ai)
+!dir$ attributes forceinline :: der2_kinovl_xyz
+    REAL(REAL64), INTENT(IN) ::  ai
+    REAL(REAL64), CONTIGUOUS, INTENT(IN) ::  xyz(0:,0:,:)
+    REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: d2xyz(0:,0:,:)
+    INTEGER, INTENT(IN) :: lit, ljt
+    INTEGER :: i
+
+    d2xyz(0:ljt,0:lit,:) = 4*ai*ai * xyz(0:ljt,2:lit+2,:)
+
+    DO i = 0, lit
+        d2xyz(0:ljt,i,:) = d2xyz(0:ljt,i,:) - 2*ai*(2*i+1)*xyz(0:ljt,i,:)
+    END DO
+
+    DO i = 2, lit
+        d2xyz(0:ljt,i,:) = d2xyz(0:ljt,i,:) + i*(i-1)*xyz(0:ljt,i-2,:)
     END DO
 
  END SUBROUTINE
@@ -2382,19 +2911,23 @@ END SUBROUTINE
 !     REVISION HISTORY:
 !> @date _Sep, 2018_ Initial release
 !
- SUBROUTINE DQGaussRys(ryscomp, cp, id, c, znuc, xyzin)
+ SUBROUTINE DQGaussRys(ryscomp, cp, id, c, znuc, xyzin, igrd)
 !dir$ attributes forceinline :: DQGaussRys
     TYPE(shpair_t), INTENT(IN) :: cp
     INTEGER, INTENT(IN) :: id
     REAL(REAL64), INTENT(IN)   :: c(3), znuc
     REAL(REAL64), CONTIGUOUS, INTENT(OUT)  :: xyzin(0:,0:,:,:)
+    INTEGER, INTENT(IN), OPTIONAL :: igrd
 
     type(rys_root_t), intent(inout) :: ryscomp
 
-    INTEGER :: ni, nj, k
+    INTEGER :: ni, nj, k, igrd1
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
 !dir$ assume_aligned xyzin : 64
+
+    igrd1 = 1
+    IF (present(igrd)) igrd1 = igrd
 
     call ryscomp%evaluate()
 
@@ -2418,13 +2951,13 @@ END SUBROUTINE
         xyzin(1,0,3,k) = d(3)*ww
 
         ! VRR (Lj+1,0) <- Rpj*(Lj,0) + Lj*b*(Lj-1,0)
-        DO nj = 2, iang+jang+1
+        DO nj = 2, iang+jang+igrd1
             xyzin(nj,0,:,k) = d(:)*xyzin(nj-1,0,:,k) + (nj-1)*b*xyzin(nj-2,0,:,k)
         END DO
 
         ! HRR (Lj,Li+1) <- (Lj+1,Li) + Rij*(Lj,Li)
-        nj = iang+jang+1
-        DO ni = 1, iang+1
+        nj = iang+jang+igrd1
+        DO ni = 1, iang+igrd1
             nj = nj-1
             xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + dij(1)*xyzin(0:nj,ni-1,1,k)
             xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + dij(2)*xyzin(0:nj,ni-1,2,k)

@@ -5,9 +5,8 @@
 ## Features
 
 - Geometry optimization for arbitrary state local minimum, MECI, MEP with Scipy library
-- Geometry optimization for arbitrary state local minimum, MECI, TS with DL-FIND library
 - Geometry optimization with geomeTRIC for state-specific optimization, MECI, MECP, TS, constrained optimizations, and IRC paths
-- Native PySCF-backed initial guesses: `pyscf`, `sad`, and `sap`
+- Native Fortran initial guesses: `hcore`, `huckel`, `modhuckel`, `minao`, and `sap` (no external quantum-chemistry package required at runtime)
 - Energy gradient calculations interface for nonadiabatic molecular dynamics
 
 ## Prerequisite
@@ -15,7 +14,6 @@
 - python >= 3.8
 - numpy >= 1.20.0
 - scipy >= 1.10.0
-- libdlfind >= 0.0.3
 - dftd4 >= 3.5.0   Optional, check `setup.py`
 
 ## Installation
@@ -150,12 +148,6 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     pen_incre=1.0
     init_scf=False
 
-[dlfind]
-    printl=2
-    icoord=0
-    iopt=3
-    ims=0
-
 [hess]
     type=numerical
     state=0
@@ -228,18 +220,14 @@ guess section handle the guess orbitals
 
 - type // choose the type of guess orbital
 
-      huckel     huckel guess (default)
-      hcore      hcore guess
+      sap        superposition of atomic potentials (default, native Fortran)
+      minao      projected atomic minimal-basis densities (native Fortran)
+      huckel     extended Huckel guess (native Fortran)
+      modhuckel  modified (weighted Wolfsberg-Helmholz) Huckel (native Fortran)
+      hcore      bare core-Hamiltonian guess
       model      read orbital from molden
       json       load data from json
       auto       load json if the requested file exists; otherwise use huckel
-      pyscf      run a PySCF SCF calculation and import the converged orbitals
-      sad        build a PySCF superposition-of-atomic-density initial guess
-      sap        build a PySCF superposition-of-atomic-potential initial guess
-
-      pyscf, sad, and sap use the native OpenQP JSON restart exporter.
-      PySCF is installed with OpenQP's Python dependencies. MOKIT is not
-      required for these initial guesses.
 
 - file // set the guess orbital or data file
 
@@ -406,7 +394,6 @@ optimize section handle the geometry optimization
 - lib // choose the optimization library
 
       scipy       use scipy.optimize library
-      dlfind      use DL-FIND library
       geometric   use geomeTRIC (default). Supports runtype=optimize, meci, mecp, ts, and irc
 
 - optimizer // choose the scipy optimizer
@@ -532,38 +519,6 @@ geometric section controls the geomeTRIC optimizer backend when [optimize]lib=ge
 - conmethod // geomeTRIC constraint method
 
       0 (default)
-
-### [dlfind]
-
-dlfind section handle the DL-FIND library for geometry optimization
-
-- printl // set the DL-FIND printing level
-
-      2 (default)
-    
-- icoord // choose the coordinate
-
-      0          Cartesian
-      1          hybrid delocalized internal coordinates, primitive internal coordinate scheme
-      2          hybrid delocalized internal coordinates, total connection scheme
-      3          delocalized internal coordinates, primitive internal coordinate scheme
-      4          delocalized internal coordinates, total connection scheme
-      10–14      Lagrange–Newton conical intersection search, with 2nd digit referring to above options
-
-- iopt // choose the optimization job
-
-      0          steepest descent
-      1          Polak-Ribiere conjugate gradient w/ automatic restart
-      2          Polak-Ribiere conjugate gradient w/ restart every 10 steps
-      3          L-BGFS (default)
-      9          P-RFO, for transition state searches, require [input]runtype=ts
-    
-- ims // set the multistate gradient calculations
-
-      0          single-state calculation (default)
-      1          conical intersection optimization with penalty function algorithm, require [input]runtype=meci
-      2          conical intersection optimization with gradient projection algorithm, require [input]runtype=meci
-      3          conical intersection optimization with Lagrange–Newton algorithm, require [input]runtype=meci
 
 ### [hess]
 hess section handle hessian and frequence calculations

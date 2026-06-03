@@ -104,11 +104,7 @@ ExternalProject_Add(libecpint
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  if(LINALG_LIB_INT64)
-    set(BLA_LIB_SUFFIX "64")
-  else()
-    set(BLA_LIB_SUFFIX "")
-  endif()
+  set(BLA_LIB_SUFFIX "64")
   if(BUILD_SHARED_LIBS)
     set(la_fortran_flags "${CMAKE_Fortran_FLAGS} -fpic")
   else()
@@ -133,10 +129,10 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         PATCH_COMMAND /usr/bin/perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
         INSTALL_COMMAND ""
         CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
-                   -DBUILD_SINGLE=OFF
+                   -DBUILD_SINGLE=ON
                    -DBUILD_DOUBLE=ON
-                   -DBUILD_COMPLEX=OFF
-                   -DBUILD_COMPLEX16=OFF
+                   -DBUILD_COMPLEX=ON
+                   -DBUILD_COMPLEX16=ON
                    -DUSE_OPTIMIZED_BLAS=OFF
                    -DUSE_OPTIMIZED_LAPACK=OFF
                    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -149,14 +145,12 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         )
 endif()
 set(otr_integer_flags "")
-if(LINALG_LIB_INT64)
-    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
-        set(otr_integer_flags "-fdefault-integer-8")
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-        set(otr_integer_flags "-fdefault-integer-8")
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-        set(otr_integer_flags "-i8")
-    endif()
+if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
+    set(otr_integer_flags "-fdefault-integer-8")
+elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    set(otr_integer_flags "-fdefault-integer-8")
+elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    set(otr_integer_flags "-i8")
 endif()
 set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)

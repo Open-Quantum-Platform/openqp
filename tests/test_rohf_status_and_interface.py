@@ -1,8 +1,8 @@
 """ROHF status and NMR claim-boundary guards.
 
-ROHF ground-state SCF support is distinct from ROHF NMR response support.  These
-checks prevent requested ROHF NMR cases from being silently routed through RHF,
-UHF, or a GIAO-to-CGO fallback while the NMR response remains unvalidated.
+ROHF ground-state SCF support is distinct from the closed-shell-only CGO NMR
+path. These checks prevent requested ROHF CGO NMR cases from being silently
+routed through RHF/UHF while allowing the validated ROHF GIAO route.
 """
 from __future__ import annotations
 
@@ -57,14 +57,18 @@ class DummyMol:
 
 def load_runfunc_with_stubs():
     """Import runfunc.py without requiring the compiled oqp extension."""
-    calls = {"nmr": 0}
+    calls = {"nmr": 0, "giao": 0}
 
     oqp = types.ModuleType("oqp")
 
     def nmr_shielding(_mol):
         calls["nmr"] += 1
 
+    def nmr_giao_shielding(_mol):
+        calls["giao"] += 1
+
     setattr(oqp, "nmr_shielding", nmr_shielding)
+    setattr(oqp, "nmr_giao_shielding", nmr_giao_shielding)
     setattr(oqp, "electric_moments", lambda _mol: None)
     setattr(oqp, "mulliken", lambda _mol: None)
     setattr(oqp, "lowdin", lambda _mol: None)
@@ -184,7 +188,7 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertIn('"rohf"', checker)
         self.assertIn("SF/MRSF requires an ROHF reference", checker)
 
-    def test_real_input_checker_leaves_rohf_nmr_to_runtime_guard(self):
+    def test_real_input_checker_rejects_rohf_cgo_nmr(self):
         input_checker = load_input_checker_with_minimal_stubs()
         config = {
             "input": {
@@ -199,7 +203,9 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
 
         report = input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertTrue(report.ok, report.to_text())
+        self.assertFalse(report.ok)
+        self.assertIn("CGO NMR shielding supports closed-shell RHF", report.to_text())
+        self.assertIn("nmr_gauge=giao", report.to_text())
         self.assertEqual(config["scf"]["type"], "rohf")
 
     def test_rohf_has_native_scf_driver_scaffold(self):
@@ -214,14 +220,13 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         ):
             self.assertIn(required, scf)
 
-    def test_rohf_nmr_raises_notimplemented_without_rhf_or_uhf_fallback(self):
+    def test_rohf_cgo_nmr_raises_without_rhf_or_uhf_fallback(self):
         runfunc, calls = load_runfunc_with_stubs()
         mol = DummyMol(scf_type="rohf", nmr_gauge="cgo")
         before = mol.config["scf"]["type"]
-        with self.assertRaisesRegex(NotImplementedError, "ROHF NMR shielding requested") as ctx:
+        with self.assertRaisesRegex(NotImplementedError, "CGO NMR shielding supports closed-shell RHF") as ctx:
             runfunc.compute_scf_prop(mol)
-        self.assertIn("ROHF SCF/reference support exists", str(ctx.exception))
-        self.assertIn("ROHF NMR response support is separate", str(ctx.exception))
+        self.assertIn("nmr_gauge=giao", str(ctx.exception))
         self.assertEqual(mol.config["scf"]["type"], before)
         self.assertEqual(calls["nmr"], 0, "ROHF NMR must not dispatch to the CGO routine")
 
@@ -271,12 +276,12 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertNotIn("Final UHF energy", log)
         self.assertNotIn("NMR shielding", log)
 
-    def test_rohf_nmr_giao_is_not_routed_to_cgo(self):
+    def test_rohf_nmr_giao_is_routed_to_giao_not_cgo(self):
         runfunc, calls = load_runfunc_with_stubs()
         mol = DummyMol(scf_type="rohf", nmr_gauge="giao")
-        with self.assertRaises(NotImplementedError):
-            runfunc.compute_scf_prop(mol)
+        runfunc.compute_scf_prop(mol)
         self.assertEqual(calls["nmr"], 0, "ROHF-GIAO must not use CGO fallback")
+        self.assertEqual(calls["giao"], 1, "ROHF-GIAO must dispatch to the native GIAO routine")
 
     def test_nmr_fortran_still_declares_closed_shell_only(self):
         nmr = NMR.read_text()

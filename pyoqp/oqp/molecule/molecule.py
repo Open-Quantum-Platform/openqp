@@ -3,6 +3,7 @@ import os
 import copy
 import json
 import platform
+import warnings
 import numpy as np
 import oqp
 from oqp.utils.input_parser import OQPConfigParser
@@ -47,8 +48,14 @@ class Molecule:
         self.soc = []  # Npairs, 1,
         self.freqs = np.zeros(0)  # 3Natom-6
         self.hessian = np.zeros(0)  # 3Natom, 3Natom
+        self.hessian_metadata = {}
         self.modes = np.zeros(0)  # 3Natom-6, 3Natom
         self.inertia = np.zeros(0)  # 3
+        self.infrared_intensities = np.zeros(0)
+        self.raman_activities = np.zeros(0)
+        self.vibrational_intensity_metadata = {}
+        self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+        self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -57,6 +64,9 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
+            'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
+            'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
+            'OQP::hf_hessian',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
         ]
@@ -232,7 +242,74 @@ class Molecule:
         Get hessian results
         """
 
-        return []
+        return copy.deepcopy(self.hessian)
+
+    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8):
+        """
+        Store a final Cartesian Hessian in OpenQP frequency conventions.
+
+        Native analytic Hessian kernels should hand one square ``(3N, 3N)``
+        matrix to this helper. The helper records the pre-symmetrization
+        asymmetry for diagnostics and stores the symmetrized matrix used by
+        normal-mode analysis; it does not compute a numerical fallback.
+        """
+
+        hessian = np.asarray(raw_hessian, dtype=float)
+        if hessian.ndim != 2 or hessian.shape[0] != hessian.shape[1]:
+            raise ValueError(f"Expected square Hessian matrix, got shape={hessian.shape}")
+
+        natom = self.data['natom']
+        expected = 3 * natom
+        if hessian.shape != (expected, expected):
+            raise ValueError(
+                f"Expected Hessian shape ({expected}, {expected}) for {natom} atoms, got {hessian.shape}"
+            )
+
+        max_asymmetry = float(np.max(np.abs(hessian - hessian.T))) if hessian.size else 0.0
+        if max_asymmetry > asymmetry_tol:
+            warnings.warn(
+                f"Analytic Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
+                RuntimeWarning,
+            )
+
+        self.hessian = 0.5 * (hessian + hessian.T)
+        self.hessian_metadata = {
+            'max_asymmetry': max_asymmetry,
+            'symmetrized': bool(max_asymmetry > 0.0),
+        }
+        return self.hessian
+
+    def get_mrsf_ekt_results(self):
+        """Collect MRSF-EKT root results for the final JSON file."""
+        if self.data is None:
+            return {}
+
+        try:
+            eigenvalues = np.array(self.data['OQP::mrsf_ekt_eigenvalues'])
+            strengths = np.array(self.data['OQP::mrsf_ekt_strengths'])
+            orbitals = np.array(self.data['OQP::mrsf_ekt_orbitals_mo'])
+        except AttributeError:
+            return {}
+
+        hartree_to_ev = 27.211386245988
+        ebe_ev = (-eigenvalues * hartree_to_ev).tolist()
+        ekt_type = self.config.get('tdhf', {}).get('type')
+        if self.config.get('input', {}).get('runtype') == 'ekt':
+            if self.config.get('ekt', {}).get('ip'):
+                ekt_type = 'mrsf_ekt_ip'
+            elif self.config.get('ekt', {}).get('ea'):
+                ekt_type = 'mrsf_ekt_ea'
+
+        return {
+            'mrsf_ekt': {
+                'tdhf_type': ekt_type,
+                'target_state': self.config.get('tdhf', {}).get('target'),
+                'eigenvalues_hartree': eigenvalues.tolist(),
+                'ebe_ev': ebe_ev,
+                'pole_strengths': strengths.tolist(),
+                'orbitals_mo': orbitals.tolist(),
+            }
+        }
 
     def get_data(self):
         """
@@ -292,6 +369,7 @@ class Molecule:
         data['nac'] = np.array(self.get_nac()).tolist()
         data['soc'] = np.array(self.get_soc()).tolist()
         data['hess'] = np.array(self.get_hess()).tolist()
+        data.update(self.get_mrsf_ekt_results())
 
         return data
 
@@ -472,9 +550,20 @@ class Molecule:
             'mass': self.get_mass().tolist(),
             'energy': self.energies[state],
             'hessian': self.hessian.tolist(),
+            'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
-            'inertia': self.modes.tolist(),
+            'frequency_modes': {
+                'frequencies_cm-1': self.freqs.tolist(),
+                'normal_mode_eigenvectors': self.modes.tolist(),
+                'normal_mode_eigenvectors_units': 'Cartesian displacement, mass-unweighted, row-major by vibrational mode',
+            },
+            'inertia': self.inertia.tolist(),
+            'infrared_intensities': self.infrared_intensities.tolist(),
+            'raman_activities': self.raman_activities.tolist(),
+            'vibrational_intensity_metadata': self.vibrational_intensity_metadata,
+            'infrared_mode_dipole_derivatives': self.infrared_mode_dipole_derivatives.tolist(),
+            'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
         }
 
         with open(jsonfile, 'w') as outdata:
@@ -547,9 +636,19 @@ class Molecule:
 
         energy = data['energy']
         hessian = data['hessian']
+        self.hessian_metadata = data.get('hessian_metadata', {})
         freqs = data['freqs']
         modes = data['modes']
         inertia = data['inertia']
+        self.infrared_intensities = np.array(data.get('infrared_intensities', []), dtype=float)
+        self.raman_activities = np.array(data.get('raman_activities', []), dtype=float)
+        self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
+        self.infrared_mode_dipole_derivatives = np.array(
+            data.get('infrared_mode_dipole_derivatives', []), dtype=float
+        )
+        self.raman_mode_polarizability_derivatives = np.array(
+            data.get('raman_mode_polarizability_derivatives', []), dtype=float
+        )
 
         return energy, hessian, freqs, modes, inertia
 
@@ -564,10 +663,18 @@ class Molecule:
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
             'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
-            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO', 'json'
+            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO',
+            'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
+            'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
+            'OQP::hf_hessian',
+            'json'
         ]
+        tdhf_type = self.config.get('tdhf', {}).get('type')
+        required_ref_keys = []
+        if tdhf_type in ('mrsf_ekt_ip', 'mrsf_ekt_ea') or runtype == 'ekt':
+            required_ref_keys.append('mrsf_ekt')
 
-        if runtype in ['energy']:
+        if runtype in ['energy', 'ekt']:
             skip_keys.append('grad')
             skip_keys.append('hess')
 
@@ -586,10 +693,30 @@ class Molecule:
             with open(ref_file, 'r') as indata:
                 ref_data = json.load(indata)
 
+            # Hessian runs write detailed Hessian references to a sidecar
+            # <input>.hess.json. Keep the primary restart/reference JSON
+            # compact, but compare the runtime hess matrix against the
+            # sidecar when the primary hess field is intentionally empty.
+            if runtype == 'hess' and ref_data.get('hess') == []:
+                hess_ref_file = self.input_file.replace('.inp', '.hess.json')
+                if os.path.exists(hess_ref_file):
+                    with open(hess_ref_file, 'r') as hess_indata:
+                        hess_ref_data = json.load(hess_indata)
+                    if 'hessian' in hess_ref_data:
+                        ref_data['hess'] = hess_ref_data['hessian']
+
+            for key in required_ref_keys:
+                if key not in ref_data:
+                    total_diff += 1.0
+                    message += f'   PyOQP missing reference {key:<20} ... failed (1.00000000)\n'
+
             for key, value in ref_data.items():
                 if key in skip_keys:
                     continue
-                flag, diff = compare_data(runtime_data[key], value)
+                if key not in runtime_data:
+                    flag, diff = 'failed', 1.0
+                else:
+                    flag, diff = compare_data(runtime_data[key], value)
                 total_diff += diff
                 message += f'   PyOQP checking {key:<20} ... {flag} ({diff:.8f})\n'
         else:
@@ -603,7 +730,58 @@ def compare_data(data_1, data_2):
     """
     Compute the numerical differences between two arrays
     """
-    diff = np.sum(np.abs(np.array(data_1) - np.array(data_2)))
+    if isinstance(data_1, dict) or isinstance(data_2, dict):
+        if not isinstance(data_1, dict) or not isinstance(data_2, dict):
+            return 'failed', 1.0
+        diff = 0.0
+        for key in sorted(data_2):
+            if key == 'orbitals_mo':
+                # EKT orbital vectors are phase/sign ambiguous between runs;
+                # eigenvalues and pole strengths provide the stable regression
+                # signal for the structured EKT result.
+                continue
+            if key not in data_1:
+                diff += 1.0
+                continue
+            _, subdiff = compare_data(data_1[key], data_2[key])
+            diff += subdiff
+        if np.round(diff, 4) > 0:
+            return 'failed', diff
+        return 'passed', diff
+
+    if isinstance(data_1, str) or isinstance(data_2, str):
+        diff = 0.0 if data_1 == data_2 else 1.0
+        if diff > 0:
+            return 'failed', diff
+        return 'passed', diff
+
+    if data_1 is None or data_2 is None:
+        diff = 0.0 if data_1 is data_2 else 1.0
+        if diff > 0:
+            return 'failed', diff
+        return 'passed', diff
+
+    arr_1 = np.array(data_1)
+    arr_2 = np.array(data_2)
+    if arr_1.shape != arr_2.shape:
+        # Some references intentionally store a compact prefix of a longer
+        # runtime vector (e.g. EKT roots). Compare the reference-sized prefix
+        # when the remaining dimensions agree; otherwise report a clean
+        # failure instead of raising a broadcasting ValueError.
+        if arr_1.ndim == arr_2.ndim and arr_1.ndim > 0 \
+                and arr_1.shape[0] >= arr_2.shape[0] \
+                and arr_1.shape[1:] == arr_2.shape[1:]:
+            arr_1 = arr_1[:arr_2.shape[0]]
+        else:
+            return 'failed', 1.0
+
+    if arr_1.size == 0:
+        diff = 0.0
+    else:
+        # Use the maximum element-wise deviation instead of an L1 sum so
+        # vector-valued references are judged by per-value numerical drift,
+        # not by the number of states/components in the vector.
+        diff = float(np.max(np.abs(arr_1 - arr_2)))
     if np.round(diff, 4) > 0:
         return 'failed', diff
 

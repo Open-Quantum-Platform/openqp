@@ -7,8 +7,75 @@ module electric_moments_mod
   private
   public electric_moments
   public electric_moments_excited
+  public electric_dipole_au_C
 
 contains
+
+  subroutine electric_dipole_au_C(c_handle, dipole) bind(C, name="electric_dipole_au")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use iso_c_binding, only: c_double
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    real(c_double), intent(out) :: dipole(3)
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call electric_dipole_au(inf, dipole)
+  end subroutine electric_dipole_au_C
+
+  subroutine electric_dipole_au(infos, dipole)
+    use oqp_tagarray_driver
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use types, only: information
+    use mathlib, only: traceprod_sym_packed
+    use int1, only: multipole_integrals
+    type(information), target, intent(inout) :: infos
+    real(kind=8), intent(out) :: dipole(3)
+
+    integer :: nbf, nbf2, ok, nat, i
+    logical :: urohf
+    type(basis_set), pointer :: basis
+    real(kind=8), allocatable :: mints(:,:)
+    real(kind=8) :: origin(3), dr(3), z
+    real(kind=8), contiguous, pointer :: dmat_a(:), dmat_b(:)
+    integer(4) :: status
+
+    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nat = ubound(basis%atoms%zn,1)
+    allocate(mints(nbf2,19), source=0.0d0, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
+    call check_status(status, module_name, "electric_dipole_au", OQP_DM_A)
+    if (urohf) then
+      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b, status)
+      call check_status(status, module_name, "electric_dipole_au", OQP_DM_B)
+    endif
+
+    origin = 0.0d0
+    call multipole_integrals(basis, mints, origin, 3)
+
+    dipole = 0.0d0
+    do i = 1, nat
+      dr = infos%atoms%xyz(:,i)
+      z = infos%atoms%zn(i) - infos%basis%ecp_zn_num(i)
+      dipole = dipole + z * dr
+    end do
+    do i = 1, 3
+      dipole(i) = dipole(i) - traceprod_sym_packed(mints(:,i), dmat_a, nbf)
+    end do
+    if (urohf) then
+      do i = 1, 3
+        dipole(i) = dipole(i) - traceprod_sym_packed(mints(:,i), dmat_b, nbf)
+      end do
+    end if
+
+    deallocate(mints)
+  end subroutine electric_dipole_au
 
   subroutine electric_moments_C(c_handle) bind(C, name="electric_moments")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info

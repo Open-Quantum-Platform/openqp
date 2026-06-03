@@ -53,6 +53,7 @@ class Runner:
         # Define the mapping of run types to their respective functions
         self.run_func = {
             'energy': compute_energy,
+            'ekt': compute_energy,
             'grad': compute_grad,
             'nac': compute_nac,
             'nacme': compute_nacme,

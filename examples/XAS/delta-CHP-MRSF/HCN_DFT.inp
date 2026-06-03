@@ -9,6 +9,7 @@ method=hf
 runtype=energy
 
 [guess]
+type=huckel
 save_mol=False
 
 [scf]
