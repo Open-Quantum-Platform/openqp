@@ -43,6 +43,7 @@ contains
     use mathlib, only: pack_matrix, unpack_matrix
     use oqp_linalg
     use printing, only: print_module_info
+    use zvector_common, only: sanitize_zvector_preconditioner
 
     implicit none
 
@@ -328,7 +329,7 @@ contains
     call flush(iw)
 
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
-    call sanitize_sf_zvector_preconditioner(xm, xminv, iw)
+    call sanitize_zvector_preconditioner(xm, xminv, iw, SF_ZVEC_DENOMINATOR_FLOOR, "SF")
 
     call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
     zvector_breakdown = .false.
@@ -556,38 +557,5 @@ contains
     close(iw)
 
   end subroutine tdhf_sf_z_vector
-
-  subroutine sanitize_sf_zvector_preconditioner(xm, xminv, log_unit)
-    use precision, only: dp
-    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
-
-    implicit none
-
-    real(kind=dp), intent(in) :: xm(:)
-    real(kind=dp), intent(inout) :: xminv(:)
-    integer, intent(in) :: log_unit
-    real(kind=dp), parameter :: SF_ZVEC_DENOMINATOR_FLOOR = 1.0d-12
-    real(kind=dp) :: denom
-    integer :: i, regularized
-
-    regularized = 0
-    do i = 1, size(xm)
-      denom = xm(i)
-      if (.not. ieee_is_finite(denom) .or. abs(denom) < SF_ZVEC_DENOMINATOR_FLOOR) then
-        if (ieee_is_finite(denom) .and. denom < 0.0_dp) then
-          denom = -SF_ZVEC_DENOMINATOR_FLOOR
-        else
-          denom = SF_ZVEC_DENOMINATOR_FLOOR
-        end if
-        regularized = regularized + 1
-      end if
-      xminv(i) = 1.0_dp / denom
-    end do
-
-    if (regularized > 0) then
-      write(log_unit,'(" SF z-vector preconditioner regularized ", I0, " denominator(s)")') regularized
-      call flush(log_unit)
-    end if
-  end subroutine sanitize_sf_zvector_preconditioner
 
 end module tdhf_sf_z_vector_mod

@@ -9,6 +9,7 @@ module tdhf_z_vector_mod
   use mod_dft_molgrid, only: dft_grid_t
   use oqp_linalg
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+  use zvector_common, only: sanitize_zvector_preconditioner
 
   implicit none
 
@@ -236,7 +237,7 @@ contains
         pxm(j,i) = mo_energy_a(nocc+i) - mo_energy_a(j)
       end do
     end do
-    call sanitize_zvector_preconditioner(xm, xminv, iw)
+    call sanitize_zvector_preconditioner(xm, xminv, iw, ZVEC_PRECOND_FLOOR, "RHF")
 
     cgdata = tdhf_cg_data( &
         infos=infos, int2_driver=int2_driver, &
@@ -385,40 +386,6 @@ contains
     close(iw)
 
   end subroutine oqp_tdhf_z_vector
-
-!###############################################################################
-
-!> @brief Build a finite diagonal preconditioner for the Z-vector PCG solve.
-  subroutine sanitize_zvector_preconditioner(xm, xminv, log_unit)
-    implicit none
-    real(kind=dp), intent(in) :: xm(:)
-    real(kind=dp), intent(out) :: xminv(:)
-    integer, intent(in) :: log_unit
-
-    integer :: idx, regularized
-    real(kind=dp) :: denom
-
-    regularized = 0
-    do idx = 1, size(xm)
-      denom = xm(idx)
-      if (.not. ieee_is_finite(denom)) then
-        denom = ZVEC_PRECOND_FLOOR
-        regularized = regularized + 1
-      else if (abs(denom) < ZVEC_PRECOND_FLOOR) then
-        denom = sign(ZVEC_PRECOND_FLOOR, denom)
-        regularized = regularized + 1
-      end if
-      xminv(idx) = 1.0_dp / denom
-    end do
-
-    if (regularized > 0) then
-      write(log_unit,'(" Z-vector preconditioner regularized ",I0," denominators ",&
-                      &"below ",1p,e10.3)') &
-        regularized, ZVEC_PRECOND_FLOOR
-      call flush(log_unit)
-    end if
-
-  end subroutine sanitize_zvector_preconditioner
 
 !###############################################################################
 

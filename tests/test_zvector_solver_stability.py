@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PCG_SRC = ROOT / "source" / "pcg.F90"
+ZVEC_COMMON_SRC = ROOT / "source" / "zvector_common.F90"
 RHF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_z_vector.F90"
 SF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_sf_z_vector.F90"
 MRSF_ZVEC_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
@@ -159,28 +160,26 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertLess(error_exit.index("final_errcode = pcg%errcode"), error_exit.index("call pcg%clean()"))
         self.assertLess(error_exit.index("call pcg%clean()"), error_exit.index("call show_message"))
 
+    def _assert_shared_sanitizer_floor_guard(self):
+        """The shared zvector_common sanitizer must floor-guard every denominator."""
+        block = ZVEC_COMMON_SRC.read_text()
+        self.assertIn("use, intrinsic :: ieee_arithmetic", block)
+        self.assertRegex(block, r"subroutine\s+sanitize_zvector_preconditioner\(")
+        self.assertRegex(block, r"abs\(denom\)\s*<\s*floor")
+        self.assertRegex(block, r"ieee_is_finite\(denom\)")
+        self.assertRegex(block, r"1\.0_dp\s*/\s*denom")
+        self.assertIn("regularized", block.lower())
+
     def test_rhf_zvector_preconditioner_clamps_near_zero_denominators(self):
         """RHF/RPA/TDA z-vector preconditioner must be finite and floor guarded."""
         src = RHF_ZVEC_SRC.read_text()
 
-        self.assertIn("use, intrinsic :: ieee_arithmetic", src)
         self.assertIn("ZVEC_PRECOND_FLOOR", src)
-        self.assertIn("sanitize_zvector_preconditioner", src)
         self.assertNotIn("xminv = 1.0d0/xm", src)
-        self.assertRegex(src, r"call\s+sanitize_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
-
-        helper = re.search(
-            r"subroutine\s+sanitize_zvector_preconditioner\(xm,\s*xminv,\s*log_unit\).*?end subroutine",
-            src,
-            re.S | re.I,
-        )
-        if helper is None:
-            self.fail("Missing z-vector preconditioner sanitizer helper")
-        block = helper.group(0)
-        self.assertRegex(block, r"abs\(denom\)\s*<\s*ZVEC_PRECOND_FLOOR")
-        self.assertRegex(block, r"ieee_is_finite\(denom\)")
-        self.assertRegex(block, r"1\.0_dp\s*/\s*denom")
-        self.assertIn("regularized", block.lower())
+        # RHF delegates to the shared, floor-guarded sanitizer (floor passed in).
+        self.assertRegex(src, r"use\s+zvector_common,\s*only:\s*sanitize_zvector_preconditioner")
+        self.assertRegex(src, r"call\s+sanitize_zvector_preconditioner\(xm,\s*xminv,\s*iw,\s*ZVEC_PRECOND_FLOOR")
+        self._assert_shared_sanitizer_floor_guard()
 
     def test_sf_zvector_loop_guards_alpha_breakdown_and_nonfinite_updates(self):
         """SF z-vector loop must not divide by tiny/non-finite p^T A p or save bad vectors."""
@@ -188,8 +187,9 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
 
         self.assertIn("use, intrinsic :: ieee_arithmetic", src)
         self.assertIn("SF_ZVEC_DENOMINATOR_FLOOR", src)
-        self.assertIn("sanitize_sf_zvector_preconditioner", src)
-        self.assertRegex(src, r"call\s+sanitize_sf_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
+        # SF delegates to the shared sanitizer, passing its own floor.
+        self.assertRegex(src, r"use\s+zvector_common,\s*only:\s*sanitize_zvector_preconditioner")
+        self.assertRegex(src, r"call\s+sanitize_zvector_preconditioner\(xm,\s*xminv,\s*iw,\s*SF_ZVEC_DENOMINATOR_FLOOR")
 
         loop = re.search(r"do iter = 1, infos%control%maxit_zv.*?end do", src, re.S | re.I)
         if loop is None:
@@ -412,21 +412,17 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertLess(block.index("if (any(.not. ieee_is_finite(x_in)))"), block.index("allocate(int2_data)"))
 
     def test_mrsf_zvector_preconditioner_sanitizes_nonfinite_values_before_solver_choice(self):
-        """MRSF z-vector CG/GMRES must not seed either solver with NaN/Inf preconditioners."""
+        """MRSF z-vector CG/GMRES/MINRES must not seed any solver with NaN/Inf preconditioners."""
         src = MRSF_ZVEC_SRC.read_text()
-        self.assertIn("sanitize_mrsf_zvector_preconditioner", src)
-        self.assertRegex(src, r"(?s)call\s+sfromcal\(xm,\s*xminv,.*?call\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*iw\)")
-        helper = re.search(
-            r"subroutine\s+sanitize_mrsf_zvector_preconditioner\(xm,\s*xminv,\s*log_unit\).*?end subroutine",
+        # MRSF builds xminv via sfromcal then floor-guards it with the shared
+        # sanitizer (its own 1e-14 floor) before choosing a solver.
+        self.assertRegex(src, r"use\s+zvector_common,\s*only:\s*sanitize_zvector_preconditioner")
+        self.assertRegex(
             src,
-            re.S | re.I,
+            r"(?s)call\s+sfromcal\(xm,\s*xminv,.*?"
+            r"call\s+sanitize_zvector_preconditioner\(xm,\s*xminv,\s*iw,\s*MRSF_ZVEC_DENOMINATOR_FLOOR",
         )
-        if helper is None:
-            self.fail("Missing MRSF z-vector preconditioner sanitizer helper")
-        block = helper.group(0)
-        self.assertIn("if (.not. ieee_is_finite(denom) .or. abs(denom) < MRSF_ZVEC_DENOMINATOR_FLOOR)", block)
-        self.assertIn("xminv(i) = 1.0_dp / denom", block)
-        self.assertIn("if (regularized > 0) then", block)
+        self._assert_shared_sanitizer_floor_guard()
 
     def test_mrsf_zvector_preconditioner_application_fails_closed_on_stale_nonfinite_inputs(self):
         """The shared MRSF preconditioner helper must not multiply stale NaN/Inf inputs into a solver step."""
