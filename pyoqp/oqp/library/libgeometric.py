@@ -64,6 +64,10 @@ class _GeometricRunner:
         self.tmax = self.geometric_config.get("tmax", 0.3)
         self.convergence_set = self.geometric_config.get("convergence_set", "GAU")
         self.prefix = self.geometric_config.get("prefix", "geometric")
+        if self.prefix == "geometric":
+            project_name = getattr(mol, "project_name", "")
+            if project_name:
+                self.prefix = f"{project_name}_geometric"
         self.hessian = self.geometric_config.get("hessian", "never")
 
     def _optimizer_keywords(self):

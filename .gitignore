@@ -26,3 +26,9 @@ openqp_test_tmp_*
 tools/_grad_validation_scratch/
 tools/_stress_scratch/
 tools/_example_grad_scratch/
+
+# Hessian dev scratch artifacts
+scratch_hess/
+run_compare_hess.py
+fort.6
+*.analytic_hess.pyscf

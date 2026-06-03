@@ -10,7 +10,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "PyOpenQP"
+name = "OpenQP"
 version = "0.1.0"
 description = "Python bindings for the Open Quantum Platform (Fortran core + Python wrapper)"
 authors = [{ name = "Mohsen Mazaherifar", email = "moh.mazaheri@gmail.com" }]
