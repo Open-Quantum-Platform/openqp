@@ -953,7 +953,23 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     functional = _as_lower(_get(config, "input", "functional", ""))
+    basis = _as_lower(_get(config, "input", "basis", "")) or ""
     state = _get(config, "hess", "state", 0)
+
+    # Feature gates that apply to ALL references (the native analytic-Hessian
+    # derivative-integral machinery lacks these; they return a wrong matrix for
+    # closed- and open-shell alike, so route them to the numerical Hessian).
+    if method == "hf":
+        rs_prefixes = ("cam", "dtcam", "stg", "lc-", "lc_", "wb97", "camh")
+        if functional and any(functional.startswith(p) or p in functional for p in rs_prefixes):
+            return "unsupported_feature", (
+                f"Native analytic Hessian does not support range-separated (CAM/LC) "
+                f"functionals (functional={functional}); use [hess] type=numerical.")
+        ecp_bases = ("lanl2dz", "lanl2tz", "sbkjc", "crenb", "stuttgart", "lanl08")
+        if any(e in basis for e in ecp_bases):
+            return "unsupported_feature", (
+                f"Native analytic Hessian does not support ECP basis sets "
+                f"(basis={basis}); use [hess] type=numerical.")
 
     if method == "hf":
         if state != 0:

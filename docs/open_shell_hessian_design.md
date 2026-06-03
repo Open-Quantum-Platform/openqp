@@ -232,3 +232,34 @@ NB: the earlier "gross error" attempts combined Vxc-in-W' with a separate analyt
 decomposition is the full-KS `W'` (Vxc included) plus the explicit `derexc`
 gradient, and no `dHt3` -- the resp_grad finite difference already contains the
 W-derivative.
+
+## Stage 6 — robustness sweep & feature gates
+
+Broad analytic-vs-numerical validation across functionals, bases, ECPs and
+references (OH, H2O+, HBr+; UHF/UKS/ROHF/ROKS), `max|analytic - numerical|`:
+
+| class | examples | result |
+|-------|----------|--------|
+| LDA / GGA / hybrid / meta-GGA | slater, PBE, b3lyp5, bhhlyp, **m06-2x** | 3e-5 - 4e-4 ✅ |
+| f-functions (cc-pVTZ) | UHF/ROHF/UKS, OH | 2e-5 - 6e-5 ✅ |
+| polyatomic | H2O+ ROKS/PBE | 7e-5 ✅ |
+| **range-separated (CAM/LC)** | cam-b3lyp | ~1e-1 ❌ |
+| **ECP** | HBr+ / LANL2DZ | 1e2 - 1e18 ❌ |
+
+The two failures are **pre-existing limitations of the OpenQP analytic Hessian**,
+not the open-shell extension: closed-shell RHF/RKS fail identically (RKS
+cam-b3lyp ~1.2e-1, RHF/HBr/LANL2DZ ~3e2). The native derivative-integral
+machinery (`der_nucattr`/`hess_en`, the Rys 2e second-derivative kernel,
+`fock_deriv_contract`) does not include ECP second derivatives, and the 2e
+derivative integrals are not range-separation (CAM) screened.
+
+These are now **gated to the numerical Hessian** rather than silently returning a
+wrong matrix:
+  * runtime guard in `hf_hessian` (all references): aborts with a clear message if
+    `any(ecp_zn_num /= 0)` or (DFT) `infos%dft%cam_flag`;
+  * Python input checker: reports range-separated functionals (`cam*`, `dtcam*`,
+    `stg*`, `lc-*`, `wb97`) and known ECP basis sets (`lanl*`, `sbkjc`, `crenb`,
+    `stuttgart`) as `unsupported_feature` -> use `[hess] type=numerical`.
+
+Supported analytic-Hessian scope (validated): RHF/RKS, UHF/UKS, ROHF/ROKS, with
+LDA/GGA/hybrid/meta-GGA functionals and standard (incl. f-function) basis sets.

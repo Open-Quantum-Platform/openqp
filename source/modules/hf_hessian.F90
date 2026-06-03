@@ -59,14 +59,27 @@ contains
     integer :: nbf, nbf2, nocc, nvir, natom, ncart
     integer :: i, j, a, mu, nu, ia, icart, kc, cc
 
+    ! Unsupported-feature guards (apply to ALL references, RHF/RKS included).
+    ! The native analytic Hessian derivative-integral machinery (der_nucattr,
+    ! hess_en, the Rys 2e second-derivative kernel, fock_deriv_contract) does NOT
+    ! include effective-core-potential second derivatives, nor the range-separated
+    ! (CAM/LC) screening of the 2e derivative integrals.  Both silently return a
+    ! wrong matrix (validated: ECP ~1e2-1e18, CAM ~1e-1 vs the numerical Hessian,
+    ! for closed- and open-shell alike).  Abort to the numerical Hessian instead.
+    if (any(infos%basis%ecp_zn_num /= 0)) then
+      call show_message('Native analytic Hessian does not support effective core '// &
+        'potentials (ECP). Use [hess] type=numerical for ECP basis sets.', WITH_ABORT)
+    end if
+    if (infos%control%hamilton >= 20 .and. infos%dft%cam_flag) then
+      call show_message('Native analytic Hessian does not support range-separated '// &
+        '(CAM/LC) functionals. Use [hess] type=numerical for these functionals.', WITH_ABORT)
+    end if
+
     ! Open-shell (UHF/ROHF) dispatch.  The body below is the closed-shell
     ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)
     ! and treats nocc as doubly occupied, so it must never run on an open-shell
-    ! SCF.  UHF (scftype==2) is handled by the native open-shell response
-    ! assembly hf_hessian_uhf (HF only; the open-shell skeleton, the UHF CPHF
-    ! solver and the open-shell derivative-Fock contraction are all
-    ! finite-difference validated).  ROHF (scftype==3) and open-shell DFT are not
-    ! yet wired; abort rather than return a partial matrix.
+    ! SCF.  UHF (scftype==2) -> hf_hessian_uhf, ROHF (scftype==3) -> hf_hessian_rohf
+    ! (both HF and DFT, finite-difference validated).
     if (infos%control%scftype == 2) then
       call hf_hessian_uhf(infos)
       return
