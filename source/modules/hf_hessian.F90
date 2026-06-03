@@ -41,6 +41,7 @@ contains
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
     use io_constants, only: iw
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
@@ -57,6 +58,23 @@ contains
     real(kind=dp) :: hfscale
     integer :: nbf, nbf2, nocc, nvir, natom, ncart
     integer :: i, j, a, mu, nu, ia, icart, kc, cc
+
+    ! Open-shell (UHF/ROHF) dispatch guard.  The body below is the closed-shell
+    ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)
+    ! and treats nocc as doubly occupied, so running it on an open-shell SCF would
+    ! silently return a WRONG Hessian.  The open-shell analytic Hessian is under
+    ! construction: the fixed-density skeleton (1e+2e) and the open-shell (UHF)
+    ! CPHF solver (cphf_mod::cphf_solve_uhf) are implemented and finite-difference
+    ! / polarizability validated (see hess_skel_open_selftest and
+    ! cphf_uhf_polarizability_selftest), but the open-shell CPHF orbital-response
+    ! ASSEMBLY is not wired here yet.  Abort rather than return a partial matrix;
+    ! the Python input checker also reports open-shell HF Hessians as unsupported.
+    if (infos%control%scftype >= 2) then
+      call show_message('Native open-shell (UHF/ROHF) HF/DFT analytic Hessian '// &
+        'is not yet available: the open-shell skeleton and UHF CPHF solver are '// &
+        'validated, but the open-shell CPHF response assembly is still being '// &
+        'wired. Use [hess] type=numerical for UHF/ROHF references.', WITH_ABORT)
+    end if
 
     basis => infos%basis
     basis%atoms => infos%atoms
