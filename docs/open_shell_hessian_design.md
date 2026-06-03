@@ -145,21 +145,36 @@ Fock occ-occ blocks (`Foo^s`), reducing to the validated UHF RHS in the
 canonical limit.
 
 **Status / validation.** The closed-shell (offset=0) limit is EXACT: H2O run as
-ROHF reproduces the RHF numerical Hessian to ~3e-5 (so the virt-docc RHS,
-response, `dCa`/`dCb` build and the geometry+orbital FD are all correct). For a
-genuine open shell the singly-occupied rotation blocks of the **CPHF
-right-hand side** (socc-docc and virt-socc, via the non-canonical Foo-coupling /
-reorthonormalization terms) still carry a residual error: OH/STO-3G `max|an -
-num| ~ 3e-3` (largest in the degenerate-pi in-plane component) and bent
-H2O+/STO-3G `~ 2e-3` (~0.3%; the bond-axis/z block is exact to ~1e-5). The bug
-is isolated to the socc-block RHS (the solver and the offset=0 path are exact);
-an empirical scan of the candidate non-canonical coupling coefficients reduces
-but does not eliminate the residual, indicating a structural (not single-term)
-correction is needed. Until that lands, the Python input checker gates ROHF
+ROHF reproduces the RHF numerical Hessian to ~3e-5. For a genuine open shell the
+analytic Hessian carries a small residual: OH/STO-3G `max|an - num| ~ 3e-3` and
+bent H2O+/STO-3G `~ 2e-3` (~0.3%).
+
+Diagnosis (per-perturbation density-derivative isolation, on non-degenerate
+H2O+/STO-3G, calibrated against re-SCF `dPa`/`dPb`):
+  * the bond-axis (z) perturbation gives EXACT relaxed `dPa`/`dPb` (`max|an -
+    num| ~ 1e-6`), confirming the CPHF solver, RHS, operator, `dCa`/`dCb` build
+    and the geometry+orbital FD response are all correct for non-socc modes;
+  * the in-plane (x,y) perturbations give `dPa` AND `dPb` errors of ~4e-3 -> the
+    residual is entirely in the **CPHF amplitudes for socc-coupled
+    perturbations** (not in the `resp_grad` response, which would also corrupt z).
+
+What was ruled OUT as the cause:
+  * the CPHF right-hand side convention -- it matches PySCF's `cphf.solve_withs1`
+    (`hs = h1 - s1 * e_i`, i.e. `B = -h1 + sum_j S^x_aj F_ji` non-canonically);
+    an empirical scan of extra non-canonical coupling terms did not help;
+  * the `dCb` reorthonormalization range -- noccb (docc only) is correct;
+    extending it over the socc makes `dPb` worse (PySCF convention confirmed).
+
+Note: PySCF (2.13) itself has NO analytic ROHF Hessian (`mf.Hessian()` raises
+`NotImplementedError`); mature codes compute ROHF frequencies numerically (FD of
+the analytic ROHF gradient), which is what OpenQP's `[hess] type=numerical` does.
+The most likely remaining cause is that the reused TRAH ROHF orbital-Hessian
+operator (`scf_converger::calc_h_op`) is not the EXACT analytic orbital Hessian on
+the socc blocks: a slightly inexact Hessian still converges the SCF (just more
+slowly), so "validated by TRAH convergence" does not certify those blocks for
+CPHF. Remaining work: validate `calc_h_op`'s socc blocks against a finite
+difference of the ROHF orbital gradient (or replace them with a from-the-Lagrangian
+operator), then re-enable the input-checker capability and add a
+`test_rohf_hessian` regression. Until then the Python input checker gates ROHF
 analytic Hessians to `type=numerical`; the kernel remains reachable (dispatched)
 for development.
-
-Remaining work: derive/validate the exact non-canonical CPHF RHS for the
-socc-docc and virt-socc blocks (the Foo-coupling and reorthonormalization-density
-terms), then re-enable the input-checker capability and add a `test_rohf_hessian`
-finite-difference regression mirroring `test_uhf_hessian`.
