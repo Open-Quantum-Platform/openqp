@@ -150,12 +150,14 @@ response, `dCa`/`dCb` build and the geometry+orbital FD are all correct). For a
 genuine open shell the singly-occupied rotation blocks of the **CPHF
 right-hand side** (socc-docc and virt-socc, via the non-canonical Foo-coupling /
 reorthonormalization terms) still carry a residual error: OH/STO-3G `max|an -
-num| ~ 3e-3` (localized to the degenerate-pi in-plane component) and bent
-H2O+/STO-3G `~ 8e-3` (~1%, in-plane block; the bond-axis/z block is exact to
-~1e-5). The bug is isolated to the socc-block RHS terms (the solver and the
-offset=0 path are exact). Until those are corrected and finite-difference
-validated, the Python input checker gates ROHF analytic Hessians to
-`type=numerical`; the kernel remains reachable (dispatched) for development.
+num| ~ 3e-3` (largest in the degenerate-pi in-plane component) and bent
+H2O+/STO-3G `~ 2e-3` (~0.3%; the bond-axis/z block is exact to ~1e-5). The bug
+is isolated to the socc-block RHS (the solver and the offset=0 path are exact);
+an empirical scan of the candidate non-canonical coupling coefficients reduces
+but does not eliminate the residual, indicating a structural (not single-term)
+correction is needed. Until that lands, the Python input checker gates ROHF
+analytic Hessians to `type=numerical`; the kernel remains reachable (dispatched)
+for development.
 
 Remaining work: derive/validate the exact non-canonical CPHF RHS for the
 socc-docc and virt-socc blocks (the Foo-coupling and reorthonormalization-density
