@@ -11,10 +11,39 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call tdhf_energy(inf)
+    call tdhf_energy_with_restart(inf)
   end subroutine tdhf_energy_C
 
+  ! Run the TDDFT/TDHF Davidson and auto-restart with a larger subspace (maxvec)
+  ! and more iterations (maxit_dav) if it fails to converge.  Re-invoking the
+  ! driver reallocates a fresh, larger subspace; user settings restored after.
+  subroutine tdhf_energy_with_restart(infos)
+    use types, only: information
+    use io_constants, only: iw
+    type(information), intent(inout) :: infos
+    integer, parameter :: max_restarts = 2
+    integer :: attempt, maxvec0, maxit0
+    maxvec0 = infos%tddft%maxvec
+    maxit0  = infos%control%maxit_dav
+    do attempt = 0, max_restarts
+      call tdhf_energy(infos)
+      if (infos%mol_energy%Davidson_converged) exit
+      if (attempt < max_restarts) then
+        infos%tddft%maxvec      = 2 * infos%tddft%maxvec
+        infos%control%maxit_dav = 2 * infos%control%maxit_dav
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/,2X,"Davidson not converged; auto-restart #",I0, &
+                 &" with larger subspace (maxvec=",I0,", maxit_dav=",I0,")"/)') &
+          attempt + 1, infos%tddft%maxvec, infos%control%maxit_dav
+        close(iw)
+      end if
+    end do
+    infos%tddft%maxvec      = maxvec0
+    infos%control%maxit_dav = maxit0
+  end subroutine tdhf_energy_with_restart
+
   subroutine tdhf_energy(infos)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use io_constants, only: iw
     use oqp_tagarray_driver
     use types, only: information
@@ -254,7 +283,15 @@ contains
 !     Get perturbed vectors Q if required
       call rparesvec(scr3,abp_r,abm_l,vlo,vro,eex,xm,ndsr,errors,cnvtol,imax,tamm_dancoff)
 
-      mxerr = maxval(errors(imax+1:ndsr))
+      if (imax < ndsr) then
+        if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then
+          ierr = 4
+          exit
+        end if
+        mxerr = maxval(errors(imax+1:ndsr))
+      else
+        mxerr = 0.0_dp
+      end if
 
       call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
 
@@ -295,6 +332,14 @@ contains
     case (3)
       write(*,'(/,2x,"..something is wrong.. No vectors were added")')
       infos%mol_energy%Davidson_converged=.false.
+    case (4)
+      write(*,'(/,2X,"TD-DFT Davidson breakdown: non-finite residual",/)')
+      infos%mol_energy%Davidson_converged=.false.
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
     end select
 
     call get_td_transition_dipole(basis, dip, mo_a, vro, vlo, nstates, nocc)

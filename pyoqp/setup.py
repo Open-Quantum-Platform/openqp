@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="PyOpenQP",
+    name="OpenQP",
     version="1.0",
     author="Jingbai Li",
     author_email="lijingbai@zspu.edu.cn",

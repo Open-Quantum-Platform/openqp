@@ -8,6 +8,12 @@
 *.sw?
 *.un~
 *.log
+*.pyc
+__pycache__/
+.pytest_cache/
+_build/
+build/
+openqp_test_tmp_*/
 f90deps.mk
 objdir*
 external/*

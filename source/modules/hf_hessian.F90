@@ -98,12 +98,14 @@ contains
     hfscale = 1.0_dp
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
 
+    open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
     write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
     write(iw,'(A)') '  Storing native OpenQP HF/DFT analytic Hessian matrix in OQP::hf_hessian.'
 
     if (nocc <= 0 .or. nvir <= 0 .or. ncart <= 0) then
       write(iw,'(A)') '  Native CPHF prepass skipped: empty occupied/virtual/nuclear space.'
+      close(iw)
       return
     end if
 
@@ -150,6 +152,25 @@ contains
       call ecp_deriv_ints(basis, basis%atoms%xyz, dVecp)
       dVa = dVa + dVecp
       deallocate(dVecp)
+    end block
+
+    ! der_* matrices are returned in the UNNORMALIZED basis; bring them into the
+    ! same normalized (bfnrm) convention as the MO coefficients / density so the
+    ! CPHF RHS and the response contractions are correct for d/f functions
+    ! (bfnrm /= 1). Invisible for s/p-only bases (e.g. STO-3G).
+    block
+      integer :: kc2, cc2, mu2, nu2
+      do kc2 = 1, natom
+        do cc2 = 1, 3
+          do nu2 = 1, nbf
+            do mu2 = 1, nbf
+              dSa(mu2,nu2,cc2,kc2) = dSa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dTa(mu2,nu2,cc2,kc2) = dTa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dVa(mu2,nu2,cc2,kc2) = dVa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+            end do
+          end do
+        end do
+      end do
     end block
 
     allocate(scr(nbf,nbf), col(nbf,nbf))
@@ -513,6 +534,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
+    close(iw)
 
     deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
                d0, d0p, gp, gfull, bvec, uvec, hess_native)
