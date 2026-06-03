@@ -1,6 +1,10 @@
 # Analytic two-electron Rys second-derivative (Hessian) kernel — design
 
-Status: **design + Stage A landed**; 2e ∂² kernel implementation in progress.
+Status: **2e ∂² kernel IMPLEMENTED & VALIDATED** (H2O/6-31G*, rel err 1.4e-7
+vs finite difference of the analytic 2e gradient; symmetric to 5e-16). Driver
+`grd2_hess_driver` + per-quartet `grd2_rys_hess_compute` are live; self-test
+`grd2_hess_selftest` / `tests/test_hess_2e_selftest.py`. Remaining: wire into
+`hf_hessian`, then finish 1e `hess_en` and the XC ∂² skeleton.
 
 ## Goal
 
