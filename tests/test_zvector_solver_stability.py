@@ -463,27 +463,64 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertRegex(cleanup_block, r"return\b")
 
     def test_mrsf_zvector_offers_minres_as_solver_option_one(self):
-        """MRSF z-vector selection must be 0=CG, 1=MINRES, 2=GMRES with a working MINRES branch."""
+        """MRSF z-vector selection: 0=CG, 1=MINRES, 2=GMRES, 3=AUTO, each a helper."""
         src = MRSF_ZVEC_SRC.read_text()
 
-        # Module is used and the dispatch maps GMRES to 2 and MINRES to 1.
         self.assertRegex(src, r"use\s+minres_mod")
-        self.assertIn("if (infos%tddft%z_solver == 2) then", src)   # GMRES demoted to 2
-        self.assertIn("else if (infos%tddft%z_solver == 1) then", src)  # MINRES is 1
 
-        # MINRES is driven through the shared apply_z_operator / apply_z_precond
-        # via the minres_matvec wrappers, and reports a breakdown on failure.
+        # Dispatch is a select case over z_solver, one helper per solver.  (Anchor
+        # past the Step-2 marker so we match the dispatch, not the label select.)
+        step2 = src.index("Step 2: solve the z-vector")
+        dispatch = re.search(r"select case \(infos%tddft%z_solver\).*?end select",
+                             src[step2:], re.S | re.I)
+        self.assertIsNotNone(dispatch, "MRSF z-vector dispatch must be a select case")
+        block = dispatch.group(0)
+        self.assertIn("case (2)", block)
+        self.assertIn("call run_mrsf_gmres_zvector()", block)
+        self.assertIn("case (1)", block)
+        self.assertIn("call run_mrsf_minres_zvector()", block)
+        self.assertIn("case (3)", block)
+        self.assertIn("call run_mrsf_zvector_auto()", block)
+        self.assertIn("case default", block)
+        self.assertIn("call run_mrsf_cg_zvector()", block)
+
+        # Each solver is a named internal subroutine.
+        for sub in ("run_mrsf_cg_zvector", "run_mrsf_minres_zvector",
+                    "run_mrsf_gmres_zvector", "run_mrsf_zvector_auto"):
+            self.assertRegex(src, r"subroutine\s+" + sub + r"\(\)")
+
+        # MINRES is driven through the shared apply_z_operator / apply_z_precond.
         self.assertIn("call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc", src)
         self.assertIn("call mr%step()", src)
         self.assertIn("call mr%clean()", src)
-        self.assertRegex(src, r"subroutine\s+minres_apply_op\(y,\s*x,\s*dat\)")
-        self.assertRegex(src, r"subroutine\s+minres_apply_pc\(y,\s*x,\s*dat\)")
         self.assertRegex(src, r"mrsf_zvector_breakdown\s*=\s*\.true\.")
 
-        # Output label distinguishes the three solvers.
-        self.assertIn('solver_name = "MINRES"', src)
-        self.assertIn('solver_name = "GMRES"', src)
-        self.assertIn('solver_name = "CG"', src)
+        # Output label distinguishes the solvers.
+        for name in ('"MINRES"', '"GMRES"', '"CG"', '"AUTO"'):
+            self.assertIn("solver_name = " + name, src)
+
+    def test_mrsf_zvector_auto_falls_back_cg_then_minres_then_gmres(self):
+        """AUTO must try CG, then MINRES, then GMRES, resetting breakdown between attempts."""
+        src = MRSF_ZVEC_SRC.read_text()
+        auto = re.search(r"subroutine run_mrsf_zvector_auto\(\).*?end subroutine run_mrsf_zvector_auto",
+                         src, re.S | re.I)
+        self.assertIsNotNone(auto, "Missing run_mrsf_zvector_auto helper")
+        block = auto.group(0)
+
+        # The three solvers are attempted in cost/robustness order.
+        i_cg = block.index("call run_mrsf_cg_zvector()")
+        i_mr = block.index("call run_mrsf_minres_zvector()")
+        i_gm = block.index("call run_mrsf_gmres_zvector()")
+        self.assertLess(i_cg, i_mr)
+        self.assertLess(i_mr, i_gm)
+
+        # Breakdown flag is cleared before each fallback so a failed solver does
+        # not poison the next attempt; success is gated on convergence.
+        self.assertGreaterEqual(block.count("mrsf_zvector_breakdown = .false."), 2)
+        self.assertIn("error <= cnvtol", block)
+        self.assertIn('solver_name = "AUTO(CG)"', block)
+        self.assertIn('solver_name = "AUTO(MINRES)"', block)
+        self.assertIn('solver_name = "AUTO(GMRES)"', block)
 
     def test_mrsf_zvector_nonconverged_path_logs_solver_and_final_residual(self):
         """MRSF CG/GMRES max-iteration exits must report solver and final residual in the log."""

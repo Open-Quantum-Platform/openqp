@@ -1024,8 +1024,10 @@ contains
                &/1x,66("-")/)')
     end if
 
-    ! Determine solver name for output (0=CG, 1=MINRES, 2=GMRES)
+    ! Determine solver name for output (0=CG, 1=MINRES, 2=GMRES, 3=AUTO)
     select case (infos%tddft%z_solver)
+    case (3)
+      solver_name = "AUTO"
     case (2)
       solver_name = "GMRES"
     case (1)
@@ -1081,101 +1083,19 @@ contains
     call sanitize_zvector_preconditioner(xm, xminv, iw, MRSF_ZVEC_DENOMINATOR_FLOOR, "MRSF")
 
     ! ======================================================================
-    ! Step 2: solve the z-vector linear system (0=CG, 1=MINRES, 2=GMRES).
+    ! Step 2: solve the z-vector linear system.
+    !   0 = CG (default)   1 = MINRES   2 = GMRES   3 = AUTO (CG->MINRES->GMRES)
     ! ======================================================================
-    if (infos%tddft%z_solver == 2) then
-
-      ! ============================================
-      ! GMRES SOLVER
-      ! ============================================
-
-      ! Initial guess with same strategy as CG
-      xk = 0.0_dp
-
-      ! Call GMRES solver
-      call gmres_solve( &
-          apply_operator = apply_z_operator, &
-          apply_precond = lambda_precond, &
-          b = rhs, &
-          x = xk, &
-          n = lzdim, &
-          restart = min(infos%tddft%gmres_dim, lzdim), &
-          max_iter = infos%control%maxit_zv, &
-          tol = cnvtol, &
-          infos = infos, &
-          basis = basis, &
-          molGrid = molGrid, &
-          int2_driver = int2_driver, &
-          nocca = nocca, &
-          noccb = noccb, &
-          nbf = nbf, &
-          mo_a = mo_a, &
-          mo_b = mo_b, &
-          mo_energy_a = mo_energy_a, &
-          fa = fa, &
-          fb = fb, &
-          scale_exch = scale_exch, &
-          dft = dft, &
-          error_out = error, &
-          iter_out = gmres_iter, &
-          iw = iw)
-
-      write(iw,'(/," Final Summary:")')
-      write(iw,'(" GMRES total iterations: ", I4)') gmres_iter
-      write(iw,'(" Final error norm      : ", 1p,e13.6)') error
-      write(iw,'(" Convergence criterion : ", 1p,e13.6)') cnvtol
-      call flush(iw)
-      
-      ! Clean up GMRES work arrays
-      call cleanup_gmres_work()
-
-    else if (infos%tddft%z_solver == 1) then
-
-      ! ============================================
-      ! MINRES SOLVER
-      ! ------------------------------------------------------------------
-      ! Symmetric short-recurrence solver (Paige-Saunders).  Unlike CG it
-      ! stays stable when the (A+B) operator turns indefinite (near
-      ! instabilities / near-degeneracies), at CG-like cost.  The operator
-      ! and preconditioner are the same apply_z_operator / apply_z_precond
-      ! used by the CG and GMRES paths, wrapped to the minres_matvec API.
-      ! ============================================
-
-      xk = 0.0_dp
-
-      call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
-                   dat=minres_dummy, tol=cnvtol)
-      minres_iter = 0
-      if (mr%errcode == MINRES_OK) then
-        do iter = 1, infos%control%maxit_zv
-          call mr%step()
-          minres_iter = iter
-          if (mr%errcode /= MINRES_OK) exit
-        end do
-      end if
-
-      if (mr%errcode == MINRES_CONVERGED .or. mr%errcode == MINRES_OK) then
-        xk = mr%x
-      else
-        write(iw,'(" MRSF MINRES Z-Vector breakdown (errcode=",I0,")")') int(mr%errcode)
-        mrsf_zvector_breakdown = .true.
-        error = huge(1.0_dp)
-      end if
-      if (.not. mrsf_zvector_breakdown) error = mr%error
-      call mr%clean()
-
-      write(iw,'(/," Final Summary:")')
-      write(iw,'(" MINRES total iterations: ", I4)') minres_iter
-      write(iw,'(" Final error norm       : ", 1p,e13.6)') error
-      write(iw,'(" Convergence criterion  : ", 1p,e13.6)') cnvtol
-      call flush(iw)
-
-    else
-
-      ! Default solver: preconditioned conjugate gradient.
+    select case (infos%tddft%z_solver)
+    case (2)
+      call run_mrsf_gmres_zvector()
+    case (1)
+      call run_mrsf_minres_zvector()
+    case (3)
+      call run_mrsf_zvector_auto()
+    case default
       call run_mrsf_cg_zvector()
-
-    end if  ! End solver selection
+    end select
 
 ! -----------------------------------------------
     if (mrsf_zvector_breakdown) then
@@ -1225,6 +1145,101 @@ contains
     close(iw)
 
   contains
+
+    ! GMRES z-vector solve.  Reports breakdown via mrsf_zvector_breakdown so the
+    ! auto driver can detect failure uniformly across solvers.
+    subroutine run_mrsf_gmres_zvector()
+      xk = 0.0_dp
+      call gmres_solve( &
+          apply_operator = apply_z_operator, &
+          apply_precond = lambda_precond, &
+          b = rhs, &
+          x = xk, &
+          n = lzdim, &
+          restart = min(infos%tddft%gmres_dim, lzdim), &
+          max_iter = infos%control%maxit_zv, &
+          tol = cnvtol, &
+          infos = infos, basis = basis, molGrid = molGrid, &
+          int2_driver = int2_driver, &
+          nocca = nocca, noccb = noccb, nbf = nbf, &
+          mo_a = mo_a, mo_b = mo_b, mo_energy_a = mo_energy_a, &
+          fa = fa, fb = fb, scale_exch = scale_exch, dft = dft, &
+          error_out = error, iter_out = gmres_iter, iw = iw)
+      if (.not. ieee_is_finite(error) .or. error > cnvtol) then
+        if (.not. ieee_is_finite(error)) mrsf_zvector_breakdown = .true.
+      end if
+      write(iw,'(/," Final Summary:")')
+      write(iw,'(" GMRES total iterations: ", I4)') gmres_iter
+      write(iw,'(" Final error norm      : ", 1p,e13.6)') error
+      write(iw,'(" Convergence criterion : ", 1p,e13.6)') cnvtol
+      call flush(iw)
+      call cleanup_gmres_work()
+    end subroutine run_mrsf_gmres_zvector
+
+    ! MINRES z-vector solve: symmetric short-recurrence solver (Paige-Saunders)
+    ! that stays stable when (A+B) turns indefinite, at CG-like cost.  Uses the
+    ! same apply_z_operator / apply_z_precond as CG and GMRES.
+    subroutine run_mrsf_minres_zvector()
+      xk = 0.0_dp
+      call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
+                   dat=minres_dummy, tol=cnvtol)
+      minres_iter = 0
+      if (mr%errcode == MINRES_OK) then
+        do iter = 1, infos%control%maxit_zv
+          call mr%step()
+          minres_iter = iter
+          if (mr%errcode /= MINRES_OK) exit
+        end do
+      end if
+      if (mr%errcode == MINRES_CONVERGED .or. mr%errcode == MINRES_OK) then
+        xk = mr%x
+        error = mr%error
+      else
+        write(iw,'(" MRSF MINRES Z-Vector breakdown (errcode=",I0,")")') int(mr%errcode)
+        mrsf_zvector_breakdown = .true.
+        error = huge(1.0_dp)
+      end if
+      call mr%clean()
+      write(iw,'(/," Final Summary:")')
+      write(iw,'(" MINRES total iterations: ", I4)') minres_iter
+      write(iw,'(" Final error norm       : ", 1p,e13.6)') error
+      write(iw,'(" Convergence criterion  : ", 1p,e13.6)') cnvtol
+      call flush(iw)
+    end subroutine run_mrsf_minres_zvector
+
+    ! AUTO driver: try CG (cheap, needs SPD), fall back to MINRES (CG-cost,
+    ! robust on indefinite operators), then GMRES (general, priciest).  rhs and
+    ! the preconditioner xminv are solver-independent and reused; only xk and
+    ! the breakdown flag reset between attempts.  solver_name is updated to the
+    ! solver that actually converged so the summary reflects reality.
+    subroutine run_mrsf_zvector_auto()
+      call run_mrsf_cg_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(CG)"
+        return
+      end if
+      write(iw,'(/," [AUTO] CG did not converge (breakdown/maxit); ", &
+                 &"falling back to MINRES")')
+      call flush(iw)
+      mrsf_zvector_breakdown = .false.
+      call run_mrsf_minres_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(MINRES)"
+        return
+      end if
+      write(iw,'(/," [AUTO] MINRES did not converge; falling back to GMRES")')
+      call flush(iw)
+      mrsf_zvector_breakdown = .false.
+      call run_mrsf_gmres_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(GMRES)"
+      else
+        solver_name = "AUTO(failed)"
+      end if
+    end subroutine run_mrsf_zvector_auto
 
     ! Preconditioned CG z-vector solve (default path).  All state is
     ! reached by host association, matching the inline version exactly.
