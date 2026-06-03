@@ -955,21 +955,14 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
-    # Feature gates that apply to ALL references (the native analytic-Hessian
-    # derivative-integral machinery lacks these; they return a wrong matrix for
-    # closed- and open-shell alike, so route them to the numerical Hessian).
-    # ECP second derivatives ARE supported (libecpint deriv order 2, contracted
-    # analytically in hf_hessian via add_ecphess + the ECP core-derivative in the
-    # CPHF response), so ECP basis sets are no longer gated here.  Range-separated
-    # (CAM/LC) functionals remain unsupported until the 2e derivative-integral
-    # assembly is split into the long-range Coulomb + short-range erfc passes.
-    if method == "hf":
-        rs_prefixes = ("cam", "dtcam", "stg", "lc-", "lc_", "wb97", "camh")
-        if functional and any(functional.startswith(p) or p in functional for p in rs_prefixes):
-            return "unsupported_feature", (
-                f"Native analytic Hessian does not support range-separated (CAM/LC) "
-                f"functionals (functional={functional}); use [hess] type=numerical.")
-
+    # The native analytic-Hessian derivative-integral machinery now covers the
+    # features that were previously gated to the numerical Hessian:
+    #   * ECP second derivatives -- libecpint deriv order 2, contracted in
+    #     hf_hessian via add_ecphess + the ECP core-derivative in the CPHF response;
+    #   * range-separated (CAM/LC) functionals -- the erfc-attenuated two-pass split
+    #     in grd2_hess_driver (skeleton), grd2_driver (fock_deriv_contract response)
+    #     and fock_jk (cphf), keyed off infos%dft%cam_flag.
+    # Both are finite-difference validated for RHF/RKS, UHF/UKS and ROHF/ROKS.
     if method == "hf":
         if state != 0:
             return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."

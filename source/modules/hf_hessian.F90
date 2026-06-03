@@ -63,16 +63,12 @@ contains
     ! Effective-core-potential (ECP) second derivatives ARE supported: RHF/UHF
     ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, libecpint
     ! deriv order 2) plus the ECP core-derivative in the CPHF response; ROHF folds
-    ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.  The
-    ! remaining gap is the range-separated (CAM/LC) screening of the 2e derivative
-    ! integrals, which the native skeleton/response assembly does not yet split
-    ! into the long-range Coulomb + short-range erfc-exchange passes; it silently
-    ! returns a wrong matrix (validated: CAM ~1e-1 vs the numerical Hessian).
-    ! Abort to the numerical Hessian for CAM instead.
-    if (infos%control%hamilton >= 20 .and. infos%dft%cam_flag) then
-      call show_message('Native analytic Hessian does not support range-separated '// &
-        '(CAM/LC) functionals. Use [hess] type=numerical for these functionals.', WITH_ABORT)
-    end if
+    ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.
+    ! Range-separated (CAM/LC) functionals are also supported: the 2e derivative
+    ! integrals are erfc-attenuation capable, so grd2_hess_driver (skeleton),
+    ! grd2_driver (fock_deriv_contract response) and fock_jk (cphf) all run the
+    ! long-range Coulomb + short-range erfc-exchange two-pass split when
+    ! infos%dft%cam_flag is set.
 
     ! Open-shell (UHF/ROHF) dispatch.  The body below is the closed-shell
     ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)

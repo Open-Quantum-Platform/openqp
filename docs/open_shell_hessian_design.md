@@ -320,3 +320,42 @@ Test: `tests/test_ecp_hessian.py`. The ECP gate is removed from the runtime guar
 and the Python input checker; **range-separated (CAM/LC) remains gated** to the
 numerical Hessian (Stage 8 candidate: split the 2e derivative-integral assembly
 into long-range Coulomb + short-range erfc-exchange passes).
+
+## Stage 8 — range-separated (CAM/LC) functionals
+
+CAM is no longer a limitation either. CAM-type functionals split `1/r12` into a
+long-range part (full Coulomb `J` + exchange `K[1/r]` scaled by `cam_alpha`) and
+a short-range part (erfc-attenuated exchange `K[erf(mu r)/r]` scaled by
+`cam_beta`). OpenQP's 2e derivative-integral engine is already erfc-attenuation
+capable (`grd2_rys_compute`/`grd2_rys_hess_compute` take `mu2`), so every Fock
+build in the analytic Hessian only had to run the established two-pass split:
+
+| Hessian term | routine | CAM handling |
+|--------------|---------|--------------|
+| 2e second-derivative skeleton | `grd2_hess_driver` | **new** two-pass wrapper (this stage), mirroring `grd2_driver` |
+| CPHF response-Fock derivative `G[P]^x` / `F^x` | `fock_deriv_contract(_os)` -> `grd2_driver` | already auto-detects `cam_flag` |
+| reorthonormalization `G[d0]`, relaxed-density `G[dP]` | `fock_jk` -> `int2_driver` | already CAM-aware |
+| CPHF A-matrix (orbital Hessian) | `cphf_apbx`/`_uhf`/`_rohf` | already CAM-aware |
+| XC skeleton/kernel (`dHse`, RHS `dVxc`, `f_xc`) | `dftexcor` / `derexc_blk` | functional's own XC; unaffected by the range split |
+
+The only code change was splitting `grd2_hess_driver` into a thin CAM two-pass
+wrapper plus `grd2_hess_driver_gen` (the former body), exactly parallel to
+`grd2_driver`/`grd2_driver_gen`. Everything else was already in place — the
+robustness sweep's ~1e-1 CAM error was entirely the un-split 2e skeleton.
+
+Validation (`max|analytic - numerical|`, 6-31g OH/OH+, exactly symmetric):
+
+| functional | RHF/RKS | UHF/UKS | ROHF/ROKS |
+|------------|---------|---------|-----------|
+| cam-b3lyp | 1.5e-4 | 4.2e-5 | 1.9e-5 |
+| wb97x | 2.7e-5 | 2.7e-5 | — |
+| lc-blyp | 2.7e-5 | 4.1e-5 | — |
+
+CAM + ECP compose: CAM-B3LYP / LANL2DZ / HBr (RHF) = 2.2e-4. Test:
+`tests/test_cam_hessian.py`. The CAM gate is removed from the runtime guard and
+the input checker.
+
+**Final analytic-Hessian scope (all finite-difference validated):** RHF/RKS,
+UHF/UKS, ROHF/ROKS, with LDA/GGA/hybrid/meta-GGA **and range-separated (CAM/LC)**
+functionals, standard (incl. f-function) **and ECP** basis sets. No remaining
+feature gates for the ground-state HF/DFT analytic Hessian.
