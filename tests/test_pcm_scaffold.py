@@ -251,9 +251,38 @@ epsilon=78.3553
         self.assertIn("pcm.mode", errors)
         self.assertIn("Only reference_scf", errors["pcm.mode"])
 
-    def test_checker_rejects_uhf_reference_for_first_pcm_scope(self):
+    def test_checker_rejects_uhf_reference_for_enabled_pcm_first_scope(self):
         input_checker = load_module(
             "input_checker_pcm_scf_scope_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {
+                "system": "\n O 0.0 0.0 0.0\n H 0.0 0.757 0.587\n H 0.0 -0.757 0.587",
+                "basis": "6-31g*",
+                "method": "hf",
+                "runtype": "energy",
+            },
+            "guess": {"type": "huckel"},
+            "scf": {"type": "uhf", "multiplicity": 3},
+            "tdhf": {"type": "rpa", "nstate": 1},
+            "pcm": {
+                "enabled": True,
+                "backend": "ddx",
+                "mode": "reference_scf",
+                "model": "ddpcm",
+                "epsilon": 78.3553,
+            },
+        }
+
+        report = input_checker.check_input_values(config, raise_error=False, emit=False)
+        errors = {item.path: item.message for item in report.errors}
+        self.assertIn("scf.type", errors)
+        self.assertIn("PCM first scope supports RHF/ROHF", errors["scf.type"])
+
+    def test_checker_allows_uhf_reference_when_pcm_is_disabled(self):
+        input_checker = load_module(
+            "input_checker_pcm_disabled_uhf_under_test",
             "pyoqp/oqp/utils/input_checker.py",
         )
         config = {
@@ -277,8 +306,7 @@ epsilon=78.3553
 
         report = input_checker.check_input_values(config, raise_error=False, emit=False)
         errors = {item.path: item.message for item in report.errors}
-        self.assertIn("scf.type", errors)
-        self.assertIn("PCM first scope supports RHF/ROHF", errors["scf.type"])
+        self.assertNotIn("scf.type", errors)
 
     def test_parser_preserves_malformed_pcm_dielectric_for_checker_diagnostic(self):
         oqpdata = load_module(

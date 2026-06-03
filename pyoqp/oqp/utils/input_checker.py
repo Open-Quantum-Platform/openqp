@@ -436,16 +436,6 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
-    if scf_type not in {"rhf", "rohf"}:
-        report.add(
-            "ERROR",
-            "scf.type",
-            "PCM first scope supports RHF/ROHF reference SCF only.",
-            value=scf_type,
-            expected="rhf or rohf",
-            action="Use RHF for closed-shell singlets or ROHF for the high-spin MRSF reference; UHF PCM is a separate future validation target.",
-            wiki=WIKI_HELP["pcm.enabled"],
-        )
 
     if model not in PCM_MODELS:
         report.add(
@@ -489,6 +479,17 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     if enabled:
+        if scf_type not in {"rhf", "rohf"}:
+            report.add(
+                "ERROR",
+                "scf.type",
+                "PCM first scope supports RHF/ROHF reference SCF only.",
+                value=scf_type,
+                expected="rhf or rohf",
+                action="Use RHF for closed-shell singlets or ROHF for the high-spin MRSF reference; UHF PCM is a separate future validation target.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
+
         # The reference_scf RHF/ROHF energy path is implemented for the ddX
         # backend only. The pcmsolver backend remains a planned candidate.
         if backend != "ddx":
