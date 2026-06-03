@@ -98,6 +98,14 @@ class FakeMol:
         raise AssertionError("save_molden is disabled in this test")
 
 
+class SlottedMolEnergy:
+    __slots__ = ("energy", "SCF_converged")
+
+    def __init__(self, energy=-1.0, converged=False):
+        self.energy = energy
+        self.SCF_converged = converged
+
+
 class TestSinglePointScfFallback(unittest.TestCase):
     def setUp(self):
         install_single_point_stubs()
@@ -181,6 +189,28 @@ class TestSinglePointScfFallback(unittest.TestCase):
 
         self.assertEqual(energy, [-2.0])
         self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_stability_noop_restores_pre_trah_energy_metadata_without_dict(self):
+        calc = self.make_calculator()
+        calc.mol.mol_energy = SlottedMolEnergy()
+        calc.stability = True
+
+        def scf_stable_after_trah_check():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                calc.mol.mol_energy.energy = -1.99999999
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_stable_after_trah_check
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-2.0])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+        self.assertTrue(calc.mol.mol_energy.SCF_converged)
 
 
 if __name__ == "__main__":

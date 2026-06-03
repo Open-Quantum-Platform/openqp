@@ -465,7 +465,7 @@ class SinglePoint(Calculator):
         # sensitive (e.g. range-separated MRSF) excited-state gradients.
         if converged and stability and primary != 'trah' and self.method == 'hf':
             e_pre = self.mol.mol_energy.energy
-            mol_energy_snapshot = getattr(self.mol.mol_energy, '__dict__', {}).copy()
+            mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
             # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
             # energy-invariantly, which would otherwise perturb sensitive
@@ -531,6 +531,28 @@ class SinglePoint(Calculator):
                 self.mol.data[tag] = value
             except Exception:
                 pass
+
+    _mol_energy_state_attrs = (
+        'energy',
+        'SCF_converged',
+        'Davidson_converged',
+    )
+
+    def _snapshot_mol_energy_state(self):
+        """Capture scalar energy/convergence metadata that must match SCF tags."""
+        mol_energy = self.mol.mol_energy
+        snap = {}
+        try:
+            snap.update(getattr(mol_energy, '__dict__', {}))
+        except Exception:
+            pass
+        for attr in self._mol_energy_state_attrs:
+            if attr not in snap and hasattr(mol_energy, attr):
+                try:
+                    snap[attr] = getattr(mol_energy, attr)
+                except Exception:
+                    pass
+        return snap
 
     def excitation(self, ref_energy):
         self.tddft()
