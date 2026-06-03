@@ -21,7 +21,13 @@ contains
 
 !> @brief Test-only/debug emitter for native GIAO (London-orbital) NMR shielding.
 !> @details Computes the GIAO paramagnetic nuclear magnetic shielding tensor for
-!>  closed-shell RHF/DFT using the validated native GIAO building blocks:
+!>  RHF/UHF/ROHF (and the corresponding DFT) references.  Open-shell support:
+!>  the diamagnetic term uses the total density D_alpha+D_beta; the paramagnetic
+!>  term is solved per spin channel (independent same-spin exchange response) and
+!>  summed.  ROHF orbitals are semicanonicalized (from the ground-state spin Fock
+!>  matrices) so the UHF-like CPHF is well defined; the closed-shell ROHF limit
+!>  reproduces RHF, and open-shell UHF/ROHF match the PySCF GIAO oracle to ~1e-4
+!>  ppm (OH, CH3 radicals).  Built from the validated native GIAO building blocks:
 !>   - first-order GIAO core Hamiltonian h10 (one-electron, giao_h10_core),
 !>   - first-order GIAO two-electron Fock derivative (giao_h10_twoe_matrix),
 !>   - first-order GIAO overlap derivative S10 (giao_overlap_derivative),
@@ -90,6 +96,8 @@ contains
     real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:)
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
     real(kind=dp), contiguous, pointer :: mo_e(:), mo_e_b(:)
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
+    real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -177,10 +185,27 @@ contains
         end do
       end do
       ! Two independent spin channels (same-spin exchange), each occ_factor = 1.
-      call giao_para_channel(infos, basis, mo_a, mo_e,   nocc,   nmo, nbf, nat, &
-                             coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
-      call giao_para_channel(infos, basis, mo_b, mo_e_b, nocc_b, nmo, nbf, nat, &
-                             coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+      if (infos%control%scftype == 3) then
+        ! ROHF: a single orbital set with effective-Fock eigenvalues.  Build
+        ! semicanonical spin orbitals/energies from the ground-state spin Fock
+        ! matrices so the UHF-like CPHF/Delta-e is well defined.
+        call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a, status)
+        call check_status(status, module_name, subroutine_name, OQP_FOCK_A)
+        call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b, status)
+        call check_status(status, module_name, subroutine_name, OQP_FOCK_B)
+        allocate(ca_sc(nbf,nmo), cb_sc(nbf,nmo), ea_sc(nmo), eb_sc(nmo), source=0.0d0)
+        call semicanon_orbitals(fock_a, mo_a, nbf, nmo, nocc,   ca_sc, ea_sc)
+        call semicanon_orbitals(fock_b, mo_b, nbf, nmo, nocc_b, cb_sc, eb_sc)
+        call giao_para_channel(infos, basis, ca_sc, ea_sc, nocc,   nmo, nbf, nat, &
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+        call giao_para_channel(infos, basis, cb_sc, eb_sc, nocc_b, nmo, nbf, nat, &
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+      else
+        call giao_para_channel(infos, basis, mo_a, mo_e,   nocc,   nmo, nbf, nat, &
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+        call giao_para_channel(infos, basis, mo_b, mo_e_b, nocc_b, nmo, nbf, nat, &
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+      end if
     else
       ! Closed shell: h1 = h10(1e) + (J - 0.5 K)[D_tot] (twoe), single channel.
       call giao_h10_twoe_matrix(basis, infos, dm, vj, vk, twoe)
@@ -455,6 +480,42 @@ contains
     end do
     deallocate(h1mo, s1mo, mo1u, mo1c, pso, st)
   end subroutine giao_para_channel
+
+  !> Semicanonicalize ROHF orbitals for spin sigma: diagonalize the occ-occ and
+  !> vir-vir blocks of C^T F_sigma C, returning semicanonical orbitals (csc) and
+  !> orbital energies (esc).  ROHF stores a single orbital set with effective-Fock
+  !> eigenvalues; the UHF-like CPHF needs proper spin orbital energies (the
+  !> ground-state spin Fock matrices F_a/F_b from OQP_FOCK_A/B).
+  subroutine semicanon_orbitals(fock_p, c0, nbf, nmo, nocc, csc, esc)
+    use eigen, only: diag_symm_full
+    real(kind=dp), intent(in) :: fock_p(:), c0(:,:)
+    integer, intent(in) :: nbf, nmo, nocc
+    real(kind=dp), intent(out) :: csc(:,:), esc(:)
+    real(kind=dp), allocatable :: fao(:,:), fmo(:,:), blk(:,:), eb(:)
+    integer :: nvir, ierr
+    nvir = nmo - nocc
+    allocate(fao(nbf,nbf), fmo(nmo,nmo))
+    call unpack_sym(fock_p, fao, nbf)
+    fmo = matmul(transpose(c0(:,1:nmo)), matmul(fao, c0(:,1:nmo)))
+    csc = c0(:,1:nmo); esc = 0.0d0
+    if (nocc > 0) then
+      allocate(blk(nocc,nocc), eb(nocc))
+      blk = fmo(1:nocc,1:nocc)
+      call diag_symm_full(1, nocc, blk, nocc, eb, ierr)
+      csc(:,1:nocc) = matmul(c0(:,1:nocc), blk)
+      esc(1:nocc) = eb(1:nocc)
+      deallocate(blk, eb)
+    end if
+    if (nvir > 0) then
+      allocate(blk(nvir,nvir), eb(nvir))
+      blk = fmo(nocc+1:nmo, nocc+1:nmo)
+      call diag_symm_full(1, nvir, blk, nvir, eb, ierr)
+      csc(:,nocc+1:nmo) = matmul(c0(:,nocc+1:nmo), blk)
+      esc(nocc+1:nmo) = eb(1:nvir)
+      deallocate(blk, eb)
+    end if
+    deallocate(fao, fmo)
+  end subroutine semicanon_orbitals
 
   subroutine para_tensor(mo1, mo, h01i, nbf, nmo, nocc, sig, occ_factor)
     real(kind=dp), intent(in) :: mo1(:,:,:), mo(:,:), h01i(:,:,:)
