@@ -4,6 +4,7 @@ module nmr_giao_debug_mod
   private
   public nmr_giao_h10_debug
   public nmr_giao_h10_twoe_debug
+  public giao_h10_twoe_matrix
 
 contains
 
@@ -111,9 +112,6 @@ contains
   subroutine nmr_giao_h10_twoe_debug(infos)
 
     use basis_tools, only: basis_set
-    use constants, only: cart_x, cart_y, cart_z, num_cart_bf
-    use int2_compute, only: int2_compute_t
-    use int2e_rys, only: int2_rys_compute_ordered_am, int2_rys_data_t
     use io_constants, only: iw
     use messages, only: show_message, with_abort
     use oqp_tagarray_driver
@@ -124,29 +122,16 @@ contains
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
-    type(int2_compute_t), target :: int2_driver
-    type(int2_rys_data_t) :: gdat
-    real(kind=dp), allocatable :: vj(:,:,:), vk(:,:,:), vk_pre(:,:,:), h10(:,:,:)
+    real(kind=dp), allocatable :: vj(:,:,:), vk(:,:,:), h10(:,:,:)
     real(kind=dp), allocatable :: dm(:,:), dmat_packed(:)
-    real(kind=dp), allocatable, target :: eri0(:), erir(:)
-    real(kind=dp), pointer :: p0(:,:,:,:), pr(:,:,:,:)
     real(kind=dp), contiguous, pointer :: dmat_a(:)
-    real(kind=dp) :: g(3), d(3), rij(3), norm4, ket_fac
-    real(kind=dp) :: base_val, raised_val
-    integer :: i, j, k, l, m, nbf, nbf2, nshell, maxang, maxcart
-    integer :: si, sj, sk, sl, ni, nj, nk, nl, mu, nu, kap, lam
-    integer :: ii, jj, kk, ll, axis, mapr, ids(4), am0(4), amr(4), ok
+    integer :: i, j, m, nbf, nbf2
     integer(4) :: status
-    logical :: zero_shq
 
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
-    nshell = basis%nshell
-    maxang = maxval(basis%am)
-    if (maxang + 1 > 6) call show_message('GIAO two-electron debug: angular momentum too high', with_abort)
-    maxcart = num_cart_bf(maxang + 1)
 
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
     if (status /= 0) call show_message('GIAO two-electron debug: OQP::DM_A missing', with_abort)
@@ -154,7 +139,77 @@ contains
     dmat_packed = dmat_a
     call unpack_symmetric_density(dmat_packed, dm, nbf)
 
-    allocate(vj(3,nbf,nbf), vk(3,nbf,nbf), vk_pre(3,nbf,nbf), h10(3,nbf,nbf), source=0.0_dp)
+    allocate(vj(3,nbf,nbf), vk(3,nbf,nbf), h10(3,nbf,nbf), source=0.0_dp)
+    call giao_h10_twoe_matrix(basis, infos, dm, vj, vk, h10)
+
+    open(unit=iw, file=infos%log_filename, position="append")
+    write(iw,'(/,A)') 'GIAO_H10_TWOE_DEBUG_BEGIN full_ao rhf-two-electron-h10'
+    write(iw,'(A,1X,I0)') 'GIAO_H10_TWOE_DEBUG_NBF', nbf
+    do m = 1, 3
+      do i = 1, nbf
+        do j = 1, nbf
+          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
+            'GIAO_H10_TWOE_DEBUG_FULL', 'vj', m, i, j, vj(m,i,j)
+          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
+            'GIAO_H10_TWOE_DEBUG_FULL', 'vk', m, i, j, vk(m,i,j)
+          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
+            'GIAO_H10_TWOE_DEBUG_FULL', 'twoe_h10', m, i, j, h10(m,i,j)
+        end do
+      end do
+    end do
+    write(iw,'(A)') 'GIAO_H10_TWOE_DEBUG_END'
+    close(iw)
+
+    deallocate(vj, vk, h10, dm, dmat_packed)
+
+  end subroutine nmr_giao_h10_twoe_debug
+
+!> @brief Native RHF GIAO two-electron magnetic-field-derivative Fock matrices.
+!> @details Returns the real coefficients of the imaginary first-order (wrt the
+!>  uniform field B) two-electron Fock contributions for x/y/z, contracted with
+!>  the ground-state density dm: the Coulomb-like image vj, the exchange-like
+!>  image vk, and the RHF combination h10 = vj - 0.5*vk.  Each block is
+!>  antisymmetric in its AO indices.  Validated against pyscf.prop.nmr.rhf.get_jk
+!>  (tests/test_nmr_giao_h10_twoe_live.py).  This is the production-reusable core
+!>  of nmr_giao_h10_twoe_debug; it computes integrals only and emits nothing.
+  subroutine giao_h10_twoe_matrix(basis, infos, dm, vj, vk, h10)
+
+    use basis_tools, only: basis_set
+    use constants, only: cart_x, cart_y, cart_z, num_cart_bf
+    use int2_compute, only: int2_compute_t
+    use int2e_rys, only: int2_rys_compute_ordered_am, int2_rys_data_t
+    use messages, only: show_message, with_abort
+    use precision, only: dp
+    use types, only: information
+
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: dm(:,:)
+    real(kind=dp), intent(out) :: vj(:,:,:), vk(:,:,:), h10(:,:,:)
+
+    type(int2_compute_t), target :: int2_driver
+    type(int2_rys_data_t) :: gdat
+    real(kind=dp), allocatable :: vk_pre(:,:,:)
+    real(kind=dp), allocatable, target :: eri0(:), erir(:)
+    real(kind=dp), pointer :: p0(:,:,:,:), pr(:,:,:,:)
+    real(kind=dp) :: g(3), d(3), rij(3), norm4, ket_fac, base_val
+    integer :: i, j, m, nbf, nshell, maxang, maxcart
+    integer :: si, sj, sk, sl, ni, nj, nk, nl, mu, nu, kap, lam
+    integer :: ii, jj, kk, ll, axis, mapr, ids(4), am0(4), amr(4), ok
+    logical :: zero_shq
+
+    nbf = basis%nbf
+    nshell = basis%nshell
+    maxang = maxval(basis%am)
+    if (maxang + 1 > 6) call show_message('GIAO two-electron: angular momentum too high', with_abort)
+    maxcart = num_cart_bf(maxang + 1)
+
+    vj = 0.0_dp
+    vk = 0.0_dp
+    h10 = 0.0_dp
+    allocate(vk_pre(3,nbf,nbf), source=0.0_dp)
     allocate(eri0(maxcart**4), erir(maxcart**4), source=0.0_dp)
 
     call int2_driver%init(basis, infos)
@@ -163,7 +218,7 @@ contains
     ! PA/PB vectors in the same shell order as the explicit ids below.
     call int2_driver%ppairs%compute(basis, int2_driver%cutoffs, noswap=.true.)
     call gdat%init(maxang + 1, int2_driver%cutoffs, ok)
-    if (ok /= 0) call show_message('GIAO two-electron debug: cannot allocate Rys workspace', with_abort)
+    if (ok /= 0) call show_message('GIAO two-electron: cannot allocate Rys workspace', with_abort)
 
     do si = 1, nshell
       ni = basis%naos(si)
@@ -234,29 +289,11 @@ contains
       end do
     end do
 
-    open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/,A)') 'GIAO_H10_TWOE_DEBUG_BEGIN full_ao rhf-two-electron-h10'
-    write(iw,'(A,1X,I0)') 'GIAO_H10_TWOE_DEBUG_NBF', nbf
-    do m = 1, 3
-      do i = 1, nbf
-        do j = 1, nbf
-          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
-            'GIAO_H10_TWOE_DEBUG_FULL', 'vj', m, i, j, vj(m,i,j)
-          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
-            'GIAO_H10_TWOE_DEBUG_FULL', 'vk', m, i, j, vk(m,i,j)
-          write(iw,'(A,1X,A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') &
-            'GIAO_H10_TWOE_DEBUG_FULL', 'twoe_h10', m, i, j, h10(m,i,j)
-        end do
-      end do
-    end do
-    write(iw,'(A)') 'GIAO_H10_TWOE_DEBUG_END'
-    close(iw)
-
     call gdat%clean()
     call int2_driver%clean()
-    deallocate(vj, vk, vk_pre, h10, dm, dmat_packed, eri0, erir)
+    deallocate(vk_pre, eri0, erir)
 
-  end subroutine nmr_giao_h10_twoe_debug
+  end subroutine giao_h10_twoe_matrix
 
   subroutine unpack_symmetric_density(packed, full, n)
     use precision, only: dp

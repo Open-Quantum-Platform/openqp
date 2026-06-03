@@ -128,9 +128,44 @@ Current native GIAO implementation status:
 | Benchmark/oracle scaffold | `scripts/nmr_giao_benchmark_matrix.py`, `tests/fixtures/nmr/benchmark_results/` | Implemented; PySCF CGO/GIAO oracle + OpenQP CGO rows populated |
 | GIAO overlap magnetic derivative `S10` | `mod_1e_primitives.F90::comp_giao_overlap_deriv_prim`, `int1.F90::giao_overlap_derivative` | Native one-electron building block implemented |
 | GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; PySCF oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
-| GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::nmr_giao_h10_twoe_debug`; PySCF oracle calls `pyscf.prop.nmr.rhf.get_jk` | Native RHF debug contraction implemented and PySCF-validated; not wired into production shielding |
-| GIAO CPHF/CPKS RHS/response assembly | pending | Not implemented |
-| OpenQP native GIAO shielding output | pending | Not implemented; no CGO fallback allowed |
+| GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::giao_h10_twoe_matrix` (+ `nmr_giao_h10_twoe_debug` emitter); PySCF oracle calls `pyscf.prop.nmr.rhf.get_jk` | Native RHF contraction implemented and PySCF-validated; now a reusable matrix builder |
+| GIAO CPHF/CPKS RHS/response assembly (paramagnetic) | `nmr_giao_shielding.F90::nmr_giao_shielding_debug` | **Implemented and PySCF-validated** (uncoupled + coupled). h1=h10(1e+2e), s1=S10, MO transform, GIAO CPHF/CPKS first-order solve (exchange-only coupled response scaled by `c_x`), PSO contraction. See note below. |
+| GIAO diamagnetic term (second-order GIAO integrals) | pending (`int1e_giao_a11part`, `int1e_a01gp` analogues) | Not implemented |
+| OpenQP native GIAO shielding output (total) | pending | Not implemented; no CGO fallback allowed (needs the diamagnetic term) |
+
+### GIAO paramagnetic checkpoint — VALIDATED
+
+`nmr_giao_shielding.F90::nmr_giao_shielding_debug` assembles the native GIAO
+paramagnetic nuclear shielding and emits machine-parseable `GIAO_SHIELDING_DEBUG_*`
+records (still a debug emitter; `nmr_gauge=giao` stays gated until the diamagnetic
+term completes the total).  It mirrors the PySCF GIAO algorithm exactly: the
+first-order magnetic Hamiltonian `h1 = h10(one-electron) + h10(two-electron)`, the
+first-order overlap `s1 = S10`, transformed to the MO basis; the GIAO CPHF/CPKS
+first-order equation solved both uncoupled (`mo1[vir]=-hs/(e_a-e_i)`,
+`mo1[occ]=-0.5 s1`) and coupled (fixed point with the exact-exchange image of the
+imaginary/antisymmetric first-order density, scaled by `c_x`, via the validated
+`int2` A-B path and `mntoia`); and the paramagnetic tensor formed by contracting
+the resulting first-order density with the PSO operator (note OpenQP
+`pso_integrals` is the negative of PySCF `int1e_prinvxp`).
+
+Validation (H2O/STO-3G, isotropic paramagnetic shielding, ppm) vs the committed
+PySCF GIAO oracle (`tests/test_nmr_giao_para_live.py`,
+`tests/fixtures/nmr/pyscf_giao_reference.json`):
+
+| Functional | c_x | O para uncoupled (OQP/ref) | O para coupled (OQP/ref) |
+|------------|-----|----------------------------|--------------------------|
+| HF     | 1.00 | 27.906 / 27.906 | **-6.3026 / -6.3026** (exact) |
+| BHHLYP | 0.50 | 37.953 / 37.950 | 25.490 / 25.487 |
+| PBE0   | 0.25 | 51.534 / 51.514 | 48.993 / 48.967 |
+| PBE    | 0.00 | 73.848 / 73.811 | 73.848 / 73.811 (coupled == uncoupled) |
+
+HF (grid-free) matches the oracle to ~1e-4 ppm; the DFT absolute offsets (≤0.04 ppm)
+are cross-code DFT-SCF/grid differences and the coupling `Delta = coupled −
+uncoupled` matches to ≤0.03 ppm — the same SCF-robust pattern established for CGO.
+Pure PBE coupled ≡ uncoupled exactly (`c_x = 0`).  The GIAO paramagnetic numbers are
+small/positive (very different from CGO's), so the **diamagnetic GIAO term carries
+the bulk of the total** and is the remaining piece before the total shielding and
+`nmr_gauge=giao` ungating.
 
 The implemented `S10` block returns the real coefficient of the imaginary first
 magnetic-field derivative of the AO overlap matrix,

@@ -228,4 +228,5 @@ void lowdin(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);
 void nmr_giao_h10_debug(struct oqp_handle_t *inf);
 void nmr_giao_h10_twoe_debug(struct oqp_handle_t *inf);
+void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
 
