@@ -176,3 +176,46 @@ implementations. The key correctness tools were (a) a PySCF finite-difference
 validation of the orbital-Hessian *operator* (which exposed the missing
 commutator coupling) and (b) the per-perturbation re-SCF density-derivative
 isolation (which localized and then confirmed the fixes).
+
+## Stage 5 — open-shell DFT (UKS done/validated; ROKS pending)
+
+The XC contribution is added on top of the open-shell HF Hessian, mirroring the
+closed-shell RKS structure for two spins (open-shell `dftexcor`/`derexc_blk` with
+`urohf=.true.`; the HF-exchange fraction stays in `hfscale`; the CPHF operator
+already carries the open-shell `f_xc` kernel via `utddft_fxc`/`get_response_packed`):
+
+  * RHS XC: one central FD of the spin XC Fock along the combined
+    geometry + reorthonormalization path, giving the XC skeleton `dVxc/dR` and
+    `f_xc[d0]`, subtracted from the CPHF right-hand side.
+  * `dHse`: XC skeleton + density response, central FD of the analytic open-shell
+    XC gradient (`derexc_blk`) along `R +/- h`, `P^s +/- h dP^s`.
+  * `dHt3`: the XC part of the energy-weighted term,
+    `- sum_s sum_kl s1oo^s,x_kl (vxc^s,y + fxc[dP^s,y])_kl`, with coefficient
+    **-1 per spin** (the UHF occupation factor; the closed-shell RKS value is -2
+    for double occupancy -- getting this factor right was the key fix).
+
+### UKS (DONE, validated)
+
+`hf_hessian_uhf` uses the analytic UHF response assembly, whose energy-weighting
+already carries Vxc through the KS orbital energies (`eps^s`), so the three XC
+pieces above compose cleanly. Validated against the OpenQP numerical Hessian,
+exactly symmetric, at the FD floor:
+  * offset=0 (closed-shell run as UKS) vs RKS analytic: `~7e-6`;
+  * OH / 6-31G bhhlyp (hybrid): `~2.1e-5`; bent H2O+ / 6-31G bhhlyp: `~1.9e-5`;
+  * OH / 6-31G PBE (pure GGA): `~2.8e-5`.
+See `tests/test_uks_hessian.py`. The input checker enables UHF/UKS analytic
+Hessians.
+
+### ROKS (PENDING, gated)
+
+`hf_hessian_rohf` evaluates the HF response SEMI-NUMERICALLY (FD of the analytic
+gradient along the relaxed orbital path, `resp_grad`). For DFT this does not
+compose cleanly with the analytic XC energy-weighting: the energy weighting must
+carry Vxc consistently in exactly one place, but the semi-numerical HF response
+uses an HF-only `W'` while `dHt3` adds the XC weighting separately, and the
+non-double-counting split (Vxc-in-W' vs `dHt3`, and derexc at fixed vs displaced
+density) does not reduce to the validated closed-shell result (residual ~0.08-0.1
+on OH/bhhlyp). The clean fix is an ANALYTIC ROHF response (the non-canonical
+`mo_e1` with Vxc) -- the piece the HF ROHF deliberately replaced with the
+semi-numerical `resp_grad`. Until that lands, ROKS analytic Hessians remain gated
+to `[hess] type=numerical`.
