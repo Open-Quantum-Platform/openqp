@@ -147,11 +147,38 @@ are promoted to **independent pyscf-validated gates** (`reference_value` = PySCF
 The fix also corrected the previously **positive (unphysical)** CO₂/CH₃CN/CH₃OH
 energies to negative.
 
-### Remaining residual (deferred, separate item)
+### Current scope: `l = 2` (quadrupole) atom-centered source
 
-HCN, H₂CO, CH₃OH, CH₃CN retain a ~2.5 kcal/mol residual. These are larger/more
-extended molecules where the `l ≤ 2` atom-centered multipole **source** (which
-determines `q_cav`) is still too truncated. Improving `q_cav` for them is the
-next step (higher-`l` or exact-density-driven primal solve); the energy
-bookkeeping itself is now correct. Reproduce all of the above with
+The validated production source is the per-atom real-solid-harmonic multipole
+expansion **through quadrupoles (`l ≤ 2`)**: net atomic charge (`l = 0`),
+atomic dipole (`l = 1`), and atomic quadrupole (`l = 2`), from a Mulliken row
+partition of the AO density. With the corrected energy bookkeeping this is what
+validates the 6 molecules above to ≤0.5 kcal/mol.
+
+### Higher `l` — to be done (and why the naive route does not work)
+
+The residual molecules (HCN, H₂CO, CH₃OH, CH₃CN, ~2.5 kcal/mol) are larger/more
+extended, where the `l ≤ 2` atom-centered source under-resolves `q_cav`. The
+obvious next step — extend the same atom-centered source to **octupole
+(`l = 3`)** — was implemented and tested, and it **does not work**:
+
+- OpenQP's own `phi_source_vs_exact_rms` self-calibration *increased* when `l = 3`
+  was added (H₂O: 0.0076 → 0.011, for both sign conventions tried), i.e. the
+  octupole made the multipole-`phi` representation **worse**, and the residual
+  barely moved.
+- Cause: an atom-centered multipole expansion only converges to the true
+  potential **outside** the sphere enclosing the density; the ddPCM cavity
+  points sit close to (and around) neighbouring atoms, **inside** that region, so
+  higher-`l` terms **diverge** there rather than converge. This is intrinsic to
+  the point-multipole-at-atom-center representation, not a normalization/sign bug.
+
+**To be done (the actual route for the residual):** replace the atom-centered
+multipole source with the **density-projected `psi`** that PySCF/ddCOSMO use —
+evaluate the exact density potential at the cavity points (OpenQP already has
+this via `electrostatic_potential_unweighted`) and project the density onto the
+cavity spheres via the ddCOSMO volume-grid (`fak_pol`) machinery, rather than a
+multipole expansion. This is research-grade Fortran and is the next milestone.
+The energy bookkeeping (`e_pcm = −½⟨phi_exact, q_cav⟩`) is already correct and
+will carry over unchanged. Reproduce all of the above with
 `scripts/pcm_validate_all.py`.
+

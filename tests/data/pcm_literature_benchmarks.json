@@ -1893,6 +1893,8 @@
       "CH3OH -2.586 kcal/mol",
       "CH3CN 2.613 kcal/mol"
     ],
-    "verdict": "6/10 closed-shell molecules now match an independent ddPCM code to <=0.5 kcal/mol (H2O,NH3,HF,CH4,CO,CO2). Larger/polar molecules (HCN,H2CO,CH3OH,CH3CN) retain ~2.5 kcal/mol from the l<=2 multipole-source q_cav truncation."
+    "verdict": "With the l<=2 source + corrected energy, 6/10 closed-shell molecules match an independent ddPCM code to <=0.5 kcal/mol (H2O,NH3,HF,CH4,CO,CO2). The 4 larger/polar molecules (HCN,H2CO,CH3OH,CH3CN, ~2.5 kcal/mol) need the density-projected psi; higher-l multipoles are ruled out empirically.",
+    "source_scope": "Production source is the per-atom real-solid-harmonic multipole expansion through QUADRUPOLES (l<=2): net atomic charge + atomic dipole + atomic quadrupole (Mulliken row partition). This is what validates the 6 molecules below.",
+    "higher_l_todo": "TO BE DONE: octupole (l=3) was implemented and tested and does NOT help -- phi_source_vs_exact_rms increases (atom-centered multipoles diverge at the near cavity, both sign conventions). The route for the residual is the density-projected psi (PySCF/ddCOSMO volume-grid), not higher multipoles. Energy bookkeeping e_pcm=-0.5<phi_exact,q_cav> already correct and carries over."
   }
 }
