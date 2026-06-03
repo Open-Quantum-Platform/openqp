@@ -328,122 +328,7 @@ contains
              &/3x,25("-")/)')
     call flush(iw)
 
-    call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
-    call sanitize_zvector_preconditioner(xm, xminv, iw, SF_ZVEC_DENOMINATOR_FLOOR, "SF")
-
-    call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
-    zvector_breakdown = .false.
-    if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
-        any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
-      zvector_breakdown = .true.
-      write(*,'(/3x,24("-")&
-            &/6x,"Z-Vector breakdown: non-finite initial PCG state"&
-            &/3x,24("-")/)')
-    end if
-
-    write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
-
-! -----------------------------------------------
-
-    do iter = 1, infos%control%maxit_zv
-
-      if (zvector_breakdown) exit
-
-      call sfrogen(wrk1, wrk2, pk, nocca, noccb)
-!     Alpha
-      call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-!     Beta
-      call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
-
-!     (A+B)*PK
-      call int2_data%clean()
-      deallocate(int2_data)
-      int2_data = int2_tdgrd_data_t(d2=pa, &
-              int_apb=.true., &
-              int_amb=.false., &
-              tamm_dancoff=.false., &
-              scale_exchange=scale_exch)
-
-      call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-      ab1 => int2_data%apb(:,:,:,1)
-
-      !ab1 = ab1/2
-      call symmetrize_matrix(pa(:,:,1), nbf)
-      call symmetrize_matrix(pa(:,:,2), nbf)
-      call utddft_fxc(basis=basis, &
-             molGrid=molGrid, &
-             isVecs=.true., &
-             wfa=MO_A, &
-             wfb=MO_B, &
-             fxa=ab1(:,:,1:1), &
-             fxb=ab1(:,:,2:2), &
-             dxa=pa(:,:,1:1), &
-             dxb=pa(:,:,2:2), &
-             nmtx=1, &
-             !threshold=1.0d-15, &
-             threshold=0.0d0, &
-             infos=infos)
-
-!     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
-      call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
-
-      call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
-
-      call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
-                   nocca, noccb)
-
-      if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: non-finite SF PCG operator state at iter", I4)') iter
-        exit
-      end if
-
-      pap = dot_product(pk, lhs)
-      if (.not. ieee_is_finite(pap) .or. abs(pap) < SF_ZVEC_DENOMINATOR_FLOOR) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: unsafe SF PCG denominator at iter", I4, 1x, 1p,e12.4)') iter, pap
-        exit
-      end if
-
-      alpha = 1.0_dp / pap
-      if (.not. ieee_is_finite(alpha)) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: non-finite SF PCG alpha at iter", I4)') iter
-        exit
-      end if
-
-      xk = xk + pk * alpha
-      errv = errv - alpha*lhs
-      if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv))) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: non-finite SF PCG update at iter", I4)') iter
-        exit
-      end if
-
-      error = dot_product(errv, errv)
-      if (.not. ieee_is_finite(error)) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: non-finite SF PCG residual at iter", I4)') iter
-        exit
-      end if
-      write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
-        iter, error, cnvtol
-      call flush(iw)
-
-      if (error<cnvtol) exit
-
-      call pcgb(pk, errv, xminv)
-      if (any(.not. ieee_is_finite(pk))) then
-        zvector_breakdown = .true.
-        write(*,'(" Z-Vector breakdown: non-finite SF PCG search direction at iter", I4)') iter
-        exit
-      end if
-
-    end do
+    call run_sf_cg_zvector()
 
 
 ! -----------------------------------------------
@@ -556,6 +441,129 @@ contains
     call measure_time(print_total=1, log_unit=iw)
     close(iw)
 
+
+  contains
+
+    ! Preconditioned CG z-vector solve.  All state is reached by host
+    ! association, so this is behaviorally identical to the inline version.
+    subroutine run_sf_cg_zvector()
+      call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
+      call sanitize_zvector_preconditioner(xm, xminv, iw, SF_ZVEC_DENOMINATOR_FLOOR, "SF")
+
+      call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+      zvector_breakdown = .false.
+      if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
+          any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
+        zvector_breakdown = .true.
+        write(*,'(/3x,24("-")&
+              &/6x,"Z-Vector breakdown: non-finite initial PCG state"&
+              &/3x,24("-")/)')
+      end if
+
+      write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
+
+  ! -----------------------------------------------
+
+      do iter = 1, infos%control%maxit_zv
+
+        if (zvector_breakdown) exit
+
+        call sfrogen(wrk1, wrk2, pk, nocca, noccb)
+  !     Alpha
+        call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+  !     Beta
+        call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+
+  !     (A+B)*PK
+        call int2_data%clean()
+        deallocate(int2_data)
+        int2_data = int2_tdgrd_data_t(d2=pa, &
+                int_apb=.true., &
+                int_amb=.false., &
+                tamm_dancoff=.false., &
+                scale_exchange=scale_exch)
+
+        call int2_driver%run(int2_data, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%dft%cam_alpha, &
+              beta=infos%dft%cam_beta,&
+              mu=infos%dft%cam_mu)
+        ab1 => int2_data%apb(:,:,:,1)
+
+        !ab1 = ab1/2
+        call symmetrize_matrix(pa(:,:,1), nbf)
+        call symmetrize_matrix(pa(:,:,2), nbf)
+        call utddft_fxc(basis=basis, &
+               molGrid=molGrid, &
+               isVecs=.true., &
+               wfa=MO_A, &
+               wfb=MO_B, &
+               fxa=ab1(:,:,1:1), &
+               fxb=ab1(:,:,2:2), &
+               dxa=pa(:,:,1:1), &
+               dxb=pa(:,:,2:2), &
+               nmtx=1, &
+               !threshold=1.0d-15, &
+               threshold=0.0d0, &
+               infos=infos)
+
+  !     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
+        call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+
+        call mntoia(ab1(:,:,2), ab1_mo_b, mo_a, mo_a, noccb, noccb)
+
+        call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
+                     nocca, noccb)
+
+        if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: non-finite SF PCG operator state at iter", I4)') iter
+          exit
+        end if
+
+        pap = dot_product(pk, lhs)
+        if (.not. ieee_is_finite(pap) .or. abs(pap) < SF_ZVEC_DENOMINATOR_FLOOR) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: unsafe SF PCG denominator at iter", I4, 1x, 1p,e12.4)') iter, pap
+          exit
+        end if
+
+        alpha = 1.0_dp / pap
+        if (.not. ieee_is_finite(alpha)) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: non-finite SF PCG alpha at iter", I4)') iter
+          exit
+        end if
+
+        xk = xk + pk * alpha
+        errv = errv - alpha*lhs
+        if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv))) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: non-finite SF PCG update at iter", I4)') iter
+          exit
+        end if
+
+        error = dot_product(errv, errv)
+        if (.not. ieee_is_finite(error)) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: non-finite SF PCG residual at iter", I4)') iter
+          exit
+        end if
+        write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+          iter, error, cnvtol
+        call flush(iw)
+
+        if (error<cnvtol) exit
+
+        call pcgb(pk, errv, xminv)
+        if (any(.not. ieee_is_finite(pk))) then
+          zvector_breakdown = .true.
+          write(*,'(" Z-Vector breakdown: non-finite SF PCG search direction at iter", I4)') iter
+          exit
+        end if
+
+      end do
+    end subroutine run_sf_cg_zvector
   end subroutine tdhf_sf_z_vector
 
 end module tdhf_sf_z_vector_mod
