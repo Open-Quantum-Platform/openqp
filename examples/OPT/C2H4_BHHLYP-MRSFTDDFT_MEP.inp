@@ -14,16 +14,18 @@ basis=6-31g*
 
 [scf]
 type=rohf
-maxit=50
+maxit=30
 multiplicity=3
 
 [tdhf]
 type=mrsf
 nstate=5
+maxit=30
 
 [optimize]
+lib=scipy
 optimizer=bfgs
-maxit=100
+maxit=2
 mep_maxit=2
 istate=2
 energy_shift=1e-3

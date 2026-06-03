@@ -81,11 +81,14 @@ class FakeData(dict):
     def set_sd_scf(self, flag):
         self.sd_scf_flags.append(flag)
 
+    def set_trah_stability(self, flag):
+        self.trah_stability = flag
+
 
 class FakeMol:
     def __init__(self):
         self.config = {
-            "scf": {"converger_type": "diis"},
+            "scf": {"converger_type": "diis", "trh_stab": False},
         }
         self.data = FakeData()
         self.mol_energy = types.SimpleNamespace(energy=-1.0, SCF_converged=False)
@@ -93,6 +96,14 @@ class FakeMol:
 
     def write_molden(self, filename):
         raise AssertionError("save_molden is disabled in this test")
+
+
+class SlottedMolEnergy:
+    __slots__ = ("energy", "SCF_converged")
+
+    def __init__(self, energy=-1.0, converged=False):
+        self.energy = energy
+        self.SCF_converged = converged
 
 
 class TestSinglePointScfFallback(unittest.TestCase):
@@ -109,7 +120,9 @@ class TestSinglePointScfFallback(unittest.TestCase):
         calc.method = "hf"
         calc.init_scf = "no"
         calc.forced_attempt = 2
+        calc.converger_type = "diis"
         calc.alternative_scf = "trah"
+        calc.stability = False
         calc.save_molden = False
         calc.exception = False
         calc._prep_guess = lambda: None
@@ -131,25 +144,73 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.energy(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
-        self.assertEqual(calc.mol.data.convergers, ["trah", "diis"])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis", "diis"])
         self.assertEqual(calc.mol.data.sd_scf_flags, [False])
 
-    def test_energy_restores_fallback_converger_after_failed_recovery(self):
+    def test_energy_restores_primary_converger_after_failed_recovery(self):
         calc = self.make_calculator()
-        calc.forced_attempt = 1
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.energy = -1.0 - calc.scf_calls
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
 
         with self.assertRaises(RuntimeError):
             calc.energy(do_init_scf=False)
 
-        self.assertEqual(calc.mol.data.convergers, ["trah", "diis"])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis", "diis"])
 
-    def test_reference_keeps_recovered_converger_for_matching_gradient(self):
+    def test_reference_restores_primary_converger_for_matching_gradient(self):
         calc = self.make_calculator()
 
         energy = calc.reference(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
-        self.assertEqual(calc.mol.data.convergers, ["trah"])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis"])
+
+    def test_stability_noop_restores_pre_trah_energy_metadata(self):
+        calc = self.make_calculator()
+        calc.stability = True
+
+        def scf_stable_after_trah_check():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                calc.mol.mol_energy.energy = -1.99999999
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_stable_after_trah_check
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-2.0])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_stability_noop_restores_pre_trah_energy_metadata_without_dict(self):
+        calc = self.make_calculator()
+        calc.mol.mol_energy = SlottedMolEnergy()
+        calc.stability = True
+
+        def scf_stable_after_trah_check():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                calc.mol.mol_energy.energy = -1.99999999
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_stable_after_trah_check
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-2.0])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+        self.assertTrue(calc.mol.mol_energy.SCF_converged)
 
 
 if __name__ == "__main__":

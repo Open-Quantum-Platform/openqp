@@ -12,15 +12,14 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "prop", "data",
+    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
 }
-NOT_AVAILABLE_RUNTYPES = {"soc", "neb"}
+NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-
 METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
-TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf"}
-GUESS_TYPES = {"huckel", "hcore", "json", "auto", "pyscf", "sad", "sap"}
+TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
+GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
@@ -31,31 +30,25 @@ PCM_BACKEND_MODELS = {
     "ddx": {"ddcosmo", "ddpcm", "ddlpb"},
     "pcmsolver": {"iefpcm", "cpcm"},
 }
-OPT_LIBS = {"scipy", "dlfind"}
+OPT_LIBS = {"scipy", "geometric"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken"}
-DLFIND_SINGLE_ICOORD = {0, 1, 2, 3, 4}
-DLFIND_LN_ICOORD = {10, 11, 12, 13, 14}
-DLFIND_MIN_IOPT = {0, 1, 2, 3}
-DLFIND_TS_IOPT = {9}
-DLFIND_MECI_IMS = {1, 2, 3}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, prop, or data. soc and neb are recognized but not implemented yet.",
-    "input.method": "Use method=hf for HF/DFT and method=tdhf for TDHF/TDDFT/SF/MRSF runs.",
+    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
+    "input.method": "Use method=hf for HF/DFT or method=tdhf for TDHF/TDDFT/SF/MRSF.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
-    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, and umrsf only with UHF.",
+    "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
-    "guess.type": "Use json with a JSON restart file, auto for JSON-if-present otherwise Huckel, sad/sap for PySCF atomic-density/potential guesses, or pyscf to build a converged external guess.",
+    "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
     "pcm.enabled": "PCM input is reserved for the planned energy-only solvent backend. Initial scope is RHF/ROHF reference_scf single-point energy; gradients and state-specific MRSF PCM are out of scope.",
     "pcm.backend": "Use backend=ddx for the preferred active ddCOSMO/ddPCM library candidate, or backend=pcmsolver for the classic PCM API candidate.",
     "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
-    "optimize.lib": "scipy supports optimize, meci, mecp, and mep. dlfind supports optimize, meci, and ts.",
-    "dlfind.ims": "ims=0 is single-state, ims=1/2/3 are MECI modes and belong to runtype=meci.",
+    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
 
@@ -317,7 +310,7 @@ def _check_basis(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
-    guess_type = _as_lower(_get(config, "guess", "type", "huckel"))
+    guess_type = _as_lower(_get(config, "guess", "type", "sap"))
     guess_file = _get(config, "guess", "file", "")
     guess_file2 = _get(config, "guess", "file2", "")
     continue_geom = _get(config, "guess", "continue_geom", False)
@@ -628,6 +621,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
     if method != "tdhf":
         return
 
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
@@ -642,10 +636,21 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown TDHF response type.",
             value=td_type,
             expected=", ".join(sorted(TDHF_TYPES)),
-            action="Choose rpa, tda, sf, mrsf, or umrsf.",
+            action="Choose rpa, tda, sf, mrsf, umrsf, mrsf_ekt_ip, or mrsf_ekt_ea.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
+
+    if td_type in {"mrsf_ekt_ip", "mrsf_ekt_ea"} and runtype != "energy":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "Legacy tdhf.type=mrsf_ekt_ip/mrsf_ekt_ea is energy-only. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf.",
+            value=f"{runtype}/{td_type}",
+            expected="input.runtype=ekt with tdhf.type=mrsf, or input.runtype=energy for legacy direct EKT calls",
+            action="Set [input] runtype=ekt and [tdhf] type=mrsf for MRSF-EKT IP/EA analysis.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
 
     if td_type in {"rpa", "tda"} and scf_mult != td_mult:
         report.add(
@@ -768,18 +773,6 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             action="Use grad=1,2,... for TDHF/MRSF gradients.",
         )
 
-    if method == "tdhf" and runtype == "grad" and grad_states:
-        highest_grad = max(int(state) for state in grad_states if state not in (None, ""))
-        nstate = _get(config, "tdhf", "nstate", 1)
-        if highest_grad == nstate:
-            report.add(
-                "WARNING",
-                "tdhf.nstate",
-                "The requested gradient root is exactly the highest computed TD state.",
-                value=nstate,
-                expected=f">= {highest_grad + 1}",
-                action="Consider increasing tdhf.nstate by 1 to avoid missing degenerate states.",
-            )
 
 
 def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None:
@@ -843,6 +836,32 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         )
         return
 
+    if runtype == "ekt":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        ekt_ip = bool(_get(config, "ekt", "ip", False))
+        ekt_ea = bool(_get(config, "ekt", "ea", False))
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "EKT runtype only supports MRSF-TDDFT.",
+                value=f"{method}/{td_type}",
+                expected="input.method=tdhf and tdhf.type=mrsf",
+                action="Set [input] method=tdhf and [tdhf] type=mrsf for MRSF-EKT analysis.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        if not ekt_ip and not ekt_ea:
+            report.add(
+                "ERROR",
+                "ekt",
+                "EKT runtype must request IP, EA, or both.",
+                value={"ip": ekt_ip, "ea": ekt_ea},
+                expected="[ekt] ip=True and/or ea=True",
+                action="Enable [ekt] ip, ea, or both for EKT analysis.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        return
+
     if runtype == "grad":
         if method == "hf":
             if _max_state(_as_list(_get(config, "properties", "grad", []))) > 0:
@@ -853,7 +872,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                     value=_get(config, "properties", "grad", []),
                     action="Use grad=0 or switch to method=tdhf.",
                 )
-        elif 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
+        elif method == "tdhf" and 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
             report.add(
                 "ERROR",
                 "properties.grad",
@@ -862,8 +881,11 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use grad=1,2,... for excited-state gradients.",
             )
 
-    if runtype in {"optimize", "meci", "mecp", "mep", "ts"}:
+    if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
+
+    if runtype == "neb":
+        _check_neb(config, report)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
@@ -878,7 +900,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
-    lib = _as_lower(_get(config, "optimize", "lib", "scipy"))
+    lib = _as_lower(_get(config, "optimize", "lib", "geometric"))
     optimizer = _as_lower(_get(config, "optimize", "optimizer", "bfgs"))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
@@ -893,7 +915,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy or dlfind.",
+            action="Use scipy or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -967,123 +989,181 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose different multiplicities for the two crossing states.",
         )
 
-    if lib == "dlfind":
-        _check_dlfind(config, report)
-
-    if lib == "scipy" and runtype == "ts":
+    if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "Transition-state optimization is not wired to the SciPy optimizer map.",
-            value=lib,
-            expected="dlfind",
-            action="Use [optimize] lib=dlfind for runtype=ts.",
-        )
-
-    if lib == "dlfind" and runtype not in {"optimize", "meci", "ts"}:
-        report.add(
-            "ERROR",
-            "optimize.lib",
-            "DL-FIND is not connected to this runtype.",
+            "This runtype is not wired to the SciPy optimizer map.",
             value=f"{lib}/{runtype}",
-            expected="optimize, meci, or ts",
-            action="Switch to lib=scipy or choose a DL-FIND-supported runtype.",
+            expected="geometric",
+            action="Use [optimize] lib=geometric for runtype=ts/irc.",
+        )
+
+    if runtype == "neb" and lib != "geometric":
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "NEB is currently wired only through geomeTRIC.",
+            value=lib,
+            expected="geometric",
+            action="Set [optimize] lib=geometric for runtype=neb.",
+        )
+
+    if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "geomeTRIC is currently connected only to state-specific geometry optimization, MECI, MECP, TS, IRC, and NEB.",
+            value=f"{lib}/{runtype}",
+            expected="optimize, meci, mecp, ts, irc, or neb",
+            action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
 
-def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
-    runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
-    icoord = _get(config, "dlfind", "icoord", 3)
-    iopt = _get(config, "dlfind", "iopt", 3)
-    ims = _get(config, "dlfind", "ims", 0)
+def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    istate = _get(config, "optimize", "istate", 0)
+    product = _get(config, "neb", "product", "")
+    nimage = _get(config, "neb", "nimage", 5)
 
-    if runtype == "optimize":
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Single-state DL-FIND optimization only supports icoord 0-4.",
-                value=icoord,
-                action="Use icoord in 0,1,2,3,4.",
-            )
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Single-state DL-FIND optimization only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Single-state optimization requires ims=0.",
-                value=ims,
-                action="Set ims=0.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
+    if method == "hf" and istate != 0:
+        report.add(
+            "ERROR",
+            "optimize.istate",
+            "HF/DFT NEB currently supports only the ground state.",
+            value=istate,
+            expected="0",
+            action="Set [optimize] istate=0, or use method=tdhf/[tdhf] type=mrsf for excited-state NEB.",
+        )
 
-    if runtype == "meci":
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "DL-FIND MECI only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims not in DLFIND_MECI_IMS:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "DL-FIND MECI requires ims=1, 2, or 3.",
-                value=ims,
-                action="Set ims to a MECI mode.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-        if ims == 3 and icoord not in DLFIND_LN_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Lagrange-Newton MECI requires icoord 10-14.",
-                value=icoord,
-                action="Use icoord 10-14 with ims=3.",
-            )
-        if ims in {1, 2} and icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Penalty/gradient-projection MECI requires icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 with ims=1 or ims=2.",
-            )
+    if method not in {"hf", "tdhf"}:
+        report.add(
+            "ERROR",
+            "input.method",
+            "NEB currently supports HF/DFT and TDHF/MRSF state-specific surfaces.",
+            value=method,
+            expected="hf or tdhf",
+            action="Use method=hf with istate=0 or method=tdhf with a valid target state.",
+        )
 
-    if runtype == "ts":
-        if iopt not in DLFIND_TS_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Transition-state DL-FIND uses P-RFO (iopt=9).",
-                value=iopt,
-                action="Set [dlfind] iopt=9 for runtype=ts.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Transition-state search is not a MECI mode and requires ims=0.",
-                value=ims,
-                action="Set [dlfind] ims=0 for runtype=ts.",
-            )
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Transition-state DL-FIND search expects icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 for TS optimization.",
-            )
+    if not product:
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint is missing.",
+            expected="XYZ filename",
+            action="Set [neb] product to a product-endpoint XYZ file.",
+        )
+    elif not os.path.exists(os.path.abspath(str(product))):
+        report.add(
+            "ERROR",
+            "neb.product",
+            "NEB product endpoint file does not exist.",
+            value=product,
+            action="Fix the product path or place the XYZ file in the working directory.",
+        )
+
+    if nimage < 3:
+        report.add(
+            "ERROR",
+            "neb.nimage",
+            "NEB requires at least reactant, one intermediate, and product images.",
+            value=nimage,
+            expected=">= 3",
+            action="Set [neb] nimage=3 or larger.",
+        )
+
+
+def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
+    """Return analytic-Hessian capability status and a precise reason.
+
+    This checker is intentionally conservative: enabling a dispatch scaffold must
+    not imply broad scientific support. Unsupported analytic Hessians fail at
+    input-check time instead of silently falling back to numerical Hessians.
+    """
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    state = _get(config, "hess", "state", 0)
+
+    if method == "hf":
+        if state != 0:
+            return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
+        if scf_type != "rhf":
+            return "unsupported_scf_type", "Native HF/DFT analytic Hessian currently supports closed-shell RHF/RKS references only."
+        return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
+
+    if method == "tdhf":
+        if td_type == "mrsf":
+            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+        if td_type == "umrsf":
+            return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
+        if td_type == "sf":
+            return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
+        if td_type in {"tda", "rpa"}:
+            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
+
+    return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
+
+
+def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
+    """Return max L in the configured basis, or None if it cannot be inspected."""
+    try:
+        import basis_set_exchange as bse
+    except Exception:
+        return None
+
+    basis = _get(config, "input", "basis", "")
+    system = _get(config, "input", "system", "")
+    library = _get(config, "input", "library", "")
+    inline_lines, xyz_path = _iter_coordinate_lines(system)
+    lines = inline_lines
+    if xyz_path and os.path.exists(os.path.abspath(xyz_path)):
+        with open(os.path.abspath(xyz_path), "r", encoding="utf-8") as handle:
+            xyz_lines = handle.read().splitlines()
+        try:
+            num_atoms = int(xyz_lines[0])
+            lines = xyz_lines[2:2 + num_atoms]
+        except (IndexError, ValueError):
+            lines = xyz_lines
+
+    if not lines:
+        return None
+
+    per_atom_basis: list[str] = []
+    if basis == "library":
+        mapping: dict[str, str] = {}
+        for raw in library.splitlines():
+            parts = raw.split()
+            if len(parts) >= 2:
+                mapping[parts[0]] = " ".join(parts[1:])
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 5 and parts[4] in mapping:
+                per_atom_basis.append(mapping[parts[4]])
+    else:
+        names = [item.strip() for item in str(basis).split(";") if item.strip()]
+        if len(names) == 1:
+            per_atom_basis = names * len(lines)
+        else:
+            per_atom_basis = names
+
+    if len(per_atom_basis) != len(lines):
+        return None
+
+    max_l = 0
+    for line, basis_name in zip(lines, per_atom_basis):
+        parts = line.split()
+        if not parts:
+            continue
+        element = parts[0]
+        data = bse.get_basis(basis_name, elements=[element])
+        for item in data.get("elements", {}).values():
+            for shell in item.get("electron_shells", []):
+                max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
+    return max_l
 
 
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
@@ -1096,14 +1176,26 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
     if hess_type == "analytical":
-        report.add(
-            "ERROR",
-            "hess.type",
-            "Analytical Hessian is not implemented; the runtime exits for this case.",
-            value=hess_type,
-            expected="numerical",
-            action="Set [hess] type=numerical.",
-        )
+        capability, reason = analytic_hessian_capability(config)
+        if capability != "supported":
+            report.add(
+                "ERROR",
+                "hess.type",
+                reason,
+                value=hess_type,
+                expected="supported analytical Hessian capability",
+                action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
+            )
+        max_l = _basis_max_angular_momentum(config)
+        if max_l is not None and max_l >= 4:
+            report.add(
+                "ERROR",
+                "input.basis",
+                "Analytical Hessian native Rys nuclear-attraction second derivatives support basis angular momentum only up to L=3.",
+                value=f"max L={max_l}",
+                expected="max L <= 3",
+                action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
+            )
 
     if method == "hf" and state > 0:
         report.add(

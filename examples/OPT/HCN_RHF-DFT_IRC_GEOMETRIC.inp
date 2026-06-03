@@ -1,0 +1,34 @@
+[input]
+system=
+   C   0.0000000000   0.0000000000   0.0000000000
+   N   0.0000000000   0.0000000000   1.1700000000
+   H  -1.1000000000   0.0000000000   0.0000000000
+charge=0
+functional=bhhlyp
+basis=3-21g
+runtype=irc
+method=hf
+
+[scf]
+type=rhf
+multiplicity=1
+maxit=30
+
+[optimize]
+lib=geometric
+istate=0
+maxit=4
+energy_shift=1
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
+
+[geometric]
+coordsys=dlc
+trust=0.2
+tmax=0.2
+hessian=first
+irc_direction=forward
+convergence_set=GAU
+prefix=hcn_rhf_dft_irc_geometric

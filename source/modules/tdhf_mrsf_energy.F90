@@ -12,7 +12,7 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call tdhf_mrsf_energy(inf)
+    call tdhf_mrsf_energy_with_restart(inf)
   end subroutine tdhf_mrsf_energy_C
 
   subroutine tdhf_umrsf_energy_C(c_handle) bind(C, name="tdhf_umrsf_energy")
@@ -22,8 +22,38 @@ contains
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
     inf%tddft%umrsf= .true.
-    call tdhf_mrsf_energy(inf)
+    call tdhf_mrsf_energy_with_restart(inf)
   end subroutine tdhf_umrsf_energy_C
+
+  ! Run the MRSF Davidson and, if it fails to converge, auto-restart with a
+  ! larger subspace (maxvec) and more iterations (maxit_dav).  Re-invoking the
+  ! driver reallocates a fresh, larger Krylov subspace, so no inner-loop state
+  ! is reused.  The user's maxvec/maxit_dav are restored afterwards.
+  subroutine tdhf_mrsf_energy_with_restart(infos)
+    use types, only: information
+    use io_constants, only: iw
+    type(information), intent(inout) :: infos
+    integer, parameter :: max_restarts = 2
+    integer :: attempt, maxvec0, maxit0
+    maxvec0 = infos%tddft%maxvec
+    maxit0  = infos%control%maxit_dav
+    do attempt = 0, max_restarts
+      call tdhf_mrsf_energy(infos)
+      if (infos%mol_energy%Davidson_converged) exit
+      if (attempt < max_restarts) then
+        infos%tddft%maxvec      = 2 * infos%tddft%maxvec
+        infos%control%maxit_dav = 2 * infos%control%maxit_dav
+        ! The energy routine closes the log on exit; reopen to record the restart.
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/,2X,"MRSF Davidson not converged; auto-restart #",I0, &
+                 &" with larger subspace (maxvec=",I0,", maxit_dav=",I0,")"/)') &
+          attempt + 1, infos%tddft%maxvec, infos%control%maxit_dav
+        close(iw)
+      end if
+    end do
+    infos%tddft%maxvec      = maxvec0
+    infos%control%maxit_dav = maxit0
+  end subroutine tdhf_mrsf_energy_with_restart
 
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
@@ -306,6 +336,13 @@ contains
             infos%tddft%cam_mu = infos%dft%cam_mu
     end if
     if (dft) scale_exch = infos%tddft%HFscale
+    ! Pure HF reference (no DFT functional): the effective exact-exchange scale
+    ! is 1.0. Without a DFT functional infos%dft%HFscale is left at the -1.0
+    ! sentinel, so the response HFscale (and hence the spin-pair coupling below)
+    ! would inherit -1.0. The energy tolerates this (the fmrst2 rescale is
+    ! skipped because spc == HFscale either way), but the MRSF gradient uses the
+    ! spin-pair coupling values directly and needs the correct +1.0.
+    if (.not. dft) infos%tddft%HFscale = 1.0_dp
     ! set spin-pair coupling
     if (infos%tddft%spc_coco==-1.0_dp) &
           infos%tddft%spc_coco = infos%tddft%HFscale

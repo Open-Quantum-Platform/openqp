@@ -276,6 +276,7 @@ module mod_dft_gridint
   public xc_consumer_t
   public xc_options_t
   public run_xc
+  public run_grid_aos
   public mo_tran_symm_
   public mo_tran_gemm_
   public xc_der1
@@ -2249,6 +2250,102 @@ contains
     xc_dat%N_elec = totele
     xc_dat%E_kin = totkin
     xc_dat%G_total = totgradxyz
+
+  end subroutine
+
+!> @brief Drive a grid loop that only evaluates AO values on the molecular grid.
+!>
+!> This is a stripped-down variant of run_xc used by guesses that need
+!> one-electron operators integrated numerically on the DFT grid (e.g. the
+!> superposition-of-atomic-potentials guess). It performs the same slice
+!> loop, coordinate shift, AO evaluation and AO pruning as run_xc, but skips
+!> the exchange-correlation evaluation (compXC) entirely, so no functional is
+!> required. The consumer's update/postUpdate hooks see xce%aoV, xce%wts and
+!> xce%xyzw (absolute point coordinates) for the pruned points.
+  subroutine run_grid_aos(xc_opts, xc_dat, basis)
+    use basis_tools, only: basis_set
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
+
+    implicit none
+    class(xc_consumer_t), intent(inout) :: xc_dat
+    type(xc_options_t), intent(in) :: xc_opts
+    type(basis_set), intent(in) :: basis
+
+    type(xc_engine_t), allocatable :: xce
+
+    logical :: skip
+    real(KIND=fp) :: dftthr, wcutoff
+    integer :: iSlice, iAtom, npt, i, numNzPts
+    integer :: iChunk, chunkSize
+    integer :: myThread, numThreads
+
+    npt = xc_opts%molGrid%nMolPts
+    dftthr = 1.0d-04/npt
+    if (xc_opts%dft_threshold > 0.0d0) dftthr = xc_opts%dft_threshold
+
+    wcutoff = 1.0d-15
+    if (dftthr > 1.1d-15) wcutoff = 1.0d-08/npt
+
+!$omp parallel &
+!$omp   private(iChunk, chunkSize, numThreads) &
+!$omp   private(iSlice, numNzPts, xce) &
+!$omp   private(myThread), &
+!$omp   private(i), &
+!$omp   private(iAtom), &
+!$omp   private(skip)
+
+    numThreads = 1
+    myThread = 1
+!$  numThreads = omp_get_num_threads()
+!$  myThread = omp_get_thread_num()+1
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/numThreads > 40) then
+      chunkSize = 40*numThreads
+    end if
+    allocate (xce)
+    call xce%init(xc_opts)
+
+!$omp master
+    call xc_dat%parallel_start(xce, numThreads)
+!$omp end master
+!$omp barrier
+
+    do iChunk = 1, xc_opts%molGrid%nSlices, chunkSize
+      if (mod(iChunk/chunkSize, xc_dat%pe%size) /= xc_dat%pe%rank) cycle
+
+!$omp do schedule(dynamic)
+      slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
+
+        call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
+        if (numNzPts==0) CYCLE
+
+        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+
+        call xce%resetPointers(numNzPts)
+
+        do i = 1, numNzPts
+          xce%xyzw(i,:3) = &
+            xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
+        end do
+
+        call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+
+        call xce%pruneAOs(skip)
+
+        IF (skip) CYCLE
+
+        call xc_dat%update(xce, myThread)
+
+        call xc_dat%postUpdate(xce, myThread)
+
+      end do slc
+!$omp end do nowait
+    end do
+
+    deallocate (xce)
+!$omp end parallel
+
+    call xc_dat%parallel_stop()
 
   end subroutine
 

@@ -50,7 +50,7 @@ class Optimizer:
             self.optimizer = mol.config['optimize']['lib']
 
         # check optimizer
-        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'dlfind']:
+        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'geometric']:
             raise ValueError(f'Unknown optimizer {self.optimizer}')
 
         self.metrics = {
@@ -100,7 +100,7 @@ class Optimizer:
 
         if np.abs(self.metrics['de']) <= self.energy_shift and \
                 self.metrics['rmsd_step'] <= self.rmsd_step and \
-                self.metrics['max_step'] <= self.rmsd_step and \
+                self.metrics['max_step'] <= self.max_step and \
                 self.metrics['rmsd_grad'] <= self.rmsd_grad and \
                 self.metrics['max_grad'] <= self.max_grad:
             dump_log(self.mol, title='PyOQP: Geometry Optimization Has Converged')
@@ -278,7 +278,7 @@ class ConstrainOpt(Optimizer):
 
         if np.abs(self.metrics['de']) <= self.energy_shift and \
                 self.metrics['rmsd_step'] <= self.rmsd_step and \
-                self.metrics['max_step'] <= self.rmsd_step and \
+                self.metrics['max_step'] <= self.max_step and \
                 self.metrics['rmsd_grad'] <= self.rmsd_grad and \
                 self.metrics['max_grad'] <= self.max_grad and \
                 self.metrics['radius'] > self.step_tol:
@@ -448,12 +448,14 @@ class MECIOpt(Optimizer):
         df_2 = 2 * gap_e * x
         df = df_1 + self.weights * df_2 / alpha
 
-        # evaluate metrics
+        # evaluate metrics.  MECI convergence must use the full
+        # crossing-objective gradient, not only the energy-gap term;
+        # individual state gradients are finite at a CI.
         de = f - self.pre_energy
         rmsd_step = np.mean((coordinates - self.pre_coord) ** 2) ** 0.5
         max_step = np.amax(np.abs(coordinates - self.pre_coord))
-        rmsd_grad = np.mean(df_2 ** 2) ** 0.5
-        max_grad = np.amax(np.abs(df_2))
+        rmsd_grad = np.mean(df ** 2) ** 0.5
+        max_grad = np.amax(np.abs(df))
         rmsd_df_1 = np.mean(df_1 ** 2) ** 0.5
         max_df_1 = np.amax(np.abs(df_1))
         self.metrics['itr'] = self.itr
@@ -509,20 +511,23 @@ class MECIOpt(Optimizer):
         sum_g = grad_j + grad_i
         gap_g = grad_j - grad_i
 
-        # gradient of the energy gap function
-        dg = 2 * gap_e * gap_g
-
         if self.alpha == 0:
-            alpha = np.mean(dg ** 2) ** 0.5
+            # Use the coupling-gradient scale described for the penalty
+            # method.  Do not scale alpha by the energy gap; otherwise alpha
+            # collapses to zero near the crossing and the penalty objective
+            # becomes ill-conditioned.
+            alpha = np.mean(gap_g ** 2) ** 0.5
         else:
             alpha = self.alpha
 
-        self.sigma *= self.incre ** self.itr
+        self.sigma *= self.incre
 
         f = sum_e * 0.5 + self.weights * self.sigma * gap_e ** 2 / (gap_e + alpha)
         df_1 = sum_g * 0.5
         df_2 = (gap_e ** 2 + 2 * alpha * gap_e) / (gap_e + alpha) ** 2 * gap_g
-        df_1 = df_1 - np.sum(df_1 * df_2) / np.sum(df_2 ** 2) * df_2
+        # True penalty-function gradient.  The average-gradient component
+        # must not be projected out when a scalar optimizer such as scipy or
+        # geomeTRIC is minimizing the penalty objective.
         df = df_1 + self.weights * self.sigma * df_2
 
         """
@@ -539,14 +544,15 @@ class MECIOpt(Optimizer):
         )
         """
 
-        # evaluate metrics
+        # evaluate metrics.  MECI convergence uses the full penalty-objective
+        # gradient.  Keep the penalty contribution separately for diagnostics.
         de = f - self.pre_energy
         rmsd_step = np.mean((coordinates - self.pre_coord) ** 2) ** 0.5
         max_step = np.amax(np.abs(coordinates - self.pre_coord))
-        rmsd_grad = np.mean(np.array(dg ** 2)) ** 0.5
-        max_grad = np.amax(np.abs(dg))
-        rmsd_df = np.mean(df ** 2) ** 0.5
-        max_df = np.amax(np.abs(df))
+        rmsd_grad = np.mean(df ** 2) ** 0.5
+        max_grad = np.amax(np.abs(df))
+        rmsd_df = np.mean(df_2 ** 2) ** 0.5
+        max_df = np.amax(np.abs(df_2))
 
         self.metrics['itr'] = self.itr
         self.metrics['sigma'] = self.sigma
@@ -580,7 +586,7 @@ class MECIOpt(Optimizer):
         if np.abs(self.metrics['de']) <= self.energy_shift and \
                 self.metrics['gap'] <= self.energy_gap and \
                 self.metrics['rmsd_step'] <= self.rmsd_step and \
-                self.metrics['max_step'] <= self.rmsd_step and \
+                self.metrics['max_step'] <= self.max_step and \
                 self.metrics['rmsd_grad'] <= self.rmsd_grad and \
                 self.metrics['max_grad'] <= self.max_grad:
             dump_log(self.mol, title='PyOQP: Geometry Optimization Has Converged')
@@ -668,13 +674,10 @@ class MECPOpt(Optimizer):
 
     def quad(self, coordinates, energies, grads):
         """
-        quadratic optimization
+        quadratic penalty optimization
 
-        f = E1 + (E2 - E1) ** 2
-        dg = dE2 - dE1
-        df1 = dE1 - dg/norm(dg) * np.sum(dE1 * dg/norm(dg))
-        df2 = 2 * (E2 - E1) * dg
-        df = df1 + df2
+        F = 0.5 * (E1 + E2) + w * (E2 - E1) ** 2
+        dF = 0.5 * (G1 + G2) + 2 * w * (E2 - E1) * (G2 - G1)
         """
 
         # flatten data
@@ -688,8 +691,8 @@ class MECPOpt(Optimizer):
         gap_e = energy_j - energy_i
         gap_g = grad_j - grad_i
 
-        f = energy_j + self.weights * gap_e ** 2
-        df1 = grad_j - gap_g * np.sum(grad_j * gap_g) / np.sum(gap_g ** 2)
+        f = (energy_i + energy_j) * 0.5 + self.weights * gap_e ** 2
+        df1 = (grad_i + grad_j) * 0.5
         df2 = 2 * gap_e * gap_g
         df = df1 + self.weights * df2
 
@@ -732,7 +735,7 @@ class MECPOpt(Optimizer):
         if np.abs(self.metrics['de']) <= self.energy_shift and \
                 np.abs(self.metrics['gap']) <= self.energy_gap and \
                 self.metrics['rmsd_step'] <= self.rmsd_step and \
-                self.metrics['max_step'] <= self.rmsd_step and \
+                self.metrics['max_step'] <= self.max_step and \
                 self.metrics['rmsd_grad'] <= self.rmsd_grad and \
                 self.metrics['max_grad'] <= self.max_grad:
             dump_log(self.mol, title='PyOQP: Geometry Optimization Has Converged')

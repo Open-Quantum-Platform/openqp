@@ -1,9 +1,12 @@
 module tdhf_lib
 
+    use, intrinsic :: ieee_arithmetic
     use precision, only : dp
     use int2_compute, only: int2_fock_data_t, int2_storage_t
     use basis_tools, only: basis_set
     use oqp_linalg
+
+    real(kind=dp), parameter :: DAVIDSON_DENOMINATOR_FLOOR = 1.0e-8_dp
 
     type, extends(int2_fock_data_t) :: int2_td_data_t
       real(kind=dp), allocatable :: apb(:,:,:,:)
@@ -701,6 +704,12 @@ contains
     if (tamm_dancoff) then
       do ivec = imax+1, ndsr
         errors(ivec) = dot_product(w_r(:,ivec),w_r(:,ivec))
+        if (.not. ieee_is_finite(errors(ivec))) then
+          write(*,'(4X,"Non-finite Davidson residual detected")')
+          write(*,'(4X,"State#=",I4)') ivec
+          q(:,ivec,1) = 0.0_dp
+          cycle
+        end if
         if (errors(ivec)>1.0_dp) then
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
@@ -710,7 +719,8 @@ contains
 
 !       Get new vectors Q
         if (errors(ivec)>tol) then
-          q(:,ivec,1) = w_r(:,ivec)/(ee(ivec)-abd(:))
+          call apply_davidson_preconditioner(q(:,ivec,1), w_r(:,ivec), ee(ivec), abd)
+          if (any(.not. ieee_is_finite(q(:,ivec,1)))) q(:,ivec,1) = 0.0_dp
         else
           q(:,ivec,1) = 0.0_dp
         end if
@@ -720,6 +730,12 @@ contains
         er_l = dot_product(w_l(:,ivec),w_l(:,ivec))
         er_r = dot_product(w_r(:,ivec),w_r(:,ivec))
         errors(ivec) = max(er_l,er_r)
+        if (.not. ieee_is_finite(errors(ivec))) then
+          write(*,'(4X,"Non-finite Davidson residual detected")')
+          write(*,'(4X,"State#=",I4)') ivec
+          q(:,ivec,1:2) = 0.0_dp
+          cycle
+        end if
         if (errors(ivec)>1.0_dp) then
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
@@ -729,11 +745,10 @@ contains
 
 !       Get new vectors Q
         if (errors(ivec)>tol) then
-          q(:,ivec,1) = 1.0d0/(ee(ivec)-abd(:))
-          q(:,ivec,2) = q(:,ivec,1)
-
-          q(:,ivec,1) = q(:,ivec,1)*w_l(:,ivec)
-          q(:,ivec,2) = q(:,ivec,2)*w_r(:,ivec)
+          call apply_davidson_preconditioner(q(:,ivec,1), w_l(:,ivec), ee(ivec), abd)
+          call apply_davidson_preconditioner(q(:,ivec,2), w_r(:,ivec), ee(ivec), abd)
+          if (any(.not. ieee_is_finite(q(:,ivec,1)))) q(:,ivec,1) = 0.0_dp
+          if (any(.not. ieee_is_finite(q(:,ivec,2)))) q(:,ivec,2) = 0.0_dp
         else
           q(:,ivec,1:2) = 0.0_dp
         end if
@@ -741,6 +756,45 @@ contains
     end if
 
   end subroutine rparesvec
+
+  subroutine apply_davidson_preconditioner(qout, residual, energy, abd)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(out) :: qout(:)
+    real(kind=dp), intent(in) :: residual(:)
+    real(kind=dp), intent(in) :: energy
+    real(kind=dp), intent(in) :: abd(:)
+
+    integer :: ii
+    real(kind=dp) :: denom
+
+    do ii = 1, ubound(qout, 1)
+      denom = energy - abd(ii)
+      if (.not. davidson_safe_denominator(denom)) then
+        if (.not. ieee_is_finite(denom)) then
+          qout(ii) = 0.0_dp
+          cycle
+        end if
+        if (abs(denom) < DAVIDSON_DENOMINATOR_FLOOR) then
+          denom = merge(DAVIDSON_DENOMINATOR_FLOOR, -DAVIDSON_DENOMINATOR_FLOOR, denom >= 0.0_dp)
+        end if
+      end if
+      qout(ii) = residual(ii) / denom
+      if (.not. ieee_is_finite(qout(ii))) qout(ii) = 0.0_dp
+    end do
+  end subroutine apply_davidson_preconditioner
+
+  logical function davidson_safe_denominator(denom)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: denom
+
+    davidson_safe_denominator = ieee_is_finite(denom) .and. abs(denom) >= DAVIDSON_DENOMINATOR_FLOOR
+  end function davidson_safe_denominator
 
 !> @brief Orthonormalize q(xvec_dim,ndsr*2) and append to bvec
   subroutine rpanewb(ndsr,bvec,q,novec,nvec,ick,tamm_dancoff)
@@ -755,9 +809,11 @@ contains
     integer, intent(out) :: ick
     logical, intent(in) :: tamm_dancoff
 
-    real(kind=dp) :: bq, fnorm
+    real(kind=dp) :: bq, fnorm, max_abs_overlap
     integer :: istat, k, ms, ndsrt, mxvec
+    logical :: bad_vector
     real(kind=dp), parameter :: norm_threshold = 1.0D-09
+    real(kind=dp), parameter :: reorth_threshold = 1.0D-08
 
     mxvec = ubound(bvec, 2)
 
@@ -770,16 +826,39 @@ contains
     if (tamm_dancoff) ndsrt = ndsr
 
     do k = 1, ndsrt
+      if (any(.not. ieee_is_finite(q(:,k)))) cycle
+      max_abs_overlap = 0.0_dp
+      bad_vector = .false.
 !     MGS: orthonormalize next vector w.r.t. all
 !     previous vectors
       do istat = 1, nvec
         bq = dot_product(bvec(:,istat),q(:,k))
+        if (.not. ieee_is_finite(bq)) then
+          bad_vector = .true.
+          exit
+        end if
+        max_abs_overlap = max(max_abs_overlap, abs(bq))
         q(:,k) = q(:,k) - bq*bvec(:,istat)
       end do
+      if (bad_vector) cycle
+
+      if (max_abs_overlap > reorth_threshold) then
+! Davidson MGS reorthogonalization pass
+        do istat = 1, nvec
+          bq = dot_product(bvec(:,istat),q(:,k))
+          if (.not. ieee_is_finite(bq)) then
+            bad_vector = .true.
+            exit
+          end if
+          q(:,k) = q(:,k) - bq*bvec(:,istat)
+        end do
+        if (bad_vector) cycle
+      end if
 
       fnorm = norm2(q(:,k))
 
 !     Possible linear dependency, skip this vector
+      if (.not. ieee_is_finite(fnorm)) cycle
       if (fnorm<norm_threshold) cycle
 
       if (nvec==mxvec) then

@@ -10,6 +10,12 @@ __pycache__/
 *.sw?
 *.un~
 *.log
+*.pyc
+__pycache__/
+.pytest_cache/
+_build/
+build/
+openqp_test_tmp_*/
 f90deps.mk
 objdir*
 external/*
@@ -20,3 +26,17 @@ include/*
 lib64/*
 share/*
 examples/data_*
+build/
+build_*/
+__pycache__/
+*.pyc
+openqp_test_tmp_*
+tools/_grad_validation_scratch/
+tools/_stress_scratch/
+tools/_example_grad_scratch/
+
+# Hessian dev scratch artifacts
+scratch_hess/
+run_compare_hess.py
+fort.6
+*.analytic_hess.pyscf
