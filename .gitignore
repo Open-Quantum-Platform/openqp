@@ -11,6 +11,8 @@
 *.pyc
 __pycache__/
 .pytest_cache/
+_build/
+build/
 f90deps.mk
 objdir*
 external/*
