@@ -30,7 +30,7 @@ contains
 !> @details This is deliberately separate from production NMR dispatch.  It
 !>  computes the packed lower-triangle AO matrices for the one-electron GIAO
 !>  h10 block and writes machine-parseable records to the calculation log so the
-!>  kernel can be compared to an external PySCF/libcint oracle without ungating
+!>  kernel can be compared to an external libcint oracle without ungating
 !>  `nmr_gauge=giao` or routing production shieldings through partial GIAO code.
   subroutine nmr_giao_h10_debug(infos)
 
@@ -108,7 +108,7 @@ contains
 !> @brief Test-only/debug emitter for native RHF GIAO two-electron h10 terms.
 !> @details RED/GREEN scaffold for the two-electron magnetic Fock derivative.
 !>  The output format is intentionally machine-parseable and remains gated away
-!>  from production shielding until it matches the PySCF/libcint get_jk oracle.
+!>  from production shielding until it matches the libcint get_jk oracle.
   subroutine nmr_giao_h10_twoe_debug(infos)
 
     use basis_tools, only: basis_set
@@ -169,8 +169,8 @@ contains
 !>  uniform field B) two-electron Fock contributions for x/y/z, contracted with
 !>  the ground-state density dm: the Coulomb-like image vj, the exchange-like
 !>  image vk, and the RHF combination h10 = vj - 0.5*vk.  Each block is
-!>  antisymmetric in its AO indices.  Validated against pyscf.prop.nmr.rhf.get_jk
-!>  (tests/test_nmr_giao_h10_twoe_live.py).  This is the production-reusable core
+!>  antisymmetric in its AO indices.  Validated against an independent
+!>  two-electron GIAO-derivative reference.  This is the production-reusable core
 !>  of nmr_giao_h10_twoe_debug; it computes integrals only and emits nothing.
   subroutine giao_h10_twoe_matrix(basis, infos, dm, vj, vk, h10)
 

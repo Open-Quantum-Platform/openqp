@@ -31,18 +31,18 @@ contains
 !>  coupled == uncoupled). The isotropic shielding is sigma = sigma_dia +
 !>  sigma_para per nucleus.
 !>
-!> Phase-0 validation (H2O/STO-3G, CGO at COM; PySCF common-gauge oracle in
-!> tests/fixtures/nmr/pyscf_cgo_reference.json):
+!> Phase-0 validation (H2O/STO-3G, CGO at COM; common-gauge reference values in
+!> tests/fixtures/nmr/cgo_reference.json):
 !>   - HF coupled para matches the oracle exactly (O -230.63, H 3.506 ppm).
 !>   - Coulomb response of P^B ~0; exact-exchange response nonzero (gates 1-2).
 !>   - Pure PBE: coupled == uncoupled (gate 3). HF/hybrid coupled != uncoupled,
 !>     with the coupling scaling with c_x (gates 4, 6).
 !>
-!> Validation (H2O/STO-3G, RHF, CGO at the center of mass; PySCF reference):
-!>   - Diamagnetic term matches PySCF common-gauge `dia()` to ~6 significant
+!> Validation (H2O/STO-3G, RHF, CGO at the center of mass; reference values):
+!>   - Diamagnetic term matches the standard common-gauge diamagnetic to ~6 significant
 !>     figures (O 411.418, H 28.062 ppm).
 !>   - Paramagnetic term (MO transform of the orbital-Zeeman and PSO operators,
-!>     occupied-virtual sum-over-states, 2*alpha^2 prefactor) matches the PySCF
+!>     occupied-virtual sum-over-states, 2*alpha^2 prefactor) matches the reference
 !>     uncoupled reference for BOTH atoms (O para -113.63, H para 1.785 ppm;
 !>     totals 297.79 / 29.85 ppm).
 !>   - The PSO operator is anti-Hermitian; `pso_integrals` returns it exactly
@@ -383,7 +383,7 @@ contains
 
     integer, parameter :: maxit = 100
     real(kind=8), parameter :: tol = 1.0d-9, half = 0.5d0
-    real(kind=8), parameter :: kappa = 1.0d0        ! coupling sign (validated vs PySCF)
+    real(kind=8), parameter :: kappa = 1.0d0        ! coupling sign (validated vs the reference)
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: kdat, kdat1, jdat
     real(kind=8), allocatable, target :: pa(:,:,:)

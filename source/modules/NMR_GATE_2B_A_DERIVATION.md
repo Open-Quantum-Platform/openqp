@@ -48,7 +48,7 @@ needed to define the boundary of the new work.
 ## 1. Current formal status (the substrate 2b-A extends)
 
 This is the validated ground-state base. Everything here is implemented in
-`nmr_shielding.F90` and matched to the PySCF common-gauge oracle.
+`nmr_shielding.F90` and matched to the independent common-gauge reference.
 
 ### 1.1 Gauge: Common Gauge Origin (CGO) at the center of mass
 A single global gauge origin `O = Σ_A m_A R_A / Σ_A m_A` is used for the vector
@@ -78,7 +78,7 @@ but the full-tensor code path fixes a definite ordering — preserve it.)
 ```
 with `P` the SCF (closed-shell) density. Operator `h^{Bm}_{ts} = α²[(r_O·r_N)δ_{ts}
 − (r_O)_s (r_N)_t]/r_N³` is **real symmetric**; the term is a pure expectation
-value over `P`. Matches PySCF `dia()` to ~6 figures (O 411.418, H 28.062 ppm).
+value over `P`. Matches the reference `dia()` to ~6 figures (O 411.418, H 28.062 ppm).
 Code: `nmr_dia_shielding` (`int1.F90`) + assembly in `nmr_shielding.F90`.
 **Do not touch the α²/2 prefactor or the `(r_O)·(r_N)/r_N³` field factor.**
 
@@ -89,7 +89,7 @@ Code: `nmr_dia_shielding` (`int1.F90`) + assembly in `nmr_shielding.F90`.
 `L^O = C^T A_O C` (orbital Zeeman about `O`, full antisymmetric AO matrix),
 `PSO^N = C^T A_PSO^N C`. The `2α²` collects the `½` of the orbital-Zeeman operator
 `h^B = ½ L_O` and the factor 2 from the two sum-over-states cross terms. Matches
-the PySCF *uncoupled* reference for both atoms (O −113.63, H 1.785 ppm). Code:
+the the independent reference *uncoupled* reference for both atoms (O −113.63, H 1.785 ppm). Code:
 `sum_ov` in `nmr_shielding.F90`. **PSO stays exactly antisymmetric `A=(M−Mᵀ)/2`;
 do not touch the `(r−c)/r³` field factor or the α² prefactor.**
 
@@ -108,7 +108,7 @@ solved by fixed-point iteration; then
 `c_x = HFscale` (1.0 HF, 0.5 BHHLYP, 0.25 PBE0, 0.0 pure GGA). `K` is the
 exact-exchange image of the antisymmetric density, built via the `int2` **A−B**
 path (`int2_td_data_t(int_amb=.true.)`, `mntoia`). For `c_x = 0` the loop is
-skipped and the result is identical to §1.4. HF matches the PySCF coupled oracle
+skipped and the result is identical to §1.4. HF matches the independent coupled reference
 exactly (O para −230.63). Code: `compute_coupled_para` in `nmr_shielding.F90`.
 
 ### 1.6 The current approximation: exchange-only, `J(P^B)=0`, `f_xc[P^B]=0`
@@ -442,9 +442,9 @@ already prototyped in `nmr_shielding.F90::compute_coupled_para` (the `int2`
 - **SOS-MRSF cross-check (internal oracle).** Assemble `⟨I|L_O|J⟩`, `⟨I|PSO|J⟩`
   from MRSF transition densities + energy denominators (spin-selected, §7). CP-MRSF
   (§5) must agree with SOS-MRSF within manifold-completeness; this is the primary
-  oracle for the genuinely-MRSF amplitude term (PySCF offers no MRSF reference).
+  oracle for the genuinely-MRSF amplitude term (the reference offers no MRSF data).
 - **Single-reference reduction (§9)** vs the existing RHF/DFT coupled prototype and
-  the PySCF coupled CGO oracle (`tests/fixtures/nmr/pyscf_cgo_reference.json`),
+  the independent coupled CGO reference (`tests/fixtures/nmr/cgo_reference.json`),
   reusing `tests/test_nmr_coupled.py` tolerances (`TOL_HF_ABS = 5e-2`,
   `TOL_DELTA = 0.12`).
 - **Finite-difference magnetic response** on a tiny system: validate the §5.3 RHS
@@ -471,7 +471,7 @@ already prototyped in `nmr_shielding.F90::compute_coupled_para` (the `int2`
   responses consistently in `U^{B_s}`, `X^{B_s}`, and `γ^{B_s}_I`.
 - **Index packing** `k=(a−1)·n_occ+i` must match `iatogen`/`mntoia` (as in the
   ground-state prototype) throughout the RHS/solve/contraction.
-- **Coupling sign** `kappa = 1` was validated against PySCF on the ground state;
+- **Coupling sign** `kappa = 1` was validated against the independent reference on the ground state;
   re-confirm the sign of the exchange image after promoting the helper.
 - **Tensor index convention** (`t = moment`, `s = field`, §2) must be fixed
   consistently across RHS, contraction, and output; isotropic output hides a swap
@@ -481,7 +481,7 @@ already prototyped in `nmr_shielding.F90::compute_coupled_para` (the `int2`
 
 ### 10.4 Acceptance criteria for Gate 2b-B (the next coding gate)
 1. **SR reduction (blocking):** on a closed-shell single-reference molecule,
-   `γ^{B_s,amp}_I → 0` and the total MRSF S0 shielding matches §1.5 / the PySCF
+   `γ^{B_s,amp}_I → 0` and the total MRSF S0 shielding matches §1.5 / the the independent reference
    coupled CGO oracle to the gate-4 tolerance (≤ 5e-2 ppm/atom for HF; Δ-metric ≤
    0.12 ppm for hybrids).
 2. **Two-route agreement:** CP-MRSF (§5) vs SOS-MRSF agree within

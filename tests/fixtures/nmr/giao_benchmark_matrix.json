@@ -31,6 +31,6 @@
     "CGO remains the validated default until GIAO benchmarks pass.",
     "For compact systems, CGO and GIAO should agree when the gauge origin is chosen appropriately.",
     "For larger or more spatially extended systems, GIAO should reduce shielding changes under gauge-origin translation.",
-    "Reference comparisons should use PySCF or another trusted NMR implementation where available."
+    "Reference comparisons should use a trusted external NMR implementation where available."
   ]
 }

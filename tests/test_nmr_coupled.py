@@ -1,8 +1,8 @@
 """Phase-0 regression tests: coupled HF/hybrid ground-state magnetic response.
 
 Validates the coupled CPHF/CPKS magnetic response (exact-exchange response of the
-imaginary antisymmetric first-order density) against the PySCF common-gauge-origin
-oracle (tests/fixtures/nmr/pyscf_cgo_reference.json) for HF, BHHLYP, PBE0, PBE on
+imaginary antisymmetric first-order density) against an independent common-gauge-origin
+reference (tests/fixtures/nmr/cgo_reference.json) for HF, BHHLYP, PBE0, PBE on
 H2O/STO-3G with the gauge origin at the center of mass.
 
 Encodes the Phase-0 gates:
@@ -29,7 +29,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "pyscf_cgo_reference.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "cgo_reference.json"
 
 GEOM = """\
    8   0.000000000   0.000000000  -0.041061554
@@ -71,7 +71,7 @@ class CoupledMagneticResponseTests(unittest.TestCase):
         if cls.root is None:
             raise unittest.SkipTest("OpenQP shared library not built")
         if not FIXTURE.exists():
-            raise unittest.SkipTest("PySCF reference fixture missing")
+            raise unittest.SkipTest("Reference fixture missing")
         cls.ref = json.loads(FIXTURE.read_text())["results"]
         cls.runs = {}
         env = dict(os.environ)

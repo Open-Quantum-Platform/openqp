@@ -4,7 +4,7 @@
 common-gauge-origin (CGO) NMR shielding feature (`scf_prop=nmr`). This is **not**
 Gate 2b-B and introduces no new theory; it exercises and documents the shipped
 ground-state code (`source/modules/nmr_shielding.F90`, `int1.F90`) against the
-committed PySCF common-gauge oracle.
+committed independent common-gauge reference.
 
 ## 1. Build & environment tested
 
@@ -46,7 +46,7 @@ Result: **8 / 8 passed** in ~2.0 s wall.
 
 | Test | Checks | Status |
 |------|--------|--------|
-| `test_nmr_shielding.NMRShieldingTests.test_nmr_shielding` | PSO `max\|diag\|`=0, `max\|A+Aᵀ\|`=0; O/H dia+uncoupled-para vs PySCF | **ok** |
+| `test_nmr_shielding.NMRShieldingTests.test_nmr_shielding` | PSO `max\|diag\|`=0, `max\|A+Aᵀ\|`=0; O/H dia+uncoupled-para vs the independent reference | **ok** |
 | `test_nmr_coupled.…test_gate0_density_antisymmetric` | `max\|P^B+P^Bᵀ\|` < 1e-9 (all functionals) | **ok** |
 | `…test_gate1_coulomb_response_vanishes` | `\|\|J(P^B)\|\|` < 1e-9 | **ok** |
 | `…test_gate2_exchange_response_nonzero` | `\|\|K(P^B)\|\|` > 1e-3 | **ok** |
@@ -73,9 +73,9 @@ python3 -m oqp.pyoqp <case>.inp      # writes <case>.log with the CGO NMR table
 | PBE0 | 0.25 | `pbe0` | becke |
 | PBE | 0.00 | `pbe` | becke |
 
-## 4. Isotropic shielding results (ppm) vs PySCF common-gauge oracle
+## 4. Isotropic shielding results (ppm) vs independent common-gauge reference
 
-Oracle: `tests/fixtures/nmr/pyscf_cgo_reference.json` (PySCF 2.13.0). OQP values
+Oracle: `tests/fixtures/nmr/cgo_reference.json` (independent NMR reference). OQP values
 from the `.log` NMR table; `absErr` = |OQP − oracle|. O = oxygen, H = either
 (equivalent) hydrogen.
 
@@ -148,7 +148,7 @@ process/SCF startup, not the NMR step.
 - **Closed-shell RHF / pure-or-hybrid DFT** references only; UHF/ROHF and MRSF are
   out of scope here.
 - DFT absolute shieldings carry a cross-code SCF/grid offset (≤ ~0.12 ppm at
-  STO-3G) vs PySCF; the coupling Δ is the SCF-robust cross-code metric.
+  STO-3G) vs the independent reference; the coupling Δ is the SCF-robust cross-code metric.
 - Semi-local `f_xc[P^B]=0` and `J(P^B)=0` are exact within the conventional
   (non-current-density) functional class; current-DFT terms are not included.
 
@@ -160,15 +160,14 @@ process/SCF startup, not the NMR step.
   used OpenQP's **native Rys** 2e backend. This is benign for these benchmarks: the
   1e NMR operators (`L_O`, PSO, diamagnetic) are native Rys/Gauss–Hermite
   regardless of backend, and the only 2e coupling is the exact-exchange image of
-  `P^B`; HF reproduced the libint-based PySCF oracle to ~1e-4 ppm, confirming the
+  `P^B`; HF reproduced the independent libint-based reference to ~1e-4 ppm, confirming the
   Rys 2e path is equivalent here. On an unrestricted network, build with
   `-DUSE_LIBINT=ON` for the production integral path.
 - Toolchain (`gfortran`, OpenBLAS) and Python deps (`numpy`, `scipy`, `cffi`,
   `basis_set_exchange`, `libdlfind`) were installed into the container; `geometric`
   is **not** required for single-point NMR (it is imported lazily only on the
   geometry-optimization path).
-- The oracle JSON is committed; do not recompute ad hoc (regeneration needs PySCF,
-  via `tests/fixtures/nmr/generate_pyscf_cgo_reference.py`).
+- The oracle JSON is committed; do not recompute ad hoc (regeneration needs an independent NMR reference implementation).
 - Driver invocation: `python3 -m oqp.pyoqp <input>.inp` with `OPENQP_ROOT` and
   `PYTHONPATH=$OPENQP_ROOT/pyoqp` set; the NMR table is written to `<input>.log`.
 
@@ -177,5 +176,5 @@ process/SCF startup, not the NMR step.
 - `source/modules/NMR_SHIELDING_STATUS.md` — feature status & validation.
 - `source/modules/NMR_MAGNETIC_SYMMETRY_NOTE.md` — `J=0`, `f_xc=0`, exchange-only.
 - `tests/test_nmr_shielding.py`, `tests/test_nmr_coupled.py` — the regression tests
-  exercised above; `tests/fixtures/nmr/pyscf_cgo_reference.json` — the oracle.
+  exercised above; `tests/fixtures/nmr/cgo_reference.json` — the oracle.
 - `examples/NMR/H2O_RHF-NMR.inp` — example input.

@@ -16,7 +16,7 @@ This is the **foundational RHF/DFT** NMR branch. The MRSF-TDDFT extension contin
 ## 1. Scope (what's on this branch)
 
 Native (Fortran) NMR nuclear magnetic shielding for **closed-shell RHF/DFT**,
-**Common Gauge Origin (CGO)** at the center of mass. Not bridged to PySCF — PySCF is
+**Common Gauge Origin (CGO)** at the center of mass. Not bridged to any external code — the independent reference is
 only an external validation oracle.
 
 ```
@@ -25,16 +25,16 @@ only an external validation oracle.
 ```
 
 **Done & validated:**
-- **1e integrals** vs PySCF: angular momentum (`int1e_cg_irxp`), diamagnetic
+- **1e integrals** vs the independent reference: angular momentum (`int1e_cg_irxp`), diamagnetic
   (`dia()` to ~6 figs), PSO. PSO off-center antisymmetry bug fixed (`8e24156`):
   `pso_integrals` returns the exact antisymmetric part `A=(M−Mᵀ)/2`.
 - **Diamagnetic** shielding, full tensor.
-- **Paramagnetic** — uncoupled (vs PySCF gold) and **Phase-0 coupled** HF/hybrid
+- **Paramagnetic** — uncoupled (vs the independent reference gold) and **Phase-0 coupled** HF/hybrid
   ground-state magnetic response: the coupled CPHF/CPKS response is the
   exact-exchange response of the imaginary/antisymmetric `P^B` (Coulomb = 0,
   fxc = 0, confirmed numerically), scaled by `c_x = HFscale`; fixed-point solve
   reusing the `int2` A−B (`int2_td_data_t int_amb`) exchange image. HF matches the
-  PySCF coupled CGO oracle exactly (O para −230.63); PBE coupled ≡ uncoupled; the
+  independent coupled CGO reference exactly (O para −230.63); PBE coupled ≡ uncoupled; the
   BHHLYP/PBE0 coupling Δ matches the oracle. Gates 0–4 automated and green.
 
 **Run:** `scf_prop=nmr`.
@@ -69,10 +69,10 @@ pre-built worktree is `../nmr-wt` on `feat/mrsf-nmr-gate5a`.
 export OPENQP_ROOT=$(pwd) PYTHONPATH=$(pwd)/pyoqp
 .venv/bin/python -m unittest tests.test_nmr_shielding tests.test_nmr_coupled
 ```
-- `tests/test_nmr_shielding.py` — dia + uncoupled para vs PySCF; PSO antisymmetry.
+- `tests/test_nmr_shielding.py` — dia + uncoupled para vs the independent reference; PSO antisymmetry.
 - `tests/test_nmr_coupled.py` — Phase-0 gates 0–4 + `c_x` exchange scaling
   (HF / BHHLYP / PBE0 / PBE).
-- `tests/fixtures/nmr/pyscf_cgo_reference.json` (+ `generate_pyscf_cgo_reference.py`) — oracle.
+- `tests/fixtures/nmr/cgo_reference.json` — oracle.
 
 ## 4. Key files
 

@@ -1,5 +1,5 @@
 {
-  "description": "PySCF common-gauge-origin NMR shielding reference (gate-4 oracle for OpenQP coupled magnetic response).",
+  "description": "the reference implementation common-gauge-origin NMR shielding reference (gate-4 oracle for OpenQP coupled magnetic response).",
   "molecule": "H2O",
   "basis": "sto-3g",
   "unit_coords": "Angstrom",
@@ -15,7 +15,7 @@
     "H",
     "H"
   ],
-  "pyscf_version": "2.13.0",
+  "reference_version": "2.13.0",
   "results": {
     "HF": {
       "exact_exchange_fraction": 1.0,

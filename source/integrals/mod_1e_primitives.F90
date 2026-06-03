@@ -609,7 +609,7 @@ END SUBROUTINE
 !> @brief Primitive GIAO/London first-order core-Hamiltonian magnetic derivative.
 !> @details Accumulates the real coefficient of the imaginary RHF GIAO h10 one-
 !>  electron operator, omitting the common factor i.  The convention follows the
-!>  PySCF/libcint RHF NMR core-orbital convention
+!>  libcint RHF NMR core-orbital convention
 !>  h10_core = - int1e_ignuc(asym) - int1e_igkin.  The assembled
 !>  int1_giao_h10_core routine adds the separate -0.5*int1e_giao_irjxp
 !>  one-electron GIAO term.  This is still not a shielding, does not include the
@@ -717,7 +717,7 @@ END SUBROUTINE
 
 !> @brief Diagnostic primitive terms for the GIAO h10 one-electron block.
 !> @details Emits the current native term construction before packed triangular
-!>  antisymmetrization so tests can compare each term against the PySCF/libcint
+!>  antisymmetrization so tests can compare each term against the libcint
 !>  oracle.  Term order is
 !>  1 raw current irjxp proxy, 2 -0.5*irjxp, 3 raw igkin proxy,
 !>  4 -igkin contribution, 5 raw ignuc proxy, 6 ignuc(asym) proxy,
@@ -830,7 +830,7 @@ END SUBROUTINE
         nuc_term(Y__) = 0.5_real64*(cvec(Z__)*nuc_mom(X__) - cvec(X__)*nuc_mom(Z__))
         nuc_term(Z__) = 0.5_real64*(cvec(X__)*nuc_mom(Y__) - cvec(Y__)*nuc_mom(X__))
 
-        ! PySCF/libcint int1e_giao_irjxp uses the opposite sign convention from
+        ! libcint int1e_giao_irjxp uses the opposite sign convention from
         ! this angular-momentum primitive block; the full debug assembler later
         ! transposes the rectangular update into the usual (bra,ket) convention.
         blk(ij,:,1) = blk(ij,:,1) - amom_term(:)
@@ -1113,7 +1113,7 @@ END SUBROUTINE
 !>  (the bra-position-weighted PSO, built by raising the bra angular momentum by
 !>  one in coordinate b, no center shift).  Full (both-triangle) block, no
 !>  packing.  The overall sign/scale is calibrated by the caller against the
-!>  PySCF int1e_a01gp oracle.
+!>  libcint int1e_a01gp oracle.
  SUBROUTINE comp_giao_a01gp_prim(cp, c, cvec, blk)
     TYPE(shpair_t), INTENT(IN) :: cp
     REAL(REAL64), INTENT(IN) :: c(3), cvec(3)

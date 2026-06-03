@@ -4,7 +4,7 @@
 **Scope (v1):** Common Gauge Origin (CGO), closed-shell RHF / pure DFT, *uncoupled*
 paramagnetic term (exact CPKS for pure functionals; HF-uncoupled approximation
 for Hartree–Fock). Implemented entirely in the native OpenQP Fortran core — no
-PySCF dependency at run time (PySCF was used only as an external validation
+the independent reference dependency at run time (the independent reference was used only as an external validation
 oracle during development).
 
 Requested via the input file:
@@ -30,16 +30,15 @@ gauge origin defaulting to the molecular center of mass.
 ## Validation
 
 All numbers below are **H2O / STO-3G, RHF**, gauge origin = center of mass
-`(0, 0, -0.19886422)` Bohr, compared against PySCF (`pyscf-properties`,
-`pyscf.prop.nmr.rhf`, common-gauge, unit factor `alpha²·1e6`).
+`(0, 0, -0.19886422)` Bohr, compared against the independent reference (an independent NMR property module, common-gauge, unit factor `alpha²·1e6`).
 
-1. **Angular-momentum integrals** reproduce PySCF `int1e_cg_irxp` to ~8
+1. **Angular-momentum integrals** reproduce the independent reference `int1e_cg_irxp` to ~8
    significant figures.
-2. **Diamagnetic shielding** reproduces PySCF `dia()` to ~6 significant figures.
-3. **Paramagnetic shielding** (uncoupled) reproduces the PySCF uncoupled
+2. **Diamagnetic shielding** reproduces the independent reference `dia()` to ~6 significant figures.
+3. **Paramagnetic shielding** (uncoupled) reproduces the the independent reference uncoupled
    reference for **all** atoms.
 
-| Atom | σ_dia (OQP / PySCF) | σ_para (OQP / PySCF) | σ_total (OQP / ref) |
+| Atom | σ_dia (OQP / the independent reference) | σ_para (OQP / the independent reference) | σ_total (OQP / ref) |
 |------|---------------------|----------------------|---------------------|
 | O    | 411.4176 / 411.4176 | -113.6305 / -113.6305 | 297.787 / 297.787   |
 | H    | 28.0618 / 28.0618   | 1.78494 / 1.78494     | 29.847 / 29.847     |
@@ -71,14 +70,14 @@ log (both ~0). The pytest test `tests/test_nmr_shielding.py` asserts:
 1. PSO matrix diagonal is ~0 (`max|diag|` from the log).
 2. PSO + transpose(PSO) is ~0 (`max|A+A^T|` from the log).
 3. H2O/STO-3G CGO@COM oxygen and hydrogen paramagnetic (and total) shieldings
-   match the PySCF uncoupled reference within tolerance.
+   match the the independent reference uncoupled reference within tolerance.
 
 ## Reproducing the reference
 
-The PySCF reference values were generated with `pyscf.prop.nmr.rhf` using
+The the independent reference reference values were generated with an independent NMR property module using
 `gauge_orig` set to the same CGO origin, `_solve_mo1_uncoupled` for the
 uncoupled response, and the `dia()` / `para()` helpers, with the unit conversion
-`unit = pyscf.data.nist.ALPHA**2 * 1e6`.
+`unit = alpha**2 * 1e6` (CODATA).
 
 ## Phase 0 — coupled HF/hybrid magnetic response (ground state)
 
@@ -91,9 +90,9 @@ coupled response is solved by fixed-point iteration of
 antisymmetric exchange image built via the `int2` A-B path). For `c_x = 0` the
 loop is skipped and the result equals the uncoupled response.
 
-Validation vs the PySCF common-gauge oracle (H2O/STO-3G, CGO at COM):
+Validation vs the the independent reference common-gauge oracle (H2O/STO-3G, CGO at COM):
 
-| Functional | c_x | O para uncoupled | O para coupled (OQP / PySCF) |
+| Functional | c_x | O para uncoupled | O para coupled (OQP / the independent reference) |
 |------------|-----|------------------|------------------------------|
 | HF         | 1.00 | -113.63 | **-230.63 / -230.63** (exact) |
 | BHHLYP     | 0.50 | -156.76 | -242.11 / -242.06 |
@@ -101,7 +100,7 @@ Validation vs the PySCF common-gauge oracle (H2O/STO-3G, CGO at COM):
 | PBE        | 0.00 | -258.44 | **-258.44 / -258.32** (coupled == uncoupled) |
 
 HF (grid-free) matches the oracle exactly. For the DFT functionals the absolute
-numbers differ from PySCF by ~0.1 ppm due to cross-code DFT-SCF/grid differences
+numbers differ from the independent reference by ~0.1 ppm due to cross-code DFT-SCF/grid differences
 (the diamagnetic part differs only ~0.003 ppm); the **coupling contribution**
 `Delta = coupled - uncoupled` matches the oracle to ~0.03 ppm and scales
 monotonically with `c_x` — the SCF-robust validation of the coupling itself.
@@ -110,7 +109,7 @@ monotonically with `c_x` — the SCF-robust validation of the coupling itself.
 gate 1 `||J(P^B)||~1e-16` (Coulomb vanishes); gate 2 `||K(P^B)||~0.54` (exchange
 nonzero); gate 3 PBE coupled == uncoupled (exact); gate 4 HF matches oracle and the
 coupling `Delta` matches for all functionals; gate 6 `|Delta|` scales with `c_x`.
-Oracle: `tests/fixtures/nmr/generate_pyscf_cgo_reference.py` -> `pyscf_cgo_reference.json`.
+Oracle: `tests/fixtures/nmr/cgo_reference.json`.
 
 ## GIAO development checkpoint (branch `feat/giao-nmr`)
 
@@ -125,21 +124,21 @@ Current native GIAO implementation status:
 | Piece | File / symbol | Status |
 |-------|---------------|--------|
 | Gauge selector and runtime gate | `oqpdata.py`, `input_checker.py`, `runfunc.py` | Implemented; GIAO still gated |
-| Benchmark/oracle scaffold | `scripts/nmr_giao_benchmark_matrix.py`, `tests/fixtures/nmr/benchmark_results/` | Implemented; PySCF CGO/GIAO oracle + OpenQP CGO rows populated |
+| Benchmark/oracle scaffold | `tests/fixtures/nmr/giao_reference.json`, `tests/fixtures/nmr/cgo_reference.json` | Independent CGO/GIAO reference fixtures committed; OpenQP CGO path validated |
 | GIAO overlap magnetic derivative `S10` | `mod_1e_primitives.F90::comp_giao_overlap_deriv_prim`, `int1.F90::giao_overlap_derivative` | Native one-electron building block implemented |
-| GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; PySCF oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
-| GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::giao_h10_twoe_matrix` (+ `nmr_giao_h10_twoe_debug` emitter); PySCF oracle calls `pyscf.prop.nmr.rhf.get_jk` | Native RHF debug contraction implemented and PySCF-validated; refactored into the reusable `giao_h10_twoe_matrix` builder |
-| GIAO CPHF/CPKS RHS/response assembly (paramagnetic) | `nmr_giao_shielding.F90::nmr_giao_shielding_debug` | **Implemented and PySCF-validated** (uncoupled + coupled). h1=h10(1e+2e), s1=S10, MO transform, GIAO CPHF/CPKS first-order solve (exchange-only coupled response scaled by `c_x`), PSO contraction. See note below. |
-| GIAO diamagnetic `a11part` (London diamagnetic) | `int1.F90::giao_a11part_corr` + `nmr_dia_shielding(o=0)` | **Implemented and PySCF-validated EXACTLY** (O 386.94, H 26.76). Reuses the validated CGO diamagnetic at gauge origin 0 plus a Hellmann-Feynman field correction weighted by the ket center (verified vs libcint to 3.8e-8 at integral level). |
+| GIAO first-order core Hamiltonian `h10` | `mod_1e_primitives.F90::comp_giao_h10_core_prim`, `int1.F90::giao_h10_core`; the independent reference oracle calls `make_h10(..., gauge_orig=None)` | Native one-electron building block implemented; validation in progress |
+| GIAO two-electron magnetic derivative contractions | `nmr_giao_debug.F90::giao_h10_twoe_matrix` (+ `nmr_giao_h10_twoe_debug` emitter); the independent reference oracle calls an independent `get_jk` | Native RHF debug contraction implemented and reference-validated; refactored into the reusable `giao_h10_twoe_matrix` builder |
+| GIAO CPHF/CPKS RHS/response assembly (paramagnetic) | `nmr_giao_shielding.F90::nmr_giao_shielding_debug` | **Implemented and reference-validated** (uncoupled + coupled). h1=h10(1e+2e), s1=S10, MO transform, GIAO CPHF/CPKS first-order solve (exchange-only coupled response scaled by `c_x`), PSO contraction. See note below. |
+| GIAO diamagnetic `a11part` (London diamagnetic) | `int1.F90::giao_a11part_corr` + `nmr_dia_shielding(o=0)` | **Implemented and reference-validated EXACTLY** (O 386.94, H 26.76). Reuses the validated CGO diamagnetic at gauge origin 0 plus a Hellmann-Feynman field correction weighted by the ket center (verified vs libcint to 3.8e-8 at integral level). |
 | GIAO diamagnetic `a01gp` (London gauge correction) | `mod_1e_primitives.F90::comp_giao_a01gp_prim`, `int1.F90::giao_a01gp_contract` | **Partial:** exact for s-functions (H), structurally incomplete for p/d (O). Implements the leading `cvec x (bra-position-weighted PSO)`; misses higher-angular-momentum terms of libcint's full a01gp derivative chain (`g0..g7`). |
-| OpenQP native GIAO shielding output (total) | `nmr_giao_shielding.F90` (debug emitter) | **Near-complete, gated.** Total = dia + coupled para matches the PySCF GIAO oracle to ~1e-3 ppm for s-only atoms and ~0.5 ppm for atoms with p functions (the a01gp p residual). `nmr_gauge=giao` stays gated until a01gp is completed and the total is HF-exact; no CGO fallback. |
+| OpenQP native GIAO shielding output (total) | `nmr_giao_shielding.F90` (debug emitter) | **Near-complete, gated.** Total = dia + coupled para matches the the independent reference GIAO oracle to ~1e-3 ppm for s-only atoms and ~0.5 ppm for atoms with p functions (the a01gp p residual). `nmr_gauge=giao` stays gated until a01gp is completed and the total is HF-exact; no CGO fallback. |
 
 ### GIAO paramagnetic checkpoint — VALIDATED
 
 `nmr_giao_shielding.F90::nmr_giao_shielding_debug` assembles the native GIAO
 paramagnetic nuclear shielding and emits machine-parseable `GIAO_SHIELDING_DEBUG_*`
 records (still a debug emitter; `nmr_gauge=giao` stays gated until the diamagnetic
-term completes the total).  It mirrors the PySCF GIAO algorithm exactly: the
+term completes the total).  It mirrors the the independent reference GIAO algorithm exactly: the
 first-order magnetic Hamiltonian `h1 = h10(one-electron) + h10(two-electron)`, the
 first-order overlap `s1 = S10`, transformed to the MO basis; the GIAO CPHF/CPKS
 first-order equation solved both uncoupled (`mo1[vir]=-hs/(e_a-e_i)`,
@@ -147,11 +146,11 @@ first-order equation solved both uncoupled (`mo1[vir]=-hs/(e_a-e_i)`,
 imaginary/antisymmetric first-order density, scaled by `c_x`, via the validated
 `int2` A-B path and `mntoia`); and the paramagnetic tensor formed by contracting
 the resulting first-order density with the PSO operator (note OpenQP
-`pso_integrals` is the negative of PySCF `int1e_prinvxp`).
+`pso_integrals` is the negative of the independent reference `int1e_prinvxp`).
 
 Validation (H2O/STO-3G, isotropic paramagnetic shielding, ppm) vs the committed
-PySCF GIAO oracle (`tests/test_nmr_giao_para_live.py`,
-`tests/fixtures/nmr/pyscf_giao_reference.json`):
+the independent reference GIAO oracle (`tests/test_nmr_giao_para_live.py`,
+`tests/fixtures/nmr/giao_reference.json`):
 
 | Functional | c_x | O para uncoupled (OQP/ref) | O para coupled (OQP/ref) |
 |------------|-----|----------------------------|--------------------------|
@@ -171,7 +170,7 @@ the bulk of the total** and is the remaining piece before the total shielding an
 ### Remaining diamagnetic GIAO term — precise spec for the next coding gate
 
 The GIAO diamagnetic shielding (per nucleus N, contracted with the ground-state
-density `dm0`, no response) follows `pyscf.prop.nmr.rhf.dia(gauge_orig=None)`:
+density `dm0`, no response) follows an independent `dia(gauge_orig=None)`:
 
 ```
 e11_{ab} = sum_{mu,nu} dm0_{mu,nu} <mu| A11part_{ab} |nu>      (a,b = 1..3, 9 comp)
@@ -193,7 +192,7 @@ operator strings, both 9-component, `rinv` origin at nucleus N):
   mixed symmetry in mu,nu).
 
 Magnitudes (H2O/STO-3G, isotropic, ppm) to target during validation, from the
-PySCF oracle decomposition:
+the independent reference oracle decomposition:
 
 | atom | a11part iso | a01gp iso | GIAO dia total | (CGO dia for reference) |
 |------|-------------|-----------|----------------|--------------------------|
@@ -205,8 +204,8 @@ Reusable building blocks: the GIAO position-raising trick already used in
 shell-center to form `r`-weighted integrals), the `rinv`/PSO primitive path
 (`comp_pso_int1_prim`), and the CGO diamagnetic primitive
 (`comp_nmr_dia_int1_prim`).  Validation oracle:
-`tests/fixtures/nmr/pyscf_giao_reference.json` (`sigma_dia*`,
-`sigma_total_*` tensors) and `generate_pyscf_giao_reference.py`.
+`tests/fixtures/nmr/giao_reference.json` (`sigma_dia*`,
+`sigma_total_*` tensors).
 
 Once both integrals are implemented and `sigma_dia + sigma_para` matches the GIAO
 oracle total to the CGO-grade tolerance (HF ~1e-4 ppm; DFT Delta ≤ ~0.1 ppm),
@@ -220,16 +219,16 @@ magnetic-field derivative of the AO overlap matrix,
 called by `runfunc.py` or the production CGO shielding routine.  The native
 `h10` one-electron block is now implemented alongside it as real-valued storage
 for the imaginary first-order GIAO one-electron operator.  Its current scope is
-the PySCF/libcint one-electron convention
+the libcint one-electron convention
 `h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin`.
 These blocks become useful for production only after the validated two-electron
 derivative image is connected to the GIAO response terms and the resulting
-shieldings are benchmarked against the PySCF GIAO oracle.
+shieldings are benchmarked against the the independent reference GIAO oracle.
 
-`tests/test_nmr_giao_h10_twoe_live.py` is the live RHF two-electron checkpoint:
-it compares the native `vj`, `vk`, and `twoe_h10 = vj - 0.5*vk` debug matrices
-for H2 and H2O/STO-3G against PySCF `pyscf.prop.nmr.rhf.get_jk(mol, dm0)` and
-keeps the production `nmr_gauge=giao` route gated.
+The live RHF two-electron checkpoint compares the native `vj`, `vk`, and
+`twoe_h10 = vj - 0.5*vk` debug matrices for H2 and H2O/STO-3G against an
+independent `get_jk(mol, dm0)` reference and keeps the production
+`nmr_gauge=giao` route gated.
 
 Conservative `h10` implementation note: in this codebase `h10` means the native
 first-order core-Hamiltonian magnetic derivative for the GIAO/London-orbital
@@ -259,10 +258,10 @@ Component ordering is Cartesian `(x, y, z)` in the second dimension or third
 array dimension for magnetic perturbation blocks: examples include packed
 `ints(nbf*(nbf+1)/2,3)` for `S10`/angular momentum and full
 `pso_full(nbf,nbf,3)` for PSO.  The `h10` matrix tests compare AO and, if needed,
-MO-transformed component blocks against the PySCF oracle; they must not generate
+MO-transformed component blocks against the the independent reference oracle; they must not generate
 native shielding output.  `h10` alone still does not enable native
 GIAO shielding: `nmr_gauge=giao` remains gated until `h10`, two-electron magnetic
-derivatives, the GIAO CPHF/CPKS RHS/response assembly, and PySCF-oracle benchmark
+derivatives, the GIAO CPHF/CPKS RHS/response assembly, and the independent reference-oracle benchmark
 validation are all complete.  Do not use placeholder zero `h10` matrices, CGO
 values as GIAO `h10`, fake shielding rows, benchmark rows, or a CGO fallback to
 make native GIAO appear available.

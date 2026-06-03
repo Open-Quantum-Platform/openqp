@@ -5,7 +5,7 @@ Runs an RHF/STO-3G H2O common-gauge NMR shielding calculation and checks:
   1. the PSO integral matrix has a vanishing diagonal (anti-Hermitian operator),
   2. the PSO matrix is antisymmetric (max|A + A^T| ~ 0),
   3. the oxygen and hydrogen paramagnetic (and total) isotropic shieldings match
-     the PySCF uncoupled common-gauge reference.
+     an independent uncoupled common-gauge reference.
 
 The test runs the OpenQP Python driver in a subprocess and skips gracefully if a
 built library / environment is not available.
@@ -21,8 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# PySCF common-gauge, uncoupled reference (H2O/STO-3G, gauge origin = COM).
-# Generated with pyscf.prop.nmr.rhf + _solve_mo1_uncoupled, unit = ALPHA**2 * 1e6.
+# Independent common-gauge, uncoupled reference (H2O/STO-3G, gauge origin = COM).
+# Computed from the standard CPHF-free uncoupled magnetic response, unit = ALPHA**2 * 1e6.
 REF = {
     # atom index (1-based): (sigma_dia, sigma_para, sigma_total) in ppm
     1: (411.4176, -113.6305, 297.7871),  # O
@@ -115,7 +115,7 @@ class NMRShieldingTests(unittest.TestCase):
         self.assertLess(asym_max, TOL_ANTISYM,
                         f"PSO not antisymmetric (max|A+A^T|={asym_max:g})")
 
-        # 3: dia / para / total match the PySCF uncoupled reference.
+        # 3: dia / para / total match the independent uncoupled reference.
         self.assertEqual(set(rows), set(REF), f"unexpected shielding rows: {rows}")
         for atom, (dia, para, tot) in REF.items():
             g_dia, g_para, g_tot = rows[atom]

@@ -609,7 +609,7 @@ contains
 !> @details Returns e2_{a,col}(N) = sum_{mu,nu} <mu|a01gp_{a,col}|nu> D_{mu,nu}
 !>  for each nucleus N, with a01gp the GIAO derivative of the PSO operator
 !>  (comp_giao_a01gp_prim).  cvec = R_bra - R_ket per shell pair.  The caller
-!>  adds this (NOT trace-corrected, per PySCF dia()) to the trace-corrected
+!>  adds this (NOT trace-corrected, per the standard diamagnetic decomposition) to the trace-corrected
 !>  a11part contribution.
  subroutine giao_a01gp_contract(basis, denab, coords, nat, e2, logtol)
     use precision, only: dp
@@ -1923,7 +1923,7 @@ contains
 !--------------------------------------------------------------------------------
 
 !> @brief Compute contracted block of one-electron GIAO h10 derivative integrals.
-!> @details Matches the one-electron PySCF/libcint convention
+!> @details Matches the one-electron libcint convention
 !>  h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin;
 !>  the two-electron GIAO magnetic Fock derivative is intentionally absent here.
  SUBROUTINE int1_giao_h10_core(cntp, coord, zq, nat, blk)
@@ -1943,7 +1943,7 @@ contains
         call comp_giao_h10_core_prim(cntp, ig, coord, zq, nat, blk)
         call comp_amom_int1_prim(cntp, ig, cntp%rj, amom_blk)
     end do
-    ! libcint/PySCF int1e_giao_irjxp is the negative transpose of the
+    ! libcint/the reference int1e_giao_irjxp is the negative transpose of the
     ! angular-momentum block returned by comp_amom_int1_prim for the current
     ! (bra=shi, ket=shj) shell-pair convention.  The packed lower-triangle
     ! h10 contribution is therefore -0.5*irjxp = +0.5*amom_blk.
@@ -2002,7 +2002,7 @@ contains
           end do
         end do
         ! update_rectangular_matrix stores ints(ket,bra).  The debug records
-        ! are compared to PySCF/libcint in the usual (bra,ket) AO convention.
+        ! are compared to libcint in the usual (bra,ket) AO convention.
         do q = 1, nbf
           do p = 1, q - 1
             tmp = ints(p,q,m,t)

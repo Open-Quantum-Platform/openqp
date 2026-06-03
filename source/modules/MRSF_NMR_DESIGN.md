@@ -332,7 +332,7 @@ molecules; multireference cases vs CASSCF/MRCI NMR or experiment.
 The §0 symmetry argument is the load-bearing assumption of the whole design. It
 **must be verified numerically on the existing ground-state prototype before any
 MRSF code is written.** All gates below use only present infrastructure: the
-`int2` Coulomb/exchange Fock builders, the RHF/DFT CGO shielding module, and PySCF
+`int2` Coulomb/exchange Fock builders, the RHF/DFT CGO shielding module, and the independent reference
 as an external oracle. MRSF generalization (gate 5) is *blocked* until gates 0–4
 pass.
 
@@ -396,10 +396,10 @@ given density.
 - **Compute:** the isotropic shielding for **HF** (and **BHHLYP**) two ways as in
   gate 3.
 - **Expect:** they **differ** by the exact-exchange response; and the **coupled**
-  result matches PySCF's coupled common-gauge NMR (the real reference), whereas the
+  result matches the independent coupled common-gauge NMR reference, whereas the
   uncoupled one does not.
 - **Pass:** `|σ_coupled − σ_uncoupled|` is clearly nonzero (≫ noise) AND
-  `|σ_coupled − σ_PySCF(coupled, common-gauge)| < 5e-2` ppm per atom for
+  `|σ_coupled − σ_ref(coupled, common-gauge)| < 5e-2` ppm per atom for
   H₂O/STO-3G.
 - **Significance:** quantifies the known limitation of the current HF prototype and
   proves the exact-exchange response is correctly built. This gate is the
@@ -445,7 +445,7 @@ The gates were implemented and **all pass** on the ground-state prototype
 (commit `Phase 0: coupled HF/hybrid ground-state NMR magnetic response`). Recorded
 here so the evidence need not be reconstructed from commit history. System:
 H2O / STO-3G, common gauge origin at the center of mass. Oracle:
-`tests/fixtures/nmr/pyscf_cgo_reference.json` (PySCF common-gauge, with generator);
+`tests/fixtures/nmr/cgo_reference.json` (independent common-gauge, with generator);
 automated in `tests/test_nmr_coupled.py`. Derivation of gates 1–2 in
 `NMR_MAGNETIC_SYMMETRY_NOTE.md`.
 
@@ -459,9 +459,9 @@ automated in `tests/test_nmr_coupled.py`. Derivation of gates 1–2 in
 | 4 | hybrid coupling Δ vs oracle | within ~0.03 ppm | PASS — Δ-metric (SCF-robust) |
 | 6 | `\|Δ\|` vs `c_x` (O para) | 117.0 → 85.3 → 54.7 → 0 (HF/BHHLYP/PBE0/PBE) | PASS — scales with `c_x` |
 
-Oxygen paramagnetic shielding (ppm), uncoupled → coupled (OQP / PySCF oracle):
+Oxygen paramagnetic shielding (ppm), uncoupled → coupled (OQP / the independent reference):
 
-| Functional | c_x | uncoupled | coupled (OQP / PySCF) |
+| Functional | c_x | uncoupled | coupled (OQP / the independent reference) |
 |------------|-----|-----------|------------------------|
 | HF     | 1.00 | −113.63 | −230.63 / −230.63 (exact) |
 | BHHLYP | 0.50 | −156.76 | −242.11 / −242.06 |
@@ -495,7 +495,7 @@ checkable result. **Phase 0 is gated by §9 (gates 0–4); MRSF phases by gate 5
   *Validation:* **this phase is exactly §9 gates 0–4** — antisymmetric response
   density (gate 0), Coulomb-zero (gate 1), exchange-nonzero across HF/BHHLYP/PBE0
   (gate 2), pure-DFT coupled≈uncoupled hypothesis test (gate 3), and HF/BHHLYP
-  coupled vs PySCF coupled common-gauge (gate 4). Do not proceed to MRSF phases
+  coupled vs independent coupled common-gauge (gate 4). Do not proceed to MRSF phases
   until all pass.
 
 ### Phase 1 — MRSF diamagnetic term
@@ -551,7 +551,7 @@ checkable result. **Phase 0 is gated by §9 (gates 0–4); MRSF phases by gate 5
 ### Cross-cutting validation strategy
 1. **Limit check:** MRSF S0 → RHF/DFT CGO NMR (single-reference molecules).
 2. **Two-route agreement:** CP-MRSF vs SOS-MRSF.
-3. **Operator-level:** `L_O`, PSO, dia already validated vs PySCF; magnetic response
+3. **Operator-level:** `L_O`, PSO, dia already validated vs the independent reference; magnetic response
    density must be antisymmetric (diagnostic like the PSO `max|A+Aᵀ|` check).
 4. **Absolute accuracy:** vs CCSD(T)/experiment (single-ref) and CASSCF/MRCI (multi-ref).
 5. **Gauge dependence:** document CGO origin dependence; quantify and motivate the

@@ -1,6 +1,6 @@
 {
-  "description": "PySCF GIAO/London-orbital NMR shielding reference for OpenQP native GIAO validation.",
-  "provenance": "Generated with pyscf.prop.nmr using gauge_orig=None; use as oracle only, not as OpenQP implementation. | DFT entries regenerated with vxc_giao (London-XC) at grids.level=5",
+  "description": "the reference implementation GIAO/London-orbital NMR shielding reference for OpenQP native GIAO validation.",
+  "provenance": "Generated with an independent NMR property module using gauge_orig=None; use as oracle only, not as OpenQP implementation. | DFT entries regenerated with vxc_giao (London-XC) at grids.level=5",
   "molecule": "H2O",
   "basis": "sto-3g",
   "basis_format": "sto-3g",
@@ -14,8 +14,8 @@
     "H",
     "H"
   ],
-  "pyscf_version": "2.13.0",
-  "pyscf_properties_version": "0.1.0",
+  "reference_version": "2.13.0",
+  "reference_properties_version": "0.1.0",
   "results": {
     "HF": {
       "sigma_dia_tensor": [

@@ -7,13 +7,13 @@ module mod_dft_gridint_giao
   implicit none
 
 !-------------------------------------------------------------------------------
-! London (GIAO) derivative of the exchange-correlation potential -- PySCF's
-! "vxc_giao" term in the first-order magnetic Hamiltonian for GIAO NMR.
+! London (GIAO) derivative of the exchange-correlation potential (the
+! "vxc_giao" term) in the first-order magnetic Hamiltonian for GIAO NMR.
 ! Per spin, accumulates three real matrices V(:,:,t); the caller antisymmetrizes
 ! (V - V^T) and subtracts from h1.
 !   V_t[mu,nu] += aow_mu * ig_t,nu  +  aoV_mu * sum_g wv_g ipig_{g,t},nu
-!   ig_t,nu       = 0.5 (R_nu x r)_t aoV_nu                       (GTOval_ig)
-!   ipig_{g,t},nu = 0.5[(R_nu x r)_t aoG1_nu,g + (R_nu x e_g)_t aoV_nu] (GTOval_ipig)
+!   ig_t,nu       = 0.5 (R_nu x r)_t aoV_nu                       (London AO value derivative)
+!   ipig_{g,t},nu = 0.5[(R_nu x r)_t aoG1_nu,g + (R_nu x e_g)_t aoV_nu] (London AO gradient derivative)
 !   aow_mu        = vrho*aoV_mu + sum_g wv_g aoG1_mu,g
 ! NOTE: d1dr/d1ds already carry the grid weight (XCLib%compute(.,wts)).
 ! NOTE: when xce%skip_p (no AO pruning) numAOs_p==numAOs and the AOs are in

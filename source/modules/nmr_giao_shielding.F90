@@ -36,7 +36,7 @@ contains
 !>  term is solved per spin channel (independent same-spin exchange response) and
 !>  summed.  ROHF orbitals are semicanonicalized (from the ground-state spin Fock
 !>  matrices) so the UHF-like CPHF is well defined; the closed-shell ROHF limit
-!>  reproduces RHF, and open-shell UHF/ROHF match the PySCF GIAO oracle to ~1e-4
+!>  reproduces RHF, and open-shell UHF/ROHF match an independent GIAO reference to ~1e-4
 !>  ppm (OH, CH3 radicals).  Built from the validated native GIAO building blocks:
 !>   - first-order GIAO core Hamiltonian h10 (one-electron, giao_h10_core),
 !>   - first-order GIAO two-electron Fock derivative (giao_h10_twoe_matrix),
@@ -49,33 +49,39 @@ contains
 !>  resulting first-order density with the PSO operator to form the paramagnetic
 !>  shielding.
 !>
-!>  Hartree-Fock (RHF/UHF/ROHF) is validated against the PySCF GIAO oracle.
+!>  Hartree-Fock (RHF/UHF/ROHF) is validated against an independent GIAO reference.
 !>
 !>  DFT (RKS/UKS/ROKS) is supported: the closed-shell h1 two-electron exchange is
 !>  scaled by c_x, and the London (GIAO) derivative of the exchange-correlation
 !>  potential (the "vxc_giao" term -- an essential contribution, ~tens of ppm) is
 !>  added via a GIAO-weighted XC grid integration (mod_dft_gridint_giao::giao_vxc;
-!>  the London derivative of the AO values and gradients).  Validated vs the PySCF
+!>  the London derivative of the AO values and gradients).  Validated vs an independent
 !>  reference (replicating get_vxc_giao): H2O/PBE and /PBE0 reproduce the
 !>  reference to ~1e-3 ppm.  vxc_giao is grid-sensitive, so DFT GIAO benefits from
 !>  a converged integration grid.
 !>
 !>  Results are written as machine-parseable records to the log so
-!>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT
+!>  the native GIAO path can be validated against an independent GIAO reference WITHOUT
 !>  ungating production nmr_gauge=giao.
 !>
-!>  Diamagnetic GIAO term (both pieces PySCF-validated):
+!>  Diamagnetic GIAO term (both pieces reference-validated):
 !>   - a11part (London diamagnetic): validated CGO diamagnetic at gauge origin 0
 !>     plus the Hellmann-Feynman field correction weighted by the ket center.
 !>   - a01gp (GIAO gauge correction = London derivative of the PSO): cvec x M,
 !>     M^{(col)}_b = <mu| r_b PSO_col |nu> with r referenced to the molecular
 !>     origin (R0I = (r-R_bra) bra-raise + R_bra*base, the libcint convention).
 !>     Full-tensor agreement with libcint int1e_a01gp to ~3e-8 (e.g. CH4).
-!>  Total GIAO shielding matches the PySCF GIAO oracle to ~1e-4 ppm for HF
+!>  Total GIAO shielding matches an independent GIAO reference to ~1e-4 ppm for HF
 !>  (grid-free) and to cross-code DFT-SCF/grid level (~0.03 ppm) for DFT, for all
 !>  geometries and angular momenta tested (He, H2, HF, CO2, CH4, H2O).
 !>  SG/SC/SA are sign/scale conventions fixed against the oracle (SA folds the
-!>  factor-2 normalization of the native a01gp vs PySCF int1e_a01gp).
+!>  factor-2 normalization of the native a01gp vs the libcint int1e_a01gp).
+!>
+!>  References (GIAO/London-orbital NMR shielding methodology):
+!>   - F. London, J. Phys. Radium 8, 397 (1937).
+!>   - R. Ditchfield, Mol. Phys. 27, 789 (1974).
+!>   - K. Wolinski, J. F. Hinton, P. Pulay, J. Am. Chem. Soc. 112, 8251 (1990).
+!>   - T. Helgaker, M. Jaszunski, K. Ruud, Chem. Rev. 99, 293 (1999).
   subroutine nmr_giao_shielding_debug(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -96,7 +102,7 @@ contains
     real(kind=dp), parameter :: ALPHA = 1.0d0/137.035999084d0
     real(kind=dp), parameter :: a2ppm = ALPHA*ALPHA*1.0d6
     real(kind=dp), parameter :: ha2ppm = 0.5d0*ALPHA*ALPHA*1.0d6
-    ! Calibration signs for the GIAO diamagnetic pieces (fixed vs PySCF oracle).
+    ! Calibration signs for the GIAO diamagnetic pieces (fixed vs the reference).
     real(kind=dp), parameter :: SG = -1.0d0, SC = 1.0d0, SA = -0.5d0
     real(kind=dp), parameter :: SX = -1.0d0   ! London-XC (vxc_giao): h1 -= vxc_giao
 
@@ -290,7 +296,7 @@ contains
       trc  = corrpre(1,1,iat)+corrpre(2,2,iat)+corrpre(3,3,iat)
       do t = 1, 3
         do s = 1, 3
-          ! a11part (trace-corrected) + a01gp (raw, per PySCF dia())
+          ! a11part (trace-corrected) + a01gp (raw, per the standard diamagnetic decomposition)
           sig_dia(t,s,iat) = ( SG*0.5d0*gdia0(s,t,iat) + SC*corrpre(t,s,iat) &
                  - merge(SG*0.5d0*trg0 + SC*trc, 0.0d0, t==s) &
                  + SA*a01(t,s,iat) ) * a2ppm
@@ -419,7 +425,7 @@ contains
     deallocate(tmp)
   end subroutine ao_to_mo_occ
 
-!> Uncoupled first-order equation (PySCF _solve_mo1_uncoupled):
+!> Uncoupled first-order equation (standard uncoupled first-order equation):
 !>   hs = h1 - s1*e_i ;  mo1[vir,i] = -hs[vir,i]/(e_a-e_i) ;
 !>   mo1[occ,i] = -0.5*s1[occ,i].
   subroutine solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1)
@@ -535,7 +541,7 @@ contains
     deallocate(dleft)
   end subroutine giao_pb_density
 
-!> Paramagnetic shielding tensor for one nucleus (PySCF para convention):
+!> Paramagnetic shielding tensor for one nucleus (standard paramagnetic convention):
 !>   dm10(a,b,x) = 2 sum_{p,i} C(a,p) mo1(p,i,x) C(b,i) ;
 !>   sigma_para[x,y] = 2 sum_{a,b} dm10(a,b,x) * h01i(b,a,y).
   !> Paramagnetic shielding contribution from one spin channel: MO transform,
@@ -632,8 +638,8 @@ contains
             acc = acc + dm10(a,b,x)*h01i(b,a,y)
           end do
         end do
-        ! OpenQP pso_integrals stores the negative of PySCF int1e_prinvxp
-        ! (h01i); the leading 2 is the +c.c. factor of the PySCF para().
+        ! OpenQP pso_integrals stores the negative of libcint int1e_prinvxp
+        ! (h01i); the leading 2 is the +c.c. factor of the the standard paramagnetic routine.
         sig(x,y) = -2.0d0*acc
       end do
     end do

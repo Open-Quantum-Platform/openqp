@@ -2,8 +2,8 @@
 
 Runs the native GIAO shielding debug emitter (``nmr_giao_shielding_debug``) on
 H2O/STO-3G for HF/BHHLYP/PBE0/PBE and compares the per-atom isotropic
-paramagnetic shielding (uncoupled and coupled) against the committed PySCF GIAO
-oracle (``tests/fixtures/nmr/pyscf_giao_reference.json``).
+paramagnetic shielding (uncoupled and coupled) against a committed independent GIAO
+reference (``tests/fixtures/nmr/giao_reference.json``).
 
 This validates the native London-orbital first-order Hamiltonian/overlap
 assembly (h10 one- and two-electron + S10), the GIAO CPHF/CPKS first-order
@@ -12,7 +12,7 @@ and the PSO contraction.  The diamagnetic GIAO term (second-order GIAO
 integrals) is a separate, later checkpoint and is not asserted here; the
 production ``nmr_gauge=giao`` route therefore remains gated.
 
-PySCF is NOT required at run time: the oracle JSON is committed.  The test runs
+The external reference code is NOT required at run time: the reference JSON is committed.  The test runs
 the OpenQP driver in a subprocess and skips gracefully if the shared library is
 not built.
 """
@@ -27,7 +27,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "pyscf_giao_reference.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "giao_reference.json"
 
 GEOM = """\
    8   0.000000000   0.000000000  -0.041061554
@@ -69,7 +69,7 @@ class GIAOParaShieldingTests(unittest.TestCase):
         if cls.root is None:
             raise unittest.SkipTest("OpenQP shared library/header not built")
         if not FIXTURE.exists():
-            raise unittest.SkipTest("PySCF GIAO reference fixture missing")
+            raise unittest.SkipTest("GIAO reference fixture missing")
         cls.ref = json.loads(FIXTURE.read_text())["results"]
         cls.runs = {}
         for label, functional, _ in CASES:
