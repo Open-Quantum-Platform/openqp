@@ -148,6 +148,7 @@ OQP_CONFIG_SCHEMA = {
         'ixcore': {'type': string, 'default': '-1'},
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: MINRES, 2: GMRES, 3: AUTO
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+        'xc_buffer': {'type': bool, 'default': 'False'},  # cache AO+XC kernel across Davidson iters
     },
     'ekt': {
         'ip': {'type': bool, 'default': 'True'},
@@ -337,6 +338,7 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+            "xc_buffer": "set_tdhf_xc_buffer",
         },
     }
     _typemap = [np.void,
@@ -776,6 +778,10 @@ class OQPData:
                 f"z_solver must be 0 (CG), 1 (MINRES), 2 (GMRES), or 3 (AUTO); got {z_solver}"
             )
         self._data.tddft.z_solver = z_solver
+
+    def set_tdhf_xc_buffer(self, xc_buffer):
+        """Cache AO values + XC kernel across Davidson iterations (opt-in, DFT only)."""
+        self._data.tddft.xc_buffer = bool(xc_buffer)
 
     def set_conf_threshold(self, conf_threshold):
         """Set configuration printout option"""
