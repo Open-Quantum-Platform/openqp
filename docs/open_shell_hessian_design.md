@@ -359,7 +359,34 @@ CAM + ECP compose: CAM-B3LYP / LANL2DZ / HBr (RHF) = 2.2e-4. Test:
 `tests/test_cam_hessian.py`. The CAM gate is removed from the runtime guard and
 the input checker.
 
+## Stage 9 — D4 dispersion contribution
+
+The native electronic analytic Hessian excludes the empirical dftd4 dispersion
+term.  The numerical Hessian includes it implicitly (each displaced gradient is
+dispersion-corrected, via `LastStep`), so without a matching analytic term the two
+paths would silently disagree whenever `[input] d4=true`.  dftd4 exposes the
+dispersion energy and gradient but not a Hessian, so the analytic driver adds
+`d2 E_disp / dR2` by central finite difference of the (cheap, analytic) dftd4
+dispersion gradient at the same step the numerical Hessian uses
+(`Hessian._dispersion_hessian` in `single_point.py`).  The dispersion gradient is
+evaluated with the *same* `DampingParam(method=...)` as the energy/gradient path,
+so the analytic dispersion term is identical to the one the numerical Hessian
+finite-differences; the two agree to the FD-truncation level.
+
+Validation (H2O / RKS-PBE / cc-pVDZ, `dx=0.005`): `max|analytic - numerical|`
+= 1.7e-5 with `d4=true` (and unchanged with `d4=false`); the dispersion term itself
+shifts the Hessian by ~5e-5 (small for a non-dispersion-bound molecule, but now
+consistently included).  Test: `tests/test_d4_hessian.py` (skipped unless dftd4 is
+installed).  Note: dftd4 must recognise the functional name, so OpenQP-specific
+names such as `b3lyp5`/`b3lyp3` (vs dftd4's `b3lyp`) are a pre-existing limitation
+of the whole d4 path (energy, gradient and Hessian alike), not of the Hessian term.
+
 **Final analytic-Hessian scope (all finite-difference validated):** RHF/RKS,
-UHF/UKS, ROHF/ROKS, with LDA/GGA/hybrid/meta-GGA **and range-separated (CAM/LC)**
-functionals, standard (incl. f-function) **and ECP** basis sets. No remaining
+UHF/UKS, ROHF/ROKS, with LDA/GGA/hybrid/meta-GGA, **range-separated (CAM/LC)** and
+**D4 dispersion**, standard (incl. f-function) **and ECP** basis sets. No remaining
 feature gates for the ground-state HF/DFT analytic Hessian.
+
+The derivative-integral normalization (`bfnrm`) must be applied exactly once in the
+closed-shell CPHF prepass; a double application scales `dSa/dTa/dVa` by `bfnrm**2`
+and is invisible for s/p-only bases but corrupts d/f functions (e.g. RHF/cc-pVDZ).
+`tests/test_rhf_hessian_dfunc.py` guards that closed-shell d-function path.
