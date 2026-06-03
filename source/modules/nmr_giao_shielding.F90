@@ -35,17 +35,18 @@ contains
 !>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT
 !>  ungating production nmr_gauge=giao.
 !>
-!>  Diamagnetic GIAO term: a11part (London diamagnetic) is implemented and
-!>  PySCF-validated EXACTLY (reuse of the validated CGO diamagnetic at gauge
-!>  origin 0 plus the Hellmann-Feynman field correction weighted by the ket
-!>  center).  a01gp (GIAO gauge correction = London derivative of the PSO
-!>  operator) is exact for s-functions but STRUCTURALLY INCOMPLETE for higher
-!>  angular momentum (it captures the leading cvec x (bra-position-weighted PSO)
-!>  but misses terms of libcint's full a01gp derivative chain).  Consequently the
-!>  total shielding matches the PySCF GIAO oracle to ~1e-3 ppm for s-only atoms
-!>  (H) and to ~0.5 ppm for atoms with p functions (O).  nmr_gauge=giao stays
-!>  gated until a01gp is completed for p/d and the total is HF-exact.
-!>  SG/SC/SA are sign/scale conventions fixed against the oracle.
+!>  Diamagnetic GIAO term (both pieces PySCF-validated):
+!>   - a11part (London diamagnetic): validated CGO diamagnetic at gauge origin 0
+!>     plus the Hellmann-Feynman field correction weighted by the ket center.
+!>   - a01gp (GIAO gauge correction = London derivative of the PSO): cvec x M,
+!>     M^{(col)}_b = <mu| r_b PSO_col |nu> with r referenced to the molecular
+!>     origin (R0I = (r-R_bra) bra-raise + R_bra*base, the libcint convention).
+!>     Full-tensor agreement with libcint int1e_a01gp to ~3e-8 (e.g. CH4).
+!>  Total GIAO shielding matches the PySCF GIAO oracle to ~1e-4 ppm for HF
+!>  (grid-free) and to cross-code DFT-SCF/grid level (~0.03 ppm) for DFT, for all
+!>  geometries and angular momenta tested (He, H2, HF, CO2, CH4, H2O).
+!>  SG/SC/SA are sign/scale conventions fixed against the oracle (SA folds the
+!>  factor-2 normalization of the native a01gp vs PySCF int1e_a01gp).
   subroutine nmr_giao_shielding_debug(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver

@@ -1125,7 +1125,7 @@ END SUBROUTINE
     REAL(REAL64) :: xx, ww, tt, bb, dd(3), rji(3), ric(3), fac, aj
     INTEGER :: id, k, nr, ni, nj, m, a, col
     INTEGER :: i, j, ix, iy, iz, jx, jy, jz, ij, jmax
-    REAL(REAL64) :: mm(3,3)   ! M^{(col)}_b : (b, col)
+    REAL(REAL64) :: mm(3,3), pbase(3)   ! M^{(col)}_b : (b, col); base PSO
     real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
     real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)   ! (ket,bra,coord,root)
     real(real64) :: dkt(0:max_ang, 0:max_ang+1, 3, NRT)   ! ket derivative
@@ -1217,6 +1217,21 @@ END SUBROUTINE
                     ( fld(jx,ix,1,1:nr)*dkt(jy,iy+1,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy+1,2,1:nr) ) )
           mm(3,3) = sum( xyzin(jz,iz+1,3,1:nr) * &
                     ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+
+          ! Base (un-raised) PSO components, to complete R0I = (r-R_bra) + R_bra,
+          ! i.e. the position is referenced to the molecular origin (libcint
+          ! convention), not the bra center.  M^{(col)}_b += R_bra,b * PSO_col.
+          pbase(1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          pbase(2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          pbase(3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+          do col = 1, 3
+            mm(1,col) = mm(1,col) + cp%ri(1)*pbase(col)
+            mm(2,col) = mm(2,col) + cp%ri(2)*pbase(col)
+            mm(3,col) = mm(3,col) + cp%ri(3)*pbase(col)
+          end do
 
           DO col = 1, 3
             blk(ij,(1-1)*3+col) = blk(ij,(1-1)*3+col) + &
