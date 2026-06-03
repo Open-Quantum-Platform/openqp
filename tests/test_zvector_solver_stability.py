@@ -466,6 +466,29 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("deallocate(int2_data)", cleanup_block)
         self.assertRegex(cleanup_block, r"return\b")
 
+    def test_mrsf_zvector_offers_minres_as_solver_option_one(self):
+        """MRSF z-vector selection must be 0=CG, 1=MINRES, 2=GMRES with a working MINRES branch."""
+        src = MRSF_ZVEC_SRC.read_text()
+
+        # Module is used and the dispatch maps GMRES to 2 and MINRES to 1.
+        self.assertRegex(src, r"use\s+minres_mod")
+        self.assertIn("if (infos%tddft%z_solver == 2) then", src)   # GMRES demoted to 2
+        self.assertIn("else if (infos%tddft%z_solver == 1) then", src)  # MINRES is 1
+
+        # MINRES is driven through the shared apply_z_operator / apply_z_precond
+        # via the minres_matvec wrappers, and reports a breakdown on failure.
+        self.assertIn("call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc", src)
+        self.assertIn("call mr%step()", src)
+        self.assertIn("call mr%clean()", src)
+        self.assertRegex(src, r"subroutine\s+minres_apply_op\(y,\s*x,\s*dat\)")
+        self.assertRegex(src, r"subroutine\s+minres_apply_pc\(y,\s*x,\s*dat\)")
+        self.assertRegex(src, r"mrsf_zvector_breakdown\s*=\s*\.true\.")
+
+        # Output label distinguishes the three solvers.
+        self.assertIn('solver_name = "MINRES"', src)
+        self.assertIn('solver_name = "GMRES"', src)
+        self.assertIn('solver_name = "CG"', src)
+
     def test_mrsf_zvector_nonconverged_path_logs_solver_and_final_residual(self):
         """MRSF CG/GMRES max-iteration exits must report solver and final residual in the log."""
         src = MRSF_ZVEC_SRC.read_text()
@@ -492,7 +515,13 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("MRSF_ZVEC_DENOMINATOR_FLOOR", src)
         self.assertIn("mrsf_zvector_breakdown", src)
 
-        loop = re.search(r"do iter = 1, infos%control%maxit_zv.*?end do", src, re.S | re.I)
+        # Anchor to the CG section: several solvers now share the
+        # "do iter = 1, infos%control%maxit_zv" loop header (MINRES, CG), so
+        # locate the conjugate-gradient block explicitly before matching.
+        cg_marker = "ORIGINAL CONJUGATE GRADIENT SOLVER"
+        self.assertIn(cg_marker, src)
+        cg_section = src[src.index(cg_marker):]
+        loop = re.search(r"do iter = 1, infos%control%maxit_zv.*?end do", cg_section, re.S | re.I)
         if loop is None:
             self.fail("Could not locate MRSF default CG z-vector loop")
         block = loop.group(0)

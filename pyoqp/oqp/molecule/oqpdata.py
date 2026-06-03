@@ -146,7 +146,7 @@ OQP_CONFIG_SCHEMA = {
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type': string, 'default': '-1'},
-        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: MINRES, 2: GMRES
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
     },
     'ekt': {
@@ -766,9 +766,14 @@ class OQPData:
 
     def set_tdhf_z_solver(self, z_solver):
         """Set z-vector solver type:
-           0: CG (Conjugate Gradient) only
-           1: GMRES (Generalized Minimal Residual)
+           0: CG (Conjugate Gradient, default) - for symmetric positive-definite (A+B)
+           1: MINRES (Minimal Residual) - symmetric, robust when (A+B) is indefinite
+           2: GMRES (Generalized Minimal Residual) - general fallback
         """
+        if z_solver not in (0, 1, 2):
+            raise ValueError(
+                f"z_solver must be 0 (CG), 1 (MINRES), or 2 (GMRES); got {z_solver}"
+            )
         self._data.tddft.z_solver = z_solver
 
     def set_conf_threshold(self, conf_threshold):

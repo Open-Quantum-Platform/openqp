@@ -145,12 +145,26 @@ tests updated in lockstep.
    short 3-term recurrence (constant memory, ~CG cost per iteration) while
    remaining robust where plain CG breaks down. This is the closest thing to
    "GMRES-robustness at CG speed" and is the recommended fallback.
-   *Status:* implemented and validated as the self-contained `source/minres.F90`
-   module (see results above). Planned z-vector selection once integrated:
-   `z_solver` = 0 → CG (default), **1 → MINRES**, 2 → GMRES. The integration into
-   `tdhf_mrsf_z_vector.F90` (operator/preconditioner adapters + breakdown
-   handling) and the input plumbing are the remaining steps and must be
-   CI-compiled, since the integrated file cannot be built in this environment.
+   *Status:* implemented, integrated, and numerically validated.
+   `source/minres.F90` is wired into the MRSF z-vector selection through the same
+   `apply_z_operator` / `apply_z_precond` used by CG and GMRES (via the
+   `minres_apply_op` / `minres_apply_pc` wrappers). Selection is now
+   `z_solver` = 0 → CG (default), **1 → MINRES**, 2 → GMRES (`oqpdata.py`).
+
+   Validated with a libint-free local build (`-DUSE_LIBINT=OFF`, native Rys
+   integrals — the same configuration CI uses), H2O BHHLYP/6-31G* MRSF-TDDFT
+   gradient, state 3, O z-component:
+
+   | z_solver | gradient (O, z) | iters | residual |
+   |---|---|---|---|
+   | 0 CG (default) | −0.18299119 | — | unchanged vs baseline |
+   | 1 MINRES | −0.18299934 | 6 | 6.3e-7 |
+   | 2 GMRES | −0.18299937 | 7 | 1.6e-7 |
+
+   MINRES agrees with GMRES to ~3e-8; the default CG path is byte-identical to
+   the pre-change baseline. (The ~8e-6 CG vs MINRES/GMRES offset is pre-existing:
+   the CG path stops on the *squared* residual `‖r‖²<zvconv`, i.e. a looser
+   `‖r‖<√zvconv`, whereas MINRES/GMRES converge to `‖r‖<zvconv`.)
 3. **BiCGStab for genuinely non-symmetric A.** Short recurrence, constant memory,
    ~2 matvecs/iter, no growing orthogonalization — far cheaper per iteration than
    restarted GMRES, when a truly non-symmetric operator must be solved.

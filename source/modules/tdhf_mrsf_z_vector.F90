@@ -855,6 +855,7 @@ contains
       mrsfqrorhs, mrsfqropcal, mrsfqrowcal
     use oqp_linalg
     use printing, only: print_module_info
+    use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
 
 
     implicit none
@@ -882,6 +883,9 @@ contains
     integer :: nocca, nvira, noccb, nvirb
     integer :: nbf, nbf_tri
     integer :: iter, gmres_iter
+    type(minres_t) :: mr
+    integer :: minres_iter
+    integer, target :: minres_dummy
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
     logical :: roref = .false.
     integer :: mrst
@@ -1048,12 +1052,15 @@ contains
                &/1x,66("-")/)')
     end if
 
-    ! Determine solver name for output
-    if (infos%tddft%z_solver == 1) then
+    ! Determine solver name for output (0=CG, 1=MINRES, 2=GMRES)
+    select case (infos%tddft%z_solver)
+    case (2)
       solver_name = "GMRES"
-    else
+    case (1)
+      solver_name = "MINRES"
+    case default
       solver_name = "CG"
-    end if
+    end select
 
     ! Save unrelaxed density matrices and the `b=A*x` vector for target state
     if (mrst==1 .or. mrst==3 ) then
@@ -1277,13 +1284,13 @@ contains
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
     call sanitize_mrsf_zvector_preconditioner(xm, xminv, iw)
 
-    ! Choose solver based on input option (0=CG, 1=GMRES)
-    if (infos%tddft%z_solver == 1) then
-      
+    ! Choose solver based on input option (0=CG, 1=MINRES, 2=GMRES)
+    if (infos%tddft%z_solver == 2) then
+
       ! ============================================
       ! GMRES SOLVER
       ! ============================================
-      
+
       ! Initial guess with same strategy as CG
       xk = 0.0_dp
 
@@ -1323,13 +1330,54 @@ contains
       
       ! Clean up GMRES work arrays
       call cleanup_gmres_work()
-      
+
+    else if (infos%tddft%z_solver == 1) then
+
+      ! ============================================
+      ! MINRES SOLVER
+      ! ------------------------------------------------------------------
+      ! Symmetric short-recurrence solver (Paige-Saunders).  Unlike CG it
+      ! stays stable when the (A+B) operator turns indefinite (near
+      ! instabilities / near-degeneracies), at CG-like cost.  The operator
+      ! and preconditioner are the same apply_z_operator / apply_z_precond
+      ! used by the CG and GMRES paths, wrapped to the minres_matvec API.
+      ! ============================================
+
+      xk = 0.0_dp
+
+      call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
+                   dat=minres_dummy, tol=cnvtol)
+      minres_iter = 0
+      if (mr%errcode == MINRES_OK) then
+        do iter = 1, infos%control%maxit_zv
+          call mr%step()
+          minres_iter = iter
+          if (mr%errcode /= MINRES_OK) exit
+        end do
+      end if
+
+      if (mr%errcode == MINRES_CONVERGED .or. mr%errcode == MINRES_OK) then
+        xk = mr%x
+      else
+        write(iw,'(" MRSF MINRES Z-Vector breakdown (errcode=",I0,")")') int(mr%errcode)
+        mrsf_zvector_breakdown = .true.
+        error = huge(1.0_dp)
+      end if
+      if (.not. mrsf_zvector_breakdown) error = mr%error
+      call mr%clean()
+
+      write(iw,'(/," Final Summary:")')
+      write(iw,'(" MINRES total iterations: ", I4)') minres_iter
+      write(iw,'(" Final error norm       : ", 1p,e13.6)') error
+      write(iw,'(" Convergence criterion  : ", 1p,e13.6)') cnvtol
+      call flush(iw)
+
     else
-      
+
       ! ============================================
       ! ORIGINAL CONJUGATE GRADIENT SOLVER
       ! ============================================
-      
+
       ! Initial guess with same strategy as CG
       xk = 0.0_dp
 
@@ -1648,6 +1696,26 @@ contains
       real(kind=dp), intent(out) :: x_out(:)
       call apply_z_precond(x_in, x_out, xminv)
     end subroutine lambda_precond
+
+    ! minres_matvec(y, x, dat) wrappers: y is the output, x the input, dat is
+    ! unused (the solver context is reached by host association).
+    subroutine minres_apply_op(y, x, dat)
+      use iso_c_binding, only: c_ptr
+      real(kind=dp) :: x(:)
+      real(kind=dp) :: y(:)
+      type(c_ptr) :: dat
+      call apply_z_operator(x, y, infos, basis, molGrid, int2_driver, &
+                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                            fa, fb, scale_exch, dft)
+    end subroutine minres_apply_op
+
+    subroutine minres_apply_pc(y, x, dat)
+      use iso_c_binding, only: c_ptr
+      real(kind=dp) :: x(:)
+      real(kind=dp) :: y(:)
+      type(c_ptr) :: dat
+      call apply_z_precond(x, y, xminv)
+    end subroutine minres_apply_pc
 
   end subroutine tdhf_mrsf_z_vector
 
