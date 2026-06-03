@@ -11,7 +11,7 @@ functional=
 d4=False
 
 [guess]
-type=sad
+type=modhuckel
 save_mol=False
 
 [scf]

@@ -19,5 +19,10 @@ lib64/*
 share/*
 examples/data_*
 build/
+build_*/
 __pycache__/
 *.pyc
+openqp_test_tmp_*
+tools/_grad_validation_scratch/
+tools/_stress_scratch/
+tools/_example_grad_scratch/

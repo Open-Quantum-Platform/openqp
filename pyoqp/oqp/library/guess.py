@@ -4,8 +4,8 @@ import os
 import copy
 import oqp
 from oqp.utils.file_utils import try_basis
+from oqp.utils.file_utils import try_data_file
 from oqp.utils.file_utils import dump_log
-from oqp.library.external import guess_from_pyscf, guess_from_pyscf_initial_density
 
 def update_guess(mol):
     if mol.config['json']['scf_type'] == 'rhf':
@@ -25,6 +25,13 @@ def guess(mol):
         hubas = try_basis("MINI_huckel", fallback=None)
         mol.data["OQP::hbasis_filename"] = hubas
         oqp.guess_huckel(mol)
+        alpha = 'computed'
+        beta = 'computed'
+
+    elif guess_type == "modhuckel":
+        hubas = try_basis("MINI_huckel", fallback=None)
+        mol.data["OQP::hbasis_filename"] = hubas
+        oqp.guess_modhuckel(mol)
         alpha = 'computed'
         beta = 'computed'
 
@@ -52,15 +59,25 @@ def guess(mol):
             alpha = 'computed'
             beta = 'computed'
 
-    elif guess_type == 'pyscf':
-        guess_from_pyscf(mol)
+    elif guess_type == 'sap':
+        # Native Fortran SAP: superposition of atomic potentials integrated
+        # on the DFT grid (Lehtola, JCTC 15, 1593 (2019)). No PySCF needed.
+        sapdata = try_data_file('sap_grasp.dat')
+        mol.data["OQP::hbasis_filename"] = sapdata
+        oqp.guess_sap(mol)
         alpha = 'computed'
         beta = 'computed'
 
-    elif guess_type in ('sad', 'sap'):
-        guess_from_pyscf_initial_density(mol, guess_type)
+    elif guess_type == 'minao':
+        # Native Fortran MINAO: project superposed atomic minimal-basis
+        # densities onto the target basis. No PySCF needed at runtime.
+        minbas = try_basis('sto-3g', fallback=None)
+        minaodata = try_data_file('minao_sto3g.dat')
+        mol.data["OQP::hbasis_filename"] = minbas + '|' + minaodata
+        oqp.guess_minao(mol)
         alpha = 'computed'
         beta = 'computed'
+
 #    # molden does not have sufficient numerical accuracy
 #    elif guess_type == "molden":
 #        # Check if the molden file from the input exists

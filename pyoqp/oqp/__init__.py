@@ -55,7 +55,7 @@ if RTLD:
         defs = oqp_header.read().replace("#include", "//#include")
 
     ffi.cdef(defs)
-    lib = ffi.dlopen(f"{oqp_root}/lib/liboqp.{suffix}", ffi.RTLD_GLOBAL)
+    lib = ffi.dlopen(f"{oqp_root}/lib/liboqp.{suffix}")
 
 else:
     from _oqp import ffi, lib

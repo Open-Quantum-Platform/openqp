@@ -11,7 +11,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 | Vibrational analysis | <small>Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly</small> | <small>IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels.</small> |
 | Nonadiabatic dynamics data | <small>MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows</small> | <small>NAC support uses the TLF-based MRSF-TDDFT machinery.</small> |
 | Geometry/path optimization | <small>Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows</small> | <small>SciPy and geomeTRIC backends are available depending on the requested job.</small> |
-| Initial guesses and SCF stability | <small>Native guesses, PySCF-backed `pyscf`/`sad`/`sap` guesses, optional MOKIT imports, and OpenTrustRegion SCF stabilization</small> | <small>MOKIT is optional and mainly useful for broader external wavefunction conversion.</small> |
+| Initial guesses and SCF stability | <small>Native initial guesses (`hcore`, `huckel`, `modhuckel`, `minao`, `sap`), JSON restart/auto guesses, and OpenTrustRegion SCF stabilization</small> | <small>Native guess paths avoid external runtime dependencies and are suitable for MPI execution.</small> |
 | Integrations | <small>LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView</small> | <small>External viewers and workflow integrations are available around the native OpenQP electronic-structure engines.</small> |
 | Performance and deployment | <small>OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images</small> | <small>MPI requires an MPI implementation such as OpenMPI.</small> |
 
@@ -44,7 +44,7 @@ git clone https://github.com/Open-Quantum-Platform/openqp.git
 cd openqp
 pip install .
 ```
-This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
+This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Native initial guesses such as `huckel`, `modhuckel`, `minao`, and `sap` work without external guess-generation dependencies.
 
 or 
 #### Detailed Compile
