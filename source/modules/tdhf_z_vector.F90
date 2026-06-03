@@ -8,10 +8,13 @@ module tdhf_z_vector_mod
     int2_fock_data_t, int2_tdgrd_data_t
   use mod_dft_molgrid, only: dft_grid_t
   use oqp_linalg
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+  use zvector_common, only: sanitize_zvector_preconditioner
 
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_z_vector_mod"
+  real(kind=dp), parameter :: ZVEC_PRECOND_FLOOR = 1.0d-12
 
   private
   public tdhf_z_vector_C
@@ -234,7 +237,7 @@ contains
         pxm(j,i) = mo_energy_a(nocc+i) - mo_energy_a(j)
       end do
     end do
-    xminv = 1.0d0/xm
+    call sanitize_zvector_preconditioner(xm, xminv, iw, ZVEC_PRECOND_FLOOR, "RHF")
 
     cgdata = tdhf_cg_data( &
         infos=infos, int2_driver=int2_driver, &
@@ -266,10 +269,31 @@ contains
                &/6x,"Z-Vector converged"&
                &/3x,24("-")/)')
       infos%mol_energy%Z_Vector_converged=.true.
+    case (PCG_BREAKDOWN)
+      write(iw,'(/3x,24("-")&
+               &/6x,"Z-Vector PCG breakdown"&
+               &/3x,24("-")/)')
+      write(iw,'(" PCG stopped on a non-finite or near-zero denominator; ",&
+               &"final residual = ",1p,e13.6)') pcg%error
+      infos%mol_energy%Z_Vector_converged=.false.
+      call flush(iw)
+      deallocate(xminv, rhs, xm)
+      if (allocated(int2_data)) then
+        call int2_data%clean()
+        deallocate(int2_data)
+      end if
+      call pcg%clean()
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
     case default
       write(iw,'(/3x,24("-")&
                &/6x,"Z-Vector not converged"&
                &/3x,24("-")/)')
+      write(iw,'(" PCG reached the maximum z-vector iterations; ",&
+               &"final residual = ",1p,e13.6)') pcg%error
       infos%mol_energy%Z_Vector_converged=.false.
     end select
     call flush(iw)
