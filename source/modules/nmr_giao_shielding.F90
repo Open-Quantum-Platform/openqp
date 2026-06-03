@@ -51,15 +51,14 @@ contains
 !>
 !>  Hartree-Fock (RHF/UHF/ROHF) is validated against the PySCF GIAO oracle.
 !>
-!>  DFT is GATED at the driver (nmr_gauge=giao with a functional raises
-!>  NotImplementedError).  Correct DFT GIAO shielding requires the London (GIAO)
-!>  derivative of the exchange-correlation potential -- the "vxc_giao" term in
-!>  h1 -- which is an ESSENTIAL contribution (verified to be tens of ppm; e.g.
-!>  ~+220 ppm on the oxygen of H2O/PBE/STO-3G), not a small correction.  It needs
-!>  a GIAO-weighted XC grid integration (the London derivative of the AO values
-!>  and gradients), and the closed-shell h1 two-electron exchange must also be
-!>  scaled by c_x.  Until that lands, DFT GIAO is gated; use nmr_gauge=cgo for
-!>  DFT NMR (CGO carries no London phase, so it has no vxc_giao term).
+!>  DFT (RKS/UKS/ROKS) is supported: the closed-shell h1 two-electron exchange is
+!>  scaled by c_x, and the London (GIAO) derivative of the exchange-correlation
+!>  potential (the "vxc_giao" term -- an essential contribution, ~tens of ppm) is
+!>  added via a GIAO-weighted XC grid integration (mod_dft_gridint_giao::giao_vxc;
+!>  the London derivative of the AO values and gradients).  Validated vs the PySCF
+!>  reference (replicating get_vxc_giao): H2O/PBE and /PBE0 reproduce the
+!>  reference to ~1e-3 ppm.  vxc_giao is grid-sensitive, so DFT GIAO benefits from
+!>  a converged integration grid.
 !>
 !>  Results are written as machine-parseable records to the log so
 !>  the native GIAO path can be validated against the PySCF GIAO oracle WITHOUT
@@ -87,6 +86,9 @@ contains
     use int1, only: giao_h10_core, giao_overlap_derivative, pso_integrals, &
                     nmr_dia_shielding, giao_a11part_corr, giao_a01gp_contract
     use nmr_giao_debug_mod, only: giao_h10_twoe_matrix
+    use dft, only: dft_initialize
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_giao, only: giao_vxc
 
     implicit none
 
@@ -96,6 +98,7 @@ contains
     real(kind=dp), parameter :: ha2ppm = 0.5d0*ALPHA*ALPHA*1.0d6
     ! Calibration signs for the GIAO diamagnetic pieces (fixed vs PySCF oracle).
     real(kind=dp), parameter :: SG = -1.0d0, SC = 1.0d0, SA = -0.5d0
+    real(kind=dp), parameter :: SX = -1.0d0   ! London-XC (vxc_giao): h1 -= vxc_giao
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
@@ -112,6 +115,9 @@ contains
     real(kind=dp), allocatable :: h1ao(:,:,:), h1ao_b(:,:,:), s1ao(:,:,:) ! (nbf,nbf,3)
     real(kind=dp), allocatable :: coords(:,:), zq(:)
     real(kind=dp), allocatable :: sig_u(:,:,:), sig_c(:,:,:)      ! (3,3,nat)
+    real(kind=dp), allocatable :: vxa(:,:,:), vxb(:,:,:)          ! London-XC (vxc_giao)
+    type(dft_grid_t) :: molGrid
+    integer :: mxAngMom
     real(kind=dp), allocatable :: gdia0(:,:,:), corrpre(:,:,:)    ! GIAO dia pieces
     real(kind=dp), allocatable :: a01(:,:,:)                      ! a01gp contracted
     real(kind=dp), allocatable :: sig_dia(:,:,:), sig_tot(:,:,:)  ! (3,3,nat)
@@ -190,6 +196,28 @@ contains
       call expand_antisym(s10p(:,c), s1ao(:,:,c), nbf)
     end do
 
+    ! --- London (GIAO) derivative of the XC potential (vxc_giao); DFT only ---
+    allocate(vxa(3,nbf,nbf), vxb(3,nbf,nbf), source=0.0d0)
+    if (is_dft) then
+      mxAngMom = maxval(basis%am) + 2
+      call dft_initialize(infos, basis, molGrid)
+      block
+        real(kind=dp), allocatable :: ca(:,:), cb(:,:)
+        allocate(ca(nbf,nbf), cb(nbf,nbf))
+        ca = mo_a(:,1:nbf)
+        if (open_shell) then
+          cb = mo_b(:,1:nbf)
+          call giao_vxc(basis, molGrid, infos, ca, cb, .true., &
+                        vxa, vxb, mxAngMom, nbf, infos%dft%grid_density_cutoff)
+        else
+          cb = ca
+          call giao_vxc(basis, molGrid, infos, ca, cb, .false., &
+                        vxa, vxb, mxAngMom, nbf, infos%dft%grid_density_cutoff)
+        end if
+        deallocate(ca, cb)
+      end block
+    end if
+
     ! --- Two-electron GIAO Fock derivative ---
     allocate(twoe(3,nbf,nbf), twoe2(3,nbf,nbf), vj(3,nbf,nbf), vk(3,nbf,nbf), source=0.0d0)
     allocate(sig_u(3,3,nat), sig_c(3,3,nat), source=0.0d0)
@@ -204,8 +232,8 @@ contains
       do c = 1, 3
         do i = 1, nbf
           do j = 1, nbf
-            h1ao_b(i,j,c) = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vkb(c,i,j)
-            h1ao(i,j,c)   = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vk(c,i,j)
+            h1ao_b(i,j,c) = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vkb(c,i,j) + SX*vxb(c,i,j)
+            h1ao(i,j,c)   = h1ao(i,j,c) + vj(c,i,j) - scale_exch*vk(c,i,j)  + SX*vxa(c,i,j)
           end do
         end do
       end do
@@ -237,7 +265,7 @@ contains
       do c = 1, 3
         do i = 1, nbf
           do j = 1, nbf
-            h1ao(i,j,c) = h1ao(i,j,c) + twoe(c,i,j)
+            h1ao(i,j,c) = h1ao(i,j,c) + vj(c,i,j) - 0.5d0*scale_exch*vk(c,i,j) + SX*vxa(c,i,j)
           end do
         end do
       end do
@@ -338,6 +366,8 @@ contains
 
     deallocate(gdia0, corrpre, a01, sig_dia, sig_tot)
     deallocate(h10p, s10p, twoe, twoe2, vj, vk, dm, dmp, h1ao, s1ao)
+    if (allocated(vxa)) deallocate(vxa)
+    if (allocated(vxb)) deallocate(vxb)
     deallocate(coords, zq, sig_u, sig_c)
     if (allocated(vkb))    deallocate(vkb)
     if (allocated(h1ao_b)) deallocate(h1ao_b)

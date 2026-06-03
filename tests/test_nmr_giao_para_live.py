@@ -56,7 +56,7 @@ def _oqp_root():
 
 def _input(functional):
     fxc = f"functional={functional}\n" if functional else ""
-    grid = "[dftgrid]\nrad_type=becke\n\n" if functional else ""
+    grid = "[dftgrid]\nrad_type=mhl\nrad_npts=99\nang_npts=302\n\n" if functional else ""
     return (f"[input]\nsystem=\n{GEOM}\ncharge=0\nruntype=energy\n{fxc}"
             f"basis=sto-3g\nmethod=hf\n\n[guess]\ntype=huckel\n\n"
             f"[scf]\nmultiplicity=1\ntype=rhf\n\n{grid}[properties]\nscf_prop=\n")
