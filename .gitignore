@@ -21,3 +21,9 @@ examples/data_*
 build/
 __pycache__/
 *.pyc
+
+# Hessian dev scratch artifacts
+scratch_hess/
+run_compare_hess.py
+fort.6
+*.analytic_hess.pyscf
