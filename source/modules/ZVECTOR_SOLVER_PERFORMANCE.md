@@ -149,7 +149,8 @@ tests updated in lockstep.
    `source/minres.F90` is wired into the MRSF z-vector selection through the same
    `apply_z_operator` / `apply_z_precond` used by CG and GMRES (via the
    `minres_apply_op` / `minres_apply_pc` wrappers). Selection is now
-   `z_solver` = 0 → CG (default), **1 → MINRES**, 2 → GMRES (`oqpdata.py`).
+   `z_solver` = 0 → CG (default), 1 → GMRES (legacy explicit fallback),
+   **2 → MINRES**, 3 → AUTO (`oqpdata.py`).
 
    Validated with a libint-free local build (`-DUSE_LIBINT=OFF`, native Rys
    integrals — the same configuration CI uses), H2O BHHLYP/6-31G* MRSF-TDDFT
@@ -158,8 +159,8 @@ tests updated in lockstep.
    | z_solver | gradient (O, z) | iters | residual |
    |---|---|---|---|
    | 0 CG (default) | −0.18299119 | — | unchanged vs baseline |
-   | 1 MINRES | −0.18299934 | 6 | 6.3e-7 |
-   | 2 GMRES | −0.18299937 | 7 | 1.6e-7 |
+   | 2 MINRES | −0.18299934 | 6 | 6.3e-7 |
+   | 1 GMRES | −0.18299937 | 7 | 1.6e-7 |
 
    MINRES agrees with GMRES to ~3e-8; the default CG path is byte-identical to
    the pre-change baseline. (The ~8e-6 CG vs MINRES/GMRES offset is pre-existing:

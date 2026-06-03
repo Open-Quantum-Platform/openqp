@@ -707,7 +707,6 @@ contains
         if (.not. ieee_is_finite(errors(ivec))) then
           write(*,'(4X,"Non-finite Davidson residual detected")')
           write(*,'(4X,"State#=",I4)') ivec
-          errors(ivec) = 0.0_dp
           q(:,ivec,1) = 0.0_dp
           cycle
         end if
@@ -734,7 +733,6 @@ contains
         if (.not. ieee_is_finite(errors(ivec))) then
           write(*,'(4X,"Non-finite Davidson residual detected")')
           write(*,'(4X,"State#=",I4)') ivec
-          errors(ivec) = 0.0_dp
           q(:,ivec,1:2) = 0.0_dp
           cycle
         end if

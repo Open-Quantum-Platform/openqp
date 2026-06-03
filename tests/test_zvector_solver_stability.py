@@ -377,6 +377,20 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertRegex(guard_block, r"cycle\b")
         self.assertIn("denom = merge(DAVIDSON_DENOMINATOR_FLOOR, -DAVIDSON_DENOMINATOR_FLOOR, denom >= 0.0_dp)", block)
 
+    def test_tdhf_davidson_preserves_nonfinite_residual_as_breakdown_signal(self):
+        """Non-finite Davidson residuals must not be converted into converged-sized errors."""
+        src = TDHF_LIB_SRC.read_text()
+        helper = re.search(r"subroutine rparesvec\(.*?end subroutine rparesvec", src, re.S | re.I)
+        if helper is None:
+            self.fail("Could not locate TDHF Davidson residual helper")
+        block = helper.group(0)
+
+        for guard in re.finditer(r"if \(\.not\. ieee_is_finite\(errors\(ivec\)\)\) then", block):
+            guarded = block[guard.start():block.index("cycle", guard.start())]
+            self.assertNotIn("errors(ivec) = 0.0_dp", guarded)
+            self.assertRegex(guarded, r"q\(:,ivec,1(?::2)?\) = 0.0_dp")
+        self.assertGreaterEqual(block.count("if (.not. ieee_is_finite(errors(ivec))) then"), 2)
+
     def test_mrsf_gmres_back_substitution_rejects_nonfinite_rhs_and_seed_solution(self):
         """GMRES triangular solve must not seed y(n) from non-finite RHS or produce NaN/Inf."""
         src = MRSF_ZVEC_SRC.read_text()
@@ -462,8 +476,8 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("deallocate(int2_data)", cleanup_block)
         self.assertRegex(cleanup_block, r"return\b")
 
-    def test_mrsf_zvector_offers_minres_as_solver_option_one(self):
-        """MRSF z-vector selection: 0=CG, 1=MINRES, 2=GMRES, 3=AUTO, each a helper."""
+    def test_mrsf_zvector_preserves_legacy_gmres_selector_and_adds_minres_option(self):
+        """MRSF z-vector selection: 0=CG, 1=GMRES legacy, 2=MINRES, 3=AUTO, each a helper."""
         src = MRSF_ZVEC_SRC.read_text()
 
         self.assertRegex(src, r"use\s+minres_mod")
@@ -475,10 +489,8 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
                              src[step2:], re.S | re.I)
         self.assertIsNotNone(dispatch, "MRSF z-vector dispatch must be a select case")
         block = dispatch.group(0)
-        self.assertIn("case (2)", block)
-        self.assertIn("call run_mrsf_gmres_zvector()", block)
-        self.assertIn("case (1)", block)
-        self.assertIn("call run_mrsf_minres_zvector()", block)
+        self.assertIsNotNone(re.search(r"case \(1\).*?call run_mrsf_gmres_zvector\(\)", block, re.S))
+        self.assertIsNotNone(re.search(r"case \(2\).*?call run_mrsf_minres_zvector\(\)", block, re.S))
         self.assertIn("case (3)", block)
         self.assertIn("call run_mrsf_zvector_auto()", block)
         self.assertIn("case default", block)

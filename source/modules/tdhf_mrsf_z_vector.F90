@@ -1024,14 +1024,14 @@ contains
                &/1x,66("-")/)')
     end if
 
-    ! Determine solver name for output (0=CG, 1=MINRES, 2=GMRES, 3=AUTO)
+    ! Determine solver name for output (0=CG, 1=GMRES legacy, 2=MINRES, 3=AUTO)
     select case (infos%tddft%z_solver)
     case (3)
       solver_name = "AUTO"
     case (2)
-      solver_name = "GMRES"
-    case (1)
       solver_name = "MINRES"
+    case (1)
+      solver_name = "GMRES"
     case default
       solver_name = "CG"
     end select
@@ -1084,13 +1084,13 @@ contains
 
     ! ======================================================================
     ! Step 2: solve the z-vector linear system.
-    !   0 = CG (default)   1 = MINRES   2 = GMRES   3 = AUTO (CG->MINRES->GMRES)
+    !   0 = CG (default)   1 = GMRES (legacy)   2 = MINRES   3 = AUTO (CG->MINRES->GMRES)
     ! ======================================================================
     select case (infos%tddft%z_solver)
     case (2)
-      call run_mrsf_gmres_zvector()
-    case (1)
       call run_mrsf_minres_zvector()
+    case (1)
+      call run_mrsf_gmres_zvector()
     case (3)
       call run_mrsf_zvector_auto()
     case default
