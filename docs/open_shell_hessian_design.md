@@ -206,16 +206,29 @@ exactly symmetric, at the FD floor:
 See `tests/test_uks_hessian.py`. The input checker enables UHF/UKS analytic
 Hessians.
 
-### ROKS (PENDING, gated)
+### ROKS (DONE, validated)
 
-`hf_hessian_rohf` evaluates the HF response SEMI-NUMERICALLY (FD of the analytic
-gradient along the relaxed orbital path, `resp_grad`). For DFT this does not
-compose cleanly with the analytic XC energy-weighting: the energy weighting must
-carry Vxc consistently in exactly one place, but the semi-numerical HF response
-uses an HF-only `W'` while `dHt3` adds the XC weighting separately, and the
-non-double-counting split (Vxc-in-W' vs `dHt3`, and derexc at fixed vs displaced
-density) does not reduce to the validated closed-shell result (residual ~0.08-0.1
-on OH/bhhlyp). The clean fix is an ANALYTIC ROHF response (the non-canonical
-`mo_e1` with Vxc) -- the piece the HF ROHF deliberately replaced with the
-semi-numerical `resp_grad`. Until that lands, ROKS analytic Hessians remain gated
-to `[hess] type=numerical`.
+`hf_hessian_rohf` evaluates the HF response semi-numerically (`resp_grad`). The
+XC is folded into the SAME finite difference, with NO separate `dHt3` term (a
+separate analytic XC energy-weighting would double-count the Vxc already carried
+by W'):
+  * the spin Fock used for the energy-weighted density `W'` is the full KS Fock
+    (Hcore + J - c_x K + Vxc), Vxc from the open-shell `dftexcor` at the displaced
+    geometry/orbitals;
+  * the explicit open-shell XC gradient (`derexc_blk`, `urohf=.true.`) at the
+    displaced density is added to the gradient.
+The CPHF right-hand side carries the XC skeleton `dVxc/dR` + `f_xc[d0]` (FD of the
+spin XC Fock along the geometry+reorthonormalization path), and the CPHF operator
+already includes the open-shell `f_xc` kernel (`get_response_packed`). A grid
+warm-up flushes stale state left by the CPHF solver before the moving-grid FD.
+
+Validated against the OpenQP numerical Hessian, exactly symmetric, at the FD
+floor: OH/6-31G bhhlyp `~3.6e-5`; bent H2O+/6-31G bhhlyp `~1.2e-4`; OH/6-31G PBE
+`~4.4e-4`. See `tests/test_roks_hessian.py`. The input checker enables ROHF/ROKS
+analytic Hessians.
+
+NB: the earlier "gross error" attempts combined Vxc-in-W' with a separate analytic
+`dHt3` (double-counting the XC energy-weighting). The correct semi-numerical ROKS
+decomposition is the full-KS `W'` (Vxc included) plus the explicit `derexc`
+gradient, and no `dHt3` -- the resp_grad finite difference already contains the
+W-derivative.
