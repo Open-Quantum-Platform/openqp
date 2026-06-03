@@ -131,7 +131,35 @@ A few-percent error in either large term explains the 0.37 residual.
   reference decomposition, e.g. PySCF skeleton/response split).
 - XC ∂² skeleton (DFT/bhhlyp only).
 
-## CPHF response term — detailed findings (the remaining ~27%)
+## RESOLVED: full analytic HF Hessian matches PySCF (0.56%, = OQP/PySCF baseline)
+
+The response term is now correct. Learning from the PySCF bridge
+(`external.analytic_hessian_from_pyscf` delegates to `pyscf/hessian/rhf.py`),
+the response is `hess_elec`'s three-term form:
+
+    H^resp_xy = 4 Tr[F^x dm1^y] - 4 Tr[S^x (eps.dm1^y)] - 2 Tr[s1oo^x mo_e1^y]
+    dm1^y_pq   = sum_k dC^y_pk C_qk
+    mo_e1^y_kl = (h^y + G[P]^y + G[dP^y])^MO_kl - 1/2(eps_k+eps_l) s1oo^y_kl   (full occ-occ)
+
+Two bugs were fixed:
+1. **Off-diagonal occ-occ term.** The third term must contract the FULL occ×occ
+   `s1oo^x_kl mo_e1^y_kl`; the earlier diagonal-only `dε_k S^x_kk` dropped the
+   off-diagonal Lagrangian-derivative contribution (the missing structural term).
+2. **d-function normalization.** `der_overlap/kinetic/nucattr_matrix` return the
+   UNNORMALIZED basis; they must be scaled by `bfnrm_mu bfnrm_nu` to match the
+   normalized MO coefficients/density before use in the CPHF RHS and the
+   response. Invisible for s/p-only bases (STO-3G), ~10% error with d in 6-31G*.
+
+Result on H2O/6-31G* (RHF): analytic vs OQP numerical = 6e-5; analytic vs PySCF
+analytic = 0.56% (identical to OQP-numerical vs PySCF, i.e. the residual is the
+OQP/PySCF integral-convention baseline, not a Hessian error). Frequencies match
+to <0.1 cm^-1.
+
+Implemented in `hf_hessian` using `fock_deriv_contract` (=1/2 Tr[M G[P]^x]) and
+`fock_jk` (G[dP^y]) for all 2e traces. Remaining: UHF/ROHF response, and the
+XC second-derivative skeleton (DFT/bhhlyp).
+
+## CPHF response term — detailed findings (historical, now resolved)
 
 The skeleton (1e + 2e + nn) is now **proven exact**: `hess_skel_selftest`
 finite-differences the full frozen-density gradient (physical energy-weighted

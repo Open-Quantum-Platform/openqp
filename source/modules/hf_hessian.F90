@@ -88,6 +88,25 @@ contains
     call der_kinetic_matrix(basis, dTa)
     call der_nucattr_matrix(basis, basis%atoms%xyz, basis%atoms%zn, dVa)
 
+    ! der_* matrices are returned in the UNNORMALIZED basis; bring them into the
+    ! same normalized (bfnrm) convention as the MO coefficients / density so the
+    ! CPHF RHS and the response contractions are correct for d/f functions
+    ! (bfnrm /= 1). Invisible for s/p-only bases (e.g. STO-3G).
+    block
+      integer :: kc2, cc2, mu2, nu2
+      do kc2 = 1, natom
+        do cc2 = 1, 3
+          do nu2 = 1, nbf
+            do mu2 = 1, nbf
+              dSa(mu2,nu2,cc2,kc2) = dSa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dTa(mu2,nu2,cc2,kc2) = dTa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+              dVa(mu2,nu2,cc2,kc2) = dVa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
+            end do
+          end do
+        end do
+      end do
+    end block
+
     allocate(scr(nbf,nbf), col(nbf,nbf))
     allocate(Sx(nbf,nbf), hx(nbf,nbf), F0x(nbf,nbf), Gd0(nbf,nbf))
     allocate(probe(nbf,nbf), gx(3,natom))
@@ -143,17 +162,135 @@ contains
 
     call cphf_solve(infos, ncart, bvec, uvec)
 
-    ! CPHF orbital-relaxation response (interchange form). NOTE: this term is
-    ! still approximate -- see docs/rys_hessian_2e_design.md. The skeleton
-    ! (1e+2e+nn) is exact (validated by hess_skel_selftest); the remaining
-    ! analytic-vs-numerical error (~27% on H2O/6-31G*) is localised entirely to
-    ! this response contraction. bvec/uvec themselves are validated
-    ! (cphf_dpdx_selftest); the open item is the correct closed-shell Hessian
-    ! contraction of them (the density-derivative form Tr[dP^y F^x]+Tr[dW^y S^x]
-    ! reproduces the validated pieces but is missing a structural contribution).
+    ! ===== CPHF orbital-relaxation response (PySCF hessian/rhf.hess_elec) =====
+    ! H^resp_xy = 4 Tr[F^x dm1^y] - 4 Tr[S^x (eps.dm1^y)] - 2 Tr[s1oo^x mo_e1^y]
+    !   dm1^y_pq      = sum_k dC^y_pk C_qk                       (one-sided)
+    !   mo_e1^y_kl    = (h^y + G[P]^y + G[dP^y])^MO_kl - 1/2 (eps_k+eps_l) s1oo^y_kl
+    ! F^x = h^x + G[P]^x; dC^y from the validated CPHF amplitudes U^y. The first
+    ! two terms equal Tr[dP^y F^x] and the eps-weighted overlap term; the third
+    ! is the FULL occ-occ energy-weighted term (the off-diagonal part is what a
+    ! diagonal dε approximation misses). 2e traces use fock_deriv_contract
+    ! (=1/2 Tr[M G[P]^x]) and fock_jk (G[dP^y]).
     allocate(hess_native(ncart,ncart), source=0.0_dp)
-    hess_native = matmul(transpose(bvec), uvec)
-    hess_native = 0.5_dp*(hess_native + transpose(hess_native))
+    block
+      real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:)
+      real(dp), allocatable :: dCx(:,:,:), dPx(:,:,:), Gdp(:,:,:)
+      real(dp), allocatable :: s1oo(:,:,:), hMOoo(:,:,:), GdpMOoo(:,:,:), moe1a(:,:,:)
+      real(dp), allocatable :: Mi(:,:), gxy(:,:), A2(:,:), tGP(:,:), hresp(:,:)
+      real(dp), allocatable :: s1(:,:), s2(:,:), bMO(:,:), dpp(:,:), gpp(:,:), gfl(:,:)
+      real(dp), allocatable :: cocc(:,:), tmpno(:,:)
+      real(dp) :: a1v, a3v, t3a, dcsx
+      integer :: x, yy, ii, jj, kk, ll, aa, ia2, mu2, nu2, ccx, kcx
+
+      allocate(sflat(nbf,nbf,ncart), hflat(nbf,nbf,ncart))
+      do x = 1, ncart
+        ccx = mod(x-1,3)+1; kcx = (x-1)/3+1
+        sflat(:,:,x) = dSa(:,:,ccx,kcx)
+        hflat(:,:,x) = dTa(:,:,ccx,kcx) + dVa(:,:,ccx,kcx)
+      end do
+      allocate(cocc(nbf,nocc)); cocc = mo_a(:,1:nocc)
+
+      ! occ-occ MO blocks of S^x and h^x
+      allocate(s1oo(nocc,nocc,ncart), hMOoo(nocc,nocc,ncart), source=0.0_dp)
+      allocate(s1(nbf,nbf), s2(nbf,nbf), bMO(nbf,nbf), tmpno(nbf,nocc))
+      do x = 1, ncart
+        call dgemm('n','n',nbf,nocc,nbf,1.0_dp,sflat(:,:,x),nbf,cocc,nbf,0.0_dp,tmpno,nbf)
+        call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,s1oo(:,:,x),nocc)
+        call dgemm('n','n',nbf,nocc,nbf,1.0_dp,hflat(:,:,x),nbf,cocc,nbf,0.0_dp,tmpno,nbf)
+        call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,hMOoo(:,:,x),nocc)
+      end do
+
+      ! relaxed orbital derivative dC^y, density dP^y (total), response Fock G[dP^y]
+      allocate(dCx(nbf,nocc,ncart), dPx(nbf,nbf,ncart), Gdp(nbf,nbf,ncart), source=0.0_dp)
+      allocate(GdpMOoo(nocc,nocc,ncart), source=0.0_dp)
+      allocate(dpp(nbf2,1), gpp(nbf2,1), gfl(nbf,nbf))
+      do yy = 1, ncart
+        ia2 = 0
+        do aa = 1, nvir
+          do ii = 1, nocc
+            ia2 = ia2 + 1
+            dCx(:,ii,yy) = dCx(:,ii,yy) + mo_a(:,nocc+aa)*uvec(ia2,yy)
+          end do
+        end do
+        do ii = 1, nocc
+          do jj = 1, nocc
+            dCx(:,ii,yy) = dCx(:,ii,yy) - 0.5_dp*mo_a(:,jj)*s1oo(jj,ii,yy)
+          end do
+        end do
+        do ii = 1, nocc
+          do mu2 = 1, nbf
+            do nu2 = 1, nbf
+              dPx(mu2,nu2,yy) = dPx(mu2,nu2,yy) &
+                + 2.0_dp*(dCx(mu2,ii,yy)*mo_a(nu2,ii) + mo_a(mu2,ii)*dCx(nu2,ii,yy))
+            end do
+          end do
+        end do
+        call pack_matrix(dPx(:,:,yy), dpp(:,1))
+        gpp = 0.0_dp
+        call fock_jk(basis, d=dpp, f=gpp, scale_exch=hfscale, infos=infos)
+        call unpack_from_packed(gpp(:,1), gfl, nbf); Gdp(:,:,yy) = gfl
+        call dgemm('n','n',nbf,nocc,nbf,1.0_dp,gfl,nbf,cocc,nbf,0.0_dp,tmpno,nbf)
+        call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,GdpMOoo(:,:,yy),nocc)
+      end do
+
+      ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
+      allocate(moe1a(nocc,nocc,ncart))
+      do yy = 1, ncart
+        do ll = 1, nocc
+          do kk = 1, nocc
+            moe1a(kk,ll,yy) = hMOoo(kk,ll,yy) + GdpMOoo(kk,ll,yy) &
+                            - 0.5_dp*(eps(kk)+eps(ll))*s1oo(kk,ll,yy)
+          end do
+        end do
+      end do
+
+      ! 2e traces: A2(x,y)=Tr[dP^y G[P]^x]; tGP(x,y)=Tr[M^x G[P]^y]
+      ! with M^x = sum_kl s1oo^x_kl C_k C_l^T
+      allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
+      do yy = 1, ncart
+        gxy = 0.0_dp
+        call fock_deriv_contract(infos, basis, pfull, dPx(:,:,yy), hfscale, gxy)
+        A2(:,yy) = 2.0_dp*reshape(gxy, [ncart])
+      end do
+      do x = 1, ncart
+        call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
+        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mi,nbf)
+        gxy = 0.0_dp
+        call fock_deriv_contract(infos, basis, pfull, Mi, hfscale, gxy)
+        tGP(x,:) = 2.0_dp*reshape(gxy, [ncart])
+      end do
+
+      ! assemble response  hresp(x,y) = 4Tr[F^x dm1^y]-4Tr[S^x eps.dm1^y]-2Tr[s1oo^x mo_e1^y]
+      !   = (Tr[dP^y h^x] + A2) - 4 A3 - 2 (sum_kl s1oo^x_kl moe1a^y_kl) - 2 tGP
+      allocate(hresp(ncart,ncart), source=0.0_dp)
+      do x = 1, ncart
+        do yy = 1, ncart
+          a1v = sum(dPx(:,:,yy)*hflat(:,:,x))
+          a3v = 0.0_dp
+          do ii = 1, nocc
+            dcsx = 0.0_dp
+            do mu2 = 1, nbf
+              do nu2 = 1, nbf
+                dcsx = dcsx + dCx(mu2,ii,yy)*sflat(mu2,nu2,x)*mo_a(nu2,ii)
+              end do
+            end do
+            a3v = a3v + eps(ii)*dcsx
+          end do
+          t3a = 0.0_dp
+          do ll = 1, nocc
+            do kk = 1, nocc
+              t3a = t3a + s1oo(kk,ll,x)*moe1a(kk,ll,yy)
+            end do
+          end do
+          hresp(x,yy) = (a1v + A2(x,yy)) - 4.0_dp*a3v - 2.0_dp*t3a - 2.0_dp*tGP(x,yy)
+        end do
+      end do
+
+      hess_native = 0.5_dp*(hresp + transpose(hresp))
+      deallocate(sflat, hflat, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
+                 Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
+    end block
+
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
 
     ! --- One-electron + Pulay second-derivative skeleton (fixed density) ------
