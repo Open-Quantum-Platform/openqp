@@ -367,7 +367,7 @@ contains
         layers(2, nLayers) = atomic_grid%sph_npts(i)
         layers(3, nLayers) = depths(iSpl)
 
-        if (rNext >= limits(iSpl)) iSpl = iSpl+1
+        if (rNext >= limits(iSpl)) iSpl = min(iSpl+1, size(stepSz))
         if (iRNext == iRMax) exit
       end do
 
