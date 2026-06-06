@@ -27,11 +27,16 @@ module dft
     integer, allocatable :: rad_id(:)
   end type
 
+!  SG1 region boundaries (in units of the atomic radius) and Lebedev
+!  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
+!  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
+!  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
+!  the unpruned 194-point grid at all radii.
   real(kind=dp), parameter :: sg1rads(5,4) = reshape(&
         [0.2500d0, 0.500d0, 1.0d00, 4.50d0, 9999999.9d0,   &
          0.1667d0, 0.500d0, 0.90d0, 3.50d0, 9999999.9d0,   &
          0.1000d0, 0.400d0, 0.80d0, 2.5d0,  9999999.9d0,   &
-         1.0d-30, 999999.9d0, 999999.9d0, 999999.9d0, 999999.9d0], &
+         0.0d0,    0.0d0,   0.0d0,  9999999.9d0, 9999999.9d0], &
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
@@ -291,10 +296,12 @@ contains
           pruned%radii(i,1:ntyps) = sg1rads(pruned%ngrids,1:ntyps)
         end do
         do iatm = 1, nat
+          ! sg1atoms are inclusive upper bounds of the period:
+          ! H-He (Z<=2), Li-Ne (Z<=10), Na-Ar (Z<=18), heavier
           do i = 1, ntyps
-            if (int(infos%atoms%zn(iatm))<sg1atoms(i)) exit
+            if (int(infos%atoms%zn(iatm))<=sg1atoms(i)) exit
           end do
-          pruned%rad_id(iatm) = i
+          pruned%rad_id(iatm) = min(i, ntyps)
         end do
       case default
         call show_message('Unknown pruned grid name', WITH_ABORT)

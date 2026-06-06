@@ -347,14 +347,18 @@ contains
     iRNext = 0
     do i = 1, nGrids
       iRMin = iRMax+1
+      ! No radial points left for this and the following regions
+      ! (e.g. pruned-grid region boundaries beyond the radial grid)
+      if (iRMin > nRad) exit
       iRMax = findl(atomic_grid%sph_radii(i), atomic_grid%rad_pts, iRMin)
 
       if (nGrids == 1) iRMax = nRad
+      if (i == nGrids) iRMax = nRad
 
       rMin = rAtm*atomic_grid%rad_pts(iRMin)
       rMax = rAtm*atomic_grid%rad_pts(iRMax)
 
-      iSpl = findl(rAtm*rMin, limits, 1)
+      iSpl = findl(rMin, limits, 1)
 
       rNext = rMin
 
