@@ -29,8 +29,13 @@ module dft
 !>   Several radial grids may coexist: `radial_id` maps each atom to
 !>   one of `nrad_types` radial grids.  Radial type 1 is always the
 !>   standard unit-radius grid (scaled by the Bragg-Slater radius);
-!>   types >= 2 are element-specific DE2 grids in absolute bohr
-!>   (`de2_alpha`/`rad_typ_z` give alpha and the element).
+!>   types >= 2 are element-specific grids in absolute bohr: DE2
+!>   (`de2_alpha`/`rad_typ_z` give alpha and the element) or, when
+!>   `me_rscale` is allocated and positive, MultiExp with `rad_npts`
+!>   nodes and scaling radius `me_rscale` (SG-0).
+!>   If `nang_override` is allocated and non-zero for an atom type,
+!>   that type is unpruned: a single `nang_override(t)`-point Lebedev
+!>   sphere is used at ALL radii (heavy-atom fallback).
   type dft_grid_pruned_t
     integer :: nrad = 0
     integer :: ngrids = 1
@@ -38,22 +43,27 @@ module dft
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
     integer, allocatable :: rad_id(:)    !< atom -> atom type
     integer, allocatable :: nradPerRegion(:,:) !< (region, atom type); 0 = unused
+    integer, allocatable :: nang_override(:) !< per atom type; 0 = no override
     integer :: nrad_types = 1            !< number of radial grids
     integer, allocatable :: radial_id(:) !< atom -> radial grid type
     real(kind=dp), allocatable :: de2_alpha(:) !< DE2 alpha of radial type
     integer, allocatable :: rad_typ_z(:) !< element of radial type (0: standard)
+    integer, allocatable :: rad_npts(:)  !< nodes of radial type (0: global nrad)
+    real(kind=dp), allocatable :: me_rscale(:) !< MultiExp R of radial type (0: DE2)
   end type
 
 !  SG1 region boundaries (in units of the atomic radius) and Lebedev
 !  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
 !  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
 !  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
-!  the unpruned 194-point grid at all radii.
+!  the unpruned 194-point grid at all radii.  Row 4 is fully
+!  overridden via nang_override (set in dft_set_options), so its
+!  boundaries are never used.
   real(kind=dp), parameter :: sg1rads(5,4) = reshape(&
         [0.2500d0, 0.500d0, 1.0d00, 4.50d0, 9999999.9d0,   &
          0.1667d0, 0.500d0, 0.90d0, 3.50d0, 9999999.9d0,   &
          0.1000d0, 0.400d0, 0.80d0, 2.5d0,  9999999.9d0,   &
-         0.0d0,    0.0d0,   0.0d0,  9999999.9d0, 9999999.9d0], &
+         9999999.9d0, 9999999.9d0, 9999999.9d0, 9999999.9d0, 9999999.9d0], &
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
@@ -154,6 +164,114 @@ module dft
         6,  86, 110, 194, 590, 194, 146,  50,  0,   & ! S
         6, 110, 194, 590, 194, 110,  50,   0,  0],  & ! Cl
         shape(sg3_leb))
+
+!  SG-0 pruned grid: S.-H. Chien, P.M.W. Gill, J. Comput. Chem. 27,
+!  730 (2006), Table 1 (counts/orders as listed in Psi4's
+!  cubature.cc), applied in ASCENDING radial order like the
+!  SG-2/SG-3 sectors (validated here: H2O/NH3/CH4/thymine BHHLYP
+!  energies agree with dense grids to ~1e-4, while the reversed
+!  order fails by up to 1e-2).  Radial grid: MultiExp (Gauss
+!  quadrature on (0,1) for the weight ln^2 x; P.M.W. Gill, S.-H.
+!  Chien, J. Comput. Chem. 24, 732 (2003)) with Nr = 23 (Z = 1,
+!  3-9) or 26 (Z = 11-17) and an element-specific scaling radius R:
+!  r_i = -R ln(x_i), w_i = R^3 omega_i / x_i (incl. r^2 Jacobian).
+!  Two spherical-rule substitutions are applied: the original
+!  18-point rule (Abramowitz & Stegun, not a Lebedev grid) is not
+!  available here and the 74-point Lebedev rule carries a negative
+!  weight, which the weight-screening machinery here (positive
+!  cutoffs in getSliceNonZero etc.) cannot represent; both are
+!  replaced by the next safe Lebedev order, 26 and 86 respectively.
+!  Defined for Z in {1, 3-9, 11-17}; other elements (He, Ne,
+!  Z >= 18) fall back to the SG1 scheme on the standard radial grid.
+  integer, parameter :: SG0_MAXSEC = 15
+  integer, parameter :: sg0_nrad(SG_NELEM) = &
+        [23, 23, 23, 23, 23, 23, 23, 23, 26, 26, 26, 26, 26, 26, 26]
+  real(kind=dp), parameter :: sg0_rscale(SG_NELEM) = &
+        [1.30d0, 1.95d0, 2.20d0, 1.45d0, 1.20d0, 1.10d0, 1.10d0, &
+         1.20d0, 2.30d0, 2.20d0, 2.10d0, 1.30d0, 1.30d0, 1.10d0, &
+         1.45d0]
+  integer, parameter :: sg0_nsec(SG_NELEM) = &
+        [11, 11, 12, 7, 13, 10, 11, 10, 8, 13, 15, 11, 11, 12, 12]
+  integer, parameter :: sg0_cnt(SG0_MAXSEC, SG_NELEM) = reshape([ &
+        6, 3, 1, 1, 1, 1, 6, 1, 1, 1, 1, 0, 0, 0, 0,   & ! H
+        6, 3, 1, 1, 1, 1, 6, 1, 1, 1, 1, 0, 0, 0, 0,   & ! Li
+        4, 2, 1, 2, 1, 1, 2, 5, 1, 1, 1, 2, 0, 0, 0,   & ! Be
+        4, 4, 3, 3, 6, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0,   & ! B
+        6, 2, 1, 2, 2, 1, 1, 1, 2, 2, 1, 1, 1, 0, 0,   & ! C
+        6, 3, 1, 2, 2, 1, 2, 3, 1, 2, 0, 0, 0, 0, 0,   & ! N
+        5, 1, 2, 1, 4, 1, 5, 1, 1, 1, 1, 0, 0, 0, 0,   & ! O
+        4, 2, 4, 2, 2, 2, 2, 3, 1, 1, 0, 0, 0, 0, 0,   & ! F
+        6, 2, 3, 1, 2, 8, 2, 2, 0, 0, 0, 0, 0, 0, 0,   & ! Na
+        5, 2, 2, 2, 2, 1, 2, 4, 1, 1, 2, 1, 1, 0, 0,   & ! Mg
+        6, 2, 1, 2, 2, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1,   & ! Al
+        5, 4, 4, 3, 1, 2, 1, 3, 1, 1, 1, 0, 0, 0, 0,   & ! Si
+        5, 4, 4, 3, 1, 2, 1, 3, 1, 1, 1, 0, 0, 0, 0,   & ! P
+        4, 1, 8, 2, 1, 2, 1, 3, 1, 1, 1, 1, 0, 0, 0,   & ! S
+        4, 7, 2, 2, 1, 1, 2, 3, 1, 1, 1, 1, 0, 0, 0],  & ! Cl
+        shape(sg0_cnt))
+!  Lebedev order of each sector (18 -> 26 and 74 -> 86 substitutions
+!  applied, see above)
+  integer, parameter :: sg0_leb(SG0_MAXSEC, SG_NELEM) = reshape([ &
+        6, 26, 26,  38,  86, 110, 146,  86,  50,  38, 26,  0,  0,  0, 0,  & ! H
+        6, 26, 26,  38,  86, 110, 146,  86,  50,  38, 26,  0,  0,  0, 0,  & ! Li
+        6, 26, 26,  38,  86,  86, 110, 146,  50,  38, 26,  6,  0,  0, 0,  & ! Be
+        6, 26, 38,  86, 146,  38,   6,   0,   0,   0,  0,  0,  0,  0, 0,  & ! B
+        6, 26, 26,  38,  50,  86, 110, 146, 170, 146, 86, 38, 26,  0, 0,  & ! C
+        6, 26, 26,  38,  86, 110, 170, 146,  86,  50,  0,  0,  0,  0, 0,  & ! N
+        6, 26, 26,  38,  50,  86, 110,  86,  50,  38,  6,  0,  0,  0, 0,  & ! O
+        6, 38, 50,  86, 110, 146, 110,  86,  50,   6,  0,  0,  0,  0, 0,  & ! F
+        6, 26, 26,  38,  50, 110,  86,   6,   0,   0,  0,  0,  0,  0, 0,  & ! Na
+        6, 26, 26,  38,  50,  86, 110, 146, 110,  86, 38, 26,  6,  0, 0,  & ! Mg
+        6, 26, 26,  38,  50,  86,  86, 146, 170, 110, 86, 86, 26, 26, 6,  & ! Al
+        6, 26, 38,  50,  86, 110, 146, 170,  86,  50,  6,  0,  0,  0, 0,  & ! Si
+        6, 26, 38,  50,  86, 110, 146, 170,  86,  50,  6,  0,  0,  0, 0,  & ! P
+        6, 26, 26,  38,  50,  86, 110, 170, 146, 110, 50,  6,  0,  0, 0,  & ! S
+        6, 26, 26,  38,  50,  86, 110, 170, 146, 110, 86,  6,  0,  0, 0], & ! Cl
+        shape(sg0_leb))
+
+!  Gauss nodes/weights on (0,1) for the weight ln^2 x (moments
+!  m_k = 2/(k+1)^3), used by the SG-0 MultiExp radial grid.  Generated
+!  at 200-digit precision via Golub-Welsch (scripts/
+!  sg0_multiexp_nodes.py); moments reproduced to ~1e-194.  Sorted by
+!  ascending radius r = -ln x (descending x).
+  real(kind=dp), parameter :: me23_x(23) = [ &
+        0.98868121412417917d0, 0.96979055758591744d0, 0.94296495577173701d0, &
+        0.90865042304171716d0, 0.86743287798275914d0, 0.82001826057974256d0, &
+        0.76721868628476330d0, 0.70993783394310550d0, 0.64915496391179920d0, &
+        0.58590767062942112d0, 0.52127362052638902d0, 0.45635157223202704d0, &
+        0.39224199352412352d0, 0.33002759271630692d0, 0.27075407329850232d0, &
+        0.21541139722601381d0, 0.16491579716600480d0, 0.12009269427713703d0, &
+        0.081660512821455929d0, 0.050215014094683999d0, 0.026212787562513862d0, &
+        0.0099491128468611853d0, 0.0015058924745840717d0]
+  real(kind=dp), parameter :: me23_w(23) = [ &
+        1.9205788879728201d-6, 2.1565953939261300d-5, 0.00010572868056731378d0, &
+        0.00034755788975770020d0, 0.00089889253062980984d0, 0.0019785635068497310d0, &
+        0.0038757714610574311d0, 0.0069477499303844705d0, 0.011611019656801442d0, &
+        0.018325604666401505d0, 0.027571576765107484d0, 0.039817159733692048d0, &
+        0.055477247414684803d0, 0.074860364849398577d0, 0.098100418872550932d0, &
+        0.12506617470764026d0, 0.15523427291530433d0, 0.18749582392684797d0, &
+        0.21982849560935217d0, 0.24866202472840894d0, 0.26742812676397013d0, &
+        0.26236396365964760d0, 0.19397997519811811d0]
+  real(kind=dp), parameter :: me26_x(26) = [ &
+        0.99104255389177476d0, 0.97606029628496512d0, 0.95471297844715660d0, &
+        0.92727872393893840d0, 0.89412727813918990d0, 0.85570731112497829d0, &
+        0.81253906250257684d0, 0.76520686385149628d0, 0.71435096447486728d0, &
+        0.66065863649024736d0, 0.60485464446878273d0, 0.54769119749545300d0, &
+        0.48993751506621983d0, 0.43236914470191774d0, 0.37575717144832967d0, &
+        0.32085745807052075d0, 0.26840004931968460d0, 0.21907886291165968d0, &
+        0.17354177117918734d0, 0.13238114512422221d0, 0.096124873966380717d0, &
+        0.065227756094948038d0, 0.040062890303615981d0, 0.020911970701014455d0, &
+        0.0079508350834211655d0, 0.0012118959531442052d0]
+  real(kind=dp), parameter :: me26_w(26) = [ &
+        9.5039183893267110d-7, 1.0687185195322948d-5, 5.2504259615681300d-5, &
+        0.00017307202304493877d0, 0.00044916603235275513d0, 0.00099280471150256854d0, &
+        0.0019544295871422983d0, 0.0035237959667716519d0, 0.0059282775235989670d0, &
+        0.0094283196275203881d0, 0.014309796296644065d0, 0.020873023457481862d0, &
+        0.029418139625084388d0, 0.040226455838504916d0, 0.053537150852983894d0, &
+        0.069518256800206744d0, 0.088230076743000778d0, 0.10957766175447101d0, &
+        0.13324603342450455d0, 0.15860582735470473d0, 0.18456387321242483d0, &
+        0.20930163443099709d0, 0.22975862025927898d0, 0.24044079379163951d0, &
+        0.22996905094874790d0, 0.16590959790074127d0]
 
   type :: saved_HF_info !< keeps HF exchange from input
     logical :: alpha = .false.
@@ -422,6 +540,10 @@ contains
           end do
           pruned%rad_id(iatm) = min(i, ntyps)
         end do
+        ! SG1 is undefined above Ar: heavy atoms (type 4) are truly
+        ! unpruned, i.e. a single 194-point sphere at all radii
+        allocate(pruned%nang_override(ntyps), source=0)
+        pruned%nang_override(4) = 194
 
         write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
                   &5X,21("-")/&
@@ -509,6 +631,89 @@ contains
                     trim(xc_func_name), pruned%nrad, &
                     infos%dft%grid_density_cutoff
 
+      case ("SG0")
+        maxsec = SG0_MAXSEC
+!       The radial storage must fit both the MultiExp grids (up to 26
+!       nodes) and the standard radial grid of the fallback atoms
+        pruned%nrad = max(nrad, 26)
+
+!       One atom type per supported element present in the system;
+!       types 1-4 are the SG1 fallback (He, Ne, Z >= 18, non-integer
+!       nuclear charges), typed by period as in the SG1 case; element
+!       types are 5, 6, ...  Radial types: 1 is the standard grid
+!       (fallback); element type 4+k uses MultiExp radial column 1+k.
+        zmap = 0
+        ntyps = 4
+        allocate(pruned%radial_id(nat), source=1)
+        do iatm = 1, nat
+          z = int(abs(infos%atoms%zn(iatm))+1.0d-5)
+          ie = 0
+          if (abs(abs(infos%atoms%zn(iatm))-z) <= 1.0d-5 .and. &
+              z >= 1 .and. z <= 17) then
+            do i = 1, SG_NELEM
+              if (sg_elem_z(i) == z) then
+                ie = i
+                exit
+              end if
+            end do
+          end if
+          if (ie > 0) then
+            if (zmap(ie) == 0) then
+              ntyps = ntyps+1
+              zmap(ie) = ntyps
+            end if
+            pruned%rad_id(iatm) = zmap(ie)
+            pruned%radial_id(iatm) = zmap(ie)-3
+          else
+            ! SG1 fallback type by period (see the SG1 case)
+            do i = 1, 4
+              if (int(infos%atoms%zn(iatm))<=sg1atoms(i)) exit
+            end do
+            pruned%rad_id(iatm) = min(i, 4)
+            pruned%radial_id(iatm) = 1
+          end if
+        end do
+
+        pruned%ngrids = maxsec
+        pruned%nrad_types = ntyps-3
+        allocate(pruned%nang(maxsec, ntyps), source=0)
+        allocate(pruned%nradPerRegion(maxsec, ntyps), source=0)
+        allocate(pruned%radii(maxsec, ntyps), source=1.0d30)
+        allocate(pruned%nang_override(ntyps), source=0)
+        allocate(pruned%de2_alpha(pruned%nrad_types), source=0.0_dp)
+        allocate(pruned%rad_typ_z(pruned%nrad_types), source=0)
+        allocate(pruned%rad_npts(pruned%nrad_types), source=0)
+        allocate(pruned%me_rscale(pruned%nrad_types), source=0.0_dp)
+
+!       Fallback types 1-4: the SG1 scheme (radius-based regions) on
+!       the standard radial grid; heavy atoms (type 4) are truly
+!       unpruned, i.e. a single 194-point sphere at all radii
+        do i = 1, 4
+          pruned%nang(1:5, i) = sg1grids
+          pruned%radii(1:5, i) = sg1rads(:, i)
+        end do
+        pruned%nang_override(4) = 194
+
+!       Element types: index-based sectors on the per-element MultiExp
+!       radial grid
+        do ie = 1, SG_NELEM
+          i = zmap(ie)
+          if (i == 0) cycle
+          nsec = sg0_nsec(ie)
+          pruned%nang(1:nsec, i) = sg0_leb(1:nsec, ie)
+          pruned%nradPerRegion(1:nsec, i) = sg0_cnt(1:nsec, ie)
+          pruned%rad_npts(i-3) = sg0_nrad(ie)
+          pruned%me_rscale(i-3) = sg0_rscale(ie)
+        end do
+
+        write(iw,'(/5X,"Standard Grid 0 (SG0) of Chien and Gill"/&
+                  &5X,39("-")/&
+                  &5X,"XC functional: ",A/&
+                  &5X,"NRAD  =   23/26   (MultiExp radial grid)"/&
+                  &5X,"THRESH=",1P,E12.2)') &
+                    trim(xc_func_name), &
+                    infos%dft%grid_density_cutoff
+
       case default
         call show_message('Unknown pruned grid name', WITH_ABORT)
       end select
@@ -557,7 +762,7 @@ contains
       integer :: bstype
       integer :: grid_id
       integer :: max_ang_pts
-      integer :: ngr, rtid
+      integer :: ngr, rtid, nrad_at, override
       real(kind=dp) :: dftthr0
       real(KIND=dp) :: brsl_radii(BRSL_NUM_ELEMENTS)
       logical :: verbose_
@@ -574,6 +779,8 @@ contains
 
       nat = ubound(infos%atoms%zn, 1)
       max_ang_pts = maxval(pruned%nang)
+      if (allocated(pruned%nang_override)) &
+        max_ang_pts = max(max_ang_pts, maxval(pruned%nang_override))
       nrad = infos%dft%grid_rad_size
       ! A pruned grid may prescribe its own radial grid size
       if (pruned%nrad > 0) nrad = pruned%nrad
@@ -617,13 +824,23 @@ contains
       call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
               nrad, infos%dft%rad_grid_type)
 
-!     Element-specific DE2 radial grids (SG-2/SG-3), absolute radii;
-!     R_max = 20 * Bragg-Slater radius (NWChem convention)
+!     Element-specific radial grids, absolute radii.
+!     MultiExp (SG-0): per-element node count and scaling radius;
+!     DE2 (SG-2/SG-3): R_max = 20 * Bragg-Slater radius (NWChem
+!     convention).  Unused trailing rows of a MultiExp column stay
+!     zero and are never referenced (per-atom grids are sliced to
+!     the per-type node count below).
       do i = 2, pruned%nrad_types
-        call de2_radial_grid(nrad, pruned%de2_alpha(i), &
-                20.0_dp*bragg_slater_radius(brsl_radii, &
-                        real(pruned%rad_typ_z(i), kind=dp)), &
-                molGrid%rad_pts(:,i), molGrid%rad_wts(:,i))
+        if (allocated(pruned%me_rscale)) then
+          nrad_at = pruned%rad_npts(i)
+          call multiexp_radial_grid(nrad_at, pruned%me_rscale(i), &
+                  molGrid%rad_pts(1:nrad_at,i), molGrid%rad_wts(1:nrad_at,i))
+        else
+          call de2_radial_grid(nrad, pruned%de2_alpha(i), &
+                  20.0_dp*bragg_slater_radius(brsl_radii, &
+                          real(pruned%rad_typ_z(i), kind=dp)), &
+                  molGrid%rad_pts(:,i), molGrid%rad_wts(:,i))
+        end if
       end do
 
 !     Per-atom radial grid types
@@ -642,37 +859,57 @@ contains
 !     Compute atomic grids for each atom
       do iat = 1, nat
         grid_id = pruned%rad_id(iat)
+        rtid = molGrid%radTypeId(iat)
 
-!       Number of regions used by this atom type and the pruning mode:
-!       index-based sectors (nradPerRegion > 0) vs radius-based regions
-        ngr = pruned%ngrids
-        if (allocated(pruned%nradPerRegion)) then
-          if (any(pruned%nradPerRegion(:, grid_id) > 0)) then
-            ngr = count(pruned%nradPerRegion(:, grid_id) > 0)
-            atomic_grid%sph_nrad = pruned%nradPerRegion(1:ngr, grid_id)
-          else
-            ngr = count(pruned%nang(:, grid_id) > 0)
-            if (allocated(atomic_grid%sph_nrad)) &
-              deallocate(atomic_grid%sph_nrad)
+        override = 0
+        if (allocated(pruned%nang_override)) &
+          override = pruned%nang_override(grid_id)
+
+        if (override > 0) then
+!         Unpruned atom type: a single angular grid at all radii
+!         (add_atomic_grid extends a single region to all radial shells)
+          if (allocated(atomic_grid%sph_nrad)) &
+            deallocate(atomic_grid%sph_nrad)
+          atomic_grid%sph_npts = [override]
+          atomic_grid%sph_radii = [9999999.9d0]
+          call molGrid%spherical_grids%add_grid(override)
+        else
+!         Number of regions used by this atom type and the pruning mode:
+!         index-based sectors (nradPerRegion > 0) vs radius-based regions
+          ngr = pruned%ngrids
+          if (allocated(pruned%nradPerRegion)) then
+            if (any(pruned%nradPerRegion(:, grid_id) > 0)) then
+              ngr = count(pruned%nradPerRegion(:, grid_id) > 0)
+              atomic_grid%sph_nrad = pruned%nradPerRegion(1:ngr, grid_id)
+            else
+              ngr = count(pruned%nang(:, grid_id) > 0)
+              if (allocated(atomic_grid%sph_nrad)) &
+                deallocate(atomic_grid%sph_nrad)
+            end if
           end if
-        end if
 
-        atomic_grid%sph_npts = pruned%nang(1:ngr, grid_id)
-        atomic_grid%sph_radii = pruned%radii(1:ngr, grid_id)
+          atomic_grid%sph_npts = pruned%nang(1:ngr, grid_id)
+          atomic_grid%sph_radii = pruned%radii(1:ngr, grid_id)
+
+!         Set angular Lebedev grid(s)
+          do igrid = 1, ngr
+!           get the unit lebedev sphere (no-op if already stored)
+            call molGrid%spherical_grids%add_grid(pruned%nang(igrid, grid_id))
+          end do
+        end if
         atomic_grid%idAtm = iat
 
-!       Set angular Lebedev grid(s)
-        do igrid = 1, ngr
-!         get the unit lebedev sphere (no-op if already stored)
-          call molGrid%spherical_grids%add_grid(pruned%nang(igrid, grid_id))
-        end do
-
-!       Set the radial grid of the atom.  DE2 radial grids (types >= 2)
-!       store absolute radii: use a unit effective radius; the standard
-!       grid (type 1) is scaled by the Bragg-Slater radius.
-        rtid = molGrid%radTypeId(iat)
-        atomic_grid%rad_pts = molGrid%rad_pts(:, rtid)
-        atomic_grid%rad_wts = molGrid%rad_wts(:, rtid)
+!       Set the radial grid of the atom.  Element-specific grids
+!       (types >= 2) store absolute radii: use a unit effective radius;
+!       the standard grid (type 1) is scaled by the Bragg-Slater
+!       radius.  The per-atom grid is sliced to the per-type node
+!       count when one is prescribed (MultiExp grids of SG-0).
+        nrad_at = nrad
+        if (allocated(pruned%rad_npts)) then
+          if (pruned%rad_npts(rtid) > 0) nrad_at = pruned%rad_npts(rtid)
+        end if
+        atomic_grid%rad_pts = molGrid%rad_pts(1:nrad_at, rtid)
+        atomic_grid%rad_wts = molGrid%rad_wts(1:nrad_at, rtid)
         if (rtid > 1) then
           atomic_grid%rAtm = 1.0_dp
         else
@@ -757,6 +994,46 @@ contains
     end do
 
   end subroutine de2_radial_grid
+
+!> @brief MultiExp radial quadrature (SG-0)
+!> @details P.M.W. Gill, S.-H. Chien, J. Comput. Chem. 24, 732 (2003).
+!>   Gauss quadrature on (0,1) for the weight function ln^2 x
+!>   (moments m_k = 2/(k+1)^3), mapped to (0,inf) by r = -R ln x:
+!>     r_i = -R ln(x_i)                                       [bohr]
+!>     w_i = R^3 omega_i / x_i
+!>   The weights include the r^2 Jacobian, matching the DE2
+!>   convention (the consumer multiplies by rAtm^3 = 1).  Nodes and
+!>   weights are tabulated for n = 23 and 26 (the SG-0 sizes), sorted
+!>   by ascending radius.
+!> @param[in]   nr      number of radial points (23 or 26)
+!> @param[in]   rscale  element-specific scaling radius R, bohr
+!> @param[out]  r       radial nodes, absolute bohr
+!> @param[out]  w       radial weights including the r^2 Jacobian
+  subroutine multiexp_radial_grid(nr, rscale, r, w)
+    implicit none
+    integer, intent(in) :: nr
+    real(kind=dp), intent(in) :: rscale
+    real(kind=dp), intent(out) :: r(:), w(:)
+
+    integer :: i
+
+    select case (nr)
+    case (23)
+      do i = 1, nr
+        r(i) = -rscale*log(me23_x(i))
+        w(i) = rscale**3*me23_w(i)/me23_x(i)
+      end do
+    case (26)
+      do i = 1, nr
+        r(i) = -rscale*log(me26_x(i))
+        w(i) = rscale**3*me26_w(i)/me26_x(i)
+      end do
+    case default
+      call show_message('MultiExp radial grid: unsupported size', &
+              WITH_ABORT)
+    end select
+
+  end subroutine multiexp_radial_grid
 
   subroutine dftexcor(basis,molGrid,iscftyp,fa,fb,coeffa,coeffb,nbf,nbf_tri,eexc,totele,totkin, infos)
     use basis_tools, only: basis_set
