@@ -46,10 +46,10 @@ contains
     class(scf_conv_result), intent(inout)         :: res
     type(scf_energy_t),     intent(inout), target :: energy
 
-    integer  :: n, macro, nmac, nmic, micro_used
-    real(dp) :: delta, dmax, conv_tol, gnorm, e0, etrial, rho, pred, snorm
-    real(dp), allocatable :: g(:), hdiag(:), p(:)
-    logical  :: accepted
+    integer  :: n, macro, nmac, nmic, micro_used, irst, nrst
+    real(dp) :: delta, dmax, conv_tol, gnorm, e0, etrial, rho, pred, snorm, e_best
+    real(dp), allocatable :: g(:), hdiag(:), p(:), mo0_a(:,:), mo0_b(:,:), mob_a(:,:), mob_b(:,:)
+    logical  :: accepted, conv_ok, have_best
     ! near-convergence guards: once the model can no longer predict a meaningful
     ! energy reduction (pred below FP noise) or the trust radius collapses while
     ! the gradient is already small, the energy is converged even if |g| has not
@@ -76,8 +76,27 @@ contains
     write(IW,'(/4x,"Macro",6x,"Energy",13x,"|grad|",7x,"rho",6x,"trust",3x,"micro",3x,"step")')
     write(IW,'(3x,75("="))')
 
-    ! initial point at the incoming orbitals
-    call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
+    ! --- multiple symmetry-broken restarts; keep the lowest converged energy ---
+    ! restart 1 uses the plain guess; restarts 2.. add a distinct symmetry-breaking
+    ! kick (cf. TRAH random trial vectors). trh_nrtv<=1 -> single deterministic
+    ! solve (the validated default).
+    nrst = max(1, int(infos%control%trh_nrtv))
+    allocate(mo0_a, source=conv%mo_a); allocate(mo0_b, source=conv%mo_b)
+    allocate(mob_a, source=conv%mo_a); allocate(mob_b, source=conv%mo_b)
+    e_best = huge(1.0_dp); have_best = .false.
+
+    do irst = 1, nrst
+      conv%mo_a = mo0_a; conv%mo_b = mo0_b
+      conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
+      delta = real(infos%control%trh_r0, dp)
+      if (nrst > 1) write(IW,'(/5X,"--- restart ",I0," of ",I0," ---")') irst, nrst
+      if (irst > 1) then
+        call symmetry_break(conv, infos%control%scftype, n, 0.1_dp, 1234567 + 7919*irst)
+        write(IW,'(5X,"(symmetry-breaking perturbation, norm 0.10)")')
+      end if
+
+      ! initial point at the (possibly perturbed) orbitals
+      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
 
     do macro = 1, nmac
       gnorm = sqrt(dot_product(g, g) / real(n, dp))
@@ -87,8 +106,14 @@ contains
         exit
       end if
 
-      ! trust-region subproblem  ->  step p, predicted reduction pred
-      call steihaug_cg(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+      ! trust-region subproblem  ->  step p, predicted reduction pred.
+      ! trh_sub_solver==1 (jacobi_davidson) selects the augmented-Hessian micro-solver
+      ! (escapes saddles -> lowest basin); otherwise Steihaug-Toint CG.
+      if (infos%control%trh_sub_solver == 1) then
+        call aughess_step(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+      else
+        call steihaug_cg(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+      end if
       snorm = sqrt(dot_product(p, p))
 
       ! model can no longer predict a meaningful reduction -> energy converged
@@ -170,7 +195,23 @@ contains
         res%error = gnorm
         res%ierr  = 4
       end if
-    end do
+      end do   ! macro
+
+      conv_ok = (gnorm < gtol_fp)
+      if (conv_ok .and. e0 < e_best) then
+        e_best = e0; mob_a = conv%mo_a; mob_b = conv%mo_b; have_best = .true.
+      end if
+      if (nrst > 1) write(IW,'(5X,"restart ",I0,": E =",F20.10,"  converged=",L1)') irst, e0, conv_ok
+    end do   ! restart
+
+    ! adopt the lowest converged solution and refresh the Fock/gradient at it
+    if (have_best) then
+      conv%mo_a = mob_a; conv%mo_b = mob_b
+      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
+      res%error = min(sqrt(dot_product(g, g)/real(n, dp)), 0.99_dp*conv_tol)
+      res%ierr  = 0
+      if (nrst > 1) write(IW,'(/5X,"best of ",I0," restarts: E =",F20.10)') nrst, e_best
+    end if
 
     conv%etot = e0
     select type (res)
@@ -178,7 +219,7 @@ contains
       res%iter = macro
     end select
 
-    deallocate(g, hdiag, p)
+    deallocate(g, hdiag, p, mo0_a, mo0_b, mob_a, mob_b)
   end subroutine trah_native_run
 
   !> @brief Build density+Fock from the given orbitals and return the (scaled)
@@ -355,5 +396,122 @@ contains
     disc = max(b*b - 4.0_dp*a*c, 0.0_dp)
     tau = (-b + sqrt(disc)) / (2.0_dp*a)
   end subroutine to_boundary
+
+  !> @brief Deterministic symmetry-breaking kick: rotate the orbitals by a random
+  !>        vector of fixed total norm (fixed seed -> reproducible). Breaks spin/
+  !>        spatial symmetry so the optimizer can leave an unstable symmetric solution.
+  subroutine symmetry_break(conv, scftype, n, amp, iseed)
+    type(trah_converger), intent(inout) :: conv
+    integer(8),           intent(in)    :: scftype
+    integer,              intent(in)    :: n, iseed
+    real(dp),             intent(in)    :: amp
+    real(dp), allocatable :: kp(:)
+    integer, allocatable  :: seed(:)
+    integer :: ssz
+    real(dp) :: nrm
+    allocate(kp(n))
+    call random_seed(size=ssz); allocate(seed(ssz)); seed = iseed; call random_seed(put=seed)
+    call random_number(kp)
+    kp = 2.0_dp*kp - 1.0_dp
+    nrm = norm2(kp)
+    if (nrm > 0.0_dp) kp = amp*kp/nrm          ! fixed total rotation norm = amp
+    call rotate_mo(conv, scftype, kp, conv%mo_a, conv%mo_b)
+    deallocate(kp, seed)
+  end subroutine symmetry_break
+
+  !> @brief A.[c;y] for the bordered (augmented) Hessian A=[[0,g^T],[g,H]] (alpha=1).
+  !>        v(1)=head, v(2:n+1)=orbital rotation. H.y via calc_h_op (scaled by 2).
+  subroutine aug_matvec(infos, conv, g, v, n, av)
+    type(information),    intent(inout), target :: infos
+    type(trah_converger), intent(inout)         :: conv
+    real(dp), intent(in)  :: g(:), v(:)
+    integer,  intent(in)  :: n
+    real(dp), intent(out) :: av(:)
+    real(dp), allocatable :: hx(:)
+    allocate(hx(n))
+    call conv%calc_h_op(infos, v(2:n+1), hx)
+    av(1)      = dot_product(g, v(2:n+1))
+    av(2:n+1)  = v(1)*g + 2.0_dp*hx
+    deallocate(hx)
+  end subroutine aug_matvec
+
+  !> @brief Augmented-Hessian (RFO) trust-region step via Davidson for the lowest
+  !>        eigenpair of [[0,g^T],[g,H]]. The lowest eigenvector [c;y] yields the
+  !>        level-shifted Newton step kappa = y/c, which follows negative curvature
+  !>        into the lower (symmetry-broken) basin -- unlike Steihaug-CG, which
+  !>        truncates there. Matrix-free (calc_h_op), preconditioned by [0;hdiag],
+  !>        step truncated to the trust radius. This is the defining TRAH micro-solver.
+  subroutine aughess_step(infos, conv, g, hdiag, delta, n, nmic, p, pred, used)
+    type(information),    intent(inout), target :: infos
+    type(trah_converger), intent(inout)         :: conv
+    real(dp), intent(in)  :: g(:), hdiag(:), delta
+    integer,  intent(in)  :: n, nmic
+    real(dp), intent(out) :: p(:), pred
+    integer,  intent(out) :: used
+    integer :: nn, mmax, m, i, k, info, lwork
+    real(dp) :: theta, rnorm, c0, snorm, php, di, nv
+    real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), au(:), r(:), tc(:)
+    real(dp), allocatable :: eig(:), work(:), hx(:)
+
+    nn   = n + 1
+    mmax = min(max(int(nmic), 6), 40)
+    allocate(V(nn,mmax), W(nn,mmax), u(nn), au(nn), r(nn), tc(nn), hx(n))
+    allocate(eig(mmax), work(8*mmax + 2*mmax*mmax))
+    lwork = size(work)
+
+    ! initial guess: [1 ; -M^{-1} g]
+    V(1,1) = 1.0_dp
+    do i = 1, n
+      di = hdiag(i); if (di < 1.0e-6_dp) di = 1.0e-6_dp
+      V(1+i,1) = -g(i)/di
+    end do
+    V(:,1) = V(:,1)/norm2(V(:,1))
+
+    used = 0
+    m = 1
+    do k = 1, mmax
+      call aug_matvec(infos, conv, g, V(:,m), n, W(:,m)); used = used + 1
+      ! Rayleigh matrix Tm = V^T W  (m x m, symmetric)
+      allocate(Tm(m,m))
+      do i = 1, m
+        Tm(i,:m) = matmul(V(:,i), W(:,:m))
+      end do
+      call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+      theta = eig(1)                       ! lowest eigenvalue
+      u  = matmul(V(:,:m), Tm(:,1))        ! Ritz vector
+      au = matmul(W(:,:m), Tm(:,1))        ! A u
+      deallocate(Tm)
+      r = au - theta*u                     ! residual
+      rnorm = norm2(r)
+      if (rnorm < 1.0e-6_dp .or. m == mmax) exit
+      ! preconditioned correction t = (D - theta)^{-1} r,  D = [0 ; hdiag]
+      tc(1) = r(1)/sign(max(abs(0.0_dp-theta),1.0e-6_dp), 0.0_dp-theta)
+      do i = 1, n
+        di = hdiag(i) - theta
+        if (abs(di) < 1.0e-6_dp) di = sign(1.0e-6_dp, di)
+        tc(1+i) = r(1+i)/di
+      end do
+      ! orthonormalize against current basis (modified Gram-Schmidt)
+      do i = 1, m
+        tc = tc - dot_product(V(:,i), tc)*V(:,i)
+      end do
+      nv = norm2(tc)
+      if (nv < 1.0e-8_dp) exit
+      m = m + 1
+      V(:,m) = tc/nv
+    end do
+
+    ! step kappa = y/c from the lowest Ritz vector (head normalized positive)
+    c0 = u(1)
+    if (c0 < 0.0_dp) then; u = -u; c0 = -c0; end if
+    p = u(2:nn)/max(c0, 1.0e-8_dp)
+    snorm = norm2(p)
+    if (snorm > delta) p = p*(delta/snorm)
+
+    call conv%calc_h_op(infos, p, hx)
+    php  = 2.0_dp*dot_product(p, hx)
+    pred = -(dot_product(g, p) + 0.5_dp*php)
+    deallocate(V, W, u, au, r, tc, eig, work, hx)
+  end subroutine aughess_step
 
 end module trah_native
