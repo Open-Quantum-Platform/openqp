@@ -219,6 +219,56 @@ class TestMoleculeMoLabelWiring(unittest.TestCase):
         self.assertIsNone(mol.label_molecular_orbitals())
         self.assertNotIn("mo_labels", mol.symmetry_metadata)
 
+    def test_product_irrep_c2v_table(self):
+        symmetry = load_module(
+            "openqp_symmetry_product_under_test",
+            "pyoqp/oqp/library/symmetry.py",
+        )
+        table = {
+            "a1": [1, 1, 1, 1],
+            "a2": [1, 1, -1, -1],
+            "b1": [1, -1, 1, -1],
+            "b2": [1, -1, -1, 1],
+        }
+        self.assertEqual(symmetry.product_irrep([], table), "a1")
+        self.assertEqual(symmetry.product_irrep(["b1", "b2"], table), "a2")
+        self.assertEqual(symmetry.product_irrep(["b1", "b1"], table), "a1")
+        self.assertEqual(symmetry.product_irrep(["a1", "b2"], table), "b2")
+        self.assertEqual(symmetry.product_irrep(["a1", "mixed"], table), "mixed")
+
+    def test_closed_shell_state_is_totally_symmetric(self):
+        mol, labels = self._build_molecule("rhf")
+        mol.data["nelec_A"] = 5
+        mol.data["nelec_B"] = 5
+        mol.mult = 1
+        result = mol.label_molecular_orbitals()
+        self.assertEqual(result["scf_state"]["irrep"], "a1")
+        self.assertEqual(result["scf_state"]["term"], "1A1")
+
+    def test_open_shell_state_carries_somo_irrep(self):
+        mol, labels = self._build_molecule("rohf")
+        mol.data["nelec_A"] = 5
+        mol.data["nelec_B"] = 4
+        mol.mult = 2
+        result = mol.label_molecular_orbitals()
+        somo = result["alpha"]["labels"][4]
+        self.assertEqual(result["scf_state"]["irrep"], somo)
+        self.assertEqual(result["scf_state"]["term"], f"2{somo.upper()}")
+
+    def test_state_label_in_log(self):
+        import tempfile
+
+        mol, _ = self._build_molecule("rhf")
+        mol.data["nelec_A"] = 5
+        mol.data["nelec_B"] = 5
+        mol.mult = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            mol.log = str(Path(tmp) / "run.log")
+            mol.label_molecular_orbitals()
+            with open(mol.log, encoding="utf-8") as fin:
+                content = fin.read()
+        self.assertIn("SCF state:        1A1", content)
+
     def test_mo_labels_written_to_log(self):
         import tempfile
 

@@ -454,6 +454,31 @@ def assign_mo_irreps(
     }
 
 
+def product_irrep(labels: Iterable[str], character_table: Mapping[str, Iterable[int]]) -> str:
+    """Direct product of abelian irreps, e.g. b1 x b2 -> a2 in C2v.
+
+    Returns 'mixed' if any input label is not in the table (e.g. a
+    symmetry-broken 'mixed' orbital).
+    """
+
+    table = {str(irrep): np.asarray(list(row), dtype=int) for irrep, row in character_table.items()}
+    if not table:
+        raise ValueError("character table must not be empty")
+    n_ops = len(next(iter(table.values())))
+
+    product = np.ones(n_ops, dtype=int)
+    for label in labels:
+        row = table.get(str(label))
+        if row is None:
+            return 'mixed'
+        product = product * row
+
+    for irrep, row in table.items():
+        if np.array_equal(row, product):
+            return irrep
+    return 'mixed'
+
+
 def assign_mode_irreps(
     modes: Any,
     operations: Iterable[Mapping[str, Any]],

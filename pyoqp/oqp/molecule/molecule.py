@@ -266,6 +266,9 @@ class Molecule:
                     tolerance=max(tolerance, 1.0e-4),
                     matrix_key='matrix_input_frame',
                 )
+            state = self._label_scf_state(result)
+            if state is not None:
+                result['scf_state'] = state
             meta['mo_labels'] = result
             try:
                 self._dump_mo_labels_log(result)
@@ -275,6 +278,44 @@ class Molecule:
         except Exception as exc:
             # Labeling must never break the run in the metadata-only phase.
             meta['mo_labels'] = {'status': 'error', 'error': str(exc)}
+            return None
+
+    def _label_scf_state(self, mo_label_result):
+        """Total-symmetry label of the SCF determinant (metadata only).
+
+        For an abelian group the state irrep is the direct product of the
+        occupied MO irreps (closed pairs cancel, so only singly occupied
+        orbitals contribute for ROHF/UHF). Returns None when occupations
+        are unavailable.
+        """
+        try:
+            from oqp.library.symmetry import product_irrep
+
+            table = self.symmetry_metadata['detection']['character_table']
+            try:
+                na = int(np.asarray(self.data['nelec_A']).ravel()[0])
+                nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
+            except Exception:
+                nocc = int(np.asarray(self.data['nocc']).ravel()[0])
+                na = nb = nocc
+            if na <= 0 or nb < 0:
+                return None
+
+            alpha = mo_label_result['alpha']['labels']
+            beta = mo_label_result.get('beta', mo_label_result['alpha'])['labels']
+            if na > len(alpha) or nb > len(beta):
+                return None
+
+            irrep = product_irrep(list(alpha[:na]) + list(beta[:nb]), table)
+            state = {'irrep': irrep, 'nelec_alpha': na, 'nelec_beta': nb}
+            multiplicity = getattr(self, 'mult', None)
+            if multiplicity:
+                state['multiplicity'] = int(multiplicity)
+                state['term'] = f"{int(multiplicity)}{irrep.upper()}"
+            else:
+                state['term'] = irrep.upper()
+            return state
+        except Exception:
             return None
 
     def label_normal_modes(self):
@@ -332,6 +373,9 @@ class Molecule:
                 f"   point group:      {meta.get('point_group', '?')}",
                 f"   abelian subgroup: {meta.get('subgroup', '?')}",
             ]
+            scf_state = result.get('scf_state')
+            if scf_state:
+                lines.append(f"   SCF state:        {scf_state['term']}")
             for spin in ('alpha', 'beta'):
                 if spin not in result:
                     continue
