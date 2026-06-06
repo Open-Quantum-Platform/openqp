@@ -5,6 +5,7 @@ module mod_dft_gridint_fxc
   use mod_dft_gridint, only: X__, Y__, Z__
   use mod_dft_gridint, only: OQP_FUNTYP_LDA, OQP_FUNTYP_GGA, OQP_FUNTYP_MGGA
   use oqp_linalg
+  use blas_wrap, only: oqp_ddot => oqp_ddot_i64
 
   implicit none
 
@@ -138,21 +139,42 @@ contains
     integer :: myThread
 
     real(kind=fp), pointer :: focks(:,:,:,:)
+    integer :: i, j, jj, m, s
 
     call self%resetOrbPointers(xce, focks=focks, myThread=myThread)
 
     associate(  numAOs  => xce%numAOs_p &  ! number of pruned AOs
               , indices => xce%indices_p &
       )
+      ! Only the upper triangle of focks is valid (dsyr2k 'U' in
+      ! R/UUpdate) and the drivers consume the result via
+      ! triangular_to_full(..., 'u'), so accumulate just that part.
+      ! The indices are ascending, hence the scatter keeps upper
+      ! triangle upper.
       if (xce%skip_p) then
 
-         self%focks(:,:,:,:,myThread) = self%focks(:,:,:,:,myThread) + focks
+         do s = 1, ubound(focks, 4)
+           do m = 1, ubound(focks, 3)
+             do j = 1, numAOs
+               self%focks(1:j, j, m, s, myThread) = &
+                  self%focks(1:j, j, m, s, myThread) + focks(1:j, j, m, s)
+             end do
+           end do
+         end do
 
       else
 
-         self%focks(indices(1:numAOs), indices(1:numAOs), :, :, myThread) &
-            = self%focks(indices(1:numAOs), indices(1:numAOs), :, :, myThread) &
-            + focks
+         do s = 1, ubound(focks, 4)
+           do m = 1, ubound(focks, 3)
+             do j = 1, numAOs
+               jj = indices(j)
+               do i = 1, j
+                 self%focks(indices(i), jj, m, s, myThread) = &
+                    self%focks(indices(i), jj, m, s, myThread) + focks(i, j, m, s)
+               end do
+             end do
+           end do
+         end do
 
       end if
 
@@ -172,7 +194,7 @@ contains
     real(kind=fp), intent(out), pointer :: mo(:,:,:,:)
     real(kind=fp), intent(out), pointer :: moG1(:,:,:,:)
     integer, intent(in) :: myThread
-    integer :: nSpin
+    integer :: nSpin, j, m
 
     if (xce%skip_p) then
 
@@ -194,12 +216,14 @@ contains
         ! Set pointer for Dens A
         da(1:numAOs, 1:numAOs, 1:nMtx) => &
               self%tmpDensity_(1:numAOs*numAOs*nMtx, 1, myThread)
-        ! Compress Dens A
-        da(1:numAOs, 1:numAOs,:) = &
-              self%da(indices(1:numAOs), indices(1:numAOs), :)
-        ! Set pointer for MOs
-        da(1:numAOs, 1:numAOs, 1:nMtx) => &
-              self%tmpDensity_(1:numAOs*numAOs*nMtx, 1, myThread)
+        ! Compress Dens A; only the upper triangle is referenced
+        ! downstream (dsymm 'L'/'U' in compRMOs/compRMOGs) and the
+        ! indices are ascending, so compressing it is sufficient
+        do m = 1, nMtx
+          do j = 1, numAOs
+            da(1:j, j, m) = self%da(indices(1:j), indices(j), m)
+          end do
+        end do
         mo(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin) => &
               self%tmpMO_(1:numAOs*numPts*nMtx*nSpin, myThread)
 
@@ -213,9 +237,12 @@ contains
             ! Set pointer for Dens B
             db(1:numAOs, 1:numAOs, 1:nMtx) => &
                   self%tmpDensity_(1:numAOs*numAOs*nMtx, 2, myThread)
-            ! Compress Dens B
-            db(1:numAOs, 1:numAOs, :) = &
-                  self%db(indices(1:numAOs), indices(1:numAOs), :)
+            ! Compress Dens B, upper triangle only as for Dens A
+            do m = 1, nMtx
+              do j = 1, numAOs
+                db(1:j, j, m) = self%db(indices(1:j), indices(j), m)
+              end do
+            end do
         end if
 
       end associate
@@ -281,8 +308,6 @@ contains
         call xce%compRMOs(db, mo(:,:,:,2))
       end if
 
-      if (.not. xce%skip_p) self%mo(indices(1:numAOs),:,:,:,myThread) = mo(1:numAOs,:,:,:)
-
       call xce%compRRho(mo, rRho)
       if (xce%funTyp /= OQP_FUNTYP_LDA) then
         call xce%compRDRho(mo, drRho)
@@ -310,15 +335,21 @@ contains
  subroutine compRTau(xce, moG1, rTau, nSpin)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rTau(:,:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:)
-    integer :: i, j, nSpin, nMtx
+    real(kind=fp), contiguous, intent(out) :: rTau(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:)
+    integer :: i, j, d, m, nSpin, nMtx
+    real(kind=fp) :: t
 
     nMtx = ubound(moG1, 4)
+    m = xce%numAOs_p
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        rTau(nSpin,i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j))
+        t = 0
+        do d = 1, 3
+          t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j), 1)
+        end do
+        rTau(nSpin,i,j) = 0.5*t
       end do
     end do
 

@@ -43,6 +43,9 @@ module dft
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
     integer, allocatable :: rad_id(:)    !< atom -> atom type
     integer, allocatable :: nradPerRegion(:,:) !< (region, atom type); 0 = unused
+    !> Per-atom-type angular override: if non-zero, the atom type is
+    !> unpruned and uses this single Lebedev sphere at ALL radii
+    !> (0 = no override, use the regular pruning regions)
     integer, allocatable :: nang_override(:) !< per atom type; 0 = no override
     integer :: nrad_types = 1            !< number of radial grids
     integer, allocatable :: radial_id(:) !< atom -> radial grid type
@@ -1062,6 +1065,7 @@ contains
     use basis_tools, only: basis_set
     use mod_dft_gridint_energy, only: dmatd_blk
     use types, only: information
+!$  use omp_lib, only: omp_get_wtime
 
     implicit none
     type(information), intent(in) :: infos
@@ -1072,7 +1076,9 @@ contains
     real(kind=dp), intent(out) :: eexc, totele, totkin
     integer :: nang, maxl
     logical :: urohf
+    real(kind=dp) :: t0, t1
 
+    t0 = 0; t1 = 0
     urohf = iscftyp/=1
 
     fa(1:nbf_tri) = 0.0d0
@@ -1084,9 +1090,12 @@ contains
     totele = 0.0d0
     totkin = 0.0d0
     eexc   = 0.0d0
+!$  t0 = omp_get_wtime()
     call dmatd_blk(basis, molGrid, coeffa,coeffb,fa,fb, &
                      eexc,totele,totkin, &
                      nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+!$  t1 = omp_get_wtime()
+!$  write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
 
   end subroutine
 

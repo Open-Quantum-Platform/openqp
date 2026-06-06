@@ -329,8 +329,8 @@ contains
     type(atomic_grid_t) :: atomic_grid
     real(KIND=fp), parameter :: EPS = tiny(0.0_fp)
 
-    integer, parameter :: depths(5) = [-1, 0, 0, 1, -2]
-    real(KIND=fp), parameter :: stepSz(5) = [1.0, 1.5, 4.0, 8.0, 1.0e9]
+    integer, parameter :: depths(5) = [-1, 0, 1, 1, 1]
+    real(KIND=fp), parameter :: stepSz(5) = [1.0, 1.5, 4.0, 8.0, 16.0]
     real(KIND=fp) :: limits(5)
 
     integer :: i, nLayers, nGrids, iSpl, iRMin, iRMax, iRNext, nRad!, k
@@ -387,7 +387,7 @@ contains
         layers(2, nLayers) = atomic_grid%sph_npts(i)
         layers(3, nLayers) = depths(iSpl)
 
-        if (rNext >= limits(iSpl)) iSpl = iSpl+1
+        if (rNext >= limits(iSpl)) iSpl = min(iSpl+1, size(stepSz))
         if (iRNext == iRMax) exit
       end do
 
