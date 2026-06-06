@@ -8,6 +8,7 @@ module mod_dft_gridint
   use mod_dft_molgrid, only: dft_grid_t
   use functionals, only: functional_t
   use oqp_linalg
+  use blas_wrap, only: oqp_ddot => oqp_ddot_i64
   use parallel, only: par_env_t
   implicit none
 
@@ -932,7 +933,7 @@ contains
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          rho(k,i,j) = ddot(m, xce%aoV(1,i), 1, mo(1,i,j,k), 1)
+          rho(k,i,j) = oqp_ddot(m, xce%aoV(:,i), 1, mo(:,i,j,k), 1)
         end do
       end do
     end do
@@ -948,28 +949,26 @@ contains
  subroutine compRDRho_ab(xce, mo, drrho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(in) :: mo(:,:,:,:)
-    real(kind=fp), intent(out) :: drrho(:,:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:,:)
+    real(kind=fp), contiguous, intent(out) :: drrho(:,:,:,:)
 
-    integer :: i, j, k, n, nMtx, nSpin
-    real(kind=fp) :: s1, s2, s3
+    integer :: i, j, k, m, ldg, nMtx, nSpin
+    real(kind=fp) :: d3(3)
 
     nMtx = ubound(mo,3)
     nSpin = ubound(mo,4)
+    m = xce%numAOs_p
+    ! aoG1 X/Y/Z planes are equidistant in memory: treat them as the
+    ! columns of an m x 3 matrix and get all three derivatives from
+    ! a single dgemv
+    ldg = size(xce%aoG1,1)*size(xce%aoG1,2)
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          ! One pass over the mo column instead of three dot products
-          s1 = 0; s2 = 0; s3 = 0
-          do n = 1, ubound(mo,1)
-            s1 = s1 + xce%aoG1(n,i,1)*mo(n,i,j,k)
-            s2 = s2 + xce%aoG1(n,i,2)*mo(n,i,j,k)
-            s3 = s3 + xce%aoG1(n,i,3)*mo(n,i,j,k)
-          end do
-          drrho(1,k,i,j) = 2*s1
-          drrho(2,k,i,j) = 2*s2
-          drrho(3,k,i,j) = 2*s3
+          call dgemv('T', m, 3, 2.0_fp, xce%aoG1(:,i,1), ldg, &
+                     mo(:,i,j,k), 1, 0.0_fp, d3, 1)
+          drrho(1:3,k,i,j) = d3
         end do
       end do
     end do
@@ -984,17 +983,23 @@ contains
  subroutine compRTau_ab(xce, moG1, rtau)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rtau(:,:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:,:)
-    integer :: i, j, k, nSpin, nMtx
+    real(kind=fp), contiguous, intent(out) :: rtau(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:,:)
+    integer :: i, j, k, d, m, nSpin, nMtx
+    real(kind=fp) :: t
 
     nSpin = ubound(moG1,5)
     nMtx = ubound(moG1, 4)
+    m = xce%numAOs_p
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          rtau(k,i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j,k))
+          t = 0
+          do d = 1, 3
+            t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j,k), 1)
+          end do
+          rtau(k,i,j) = 0.5*t
         end do
       end do
     end do
@@ -1010,15 +1015,16 @@ contains
  subroutine compRRho_a(xce, mo, rho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rho(:,:)
-    real(kind=fp), intent(in) :: mo(:,:,:)
-    integer :: j, i, nMtx
+    real(kind=fp), contiguous, intent(out) :: rho(:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:)
+    integer :: j, i, m, nMtx
 
     nMtx = ubound(mo,3)
+    m = xce%numAOs_p
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        rho(i,j) = dot_product(xce%aoV(:,i), mo(:,i,j))
+        rho(i,j) = oqp_ddot(m, xce%aoV(:,i), 1, mo(:,i,j), 1)
       end do
     end do
 
@@ -1033,26 +1039,22 @@ contains
  subroutine compRDRho_a(xce, mo, drrho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(in) :: mo(:,:,:)
-    real(kind=fp), intent(out) :: drrho(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:)
+    real(kind=fp), contiguous, intent(out) :: drrho(:,:,:)
 
-    integer :: i, j, n, nMtx
-    real(kind=fp) :: s1, s2, s3
+    integer :: i, j, m, ldg, nMtx
+    real(kind=fp) :: d3(3)
 
     nMtx = ubound(mo,3)
+    m = xce%numAOs_p
+    ! aoG1 X/Y/Z planes as columns of an m x 3 matrix, see compRDRho_ab
+    ldg = size(xce%aoG1,1)*size(xce%aoG1,2)
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        ! One pass over the mo column instead of three dot products
-        s1 = 0; s2 = 0; s3 = 0
-        do n = 1, ubound(mo,1)
-          s1 = s1 + xce%aoG1(n,i,1)*mo(n,i,j)
-          s2 = s2 + xce%aoG1(n,i,2)*mo(n,i,j)
-          s3 = s3 + xce%aoG1(n,i,3)*mo(n,i,j)
-        end do
-        drrho(1,i,j) = 2*s1
-        drrho(2,i,j) = 2*s2
-        drrho(3,i,j) = 2*s3
+        call dgemv('T', m, 3, 2.0_fp, xce%aoG1(:,i,1), ldg, &
+                   mo(:,i,j), 1, 0.0_fp, d3, 1)
+        drrho(1:3,i,j) = d3
       end do
     end do
 
@@ -1066,13 +1068,20 @@ contains
  subroutine compRTau_a(xce, moG1, tau)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: tau(:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:)
-    integer :: i, j
+    real(kind=fp), contiguous, intent(out) :: tau(:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:)
+    integer :: i, j, d, m
+    real(kind=fp) :: t
+
+    m = xce%numAOs_p
 
     do j = 1, ubound(moG1,4)
       do i = 1, xce%numPts
-        tau(i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j))
+        t = 0
+        do d = 1, 3
+          t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j), 1)
+        end do
+        tau(i,j) = 0.5*t
       end do
     end do
 
@@ -1112,17 +1121,18 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: rho(:,:)
-    integer :: i
+    integer :: i, m
 
+    m = self%numAOs_p
 
     if (self%hasBeta) then
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%aoV(:,i), self%moVA(:,i))
-        rho(2,i) = dot_product(self%aoV(:,i), self%moVB(:,i))
+        rho(1,i) = oqp_ddot(m, self%aoV(:,i), 1, self%moVA(:,i), 1)
+        rho(2,i) = oqp_ddot(m, self%aoV(:,i), 1, self%moVB(:,i), 1)
       end do
     else
       do i = 1, self%numPts
-        rho(1,i) = 0.5_fp*dot_product(self%aoV(:,i), self%moVA(:,i))
+        rho(1,i) = 0.5_fp*oqp_ddot(m, self%aoV(:,i), 1, self%moVA(:,i), 1)
         rho(2,i) = rho(1,i)
       end do
     end if
@@ -1145,12 +1155,12 @@ contains
 
     if (self%hasBeta) then
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%moVA(:noa,i), self%moVA(:noa,i))
-        rho(2,i) = dot_product(self%moVB(:nob,i), self%moVB(:nob,i))
+        rho(1,i) = oqp_ddot(noa, self%moVA(:,i), 1, self%moVA(:,i), 1)
+        rho(2,i) = oqp_ddot(nob, self%moVB(:,i), 1, self%moVB(:,i), 1)
       end do
     else
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%moVA(:noa,i), self%moVA(:noa,i))
+        rho(1,i) = oqp_ddot(noa, self%moVA(:,i), 1, self%moVA(:,i), 1)
         rho(2,i) = rho(1,i)
       end do
     end if
@@ -1167,28 +1177,22 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j, n
+    integer :: i, m, ldg
     real(kind=fp) :: drhoa(3), drhob(3)
+
+    m = self%numAOs_p
+    ! aoG1 X/Y/Z planes as columns of an m x 3 matrix, see compRDRho_ab
+    ldg = size(self%aoG1,1)*size(self%aoG1,2)
 
     do i = 1, self%numPts
       if (self%hasBeta) then
-        ! One pass over the moV columns instead of three dot products
-        drhoa = 0; drhob = 0
-        do n = 1, ubound(self%moVA,1)
-          do j = 1, 3
-            drhoa(j) = drhoa(j) + self%aoG1(n,i,j)*self%moVA(n,i)
-            drhob(j) = drhob(j) + self%aoG1(n,i,j)*self%moVB(n,i)
-          end do
-        end do
-        drhoa = 2*drhoa
-        drhob = 2*drhob
+        call dgemv('T', m, 3, 2.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
+        call dgemv('T', m, 3, 2.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVB(:,i), 1, 0.0_fp, drhob, 1)
       else
-        drhoa = 0
-        do n = 1, ubound(self%moVA,1)
-          do j = 1, 3
-            drhoa(j) = drhoa(j) + self%aoG1(n,i,j)*self%moVA(n,i)
-          end do
-        end do
+        call dgemv('T', m, 3, 1.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
         drhob = drhoa
       end if
       drho(1:3,i) = drhoa
@@ -1210,29 +1214,26 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j, n, noa, nob
+    integer :: i, lda, ldb, noa, nob
     real(kind=fp) :: drhoa(3), drhob(3)
 
     noa = self%numOccAlpha
     nob = self%numOccBeta
+    ! moG1 X/Y/Z planes as columns of an (nocc) x 3 matrix, see compRDRho_ab
+    lda = size(self%moG1A,1)*size(self%moG1A,2)
+    ldb = lda
+    if (self%hasBeta) ldb = size(self%moG1B,1)*size(self%moG1B,2)
+
+    ! dgemv quick-returns without touching y when m == 0
+    drhoa = 0
+    drhob = 0
 
     do i = 1, self%numPts
-      ! One pass over the moV columns instead of three dot products
-      drhoa = 0
-      do n = 1, noa
-        do j = 1, 3
-          drhoa(j) = drhoa(j) + self%moG1A(n,i,j)*self%moVA(n,i)
-        end do
-      end do
-      drhoa = 2*drhoa
+      call dgemv('T', noa, 3, 2.0_fp, self%moG1A(:,i,1), lda, &
+                 self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
       if (self%hasBeta) then
-        drhob = 0
-        do n = 1, nob
-          do j = 1, 3
-            drhob(j) = drhob(j) + self%moG1B(n,i,j)*self%moVB(n,i)
-          end do
-        end do
-        drhob = 2*drhob
+        call dgemv('T', nob, 3, 2.0_fp, self%moG1B(:,i,1), ldb, &
+                   self%moVB(:,i), 1, 0.0_fp, drhob, 1)
       else
         drhob = drhoa
       end if
@@ -1256,17 +1257,19 @@ contains
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: tau(:,:)
     real(kind=fp) :: taua(3), taub(3)
-    integer :: i, j
+    integer :: i, j, m
+
+    m = self%numAOs_p
 
     do i = 1, self%numPts
       if (self%hasBeta) then
         do j = 1, 3
-          taua(j) = dot_product(self%aoG1(:,i,j), self%moG1A(:,i,j))
-          taub(j) = dot_product(self%aoG1(:,i,j), self%moG1B(:,i,j))
+          taua(j) = oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1A(:,i,j), 1)
+          taub(j) = oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1B(:,i,j), 1)
         end do
       else
         do j = 1, 3
-          taua(j) = 0.5_fp*dot_product(self%aoG1(:,i,j), self%moG1A(:,i,j))
+          taua(j) = 0.5_fp*oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1A(:,i,j), 1)
         end do
         taub = taua
       end if
@@ -1297,12 +1300,12 @@ contains
     do i = 1, self%numPts
       if (self%hasBeta) then
         do j = 1, 3
-          taua(j) = dot_product(self%moG1A(:noa,i,j), self%moG1A(:noa,i,j))
-          taub(j) = dot_product(self%moG1B(:nob,i,j), self%moG1B(:nob,i,j))
+          taua(j) = oqp_ddot(noa, self%moG1A(:,i,j), 1, self%moG1A(:,i,j), 1)
+          taub(j) = oqp_ddot(nob, self%moG1B(:,i,j), 1, self%moG1B(:,i,j), 1)
         end do
       else
         do j = 1, 3
-          taua(j) = dot_product(self%moG1A(:noa,i,j), self%moG1A(:noa,i,j))
+          taua(j) = oqp_ddot(noa, self%moG1A(:,i,j), 1, self%moG1A(:,i,j), 1)
         end do
         taub = taua
       end if

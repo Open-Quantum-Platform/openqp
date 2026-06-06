@@ -5,6 +5,7 @@ module mod_dft_gridint_fxc
   use mod_dft_gridint, only: X__, Y__, Z__
   use mod_dft_gridint, only: OQP_FUNTYP_LDA, OQP_FUNTYP_GGA, OQP_FUNTYP_MGGA
   use oqp_linalg
+  use blas_wrap, only: oqp_ddot => oqp_ddot_i64
 
   implicit none
 
@@ -334,15 +335,21 @@ contains
  subroutine compRTau(xce, moG1, rTau, nSpin)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rTau(:,:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:)
-    integer :: i, j, nSpin, nMtx
+    real(kind=fp), contiguous, intent(out) :: rTau(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:)
+    integer :: i, j, d, m, nSpin, nMtx
+    real(kind=fp) :: t
 
     nMtx = ubound(moG1, 4)
+    m = xce%numAOs_p
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        rTau(nSpin,i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j))
+        t = 0
+        do d = 1, 3
+          t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j), 1)
+        end do
+        rTau(nSpin,i,j) = 0.5*t
       end do
     end do
 
