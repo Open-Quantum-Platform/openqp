@@ -22,7 +22,7 @@ contains
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
-    use mathlib, only: matrix_invsqrt
+    use qmat_cache, only: get_qmat_cached
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
     use printing, only: print_module_info
@@ -146,7 +146,7 @@ contains
     fock(1:nbf2) = tmat(1:nbf2) + vsap(1:nbf2)
 
   ! Solve F C = eps S C
-    call matrix_invsqrt(smat, qmat, nbf)
+    call get_qmat_cached(infos, smat, qmat, nbf)
     call get_ab_initio_orbital(fock, MO_A, MO_Energy_A, QMat)
     if (infos%control%scftype >= 2) MO_B = MO_A
 
