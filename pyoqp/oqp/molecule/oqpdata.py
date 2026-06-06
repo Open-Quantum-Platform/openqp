@@ -110,6 +110,7 @@ OQP_CONFIG_SCHEMA = {
         'trh_nmic': {'type': int,   'default': '50'},
         'trh_gred': {'type': float, 'default': '0.001'},
         'trh_lred': {'type': float, 'default': '0.0001'},
+        'trh_impl': {'type': string, 'default': 'otr'},
     },
 
     'dftgrid': {
@@ -300,6 +301,7 @@ class OQPData:
             "trh_nmic": "set_trah_n_micro",
             "trh_gred": "set_trah_global_red_factor",
             "trh_lred": "set_trah_local_red_factor",
+            "trh_impl": "set_trah_impl",
             "sd_scf": "set_sd_scf"
         },
         "dftgrid": {
@@ -675,6 +677,18 @@ class OQPData:
         if not (0.0 < f < 1.0):
             raise ValueError("local_red_factor must be in (0,1)")
         self._data.control.trh_lred = float(f)
+    def set_trah_impl(self, trh_impl) -> None:
+        """
+        Select the TRAH implementation.
+        Valid values:
+          otr    : external OpenTrustRegion library (default)
+          native : native Fortran trust-region augmented-Hessian solver
+        """
+        impl_map = {"otr": 0, "native": 1}
+        if not isinstance(trh_impl, str):
+            raise TypeError("trh_impl must be a string")
+        self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
+
     def set_sd_scf(self, sd_scf):
         """prevent running the first SD-SCF calculation"""
         self._data.control.sd_scf = sd_scf

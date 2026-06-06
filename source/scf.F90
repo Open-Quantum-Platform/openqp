@@ -488,32 +488,36 @@ contains
     !==============================================================================
     ! Print SCF Options
     !==============================================================================
-    write(IW,'(/5X,"SCF options"/ &
-               &5X,18("-")/ &
-               &5X,"SCF type = ",A,5x,"MaxIT = ",I5/, &
-               &5X,"MaxDIIS = ",I5,17x,"Conv = ",F14.10/, &
-               &5X,"DIIS Type = ",A/, &
-               &5X,"vDIIS_cDIIS_Switch = ",F8.5,3x,"vDIIS_vshift_Switch = ",F8.5/, &
-               &5X,"DIIS Reset Mod = ",I5,10x,"DIIS Reset Conv = ",F12.8/, &
-               &5X,"VShift = ",F8.5,15X,"VShift_cDIIS_Switch = ",F8.5)') &
-               & scf_name, infos%control%maxit, &
-               & infos%control%maxdiis, infos%control%conv, &
-               & diis_name(infos%control%diis_type), &
-               & infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch, &
-               & infos%control%diis_reset_mod, infos%control%diis_reset_conv, &
-               & infos%control%vshift, infos%control%vshift_cdiis_switch
-    write(IW,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
-               & infos%control%mom, infos%control%mom_switch
-    write(IW,'(5X,"pFON = ",L5,20X,"pFON Start Temp. = ",F9.2,/, &
-               5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
-               infos%control%pfon, infos%control%pfon_start_temp, &
-               infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
-    if (use_soscf) then
-      write(IW,'(/5X,"SOSCF options"/ &
-                 &5X,18("-"))')
-      write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",A)') &
-             & use_soscf, trim(get_solver_name(infos%control%converger_type))
+    ! Only the options relevant to the active converger/features are printed,
+    ! to keep the log focused (the previous version dumped every knob always).
+    write(IW,'(/5X,"SCF options"/5X,18("-"))')
+    write(IW,'(5X,"SCF type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
+               trim(scf_name), infos%control%maxit, infos%control%conv
+    if (use_trah) then
+      write(IW,'(5X,"Converger = TRAH (trust-region augmented Hessian)")')
+    else if (use_soscf) then
+      write(IW,'(5X,"Converger = SOSCF (",A,")")') &
+                 trim(get_solver_name(infos%control%converger_type))
+    else
+      write(IW,'(5X,"Converger = ",A,"   MaxDIIS = ",I0)') &
+                 trim(diis_name(infos%control%diis_type)), infos%control%maxdiis
+      if (infos%control%diis_reset_mod > 0) &
+        write(IW,'(5X,"DIIS reset every ",I0," iters when error > ",ES9.2)') &
+                   infos%control%diis_reset_mod, infos%control%diis_reset_conv
+      if (infos%control%diis_type == 5) &
+        write(IW,'(5X,"vDIIS switch: cDIIS = ",F6.3,"  vshift = ",F7.4)') &
+                   infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch
+      if (infos%control%vshift /= 0.0_dp) &
+        write(IW,'(5X,"Level shift = ",F6.3,"  (cDIIS switch = ",F6.3,")")') &
+                   infos%control%vshift, infos%control%vshift_cdiis_switch
     end if
+    if (infos%control%mom) &
+      write(IW,'(5X,"MOM enabled (switch = ",ES9.2,")")') infos%control%mom_switch
+    if (infos%control%pfon) &
+      write(IW,'(5X,"pFON enabled: start T = ",F7.1," K, cooling = ",F6.1, &
+                 &" K/iter, smearing = ",F6.3)') &
+                 infos%control%pfon_start_temp, infos%control%pfon_cooling_rate, &
+                 infos%control%pfon_nsmear
 
     ! Initial message for SCF iterations
     if (infos%control%pfon) then
@@ -1395,15 +1399,16 @@ contains
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger, scf_conv_result
     use otr_interface, only: init_trah_solver, run_trah_solver
+    use trah_native,   only: trah_native_run
     use scf_addons, only: scf_energy_t
 
     implicit none
-     
+
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), target, intent(in) :: mol_grid
     type(scf_conv), intent(inout) :: conv
     class(scf_conv_result), intent(inout) :: res
-    type(scf_energy_t), intent(inout) :: energy 
+    type(scf_energy_t), intent(inout) :: energy
 
     integer :: i
 
@@ -1411,8 +1416,14 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
-          call init_trah_solver(infos, mol_grid, sc , energy)
-          call run_trah_solver(res)
+          if (infos%control%trh_impl == 1) then
+            ! native Fortran trust-region augmented-Hessian solver
+            call trah_native_run(infos, mol_grid, sc, res, energy)
+          else
+            ! external OpenTrustRegion library (default)
+            call init_trah_solver(infos, mol_grid, sc , energy)
+            call run_trah_solver(res)
+          end if
       end select
     end do
 

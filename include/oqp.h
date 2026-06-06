@@ -150,6 +150,7 @@ struct control_parameters {
     int64_t   trh_nmic;
     double    trh_gred;
     double    trh_lred;
+    int64_t   trh_impl;
     bool      sd_scf;
 };
 
