@@ -51,7 +51,7 @@ contains
 
     allocate(d2(n,n), tmp(n,m))
     do i = 1, m
-      tmp(:,i) = v(:,i)*x(m)
+      tmp(:,i) = v(:,i)*x(i)
     end do
 
     call dsyr2k('u', 'n', n, m, 0.5_dp, v, ldv, tmp, n, 0.0_dp, d2, n)
@@ -361,7 +361,7 @@ contains
 !>                   default = 1.0e-8
   subroutine matrix_invsqrt(s, q, nbf, qrnk, tol)
     use messages,  only: show_message, with_abort
-    use eigen,     only: diag_symm_packed
+    use eigen,     only: diag_symm_full
     implicit none
 
     real(kind=dp), intent(in) :: s(*)
@@ -372,24 +372,21 @@ contains
 
     real(kind=dp), parameter :: deftol = 1.0d-08
 
-    real(kind=dp), allocatable :: tmp(:), eig(:)
+    real(kind=dp), allocatable :: eig(:)
     real(kind=dp) :: rtol
-    integer :: nbf2, ok, i, j
+    integer :: ok, i, j
 
     rtol = deftol
     if (present(tol)) rtol = tol
 
-    nbf2 = nbf*(nbf+1)/2
-
-    allocate(tmp(nbf2), &
-             eig(nbf), &
-             stat=ok)
+    allocate(eig(nbf), stat=ok)
     if (ok/=0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-    tmp(:) = s(1:nbf2)
-
-!   Compute SVD
-    call diag_symm_packed(1, nbf, nbf, nbf, tmp, eig, q, ok)
+!   Unpack S into Q and diagonalize in full storage:
+!   the blocked full-storage driver is much faster than the
+!   packed-storage one, which cannot use level-3 BLAS.
+    call unpack_matrix(s, q(:,1:nbf))
+    call diag_symm_full(1, nbf, q, nbf, eig)
 
 !   Compute Q = S^{-1/2}, eliminating eigenvectors corresponding
 !   to small eigenvalues
