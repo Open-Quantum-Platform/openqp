@@ -16,15 +16,17 @@ module dft
   public dftexcor
   public dftder
 
-  integer, parameter :: max_number_of_grid_based_DFT_grids = 10
-  integer, parameter :: max_number_of_atom_grid_types_for_DFT_grids = 10
-
+!> @brief Pruned-grid specification
+!> @details A pruned grid is defined per atom type by up to `ngrids`
+!>   radial regions: region i of type t covers radii (in units of the
+!>   atomic radius) up to `radii(i,t)` and uses a `nang(i,t)`-point
+!>   Lebedev sphere.  `rad_id` maps each atom to its type.
   type dft_grid_pruned_t
-    integer :: nrad, nang(max_number_of_grid_based_DFT_grids)
-    real(kind=dp) :: radii(max_number_of_grid_based_DFT_grids, &
-                               max_number_of_atom_grid_types_for_DFT_grids)
+    integer :: nrad = 0
     integer :: ngrids = 1
-    integer, allocatable :: rad_id(:)
+    integer, allocatable :: nang(:,:)    !< (region, atom type)
+    real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
+    integer, allocatable :: rad_id(:)    !< atom -> atom type
   end type
 
 !  SG1 region boundaries (in units of the atomic radius) and Lebedev
@@ -257,7 +259,6 @@ contains
 
 !   Default radial/angular grid is 96/302 for LDA/GGA.
     nrad     = infos%dft%grid_rad_size
-    pruned%nang(1)  = infos%dft%grid_ang_size
     nat = ubound(infos%atoms%zn, 1)
     allocate(pruned%rad_id(nat), source=1)
 
@@ -265,6 +266,8 @@ contains
 
     if (.not. infos%dft%grid_pruned) then
       pruned%ngrids = 1
+      allocate(pruned%nang(1,1), pruned%radii(1,1))
+      pruned%nang(1,1) = infos%dft%grid_ang_size
       pruned%radii(1,1) = 1.0d+30
 
       write(iw,'(/5X,"Lebedev grid-based DFT options"/&
@@ -273,7 +276,7 @@ contains
                 &5X,"NRAD  =",I8,5X,"NLEB  =",I8/&
                 &5X,"THRESH=",1P,E12.2)') &
                   trim(xc_func_name), &
-                  nrad, pruned%nang(1), &
+                  nrad, pruned%nang(1,1), &
                   infos%dft%grid_density_cutoff
 
     else
@@ -290,10 +293,11 @@ contains
       case ("SG1")
         pruned%ngrids = 5
         ntyps = 4
-        pruned%radii(1:pruned%ngrids,1:ntyps) = sg1rads
-        pruned%nang(:pruned%ngrids) = sg1grids(1:pruned%ngrids)
-        do i = pruned%ngrids+1, ubound(pruned%radii, 1)
-          pruned%radii(i,1:ntyps) = sg1rads(pruned%ngrids,1:ntyps)
+        allocate(pruned%nang(pruned%ngrids, ntyps), &
+                 pruned%radii(pruned%ngrids, ntyps))
+        pruned%radii = sg1rads
+        do i = 1, ntyps
+          pruned%nang(:,i) = sg1grids
         end do
         do iatm = 1, nat
           ! sg1atoms are inclusive upper bounds of the period:
@@ -303,16 +307,18 @@ contains
           end do
           pruned%rad_id(iatm) = min(i, ntyps)
         end do
+
+        write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
+                  &5X,21("-")/&
+                  &5X,"XC functional: ",A/&
+                  &5X,"THRESH=",1P,E12.2)') &
+                    trim(xc_func_name), &
+                    infos%dft%grid_density_cutoff
+
       case default
         call show_message('Unknown pruned grid name', WITH_ABORT)
       end select
 
-      write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
-                &5X,21("-")/&
-                &5X,"XC functional: ",A/&
-                &5X,"THRESH=",1P,E12.2)') &
-                  trim(xc_func_name), &
-                  infos%dft%grid_density_cutoff
     end if
 
 
@@ -372,9 +378,11 @@ contains
       if (present(verbose)) verbose_ = verbose
 
       nat = ubound(infos%atoms%zn, 1)
-      max_ang_pts = maxval(pruned%nang(:pruned%ngrids))
-      maxpt_per_atom = infos%dft%grid_rad_size*max_ang_pts
+      max_ang_pts = maxval(pruned%nang)
       nrad = infos%dft%grid_rad_size
+      ! A pruned grid may prescribe its own radial grid size
+      if (pruned%nrad > 0) nrad = pruned%nrad
+      maxpt_per_atom = nrad*max_ang_pts
 
       allocate(&
         txyz(max_ang_pts*3), &
@@ -431,14 +439,14 @@ contains
       do iat = 1, nat
         grid_id = pruned%rad_id(iat)
 
-        atomic_grid%sph_npts = pruned%nang(1:pruned%ngrids)
+        atomic_grid%sph_npts = pruned%nang(1:pruned%ngrids, grid_id)
         atomic_grid%sph_radii = pruned%radii(:pruned%ngrids, grid_id)
         atomic_grid%idAtm = iat
 
 !       Set angular Lebedev grid(s)
         do igrid = 1, pruned%ngrids
-!         get the unit lebedev sphere
-          call molGrid%spherical_grids%add_grid(pruned%nang(igrid))
+!         get the unit lebedev sphere (no-op if already stored)
+          call molGrid%spherical_grids%add_grid(pruned%nang(igrid, grid_id))
         end do
 
         atomic_grid%rAtm = bsrad(iat)

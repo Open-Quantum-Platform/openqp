@@ -825,7 +825,7 @@ class OQPData:
 
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
-        pruned_list = ['SG1', ]
+        pruned_list = ['SG1', 'SG2', 'SG3']
         if pruned != "":
             pruned = pruned.upper()
             if pruned in pruned_list:
