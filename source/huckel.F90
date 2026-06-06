@@ -353,9 +353,12 @@ contains
 
     allocate(u(nbf,nbf), tmp(nbf,nbf))
 
+    ! query both routines so that dormqr can also run blocked
+    ! (dormqr with side='r' requires lwork >= nbf as a minimum)
     call dgeqrf(l0, n, v, ndim, u, wrksize, -1, info)
-    ! dormqr with side='r' below requires lwork >= nbf
     lwork = max(int(wrksize(1)), nbf)
+    call dormqr('r', 'n', nbf, l0, n, u, ndim, tmp, v, nbf, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
     allocate(wrk(lwork))
 
     ! 1. Compute Q^T * S * V, store in U

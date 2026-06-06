@@ -120,7 +120,6 @@ end subroutine get_ab_initio_density
  subroutine corresponding_orbital_projection(vb, sba, va, &
                    ndoc, nact, nproj, nbf, l1co, l0)
 
-  use eigen, only: schmd
   use messages, only: show_message, WITH_ABORT
 
   implicit none
@@ -206,23 +205,31 @@ end subroutine get_ab_initio_density
     vaco(1:nrest,1:nsv) = transpose(vt(1:nsv,1:nrest))
     deallocate(sv, vt, wrk)
 
-!   The near zero overlap part of the space is not determined
-!   by the SVD, we can get a symmetry adapted space by
-!   Gram-Schmidt completion instead.
-    call schmd(vaco,nmo,nrest,nbf,scr)
+    if (nmo > nrest) &
+      call show_message('Corresponding orbital projection: nmo > nrest', WITH_ABORT)
 
-!   Rotate va to corresponding orbital set, a'=a*v,
-    call dgemm('n', 'n', nbf, nrest, nrest, &
-               1.0_dp, va(1,minmo), nbf, &
-                       vaco, nbf, &
-               0.0_dp, tmp, nbf)
-
-!   Copy projected orbitals back to end of va
-    va(:,minmo:l0) = tmp(:,1:nrest)
+!   Rotate va to the corresponding orbital set, a' = a*Q, where the
+!   orthogonal Q completes the nmo leading corresponding vectors to a
+!   full basis of the nrest space (the near zero overlap part of the
+!   space is not determined by the SVD; the QR completion provides a
+!   symmetry adapted complement). Q is applied directly from its
+!   Householder reflectors (dgeqrf+dormqr) at O(nbf*nrest*nmo) cost,
+!   instead of forming Q explicitly and multiplying at O(nbf*nrest^2).
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrksize, -1, info)
+    lwork = int(wrksize(1))
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
+    allocate(wrk(lwork))
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrk, lwork, info)
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrk, lwork, info)
+    deallocate(wrk)
 
 !   Get overlap between `b` and the `a'` corresponding set,
 !   D = Vb^T * Sab * VaCO
-    call dgemm('t', 't', nrest, nmo, nbf, &
+!   Only the leading (nmo x nmo) block is used by the pairing below.
+    call dgemm('t', 't', nmo, nmo, nbf, &
                1.0_dp, va(1,minmo), nbf, &
                        rhs(minmo,1), nbf, &
                0.0_dp, tmp, nbf)

@@ -152,8 +152,11 @@ contains
       call show_message("SCHMD: N > LDV", WITH_ABORT)
     end if
 !   Householder QR-based version using LAPACK:
+!   query both routines so that dorgqr can also run blocked
     call dgeqrf(n, m, v, ldv, x, wrksize, -1, info)
     lwork = max(int(wrksize(1)), n)
+    call dorgqr(n, n, m, v, ldv, x, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
     allocate (work(lwork))
     call dgeqrf(n, m, v, ldv, x, work, lwork, info)
     call dorgqr(n, n, m, v, ldv, x, work, lwork, info)
