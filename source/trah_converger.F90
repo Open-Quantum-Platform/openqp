@@ -448,10 +448,11 @@ contains
     integer,  intent(in)  :: n, nmic
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used
-    integer :: nn, mmax, m, i, k, info, lwork
+    integer :: nn, mmax, m, i, k, info, lwork, n_rtv, j, mw, ssz
     real(dp) :: theta, rnorm, c0, snorm, php, di, nv
     real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), au(:), r(:), tc(:)
     real(dp), allocatable :: eig(:), work(:), hx(:)
+    integer,  allocatable :: seed(:)
 
     nn   = n + 1
     mmax = min(max(int(nmic), 6), 40)
@@ -459,18 +460,41 @@ contains
     allocate(eig(mmax), work(8*mmax + 2*mmax*mmax))
     lwork = size(work)
 
-    ! initial guess: [1 ; -M^{-1} g]
+    ! initial subspace, vector 1: gradient-seeded [1 ; -M^{-1} g]
     V(1,1) = 1.0_dp
     do i = 1, n
       di = hdiag(i); if (di < 1.0e-6_dp) di = 1.0e-6_dp
       V(1+i,1) = -g(i)/di
     end do
     V(:,1) = V(:,1)/norm2(V(:,1))
-
-    used = 0
     m = 1
+
+    ! random trial vectors (head 0, random tail): give the eigensolver a generic
+    ! component along symmetry-breaking negative-curvature modes that the gradient
+    ! cannot see at a symmetric point -- this is how the solver locates broken-
+    ! symmetry minima in a single run. Deterministic fixed seed -> reproducible.
+    n_rtv = min(max(int(infos%control%trh_nrtv), 1), mmax-1)
+    call random_seed(size=ssz); allocate(seed(ssz)); seed = 20260607; call random_seed(put=seed)
+    do j = 1, n_rtv
+      tc(1) = 0.0_dp
+      call random_number(tc(2:nn)); tc(2:nn) = 2.0_dp*tc(2:nn) - 1.0_dp
+      do i = 1, m
+        tc = tc - dot_product(V(:,i), tc)*V(:,i)
+      end do
+      nv = norm2(tc)
+      if (nv > 1.0e-8_dp) then
+        m = m + 1; V(:,m) = tc/nv
+      end if
+    end do
+    deallocate(seed)
+
+    used = 0; mw = 0
     do k = 1, mmax
-      call aug_matvec(infos, conv, g, V(:,m), n, W(:,m)); used = used + 1
+      ! augmented matrix-vector products for any new basis columns
+      do while (mw < m)
+        mw = mw + 1
+        call aug_matvec(infos, conv, g, V(:,mw), n, W(:,mw)); used = used + 1
+      end do
       ! Rayleigh matrix Tm = V^T W  (m x m, symmetric)
       allocate(Tm(m,m))
       do i = 1, m
