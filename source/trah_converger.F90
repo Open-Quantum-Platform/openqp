@@ -81,6 +81,7 @@ contains
     ! kick (cf. TRAH random trial vectors). trh_nrtv<=1 -> single deterministic
     ! solve (the validated default).
     nrst = max(1, int(infos%control%trh_nrtv))
+    if (infos%control%mom) nrst = 1     ! no symmetry-breaking restarts under MOM
     allocate(mo0_a, source=conv%mo_a); allocate(mo0_b, source=conv%mo_b)
     allocate(mob_a, source=conv%mo_a); allocate(mob_b, source=conv%mo_b)
     e_best = huge(1.0_dp); have_best = .false.
@@ -107,12 +108,16 @@ contains
       end if
 
       ! trust-region subproblem  ->  step p, predicted reduction pred.
-      ! trh_sub_solver==1 (jacobi_davidson) selects the augmented-Hessian micro-solver
-      ! (escapes saddles -> lowest basin); otherwise Steihaug-Toint CG.
-      if (infos%control%trh_sub_solver == 1) then
-        call aughess_step(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
-      else
+      ! Default (davidson/jacobi_davidson) = augmented-Hessian + random trial vectors
+      ! (robust; finds broken-symmetry minima, like OpenTrustRegion). trh_sub_solver=tcg
+      ! selects the cheaper Steihaug-Toint CG for routine/easy cases.
+      ! With MOM (state-specific SCF) we MUST stay deterministic: random trial vectors
+      ! would break symmetry and collapse the targeted (often excited) state, so force
+      ! the conservative Steihaug step that preserves the MOM-selected occupied space.
+      if (infos%control%trh_sub_solver == 2 .or. infos%control%mom) then
         call steihaug_cg(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+      else
+        call aughess_step(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
       end if
       snorm = sqrt(dot_product(p, p))
 

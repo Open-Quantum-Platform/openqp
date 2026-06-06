@@ -533,9 +533,12 @@ contains
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
-      write(IW,"(/, &
-            5x,'Using OpenTrustRegion library for SCF convergence.',/, &
-            5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
+      if (infos%control%trh_impl == 1) then
+        write(IW,"(/,5x,'TRAH via the native trust-region augmented-Hessian solver')")
+      else
+        write(IW,"(/,5x,'TRAH via the external OpenTrustRegion library', &
+              &/,5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
+      end if
 
     else
       write(IW,fmt="&
@@ -1417,10 +1420,10 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
           if (infos%control%trh_impl == 1) then
-            ! native Fortran trust-region augmented-Hessian solver
+            ! native Fortran trust-region augmented-Hessian solver (opt-in: trh_impl=native)
             call trah_native_run(infos, mol_grid, sc, res, energy)
           else
-            ! external OpenTrustRegion library (default)
+            ! external OpenTrustRegion library (default; validated for gradients/MRSF)
             call init_trah_solver(infos, mol_grid, sc , energy)
             call run_trah_solver(res)
           end if

@@ -143,7 +143,7 @@ module types
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
-    integer(c_int64_t)     :: trh_impl = 0          !< TRAH solver: 0=OpenTrustRegion (external), 1=native Fortran
+    integer(c_int64_t)     :: trh_impl = 0          !< TRAH solver: 0=OpenTrustRegion (external, default), 1=native Fortran (opt-in; not yet validated for gradients/MRSF/state-specific)
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
   end type control_parameters
