@@ -267,11 +267,51 @@ class Molecule:
                     matrix_key='matrix_input_frame',
                 )
             meta['mo_labels'] = result
+            try:
+                self._dump_mo_labels_log(result)
+            except Exception:
+                pass
             return result
         except Exception as exc:
             # Labeling must never break the run in the metadata-only phase.
             meta['mo_labels'] = {'status': 'error', 'error': str(exc)}
             return None
+
+    @mpi_dump
+    def _dump_mo_labels_log(self, result):
+        """Append MO irrep labels to the main log (best effort, non-fatal)."""
+        try:
+            meta = self.symmetry_metadata
+            lines = [
+                '',
+                '   ==============================================',
+                '   PyOQP: MO symmetry labels (metadata only)',
+                '   ==============================================',
+                f"   point group:      {meta.get('point_group', '?')}",
+                f"   abelian subgroup: {meta.get('subgroup', '?')}",
+            ]
+            for spin in ('alpha', 'beta'):
+                if spin not in result:
+                    continue
+                labels = result[spin]['labels']
+                try:
+                    energies = np.asarray(
+                        self.data[f"OQP::E_MO_{'A' if spin == 'alpha' else 'B'}"],
+                        dtype=float,
+                    ).ravel()
+                except Exception:
+                    energies = None
+                lines.append(f'   {spin} MOs:')
+                for imo, label in enumerate(labels):
+                    if energies is not None and imo < energies.size:
+                        lines.append(f'   {imo + 1:5d}  {energies[imo]:16.8f}  {label}')
+                    else:
+                        lines.append(f'   {imo + 1:5d}  {"":16s}  {label}')
+            lines.append('')
+            with open(self.log, 'a', encoding='utf-8') as fout:
+                fout.write('\n'.join(lines))
+        except Exception:
+            pass
 
     def get_mass(self):
         """

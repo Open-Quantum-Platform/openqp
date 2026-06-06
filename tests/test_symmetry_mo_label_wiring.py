@@ -219,6 +219,22 @@ class TestMoleculeMoLabelWiring(unittest.TestCase):
         self.assertIsNone(mol.label_molecular_orbitals())
         self.assertNotIn("mo_labels", mol.symmetry_metadata)
 
+    def test_mo_labels_written_to_log(self):
+        import tempfile
+
+        mol, expected = self._build_molecule("rhf")
+        with tempfile.TemporaryDirectory() as tmp:
+            mol.log = str(Path(tmp) / "run.log")
+            mol.data["OQP::E_MO_A"] = np.linspace(-20.0, 2.0, WATER_NAO)
+            mol.label_molecular_orbitals()
+            with open(mol.log, encoding="utf-8") as fin:
+                content = fin.read()
+        self.assertIn("MO symmetry labels", content)
+        self.assertIn("point group:      c2v", content)
+        self.assertIn("alpha MOs:", content)
+        for label in set(expected):
+            self.assertIn(label, content)
+
     def test_f_shells_are_skipped_gracefully(self):
         mol, _ = self._build_molecule("rhf")
 

@@ -26,7 +26,7 @@ Run-output labeling gates (increment 3):
 
 Remaining (future increments):
 - [ ] Label excited states/modes in run outputs.
-- [ ] Print MO labels to the .log file alongside orbital energies.
+- [x] Print MO labels to the .log file alongside orbital energies (rank-0 only, best-effort).
 - [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder and labeling path.
 - [ ] Integral-side symmetry reductions behind `use_integral_symmetry` (off by default until production-ready).
 - [ ] Response-side reductions behind `use_response_symmetry`.
