@@ -699,6 +699,16 @@ contains
           mo_energy_b = mo_energy_a
         end if
         call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        ! Native TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
+        ! the converged Fock so post-SCF properties and analytic gradients receive
+        ! canonical MOs and orbital energies (same density/energy at the stationary
+        ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
+        ! and is left to the existing ROHF handling.
+        if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
+          call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) &
+            call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+        end if
       end if
 
       diis_error = conv_res%get_error()

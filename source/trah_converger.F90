@@ -58,6 +58,7 @@ contains
     real(dp), parameter :: pred_floor = 1.0e-11_dp
     real(dp), parameter :: delta_min  = 1.0e-4_dp
     real(dp), parameter :: gtol_fp    = 1.0e-4_dp
+    real(dp), parameter :: stab_step  = 1.0e-3_dp   ! step above this at small |g| = saddle escape
 
     n        = int(conv%n_param)
     nmac     = int(infos%control%maxit)
@@ -101,11 +102,6 @@ contains
 
     do macro = 1, nmac
       gnorm = sqrt(dot_product(g, g) / real(n, dp))
-      if (gnorm < conv_tol) then
-        write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') macro-1, e0, gnorm
-        res%error = gnorm
-        exit
-      end if
 
       ! trust-region subproblem  ->  step p, predicted reduction pred.
       ! Default (davidson/jacobi_davidson) = augmented-Hessian + random trial vectors
@@ -114,6 +110,9 @@ contains
       ! With MOM (state-specific SCF) we MUST stay deterministic: random trial vectors
       ! would break symmetry and collapse the targeted (often excited) state, so force
       ! the conservative Steihaug step that preserves the MOM-selected occupied space.
+      ! The micro-solver runs BEFORE the convergence test so the aug-Hessian eigensolve
+      ! can detect a negative-curvature (saddle) direction even when |g|~0 -- this is the
+      ! stability check that lets us escape an unstable solution a prior DIIS pass landed on.
       if (infos%control%trh_sub_solver == 2 .or. infos%control%mom) then
         call steihaug_cg(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
       else
@@ -121,8 +120,17 @@ contains
       end if
       snorm = sqrt(dot_product(p, p))
 
+      ! converged only at a genuine minimum: small gradient AND no escape step. A large
+      ! step at small |g| means the eigensolver found a downhill (negative-curvature)
+      ! direction, so keep going to leave the saddle.
+      if (gnorm < conv_tol .and. snorm < stab_step) then
+        write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') macro-1, e0, gnorm
+        res%error = gnorm
+        exit
+      end if
+
       ! model can no longer predict a meaningful reduction -> energy converged
-      if (pred <= pred_floor .and. gnorm < gtol_fp) then
+      if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
         write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision)")') macro, e0, gnorm
         ! report error below conv_tol so the SCF driver recognises convergence and
         ! does NOT re-diagonalise the raw Fock (which would corrupt ROHF orbitals)
