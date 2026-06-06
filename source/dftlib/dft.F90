@@ -30,9 +30,9 @@ module dft
 !>   one of `nrad_types` radial grids.  Radial type 1 is always the
 !>   standard unit-radius grid (scaled by the Bragg-Slater radius);
 !>   types >= 2 are element-specific grids in absolute bohr: DE2
-!>   (`de2_alpha`/`rad_typ_z` give alpha and the element) or, when
-!>   `me_rscale` is allocated and positive, MultiExp with `rad_npts`
-!>   nodes and scaling radius `me_rscale` (SG-0).
+!>   (`de2_alpha`/`de2_rmax` give alpha and the outermost node) or,
+!>   when `me_rscale` is allocated and positive, MultiExp with
+!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0).
 !>   If `nang_override` is allocated and non-zero for an atom type,
 !>   that type is unpruned: a single `nang_override(t)`-point Lebedev
 !>   sphere is used at ALL radii (heavy-atom fallback).
@@ -47,7 +47,7 @@ module dft
     integer :: nrad_types = 1            !< number of radial grids
     integer, allocatable :: radial_id(:) !< atom -> radial grid type
     real(kind=dp), allocatable :: de2_alpha(:) !< DE2 alpha of radial type
-    integer, allocatable :: rad_typ_z(:) !< element of radial type (0: standard)
+    real(kind=dp), allocatable :: de2_rmax(:)  !< DE2 outermost node, bohr
     integer, allocatable :: rad_npts(:)  !< nodes of radial type (0: global nrad)
     real(kind=dp), allocatable :: me_rscale(:) !< MultiExp R of radial type (0: DE2)
   end type
@@ -72,7 +72,10 @@ module dft
 !  J. Comput. Chem. 38, 869 (2017).  Radial grid: Mitani
 !  double-exponential (DE2), M. Mitani, Theor. Chem. Acc. 130,
 !  645 (2011), with element-specific alpha and Nr = 75 (SG-2) or
-!  Nr = 99 (SG-3); R_max = 20 * Bragg-Slater radius.
+!  Nr = 99 (SG-3).  The first/last radial nodes are pinned to
+!  r = 1e-7 bohr and the element-specific R_max below (values from
+!  NVIDIA cuEST's SG-2/SG-3 implementation, CUDALibrarySamples,
+!  cuest_molecular_grid.py; R_max is 10x the EML scaling radius).
 !  The pruning sectors are counts of consecutive radial shells
 !  (ascending radius), each integrated on the given Lebedev sphere.
 !  Defined for Z in {1, 3-9, 11-17}; other elements fall back to the
@@ -80,6 +83,11 @@ module dft
   integer, parameter :: SG_NELEM = 15
   integer, parameter :: sg_elem_z(SG_NELEM) = &
         [1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17]
+  real(kind=dp), parameter :: SG_DE2_RMIN = 1.0d-7
+  real(kind=dp), parameter :: sg_de2_rmax(SG_NELEM) = &
+        [15.0d0, 38.7d0, 26.5d0, 22.0d0, 17.1d0, 14.1d0, 12.3d0, &
+         10.8d0, 42.1d0, 32.5d0, 34.3d0, 27.5d0, 23.2d0, 20.6d0, &
+         18.4d0]
 
   integer, parameter :: SG2_NRAD = 75
   integer, parameter :: SG2_MAXSEC = 5
@@ -598,7 +606,7 @@ contains
         allocate(pruned%nradPerRegion(maxsec, ntyps), source=0)
         allocate(pruned%radii(maxsec, ntyps), source=1.0d30)
         allocate(pruned%de2_alpha(ntyps), source=0.0_dp)
-        allocate(pruned%rad_typ_z(ntyps), source=0)
+        allocate(pruned%de2_rmax(ntyps), source=0.0_dp)
         pruned%radial_id = pruned%rad_id
 
 !       Fallback type: single unpruned region, standard radial grid
@@ -619,7 +627,7 @@ contains
             pruned%nradPerRegion(1:nsec, i) = sg2_cnt(1:nsec, ie)
             pruned%de2_alpha(i) = sg2_alpha(ie)
           end if
-          pruned%rad_typ_z(i) = sg_elem_z(ie)
+          pruned%de2_rmax(i) = sg_de2_rmax(ie)
         end do
 
         write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
@@ -681,7 +689,7 @@ contains
         allocate(pruned%radii(maxsec, ntyps), source=1.0d30)
         allocate(pruned%nang_override(ntyps), source=0)
         allocate(pruned%de2_alpha(pruned%nrad_types), source=0.0_dp)
-        allocate(pruned%rad_typ_z(pruned%nrad_types), source=0)
+        allocate(pruned%de2_rmax(pruned%nrad_types), source=0.0_dp)
         allocate(pruned%rad_npts(pruned%nrad_types), source=0)
         allocate(pruned%me_rscale(pruned%nrad_types), source=0.0_dp)
 
@@ -826,10 +834,11 @@ contains
 
 !     Element-specific radial grids, absolute radii.
 !     MultiExp (SG-0): per-element node count and scaling radius;
-!     DE2 (SG-2/SG-3): R_max = 20 * Bragg-Slater radius (NWChem
-!     convention).  Unused trailing rows of a MultiExp column stay
-!     zero and are never referenced (per-atom grids are sliced to
-!     the per-type node count below).
+!     DE2 (SG-2/SG-3): the innermost/outermost nodes are pinned to
+!     SG_DE2_RMIN and the element-specific R_max (cuEST convention).
+!     Unused trailing rows of a MultiExp column stay zero and are
+!     never referenced (per-atom grids are sliced to the per-type
+!     node count below).
       do i = 2, pruned%nrad_types
         if (allocated(pruned%me_rscale)) then
           nrad_at = pruned%rad_npts(i)
@@ -837,8 +846,7 @@ contains
                   molGrid%rad_pts(1:nrad_at,i), molGrid%rad_wts(1:nrad_at,i))
         else
           call de2_radial_grid(nrad, pruned%de2_alpha(i), &
-                  20.0_dp*bragg_slater_radius(brsl_radii, &
-                          real(pruned%rad_typ_z(i), kind=dp)), &
+                  SG_DE2_RMIN, pruned%de2_rmax(i), &
                   molGrid%rad_pts(:,i), molGrid%rad_wts(:,i))
         end if
       end do
@@ -951,49 +959,64 @@ contains
 !> @details M. Mitani, Theor. Chem. Acc. 130, 645 (2011);
 !>   M. Mitani, Y. Yoshioka, Theor. Chem. Acc. 131, 1169 (2012).
 !>   Nodes and weights (the weights include the r^2 Jacobian):
-!>     x_i = i*h,  i = n_lo..n_hi
+!>     x_i = x_start + (i-1)*h,  i = 1..nr
 !>     r_i = exp(alpha*x_i - exp(-x_i))                        [bohr]
 !>     w_i = h*(alpha + exp(-x_i))*exp(3*alpha*x_i - 3*exp(-x_i))
-!>   The mesh size h is chosen so that the outermost node equals rmax:
-!>   alpha*(n_hi*h) - exp(-n_hi*h) = ln(rmax), solved by Newton
-!>   iteration (the left-hand side is strictly increasing in h).
+!>   x_start and x_end are pinned to the innermost/outermost radial
+!>   nodes:  alpha*x - exp(-x) = ln(rmin) resp. ln(rmax), solved by
+!>   Newton iteration (the left-hand side is strictly increasing),
+!>   and h = (x_end - x_start)/(nr - 1).  This matches the SG-2/SG-3
+!>   convention of NVIDIA cuEST (CUDALibrarySamples).
 !> @param[in]   nr     number of radial points
 !> @param[in]   alpha  DE2 alpha parameter (element-specific)
+!> @param[in]   rmin   innermost radial node, bohr
 !> @param[in]   rmax   outermost radial node, bohr
 !> @param[out]  r      radial nodes, absolute bohr
 !> @param[out]  w      radial weights including the r^2 Jacobian
-  pure subroutine de2_radial_grid(nr, alpha, rmax, r, w)
+  pure subroutine de2_radial_grid(nr, alpha, rmin, rmax, r, w)
     implicit none
     integer, intent(in) :: nr
-    real(kind=dp), intent(in) :: alpha, rmax
+    real(kind=dp), intent(in) :: alpha, rmin, rmax
     real(kind=dp), intent(out) :: r(:), w(:)
 
-    integer :: i, n_lo, n_hi, iter
-    real(kind=dp) :: h, x, f, fp, lnr
+    integer :: i
+    real(kind=dp) :: h, x, x_start, x_end
 
-    if (mod(nr,2) == 1) then
-      n_lo = -(nr-1)/2
-    else
-      n_lo = -nr/2
-    end if
-    n_hi = nr+n_lo-1
+    x_start = de2_solve_x(alpha, log(rmin), -2.3_dp)
+    x_end = de2_solve_x(alpha, log(rmax), 1.25_dp)
+    h = (x_end-x_start)/(nr-1)
 
-    lnr = log(rmax)
-    h = lnr/(alpha*n_hi)
-    do iter = 1, 64
-      f = alpha*n_hi*h-exp(-n_hi*h)-lnr
-      if (abs(f) < 1.0d-14*max(1.0_dp, abs(lnr))) exit
-      fp = n_hi*(alpha+exp(-n_hi*h))
-      h = h-f/fp
-    end do
-
-    do i = n_lo, n_hi
-      x = i*h
-      r(i-n_lo+1) = exp(alpha*x-exp(-x))
-      w(i-n_lo+1) = h*(alpha+exp(-x))*exp(3.0_dp*alpha*x-3.0_dp*exp(-x))
+    do i = 1, nr
+      x = x_start+(i-1)*h
+      r(i) = exp(alpha*x-exp(-x))
+      w(i) = h*(alpha+exp(-x))*exp(3.0_dp*alpha*x-3.0_dp*exp(-x))
     end do
 
   end subroutine de2_radial_grid
+
+!> @brief Solve alpha*x - exp(-x) = lnr for x by Newton iteration
+!> @details The left-hand side is strictly increasing in x for
+!>   alpha > 0, so the root is unique.
+  pure function de2_solve_x(alpha, lnr, x0) result(x)
+    implicit none
+    real(kind=dp), intent(in) :: alpha, lnr, x0
+    real(kind=dp) :: x
+
+    integer :: iter
+    real(kind=dp) :: f, xnew
+
+    x = x0
+    do iter = 1, 100
+      f = alpha*x-exp(-x)-lnr
+      xnew = x-f/(alpha+exp(-x))
+      if (abs(xnew-x) < 1.0d-14) then
+        x = xnew
+        exit
+      end if
+      x = xnew
+    end do
+
+  end function de2_solve_x
 
 !> @brief MultiExp radial quadrature (SG-0)
 !> @details P.M.W. Gill, S.-H. Chien, J. Comput. Chem. 24, 732 (2003).
