@@ -27,9 +27,9 @@ Run-output labeling gates (increment 3):
 Remaining (future increments):
 - [x] Label normal modes in run outputs (`assign_mode_irreps` + `Molecule.label_normal_modes`, hooked before `save_freqs`; labels land in hess.json via symmetry_metadata).
 - [x] SCF ground-state term symbol (product of occupied MO irreps; RHF/UHF/ROHF, e.g. 1A1/2B1) in mo_labels payload and log.
-- [ ] Label excited states in run outputs (needs response-vector conventions — design decision).
+- [x] Excited-state irrep labels for tda/rpa/sf/mrsf (`assign_state_irreps`): transition character <X, U X V^T>/<X,X> from td_bvec_mo (Fortran layout: occupied index fastest, verified in tdhf_lib.F90 iatogen / tdhf_mrsf_lib.F90 mrsfxvec); sf/mrsf total symmetry includes the SOMO reference product; terms in state_labels payload and log.
 - [x] Print MO labels to the .log file alongside orbital energies (rank-0 only, best-effort).
-- [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder and labeling path.
+- [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder and labeling path. BLOCKED: feat/ispher-basis-option only maps shell sizes; the spherical AO order/integral path is not yet validated at runtime, so there is no convention to code against.
 - [ ] Integral-side symmetry reductions behind `use_integral_symmetry` (off by default until production-ready).
 - [ ] Response-side reductions behind `use_response_symmetry`.
 

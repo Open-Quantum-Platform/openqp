@@ -210,6 +210,40 @@ class Molecule:
                 f"detected '{self.symmetry_metadata['detected_point_group']}'"
             )
 
+    def _symmetry_labeling_inputs(self):
+        """Shared shells + square overlap for symmetry labeling.
+
+        Returns (shells, smat, nbf, None) on success or
+        (None, None, 0, reason) when labeling must be skipped.
+        """
+        from oqp.library.symmetry import _cartesian_shell_size
+
+        basis = self.data.get_basis()
+        if not basis:
+            return None, None, 0, 'skipped_no_basis'
+        nbf = int(basis['nbf'])
+        shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+        if any(l > 2 for _, l in shells):
+            return None, None, 0, 'skipped_unsupported_shells_beyond_d'
+        if sum(_cartesian_shell_size(l) for _, l in shells) != nbf:
+            return None, None, 0, 'skipped_non_cartesian_basis'
+
+        # Unpack triangular overlap to a square symmetric matrix.
+        packed = np.asarray(self.data['OQP::SM'], dtype=float).ravel()
+        if packed.size != nbf * (nbf + 1) // 2:
+            return None, None, 0, 'skipped_overlap_shape_mismatch'
+        smat = np.zeros((nbf, nbf))
+        rows, cols = np.tril_indices(nbf)
+        smat[rows, cols] = packed
+        smat[cols, rows] = packed
+        return shells, smat, nbf, None
+
+    def _mo_coefficients(self, tag, nbf):
+        """AO x MO coefficient matrix from a Fortran column-stored tag."""
+        # Fortran stores MOs column-wise; the C-order view has MOs as rows,
+        # so transpose to (n_ao, n_mo).
+        return np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
+
     def label_molecular_orbitals(self):
         """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
 
@@ -226,30 +260,12 @@ class Molecule:
             return None
 
         try:
-            from oqp.library.symmetry import assign_mo_irreps, _cartesian_shell_size
+            from oqp.library.symmetry import assign_mo_irreps
 
-            basis = self.data.get_basis()
-            if not basis:
-                meta['mo_labels'] = {'status': 'skipped_no_basis'}
+            shells, smat, nbf, skip_reason = self._symmetry_labeling_inputs()
+            if shells is None:
+                meta['mo_labels'] = {'status': skip_reason}
                 return None
-            nbf = int(basis['nbf'])
-            shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
-            if any(l > 2 for _, l in shells):
-                meta['mo_labels'] = {'status': 'skipped_unsupported_shells_beyond_d'}
-                return None
-            if sum(_cartesian_shell_size(l) for _, l in shells) != nbf:
-                meta['mo_labels'] = {'status': 'skipped_non_cartesian_basis'}
-                return None
-
-            # Unpack triangular overlap to a square symmetric matrix.
-            packed = np.asarray(self.data['OQP::SM'], dtype=float).ravel()
-            if packed.size != nbf * (nbf + 1) // 2:
-                meta['mo_labels'] = {'status': 'skipped_overlap_shape_mismatch'}
-                return None
-            smat = np.zeros((nbf, nbf))
-            rows, cols = np.tril_indices(nbf)
-            smat[rows, cols] = packed
-            smat[cols, rows] = packed
 
             tolerance = float(meta.get('tolerance', 1.0e-5))
             result = {'status': 'ok'}
@@ -257,9 +273,7 @@ class Molecule:
             if self.config.get('scf', {}).get('type', 'rhf') != 'rhf':
                 spins.append(('beta', 'OQP::VEC_MO_B'))
             for spin, tag in spins:
-                # Fortran stores MOs column-wise; the C-order view has MOs
-                # as rows, so transpose to (n_ao, n_mo).
-                coefficients = np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
+                coefficients = self._mo_coefficients(tag, nbf)
                 result[spin] = assign_mo_irreps(
                     coefficients, smat, shells,
                     detection['operations'], detection['character_table'],
@@ -317,6 +331,122 @@ class Molecule:
             return state
         except Exception:
             return None
+
+    def label_excited_states(self):
+        """Assign abelian irrep labels to TD excited states (metadata only).
+
+        Supports tda/rpa (closed-shell, occ/vir from VEC_MO_A) and sf/mrsf
+        (occ from alpha, vir from beta MOs; total symmetry includes the
+        direct product of the reference SOMO irreps). Stores results under
+        ``symmetry_metadata['state_labels']``; never fatal.
+        """
+        meta = self.symmetry_metadata
+        if not meta or meta.get('status', 'disabled') == 'disabled':
+            return None
+        if not meta.get('label_states', True):
+            return None
+        detection = meta.get('detection')
+        if not detection:
+            return None
+
+        td_type = str(self.config.get('tdhf', {}).get('type', '')).lower()
+        if td_type not in ('tda', 'rpa', 'sf', 'mrsf'):
+            if td_type:
+                meta['state_labels'] = {'status': f'skipped_unsupported_td_type_{td_type}'}
+            return None
+
+        try:
+            from oqp.library.symmetry import assign_state_irreps
+
+            shells, smat, nbf, skip_reason = self._symmetry_labeling_inputs()
+            if shells is None:
+                meta['state_labels'] = {'status': skip_reason}
+                return None
+
+            # MO labels provide the SOMO reference product for sf/mrsf.
+            mo_labels = meta.get('mo_labels')
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                mo_labels = self.label_molecular_orbitals()
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                meta['state_labels'] = {'status': 'skipped_no_mo_labels'}
+                return None
+
+            na = int(np.asarray(self.data['nelec_A']).ravel()[0])
+            nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
+
+            c_alpha = self._mo_coefficients('OQP::VEC_MO_A', nbf)
+            if td_type in ('sf', 'mrsf'):
+                # Spin-flip: occupied alpha -> virtual beta.
+                c_beta = self._mo_coefficients('OQP::VEC_MO_B', nbf)
+                occ, vir = c_alpha[:, :na], c_beta[:, nb:]
+                reference_labels = mo_labels['alpha']['labels'][nb:na]
+            else:
+                occ, vir = c_alpha[:, :na], c_alpha[:, na:]
+                reference_labels = []
+            n_occ, n_vir = occ.shape[1], vir.shape[1]
+
+            # Fortran bvec(xvec_dim, nstates), occupied index fastest; the
+            # C-order buffer is state-major.
+            bvec = np.asarray(self.data['OQP::td_bvec_mo'], dtype=float).ravel()
+            xvec_dim = n_occ * n_vir
+            if xvec_dim == 0 or bvec.size % xvec_dim != 0:
+                meta['state_labels'] = {'status': 'skipped_amplitude_shape_mismatch'}
+                return None
+            nstates = bvec.size // xvec_dim
+            amplitudes = bvec.reshape(nstates, n_vir, n_occ).transpose(0, 2, 1)
+
+            tolerance = float(meta.get('tolerance', 1.0e-5))
+            result = assign_state_irreps(
+                amplitudes, occ, vir, smat, shells,
+                detection['operations'], detection['character_table'],
+                reference_labels=reference_labels,
+                tolerance=max(tolerance, 1.0e-3),
+                matrix_key='matrix_input_frame',
+            )
+            result = dict(result)
+            result['status'] = 'ok'
+            result['td_type'] = td_type
+            multiplicity = self.config.get('tdhf', {}).get('mult')
+            if multiplicity:
+                result['terms'] = [
+                    f"{int(multiplicity)}{lbl.upper()}" for lbl in result['labels']
+                ]
+            meta['state_labels'] = result
+            try:
+                self._dump_state_labels_log(result)
+            except Exception:
+                pass
+            return result
+        except Exception as exc:
+            # Labeling must never break the run in the metadata-only phase.
+            meta['state_labels'] = {'status': 'error', 'error': str(exc)}
+            return None
+
+    @mpi_dump
+    def _dump_state_labels_log(self, result):
+        """Append excited-state irrep labels to the main log (best effort)."""
+        try:
+            lines = [
+                '',
+                '   ==============================================',
+                '   PyOQP: excited-state symmetry labels (metadata only)',
+                '   ==============================================',
+            ]
+            try:
+                energies = np.asarray(self.data['OQP::td_energies'], dtype=float).ravel()
+            except Exception:
+                energies = None
+            terms = result.get('terms') or [lbl.upper() for lbl in result['labels']]
+            for istate, term in enumerate(terms):
+                if energies is not None and istate < energies.size:
+                    lines.append(f'   state {istate + 1:3d}  {energies[istate]:14.8f}  {term}')
+                else:
+                    lines.append(f'   state {istate + 1:3d}  {"":14s}  {term}')
+            lines.append('')
+            with open(self.log, 'a', encoding='utf-8') as fout:
+                fout.write('\n'.join(lines))
+        except Exception:
+            pass
 
     def label_normal_modes(self):
         """Assign abelian irrep labels to normal modes (metadata only, non-fatal).

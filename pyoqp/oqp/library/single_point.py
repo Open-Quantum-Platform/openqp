@@ -575,6 +575,10 @@ class SinglePoint(Calculator):
 
         self.mol.energies = energies
 
+        # Metadata-only state irrep labels (no-op unless symmetry enabled).
+        if getattr(self.mol, 'symmetry_metadata', None):
+            self.mol.label_excited_states()
+
         return energies
 
     def scf(self):

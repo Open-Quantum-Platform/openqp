@@ -479,6 +479,82 @@ def product_irrep(labels: Iterable[str], character_table: Mapping[str, Iterable[
     return 'mixed'
 
 
+def assign_state_irreps(
+    amplitudes: Any,
+    occ_coefficients: Any,
+    vir_coefficients: Any,
+    overlap: Any,
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+    character_table: Mapping[str, Iterable[int]],
+    reference_labels: Iterable[str] = (),
+    tolerance: float = 1.0e-3,
+    matrix_key: str = "matrix",
+) -> dict[str, Any]:
+    """Assign abelian irrep labels to excitation amplitudes (metadata only).
+
+    ``amplitudes`` holds X_ia per state, shape (n_states, n_occ, n_vir),
+    where i indexes the occupied set described by ``occ_coefficients``
+    (n_ao, n_occ) and a the virtual set of ``vir_coefficients`` (n_ao,
+    n_vir). The transition character per operation is
+    ``<X, U X V^T> / <X, X>`` with ``U/V`` the MO representations of the
+    operation in the two sets. The total state irrep is the direct product
+    of the transition irrep with ``reference_labels`` (e.g. the SOMOs of a
+    spin-flip reference); for a closed-shell reference leave it empty.
+    """
+
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive")
+
+    x = _to_float_array(amplitudes)
+    if x.ndim != 3:
+        raise ValueError("amplitudes must have shape (n_states, n_occ, n_vir)")
+    c_occ = _to_float_array(occ_coefficients)
+    c_vir = _to_float_array(vir_coefficients)
+    s = _to_float_array(overlap)
+    if c_occ.shape != (s.shape[0], x.shape[1]) or c_vir.shape != (s.shape[0], x.shape[2]):
+        raise ValueError("coefficient shapes do not match amplitudes/overlap")
+
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+    table = {str(irrep): [int(ch) for ch in row] for irrep, row in character_table.items()}
+
+    norms = np.einsum('sia,sia->s', x, x)
+    characters = np.zeros((x.shape[0], len(op_list)))
+    for iop, op in enumerate(op_list):
+        t = _ao_operator_matrix(shell_list, op, matrix_key=matrix_key)
+        u = c_occ.T @ s @ t @ c_occ
+        v = c_vir.T @ s @ t @ c_vir
+        transformed = np.einsum('ji,sia,ba->sjb', u, x, v)
+        characters[:, iop] = np.einsum('sia,sia->s', x, transformed) / norms
+
+    reference = list(reference_labels)
+    labels: list[str] = []
+    transition_labels: list[str] = []
+    deviations: list[float] = []
+    for istate in range(x.shape[0]):
+        best_label = 'mixed'
+        best_dev = np.inf
+        for irrep, row in table.items():
+            dev = float(np.max(np.abs(characters[istate] - np.asarray(row, dtype=float))))
+            if dev < best_dev:
+                best_dev = dev
+                best_label = irrep
+        transition = best_label if best_dev <= tolerance else 'mixed'
+        transition_labels.append(transition)
+        labels.append(product_irrep([transition] + reference, table))
+        deviations.append(best_dev)
+
+    return {
+        'labels': labels,
+        'transition_labels': transition_labels,
+        'reference_labels': reference,
+        'characters': characters.tolist(),
+        'max_deviation': float(np.max(deviations)) if deviations else 0.0,
+        'status': 'label_only_no_reductions',
+    }
+
+
 def assign_mode_irreps(
     modes: Any,
     operations: Iterable[Mapping[str, Any]],
