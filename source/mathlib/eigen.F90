@@ -94,31 +94,34 @@ contains
     real(kind=dp), intent(out) :: eival(*)
     integer, optional, intent(out) :: ierr
 
-    integer(blas_int) :: lda_, n_, info, ione, lwork
+    integer(blas_int) :: lda_, n_, info, lwork, liwork
     integer :: iok
     real(dp), dimension(:), allocatable :: work
+    integer(blas_int), dimension(:), allocatable :: iwork
     real(dp) :: rwork(1)
+    integer(blas_int) :: irwork(1)
     logical :: fatal
     character(16) :: driver
 
     lda_    = int(lda, kind=blas_int)
     n_      = int(n, kind=blas_int)
-    ione    = 1
 
     fatal = WITH_ABORT
     if (present(ierr)) fatal = WITHOUT_ABORT
 
-    driver = 'DSYEV'
-    call dsyev('V', 'U', n_, a, lda_, eival, rwork, -1_blas_int, info)
+!   Divide-and-conquer driver: much faster than DSYEV for large matrices
+    driver = 'DSYEVD'
+    call dsyevd('V', 'U', n_, a, lda_, eival, rwork, -1_blas_int, &
+                irwork, -1_blas_int, info)
     lwork = int(nint(rwork(1)), blas_int)
-    allocate (work(lwork), stat=iok)
+    liwork = irwork(1)
+    allocate (work(lwork), iwork(liwork), stat=iok)
     if (iok /= 0) then
       if (present(ierr)) ierr = iok
       call show_message('Cannot allocate memory', fatal)
       return
     end if
-    call dsyev('V', 'U', n_, a, lda_, eival, work, lwork, info)
-
+    call dsyevd('V', 'U', n_, a, lda_, eival, work, lwork, iwork, liwork, info)
 
     if (present(ierr)) ierr = info
 
