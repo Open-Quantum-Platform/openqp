@@ -115,6 +115,9 @@ module mod_dft_gridint
     real(KIND=fp), allocatable :: tmpWfAlpha(:) !< tmp alpha spin wavefunction
     real(KIND=fp), allocatable :: tmpWfBeta(:) !< tmp beta spin wavefunction
     integer, allocatable :: indices_p(:) !< AO significant indices
+    integer, allocatable :: shells_p(:) !< shells surviving the slice-level prescreen
+    integer, allocatable :: deadAOs_(:) !< AOs of prescreened-out shells
+    logical, allocatable :: aoLive_(:) !< .true. for AOs of surviving shells
 
     real(KIND=fp), contiguous, pointer :: &
         aoMem(:, :, :) => null() & !< AO memory
@@ -142,6 +145,8 @@ module mod_dft_gridint
                                    !< .FALSE. - wfA and wfB are densities
     integer :: numAOs = 0 !< number of AOs
     integer :: numAOs_p = 0 !< number of pruned AOs
+    integer :: numShells_p = 0 !< number of shells in shells_p
+    integer :: numDeadAOs = 0 !< number of AOs in deadAOs_
     logical :: skip_p = .true. !< skip if no pruned numAOs
     integer :: numPts = 0
     integer :: numAtoms = 0
@@ -181,6 +186,7 @@ module mod_dft_gridint
     procedure :: resetOrbPointers
     procedure :: resetXCPointers
     procedure :: compAOs
+    procedure :: buildShellList
     procedure :: pruneAOs
     procedure :: resetPrunedPointers
     procedure :: compMOs
@@ -575,6 +581,63 @@ contains
 
 !###############################################################################
 
+!> @brief Build the list of shells that can be nonzero anywhere in the
+!>  current slice of grid points
+!> @details The slice is enclosed in a bounding sphere and a shell
+!>  survives if the closest approach of the sphere to the shell origin
+!>  is within the shell extent (shell_mx_dist2).  AO evaluation then
+!>  loops only over surviving shells, and the AOs of screened-out
+!>  shells are known-zero without being touched.
+!> @param[in] basis  atomic basis set
+!> @param[in] xyz    absolute coordinates of the slice points
+  subroutine buildShellList(self, basis, xyz)
+    class(xc_engine_t) :: self
+    type(basis_set), intent(in) :: basis
+    real(kind=fp), intent(in) :: xyz(:,:)
+
+    real(kind=fp) :: cmin(3), cmax(3), c(3), rad, dmr
+    integer :: i, ish, n, nd, off, nao
+
+    if (.not. allocated(self%shells_p)) then
+      allocate(self%shells_p(basis%nshell))
+      allocate(self%deadAOs_(self%numAOs))
+      allocate(self%aoLive_(self%numAOs))
+    end if
+
+    ! Bounding sphere of the slice
+    cmin = xyz(1,1:3)
+    cmax = cmin
+    do i = 2, ubound(xyz,1)
+      cmin = min(cmin, xyz(i,1:3))
+      cmax = max(cmax, xyz(i,1:3))
+    end do
+    c = 0.5_fp*(cmin+cmax)
+    rad = 0.5_fp*sqrt(sum((cmax-cmin)**2))
+
+    n = 0
+    nd = 0
+    do ish = 1, basis%nshell
+      off = basis%ao_offset(ish)
+      nao = basis%naos(ish)
+      dmr = max(0.0_fp, &
+              sqrt(sum((basis%atoms%xyz(:3,basis%origin(ish)) - c)**2)) - rad)
+      if (dmr*dmr <= basis%shell_mx_dist2(ish)) then
+        n = n + 1
+        self%shells_p(n) = ish
+        self%aoLive_(off:off+nao-1) = .true.
+      else
+        do i = off, off+nao-1
+          nd = nd + 1
+          self%deadAOs_(nd) = i
+        end do
+        self%aoLive_(off:off+nao-1) = .false.
+      end if
+    end do
+    self%numShells_p = n
+    self%numDeadAOs = nd
+
+  end subroutine
+
 !> @brief Compute atomic orbital values/gradient/hessian in a grid point
 !> @param[in]  iPtIn      index of the point in self%xyzw array
 !> @param[in]  iPtOut     index of the point in AO/MO arrays
@@ -589,13 +652,19 @@ contains
     integer :: nnz, ipt
     real(kind=fp) :: ptxyz(3)
 
+    ! Screen out shells which are out of range for the whole slice;
+    ! their AO entries are left untouched (known zero), see pruneAOs
+    call self%buildShellList(basis, xyz)
+
+    associate (shells => self%shells_p(1:self%numShells_p))
+
     select case (nDer)
     case (0)
       do iPt = 1, ubound(xyz,1)
         ptxyz = xyz(iPt,1:3)
 
         call basis%aoval(ptxyz, nnz, &
-                     self%aoV(:, iPt))
+                     self%aoV(:, iPt), shells=shells)
       end do
     case (1)
       do iPt = 1, ubound(xyz,1)
@@ -605,7 +674,7 @@ contains
                       self%aoV(:, iPt), &
                       self%aoG1(:, iPt, X__), &
                       self%aoG1(:, iPt, Y__), &
-                      self%aoG1(:, iPt, Z__))
+                      self%aoG1(:, iPt, Z__), shells=shells)
       end do
     case (2)
       do iPt = 1, ubound(xyz,1)
@@ -621,7 +690,7 @@ contains
                        self%aoG2(:, iPt, ZZ_), &
                        self%aoG2(:, iPt, XY_), &
                        self%aoG2(:, iPt, YZ_), &
-                       self%aoG2(:, iPt, XZ_))
+                       self%aoG2(:, iPt, XZ_), shells=shells)
 
       end do
     case default
@@ -629,17 +698,22 @@ contains
       stop
     end select
 
+    end associate
+
   end subroutine
 
   subroutine pruneAOs(self, skip)
     class(xc_engine_t), target :: self
 
     logical :: skip
-    integer :: i, j, numAOs_p
+    integer :: i, j, v, numAOs_p
     real(kind=fp) :: aoVMax(self%numAOs)
 
     ! Per-AO maximum over all points, accumulated by cache-friendly
-    ! column sweeps (aoV rows are strided by numAOs)
+    ! column sweeps (aoV rows are strided by numAOs).  AOs of shells
+    ! screened out at the slice level (see buildShellList) were never
+    ! evaluated: their entries hold stale values and are excluded via
+    ! aoLive_ below.
     aoVMax = 0.0_fp
     do j = 1, self%numPts
       do i = 1, self%numAOs
@@ -650,9 +724,11 @@ contains
     numAOs_p = 0
     ! Save significant indices
     do i = 1, self%numAOs
-      if (aoVMax(i) > self%ao_threshold) then
-        numAOs_p = numAOs_p + 1
-        self%indices_p(numAOs_p) = i
+      if (self%aoLive_(i)) then
+        if (aoVMax(i) > self%ao_threshold) then
+          numAOs_p = numAOs_p + 1
+          self%indices_p(numAOs_p) = i
+        end if
       end if
     end do
 
@@ -668,6 +744,17 @@ contains
     if (self%skip_p) then
       ! Set the full number of AOs since we skip pruning AOs
       self%numAOs_p = self%numAOs
+
+      ! The full (uncompressed) AO arrays are used downstream, so the
+      ! never-evaluated entries of prescreened-out shells must be
+      ! zeroed.  Few shells are dead here, since most AOs survived.
+      if (self%numDeadAOs > 0) then
+        do v = 1, ubound(self%aoMem, 3)
+          do j = 1, self%numPts
+            self%aoMem(self%deadAOs_(1:self%numDeadAOs), j, v) = 0.0_fp
+          end do
+        end do
+      end if
 
       self%wfAlpha_p => self%wfAlpha
       if (self%hasbeta) &
