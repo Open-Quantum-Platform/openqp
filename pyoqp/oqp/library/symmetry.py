@@ -171,3 +171,210 @@ def _cartesian_shell_size(l: int) -> int:
     if l == 2:
         return 6
     raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+
+
+def _component_signs(l: int, signs: tuple[int, int, int]) -> list[int]:
+    """Per-component characters of a Cartesian shell under diag(sx, sy, sz).
+
+    Cartesian d components are ordered xx, yy, zz, xy, xz, yz.
+    """
+
+    sx, sy, sz = signs
+    if l == 0:
+        return [1]
+    if l == 1:
+        return [sx, sy, sz]
+    if l == 2:
+        return [1, 1, 1, sx * sy, sx * sz, sy * sz]
+    raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+
+
+def _normalize_shells(shells: Iterable[Any]) -> list[tuple[int, int]]:
+    """Normalize shell specs to (atom_index, l) tuples."""
+
+    normalized: list[tuple[int, int]] = []
+    for shell in shells:
+        if isinstance(shell, Mapping):
+            atom = int(shell["atom"])
+            l = int(shell["l"])
+        else:
+            atom, l = (int(x) for x in shell)
+        if atom < 0:
+            raise ValueError("shell atom index must be non-negative")
+        normalized.append((atom, l))
+    return normalized
+
+
+def _ao_operator_maps(
+    shells: list[tuple[int, int]],
+    operations: Iterable[Mapping[str, Any]],
+) -> tuple[int, list[tuple[np.ndarray, np.ndarray]]]:
+    """Build per-operation AO maps (target_index, sign) for sign-matrix ops.
+
+    Operation payloads follow ``symmetry_detect``: ``matrix`` must be a
+    diagonal +-1 matrix and ``permutation[a]`` is the atom that atom ``a``
+    is mapped onto.
+    """
+
+    # AO offsets per shell, and per-atom shell lists for cross-atom mapping.
+    offsets: list[int] = []
+    n_ao = 0
+    atom_shells: dict[int, list[int]] = {}
+    for idx, (atom, l) in enumerate(shells):
+        offsets.append(n_ao)
+        n_ao += _cartesian_shell_size(l)
+        atom_shells.setdefault(atom, []).append(idx)
+
+    signatures = {
+        atom: tuple(shells[idx][1] for idx in idx_list)
+        for atom, idx_list in atom_shells.items()
+    }
+
+    maps: list[tuple[np.ndarray, np.ndarray]] = []
+    for op in operations:
+        matrix = _to_float_array(op["matrix"])
+        diag = np.diagonal(matrix)
+        if not np.allclose(matrix, np.diag(diag)) or not np.allclose(np.abs(diag), 1.0):
+            raise ValueError("operations must be diagonal sign matrices (D2h family)")
+        signs = tuple(int(round(s)) for s in diag)
+
+        permutation = [int(a) for a in op["permutation"]]
+        target = np.zeros(n_ao, dtype=int)
+        sign = np.zeros(n_ao, dtype=float)
+        for idx, (atom, l) in enumerate(shells):
+            mapped_atom = permutation[atom]
+            if signatures[atom] != signatures.get(mapped_atom):
+                raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
+            shell_rank = atom_shells[atom].index(idx)
+            mapped_shell = atom_shells[mapped_atom][shell_rank]
+            comp_signs = _component_signs(l, signs)
+            for comp, comp_sign in enumerate(comp_signs):
+                target[offsets[idx] + comp] = offsets[mapped_shell] + comp
+                sign[offsets[idx] + comp] = float(comp_sign)
+        maps.append((target, sign))
+
+    return n_ao, maps
+
+
+def build_symmetry_adapted_transform(
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+    character_table: Mapping[str, Iterable[int]],
+) -> tuple[np.ndarray, list[str]]:
+    """Build an orthogonal symmetry-adapted AO transform with irrep labels.
+
+    Parameters
+    ----------
+    shells:
+        Shell specs as (atom_index, l) pairs or {'atom','l'} mappings,
+        Cartesian s/p/d only, in AO order.
+    operations:
+        Abelian-group operations from ``symmetry_detect.detect_point_group``
+        (``operations`` payload), in character-table column order.
+    character_table:
+        Irrep -> characters mapping matching the operation order.
+
+    Returns
+    -------
+    (U, labels):
+        Orthogonal (n_ao, n_ao) transform whose columns are SALCs, and the
+        per-column irrep labels.
+    """
+
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+    n_ao, maps = _ao_operator_maps(shell_list, op_list)
+
+    table = {str(irrep): [int(c) for c in row] for irrep, row in character_table.items()}
+    for irrep, row in table.items():
+        if len(row) != len(op_list):
+            raise ValueError(f"character row for {irrep} does not match operation count")
+
+    columns: list[np.ndarray] = []
+    labels: list[str] = []
+    order = len(op_list)
+    for seed in range(n_ao):
+        for irrep, chars in table.items():
+            vec = np.zeros(n_ao)
+            for (target, sign), chi in zip(maps, chars):
+                vec[target[seed]] += chi * sign[seed]
+            vec /= float(order)
+            # Project out previously accepted SALCs.
+            for col in columns:
+                vec -= np.dot(col, vec) * col
+            norm = float(np.linalg.norm(vec))
+            if norm > 1.0e-8:
+                columns.append(vec / norm)
+                labels.append(irrep)
+
+    if len(columns) != n_ao:
+        raise ValueError(
+            f"projection produced {len(columns)} SALCs for {n_ao} AOs; "
+            "check operations/permutations consistency"
+        )
+
+    u = np.array(columns).T
+    return u, labels
+
+
+def assign_mo_irreps(
+    mo_coefficients: Any,
+    overlap: Any,
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+    character_table: Mapping[str, Iterable[int]],
+    tolerance: float = 1.0e-4,
+) -> dict[str, Any]:
+    """Assign abelian irrep labels to molecular orbitals (metadata only).
+
+    For each MO ``m`` the character under operation ``O`` is
+    ``chi(O) = <m|S O|m> / <m|S|m>``; the MO gets the irrep whose character
+    row matches within ``tolerance``, otherwise the label 'mixed'.
+    """
+
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive")
+
+    c = _to_float_array(mo_coefficients)
+    if c.ndim != 2:
+        raise ValueError("mo_coefficients must be a 2D (n_ao, n_mo) array")
+    s = _to_float_array(overlap)
+    if s.shape != (c.shape[0], c.shape[0]):
+        raise ValueError("overlap must be square and match the AO dimension")
+
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+    n_ao, maps = _ao_operator_maps(shell_list, op_list)
+    if n_ao != c.shape[0]:
+        raise ValueError("shells do not match the AO dimension of mo_coefficients")
+
+    table = {str(irrep): [int(ch) for ch in row] for irrep, row in character_table.items()}
+
+    sc = s @ c
+    characters = np.zeros((c.shape[1], len(op_list)))
+    for iop, (target, sign) in enumerate(maps):
+        transformed = np.zeros_like(c)
+        transformed[target, :] = sign[:, None] * c
+        numerator = np.einsum('im,im->m', sc, transformed)
+        denominator = np.einsum('im,im->m', sc, c)
+        characters[:, iop] = numerator / denominator
+
+    labels: list[str] = []
+    deviations: list[float] = []
+    for imo in range(c.shape[1]):
+        best_label = 'mixed'
+        best_dev = np.inf
+        for irrep, row in table.items():
+            dev = float(np.max(np.abs(characters[imo] - np.asarray(row, dtype=float))))
+            if dev < best_dev:
+                best_dev = dev
+                best_label = irrep
+        labels.append(best_label if best_dev <= tolerance else 'mixed')
+        deviations.append(best_dev)
+
+    return {
+        'labels': labels,
+        'characters': characters.tolist(),
+        'max_deviation': float(np.max(deviations)) if deviations else 0.0,
+        'status': 'label_only_no_reductions',
+    }

@@ -183,7 +183,32 @@ class Molecule:
             },
         }
 
+        if status != 'disabled':
+            self._detect_symmetry_metadata()
+
         return self.symmetry_metadata
+
+    def _detect_symmetry_metadata(self):
+        """Geometry-based point-group detection (metadata only, non-fatal)."""
+        try:
+            from oqp.library.symmetry_detect import attach_detection_metadata
+            atoms = np.asarray(self.get_atoms(), dtype=float).ravel()
+            coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+            if atoms.size == 0 or coords.shape[0] != atoms.size:
+                return
+            attach_detection_metadata(self.symmetry_metadata, atoms, coords)
+        except Exception as exc:
+            # Detection must never break the run in the metadata-only phase.
+            self.symmetry_metadata['detection_error'] = str(exc)
+            return
+
+        if self.symmetry_metadata.get('strict') and \
+                not self.symmetry_metadata.get('requested_matches_detected', True):
+            raise ValueError(
+                "symmetry.strict: requested point group "
+                f"'{self.symmetry_metadata['requested_point_group']}' does not match "
+                f"detected '{self.symmetry_metadata['detected_point_group']}'"
+            )
 
     def get_mass(self):
         """
