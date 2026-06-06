@@ -14,6 +14,8 @@
  * the calls are no-ops and we report "unknown" (-1).
  */
 
+#define _GNU_SOURCE   /* RTLD_DEFAULT in <dlfcn.h> on glibc < 2.34 */
+
 #include <stdint.h>
 
 #if defined(_WIN32)
