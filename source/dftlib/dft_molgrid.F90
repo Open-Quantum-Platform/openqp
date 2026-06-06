@@ -336,6 +336,7 @@ contains
     integer :: i, nLayers, nGrids, iSpl, iRMin, iRMax, iRNext, nRad!, k
     integer :: idAtm
     real(KIND=fp) :: rAtm, rMin, rMax, rNext
+    logical :: by_index
 
     integer :: layers(3, MAXGRID*5)
 
@@ -343,6 +344,10 @@ contains
     nRad = ubound(atomic_grid%rad_pts, 1)
     nGrids = ubound(atomic_grid%sph_npts, 1)
     rAtm = atomic_grid%rAtm
+!   Index-based pruning sectors (e.g. SG-2/SG-3): region i spans the
+!   next sph_nrad(i) radial shells instead of all shells up to radius
+!   sph_radii(i)
+    by_index = allocated(atomic_grid%sph_nrad)
 
     limits = [1.0, 2.0, 8.0, 12.0, 20.0]
     if (grid%rInner(idAtm) /= 0.0_fp) then
@@ -357,7 +362,11 @@ contains
       ! No radial points left for this and the following regions
       ! (e.g. pruned-grid region boundaries beyond the radial grid)
       if (iRMin > nRad) exit
-      iRMax = findl(atomic_grid%sph_radii(i), atomic_grid%rad_pts, iRMin)
+      if (by_index) then
+        iRMax = min(nRad, iRMin+atomic_grid%sph_nrad(i)-1)
+      else
+        iRMax = findl(atomic_grid%sph_radii(i), atomic_grid%rad_pts, iRMin)
+      end if
 
       if (nGrids == 1) iRMax = nRad
       if (i == nGrids) iRMax = nRad

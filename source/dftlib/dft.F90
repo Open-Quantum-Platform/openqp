@@ -21,12 +21,27 @@ module dft
 !>   radial regions: region i of type t covers radii (in units of the
 !>   atomic radius) up to `radii(i,t)` and uses a `nang(i,t)`-point
 !>   Lebedev sphere.  `rad_id` maps each atom to its type.
+!>   Alternatively (SG-2/SG-3), regions are given as counts of
+!>   consecutive radial shells: when `nradPerRegion(i,t) > 0`, region i
+!>   of type t spans the next `nradPerRegion(i,t)` shells of the radial
+!>   grid and `radii` is ignored for that type (regions with a zero
+!>   count are unused).
+!>   Several radial grids may coexist: `radial_id` maps each atom to
+!>   one of `nrad_types` radial grids.  Radial type 1 is always the
+!>   standard unit-radius grid (scaled by the Bragg-Slater radius);
+!>   types >= 2 are element-specific DE2 grids in absolute bohr
+!>   (`de2_alpha`/`rad_typ_z` give alpha and the element).
   type dft_grid_pruned_t
     integer :: nrad = 0
     integer :: ngrids = 1
     integer, allocatable :: nang(:,:)    !< (region, atom type)
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
     integer, allocatable :: rad_id(:)    !< atom -> atom type
+    integer, allocatable :: nradPerRegion(:,:) !< (region, atom type); 0 = unused
+    integer :: nrad_types = 1            !< number of radial grids
+    integer, allocatable :: radial_id(:) !< atom -> radial grid type
+    real(kind=dp), allocatable :: de2_alpha(:) !< DE2 alpha of radial type
+    integer, allocatable :: rad_typ_z(:) !< element of radial type (0: standard)
   end type
 
 !  SG1 region boundaries (in units of the atomic radius) and Lebedev
@@ -42,6 +57,103 @@ module dft
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
+
+!  SG-2 / SG-3 pruned grids: S. Dasgupta, J.M. Herbert,
+!  J. Comput. Chem. 38, 869 (2017).  Radial grid: Mitani
+!  double-exponential (DE2), M. Mitani, Theor. Chem. Acc. 130,
+!  645 (2011), with element-specific alpha and Nr = 75 (SG-2) or
+!  Nr = 99 (SG-3); R_max = 20 * Bragg-Slater radius.
+!  The pruning sectors are counts of consecutive radial shells
+!  (ascending radius), each integrated on the given Lebedev sphere.
+!  Defined for Z in {1, 3-9, 11-17}; other elements fall back to the
+!  unpruned 302/590-point grid on the standard radial grid.
+  integer, parameter :: SG_NELEM = 15
+  integer, parameter :: sg_elem_z(SG_NELEM) = &
+        [1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17]
+
+  integer, parameter :: SG2_NRAD = 75
+  integer, parameter :: SG2_MAXSEC = 5
+  real(kind=dp), parameter :: sg2_alpha(SG_NELEM) = &
+        [2.6d0, 3.2d0, 2.4d0, 2.4d0, 2.2d0, 2.2d0, 2.2d0, 2.2d0, &
+         3.2d0, 2.4d0, 2.5d0, 2.3d0, 2.5d0, 2.5d0, 2.5d0]
+!  number of radial shells per sector
+  integer, parameter :: sg2_cnt(SG2_MAXSEC, SG_NELEM) = reshape([ &
+        35, 12, 16, 7, 5,   & ! H
+        35, 12, 17, 7, 4,   & ! Li
+        35, 12, 17, 7, 4,   & ! Be
+        35, 12, 17, 7, 4,   & ! B
+        35, 12, 17, 7, 4,   & ! C
+        35, 12, 17, 7, 4,   & ! N
+        30, 14, 18, 8, 5,   & ! O
+        26, 16, 19, 8, 6,   & ! F
+        35, 12, 17, 7, 4,   & ! Na
+        35, 12, 17, 7, 4,   & ! Mg
+        32, 15, 17, 7, 4,   & ! Al
+        32, 15, 17, 7, 4,   & ! Si
+        30, 14, 17, 7, 7,   & ! P
+        30, 14, 17, 7, 7,   & ! S
+        26, 16, 19, 8, 6],  & ! Cl
+        shape(sg2_cnt))
+!  Lebedev order of each sector
+  integer, parameter :: sg2_leb(SG2_MAXSEC, SG_NELEM) = reshape([ &
+        6, 110, 302,  86, 26,   & ! H
+        6, 110, 302,  86, 50,   & ! Li
+        6, 110, 302,  86, 50,   & ! Be
+        6, 110, 302, 146, 26,   & ! B
+        6, 110, 302, 146, 26,   & ! C
+        6, 110, 302,  86, 26,   & ! N
+        6, 110, 302, 146, 50,   & ! O
+        6, 110, 302, 110, 50,   & ! F
+        6, 110, 302,  86, 50,   & ! Na
+        6, 110, 302,  86, 50,   & ! Mg
+        6, 110, 302, 146, 86,   & ! Al
+        6, 110, 302, 146, 50,   & ! Si
+        6, 110, 302, 146, 38,   & ! P
+        6, 110, 302, 146, 38,   & ! S
+        6, 110, 302, 110, 50],  & ! Cl
+        shape(sg2_leb))
+
+  integer, parameter :: SG3_NRAD = 99
+  integer, parameter :: SG3_MAXSEC = 9
+  real(kind=dp), parameter :: sg3_alpha(SG_NELEM) = &
+        [2.7d0, 3.0d0, 2.4d0, 2.4d0, 2.4d0, 2.4d0, 2.6d0, 2.1d0, &
+         3.2d0, 2.6d0, 2.6d0, 2.8d0, 2.4d0, 2.4d0, 2.6d0]
+  integer, parameter :: sg3_nsec(SG_NELEM) = &
+        [5, 5, 7, 6, 7, 5, 9, 7, 5, 5, 7, 6, 8, 8, 7]
+  integer, parameter :: sg3_cnt(SG3_MAXSEC, SG_NELEM) = reshape([ &
+        45, 16, 21, 10,  7,  0,  0,  0,  0,   & ! H
+        46, 16, 22,  9,  6,  0,  0,  0,  0,   & ! Li
+        42,  6, 14, 22,  3,  6,  6,  0,  0,   & ! Be
+        42,  6, 14, 22,  9,  6,  0,  0,  0,   & ! B
+        46, 16, 22,  1,  2,  6,  6,  0,  0,   & ! C
+        40, 18, 24, 11,  6,  0,  0,  0,  0,   & ! N
+        40, 14,  2,  2, 24,  1,  1,  8,  7,   & ! O
+        35, 17,  4, 25,  2,  8,  8,  0,  0,   & ! F
+        46, 16, 22,  9,  6,  0,  0,  0,  0,   & ! Na
+        48, 15, 20,  7,  9,  0,  0,  0,  0,   & ! Mg
+        42,  6, 14, 22,  3,  6,  6,  0,  0,   & ! Al
+        42,  6, 14, 22,  9,  6,  0,  0,  0,   & ! Si
+        35,  1, 18,  4, 25,  2,  8,  6,  0,   & ! P
+        35,  1, 18,  4, 25,  2,  8,  6,  0,   & ! S
+        35, 17,  4, 25,  2,  8,  8,  0,  0],  & ! Cl
+        shape(sg3_cnt))
+  integer, parameter :: sg3_leb(SG3_MAXSEC, SG_NELEM) = reshape([ &
+        6, 110, 590, 194,  50,   0,   0,   0,  0,   & ! H
+        6, 110, 590, 146,  50,   0,   0,   0,  0,   & ! Li
+        6,  86, 110, 590, 194, 146,  50,   0,  0,   & ! Be
+        6,  86, 110, 590, 194,  50,   0,   0,  0,   & ! B
+        6, 146, 590, 302, 194, 146,  86,   0,  0,   & ! C
+        6, 110, 590, 146,  50,   0,   0,   0,  0,   & ! N
+        6, 110, 194, 302, 590, 302, 194, 146, 50,   & ! O
+        6, 110, 194, 590, 194, 110,  50,   0,  0,   & ! F
+        6, 110, 590, 146,  50,   0,   0,   0,  0,   & ! Na
+        6, 110, 590, 146,  50,   0,   0,   0,  0,   & ! Mg
+        6,  86, 110, 590, 194, 146,  50,   0,  0,   & ! Al
+        6,  86, 110, 590, 194,  50,   0,   0,  0,   & ! Si
+        6,  86, 110, 194, 590, 194, 146,  50,  0,   & ! P
+        6,  86, 110, 194, 590, 194, 146,  50,  0,   & ! S
+        6, 110, 194, 590, 194, 110,  50,   0,  0],  & ! Cl
+        shape(sg3_leb))
 
   type :: saved_HF_info !< keeps HF exchange from input
     logical :: alpha = .false.
@@ -253,6 +365,9 @@ contains
     character(len=20) :: xc_func_name
     integer :: nat, i, slen, ntyps
     character(:), allocatable :: pruned_name
+    logical :: is_sg3
+    integer :: z, ie, nsec, maxsec, nang_fallback
+    integer :: zmap(SG_NELEM)
 
     need_func = .true.
     if (present(need_functional)) need_func = need_functional
@@ -315,6 +430,85 @@ contains
                     trim(xc_func_name), &
                     infos%dft%grid_density_cutoff
 
+      case ("SG2", "SG3")
+        is_sg3 = trim(pruned_name) == "SG3"
+        if (is_sg3) then
+          pruned%nrad = SG3_NRAD
+          maxsec = SG3_MAXSEC
+          nang_fallback = 590
+        else
+          pruned%nrad = SG2_NRAD
+          maxsec = SG2_MAXSEC
+          nang_fallback = 302
+        end if
+
+!       One atom type per supported element present in the system;
+!       type 1 is the fallback (He, Ne, Ar, Z > 18, dummy atoms):
+!       unpruned nang_fallback-point grid on the standard radial grid.
+        zmap = 0
+        ntyps = 1
+        do iatm = 1, nat
+          z = int(abs(infos%atoms%zn(iatm))+1.0d-5)
+          ie = 0
+          if (abs(abs(infos%atoms%zn(iatm))-z) <= 1.0d-5 .and. &
+              z >= 1 .and. z <= 17) then
+            do i = 1, SG_NELEM
+              if (sg_elem_z(i) == z) then
+                ie = i
+                exit
+              end if
+            end do
+          end if
+          if (ie > 0) then
+            if (zmap(ie) == 0) then
+              ntyps = ntyps+1
+              zmap(ie) = ntyps
+            end if
+            pruned%rad_id(iatm) = zmap(ie)
+          else
+            pruned%rad_id(iatm) = 1
+          end if
+        end do
+
+        pruned%ngrids = maxsec
+        pruned%nrad_types = ntyps
+        allocate(pruned%nang(maxsec, ntyps), source=0)
+        allocate(pruned%nradPerRegion(maxsec, ntyps), source=0)
+        allocate(pruned%radii(maxsec, ntyps), source=1.0d30)
+        allocate(pruned%de2_alpha(ntyps), source=0.0_dp)
+        allocate(pruned%rad_typ_z(ntyps), source=0)
+        pruned%radial_id = pruned%rad_id
+
+!       Fallback type: single unpruned region, standard radial grid
+        pruned%nang(1,1) = nang_fallback
+
+!       Element types: index-based sectors on the per-element DE2 grid
+        do ie = 1, SG_NELEM
+          i = zmap(ie)
+          if (i == 0) cycle
+          if (is_sg3) then
+            nsec = sg3_nsec(ie)
+            pruned%nang(1:nsec, i) = sg3_leb(1:nsec, ie)
+            pruned%nradPerRegion(1:nsec, i) = sg3_cnt(1:nsec, ie)
+            pruned%de2_alpha(i) = sg3_alpha(ie)
+          else
+            nsec = SG2_MAXSEC
+            pruned%nang(1:nsec, i) = sg2_leb(1:nsec, ie)
+            pruned%nradPerRegion(1:nsec, i) = sg2_cnt(1:nsec, ie)
+            pruned%de2_alpha(i) = sg2_alpha(ie)
+          end if
+          pruned%rad_typ_z(i) = sg_elem_z(ie)
+        end do
+
+        write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
+                  &5X,40("-")/&
+                  &5X,"XC functional: ",A/&
+                  &5X,"NRAD  =",I8,"   (Mitani DE2 radial grid)"/&
+                  &5X,"THRESH=",1P,E12.2)') &
+                    pruned_name(3:3), trim(pruned_name), &
+                    trim(xc_func_name), pruned%nrad, &
+                    infos%dft%grid_density_cutoff
+
       case default
         call show_message('Unknown pruned grid name', WITH_ABORT)
       end select
@@ -363,6 +557,7 @@ contains
       integer :: bstype
       integer :: grid_id
       integer :: max_ang_pts
+      integer :: ngr, rtid
       real(kind=dp) :: dftthr0
       real(KIND=dp) :: brsl_radii(BRSL_NUM_ELEMENTS)
       logical :: verbose_
@@ -393,7 +588,7 @@ contains
         source=0.0d0)
 
 !     Init storage for the grid
-      call molGrid%reset(nat, maxpt_per_atom, nRad)
+      call molGrid%reset(nat, maxpt_per_atom, nRad, pruned%nrad_types)
 
 !     Print out DFT info
       if (verbose_) then
@@ -422,6 +617,19 @@ contains
       call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
               nrad, infos%dft%rad_grid_type)
 
+!     Element-specific DE2 radial grids (SG-2/SG-3), absolute radii;
+!     R_max = 20 * Bragg-Slater radius (NWChem convention)
+      do i = 2, pruned%nrad_types
+        call de2_radial_grid(nrad, pruned%de2_alpha(i), &
+                20.0_dp*bragg_slater_radius(brsl_radii, &
+                        real(pruned%rad_typ_z(i), kind=dp)), &
+                molGrid%rad_pts(:,i), molGrid%rad_wts(:,i))
+      end do
+
+!     Per-atom radial grid types
+      if (allocated(pruned%radial_id)) &
+        molGrid%radTypeId(1:nat) = pruned%radial_id(1:nat)
+
 !     Pre-compute atomic distances
       call get_atomic_distances(infos%atoms%xyz, rij)
 
@@ -431,25 +639,46 @@ contains
 !     Find nearest neighbours for all atoms
       call molGrid%find_neighbours(rij, partFunType=infos%dft%dft_partfun)
 
-!     Set radial grid
-      atomic_grid%rad_pts = molGrid%rad_pts(:,1)
-      atomic_grid%rad_wts = molGrid%rad_wts(:,1)
-
 !     Compute atomic grids for each atom
       do iat = 1, nat
         grid_id = pruned%rad_id(iat)
 
-        atomic_grid%sph_npts = pruned%nang(1:pruned%ngrids, grid_id)
-        atomic_grid%sph_radii = pruned%radii(:pruned%ngrids, grid_id)
+!       Number of regions used by this atom type and the pruning mode:
+!       index-based sectors (nradPerRegion > 0) vs radius-based regions
+        ngr = pruned%ngrids
+        if (allocated(pruned%nradPerRegion)) then
+          if (any(pruned%nradPerRegion(:, grid_id) > 0)) then
+            ngr = count(pruned%nradPerRegion(:, grid_id) > 0)
+            atomic_grid%sph_nrad = pruned%nradPerRegion(1:ngr, grid_id)
+          else
+            ngr = count(pruned%nang(:, grid_id) > 0)
+            if (allocated(atomic_grid%sph_nrad)) &
+              deallocate(atomic_grid%sph_nrad)
+          end if
+        end if
+
+        atomic_grid%sph_npts = pruned%nang(1:ngr, grid_id)
+        atomic_grid%sph_radii = pruned%radii(1:ngr, grid_id)
         atomic_grid%idAtm = iat
 
 !       Set angular Lebedev grid(s)
-        do igrid = 1, pruned%ngrids
+        do igrid = 1, ngr
 !         get the unit lebedev sphere (no-op if already stored)
           call molGrid%spherical_grids%add_grid(pruned%nang(igrid, grid_id))
         end do
 
-        atomic_grid%rAtm = bsrad(iat)
+!       Set the radial grid of the atom.  DE2 radial grids (types >= 2)
+!       store absolute radii: use a unit effective radius; the standard
+!       grid (type 1) is scaled by the Bragg-Slater radius.
+        rtid = molGrid%radTypeId(iat)
+        atomic_grid%rad_pts = molGrid%rad_pts(:, rtid)
+        atomic_grid%rad_wts = molGrid%rad_wts(:, rtid)
+        if (rtid > 1) then
+          atomic_grid%rAtm = 1.0_dp
+        else
+          atomic_grid%rAtm = bsrad(iat)
+        end if
+
         call molGrid%add_atomic_grid(atomic_grid)
       end do
 
@@ -474,7 +703,60 @@ contains
 
       call molGrid%compress
 
+      if (verbose_) then
+        write(iw,'(5X,"Molecular grid: ",I0," points in ",I0," slices")') &
+              sum(molGrid%nTotPts(1:molGrid%nSlices)), molGrid%nSlices
+      end if
+
   end subroutine
+
+!> @brief Mitani double-exponential (DE2) radial quadrature
+!> @details M. Mitani, Theor. Chem. Acc. 130, 645 (2011);
+!>   M. Mitani, Y. Yoshioka, Theor. Chem. Acc. 131, 1169 (2012).
+!>   Nodes and weights (the weights include the r^2 Jacobian):
+!>     x_i = i*h,  i = n_lo..n_hi
+!>     r_i = exp(alpha*x_i - exp(-x_i))                        [bohr]
+!>     w_i = h*(alpha + exp(-x_i))*exp(3*alpha*x_i - 3*exp(-x_i))
+!>   The mesh size h is chosen so that the outermost node equals rmax:
+!>   alpha*(n_hi*h) - exp(-n_hi*h) = ln(rmax), solved by Newton
+!>   iteration (the left-hand side is strictly increasing in h).
+!> @param[in]   nr     number of radial points
+!> @param[in]   alpha  DE2 alpha parameter (element-specific)
+!> @param[in]   rmax   outermost radial node, bohr
+!> @param[out]  r      radial nodes, absolute bohr
+!> @param[out]  w      radial weights including the r^2 Jacobian
+  pure subroutine de2_radial_grid(nr, alpha, rmax, r, w)
+    implicit none
+    integer, intent(in) :: nr
+    real(kind=dp), intent(in) :: alpha, rmax
+    real(kind=dp), intent(out) :: r(:), w(:)
+
+    integer :: i, n_lo, n_hi, iter
+    real(kind=dp) :: h, x, f, fp, lnr
+
+    if (mod(nr,2) == 1) then
+      n_lo = -(nr-1)/2
+    else
+      n_lo = -nr/2
+    end if
+    n_hi = nr+n_lo-1
+
+    lnr = log(rmax)
+    h = lnr/(alpha*n_hi)
+    do iter = 1, 64
+      f = alpha*n_hi*h-exp(-n_hi*h)-lnr
+      if (abs(f) < 1.0d-14*max(1.0_dp, abs(lnr))) exit
+      fp = n_hi*(alpha+exp(-n_hi*h))
+      h = h-f/fp
+    end do
+
+    do i = n_lo, n_hi
+      x = i*h
+      r(i-n_lo+1) = exp(alpha*x-exp(-x))
+      w(i-n_lo+1) = h*(alpha+exp(-x))*exp(3.0_dp*alpha*x-3.0_dp*exp(-x))
+    end do
+
+  end subroutine de2_radial_grid
 
   subroutine dftexcor(basis,molGrid,iscftyp,fa,fb,coeffa,coeffb,nbf,nbf_tri,eexc,totele,totkin, infos)
     use basis_tools, only: basis_set
