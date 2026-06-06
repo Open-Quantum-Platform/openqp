@@ -418,8 +418,8 @@ contains
         bsrad(i) = bragg_slater_radius(brsl_radii, infos%atoms%zn(i))
       end do
 
-!     Set up radial grid
-      call get_radial_grid(molGrid%rad_pts, molGrid%rad_wts, &
+!     Set up radial grid (the standard grid is radial type 1)
+      call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
               nrad, infos%dft%rad_grid_type)
 
 !     Pre-compute atomic distances
@@ -432,8 +432,8 @@ contains
       call molGrid%find_neighbours(rij, partFunType=infos%dft%dft_partfun)
 
 !     Set radial grid
-      atomic_grid%rad_pts = molGrid%rad_pts
-      atomic_grid%rad_wts = molGrid%rad_wts
+      atomic_grid%rad_pts = molGrid%rad_pts(:,1)
+      atomic_grid%rad_wts = molGrid%rad_wts(:,1)
 
 !     Compute atomic grids for each atom
       do iat = 1, nat
