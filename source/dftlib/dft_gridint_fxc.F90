@@ -138,21 +138,42 @@ contains
     integer :: myThread
 
     real(kind=fp), pointer :: focks(:,:,:,:)
+    integer :: i, j, jj, m, s
 
     call self%resetOrbPointers(xce, focks=focks, myThread=myThread)
 
     associate(  numAOs  => xce%numAOs_p &  ! number of pruned AOs
               , indices => xce%indices_p &
       )
+      ! Only the upper triangle of focks is valid (dsyr2k 'U' in
+      ! R/UUpdate) and the drivers consume the result via
+      ! triangular_to_full(..., 'u'), so accumulate just that part.
+      ! The indices are ascending, hence the scatter keeps upper
+      ! triangle upper.
       if (xce%skip_p) then
 
-         self%focks(:,:,:,:,myThread) = self%focks(:,:,:,:,myThread) + focks
+         do s = 1, ubound(focks, 4)
+           do m = 1, ubound(focks, 3)
+             do j = 1, numAOs
+               self%focks(1:j, j, m, s, myThread) = &
+                  self%focks(1:j, j, m, s, myThread) + focks(1:j, j, m, s)
+             end do
+           end do
+         end do
 
       else
 
-         self%focks(indices(1:numAOs), indices(1:numAOs), :, :, myThread) &
-            = self%focks(indices(1:numAOs), indices(1:numAOs), :, :, myThread) &
-            + focks
+         do s = 1, ubound(focks, 4)
+           do m = 1, ubound(focks, 3)
+             do j = 1, numAOs
+               jj = indices(j)
+               do i = 1, j
+                 self%focks(indices(i), jj, m, s, myThread) = &
+                    self%focks(indices(i), jj, m, s, myThread) + focks(i, j, m, s)
+               end do
+             end do
+           end do
+         end do
 
       end if
 
@@ -172,7 +193,7 @@ contains
     real(kind=fp), intent(out), pointer :: mo(:,:,:,:)
     real(kind=fp), intent(out), pointer :: moG1(:,:,:,:)
     integer, intent(in) :: myThread
-    integer :: nSpin
+    integer :: nSpin, j, m
 
     if (xce%skip_p) then
 
@@ -194,12 +215,14 @@ contains
         ! Set pointer for Dens A
         da(1:numAOs, 1:numAOs, 1:nMtx) => &
               self%tmpDensity_(1:numAOs*numAOs*nMtx, 1, myThread)
-        ! Compress Dens A
-        da(1:numAOs, 1:numAOs,:) = &
-              self%da(indices(1:numAOs), indices(1:numAOs), :)
-        ! Set pointer for MOs
-        da(1:numAOs, 1:numAOs, 1:nMtx) => &
-              self%tmpDensity_(1:numAOs*numAOs*nMtx, 1, myThread)
+        ! Compress Dens A; only the upper triangle is referenced
+        ! downstream (dsymm 'L'/'U' in compRMOs/compRMOGs) and the
+        ! indices are ascending, so compressing it is sufficient
+        do m = 1, nMtx
+          do j = 1, numAOs
+            da(1:j, j, m) = self%da(indices(1:j), indices(j), m)
+          end do
+        end do
         mo(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin) => &
               self%tmpMO_(1:numAOs*numPts*nMtx*nSpin, myThread)
 
@@ -213,9 +236,12 @@ contains
             ! Set pointer for Dens B
             db(1:numAOs, 1:numAOs, 1:nMtx) => &
                   self%tmpDensity_(1:numAOs*numAOs*nMtx, 2, myThread)
-            ! Compress Dens B
-            db(1:numAOs, 1:numAOs, :) = &
-                  self%db(indices(1:numAOs), indices(1:numAOs), :)
+            ! Compress Dens B, upper triangle only as for Dens A
+            do m = 1, nMtx
+              do j = 1, numAOs
+                db(1:j, j, m) = self%db(indices(1:j), indices(j), m)
+              end do
+            end do
         end if
 
       end associate
@@ -280,8 +306,6 @@ contains
       if (hasBeta) then
         call xce%compRMOs(db, mo(:,:,:,2))
       end if
-
-      if (.not. xce%skip_p) self%mo(indices(1:numAOs),:,:,:,myThread) = mo(1:numAOs,:,:,:)
 
       call xce%compRRho(mo, rRho)
       if (xce%funTyp /= OQP_FUNTYP_LDA) then

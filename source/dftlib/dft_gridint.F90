@@ -634,12 +634,22 @@ contains
     class(xc_engine_t), target :: self
 
     logical :: skip
-    integer :: i, numAOs_p
+    integer :: i, j, numAOs_p
+    real(kind=fp) :: aoVMax(self%numAOs)
+
+    ! Per-AO maximum over all points, accumulated by cache-friendly
+    ! column sweeps (aoV rows are strided by numAOs)
+    aoVMax = 0.0_fp
+    do j = 1, self%numPts
+      do i = 1, self%numAOs
+        aoVMax(i) = max(aoVMax(i), abs(self%aoV(i, j)))
+      end do
+    end do
 
     numAOs_p = 0
     ! Save significant indices
     do i = 1, self%numAOs
-      if (maxval(abs(self%aoV(i, :))) > self%ao_threshold) then
+      if (aoVMax(i) > self%ao_threshold) then
         numAOs_p = numAOs_p + 1
         self%indices_p(numAOs_p) = i
       end if
@@ -698,17 +708,23 @@ contains
 
       if (isWFVecs) then
 
-        ! Set pointer for pruned
-        self%wfAlpha_p(1:numAOs_p, 1:numAOs) => self%tmpWfAlpha(1:numAOs_p*numAOs)
-        ! Compress array
-        self%wfAlpha_p(:numAOs_p,:) = self%wfAlpha(indices(:numAOs_p),:)
+        ! Only the occupied MO coefficient columns are referenced in
+        ! compMOs, so compress just those instead of all numAOs columns
+        associate (nOccA => self%numOccAlpha, nOccB => self%numOccBeta)
 
-        if (hasBeta) then
           ! Set pointer for pruned
-          self%wfBeta_p(1:numAOs_p, 1:numAOs) => self%tmpWfBeta(1:numAOs_p*numAOs)
+          self%wfAlpha_p(1:numAOs_p, 1:nOccA) => self%tmpWfAlpha(1:numAOs_p*nOccA)
           ! Compress array
-          self%wfBeta_p(:numAOs_p, :) = self%wfBeta(indices(:numAOs_p),:)
-        end if
+          self%wfAlpha_p(:numAOs_p,:) = self%wfAlpha(indices(:numAOs_p),:nOccA)
+
+          if (hasBeta) then
+            ! Set pointer for pruned
+            self%wfBeta_p(1:numAOs_p, 1:nOccB) => self%tmpWfBeta(1:numAOs_p*nOccB)
+            ! Compress array
+            self%wfBeta_p(:numAOs_p, :) = self%wfBeta(indices(:numAOs_p),:nOccB)
+          end if
+
+        end associate
 
       else
 
@@ -905,17 +921,18 @@ contains
  subroutine compRRho_ab(xce, mo, rho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rho(:,:,:)
-    real(kind=fp), intent(in) :: mo(:,:,:,:)
-    integer :: i, j, k, nMtx, nSpin
+    real(kind=fp), contiguous, intent(out) :: rho(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:,:)
+    integer :: i, j, k, m, nMtx, nSpin
 
     nMtx = ubound(mo,3)
     nSpin = ubound(mo,4)
+    m = xce%numAOs_p
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          rho(k,i,j) = dot_product(xce%aoV(:,i), mo(:,i,j,k))
+          rho(k,i,j) = ddot(m, xce%aoV(1,i), 1, mo(1,i,j,k), 1)
         end do
       end do
     end do
@@ -934,7 +951,8 @@ contains
     real(kind=fp), intent(in) :: mo(:,:,:,:)
     real(kind=fp), intent(out) :: drrho(:,:,:,:)
 
-    integer :: i, j, k, nMtx, nSpin
+    integer :: i, j, k, n, nMtx, nSpin
+    real(kind=fp) :: s1, s2, s3
 
     nMtx = ubound(mo,3)
     nSpin = ubound(mo,4)
@@ -942,9 +960,16 @@ contains
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          drrho(1,k,i,j) = 2*dot_product(xce%aoG1(:,i,1), mo(:,i,j,k))
-          drrho(2,k,i,j) = 2*dot_product(xce%aoG1(:,i,2), mo(:,i,j,k))
-          drrho(3,k,i,j) = 2*dot_product(xce%aoG1(:,i,3), mo(:,i,j,k))
+          ! One pass over the mo column instead of three dot products
+          s1 = 0; s2 = 0; s3 = 0
+          do n = 1, ubound(mo,1)
+            s1 = s1 + xce%aoG1(n,i,1)*mo(n,i,j,k)
+            s2 = s2 + xce%aoG1(n,i,2)*mo(n,i,j,k)
+            s3 = s3 + xce%aoG1(n,i,3)*mo(n,i,j,k)
+          end do
+          drrho(1,k,i,j) = 2*s1
+          drrho(2,k,i,j) = 2*s2
+          drrho(3,k,i,j) = 2*s3
         end do
       end do
     end do
@@ -1011,15 +1036,23 @@ contains
     real(kind=fp), intent(in) :: mo(:,:,:)
     real(kind=fp), intent(out) :: drrho(:,:,:)
 
-    integer :: i, j, nMtx
+    integer :: i, j, n, nMtx
+    real(kind=fp) :: s1, s2, s3
 
     nMtx = ubound(mo,3)
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        drrho(1,i,j) = 2*dot_product(xce%aoG1(:,i,1), mo(:,i,j))
-        drrho(2,i,j) = 2*dot_product(xce%aoG1(:,i,2), mo(:,i,j))
-        drrho(3,i,j) = 2*dot_product(xce%aoG1(:,i,3), mo(:,i,j))
+        ! One pass over the mo column instead of three dot products
+        s1 = 0; s2 = 0; s3 = 0
+        do n = 1, ubound(mo,1)
+          s1 = s1 + xce%aoG1(n,i,1)*mo(n,i,j)
+          s2 = s2 + xce%aoG1(n,i,2)*mo(n,i,j)
+          s3 = s3 + xce%aoG1(n,i,3)*mo(n,i,j)
+        end do
+        drrho(1,i,j) = 2*s1
+        drrho(2,i,j) = 2*s2
+        drrho(3,i,j) = 2*s3
       end do
     end do
 
@@ -1134,18 +1167,27 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j
+    integer :: i, j, n
     real(kind=fp) :: drhoa(3), drhob(3)
 
     do i = 1, self%numPts
       if (self%hasBeta) then
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%aoG1(:,i,j), self%moVA(:,i))
-          drhob(j) = 2*dot_product(self%aoG1(:,i,j), self%moVB(:,i))
+        ! One pass over the moV columns instead of three dot products
+        drhoa = 0; drhob = 0
+        do n = 1, ubound(self%moVA,1)
+          do j = 1, 3
+            drhoa(j) = drhoa(j) + self%aoG1(n,i,j)*self%moVA(n,i)
+            drhob(j) = drhob(j) + self%aoG1(n,i,j)*self%moVB(n,i)
+          end do
         end do
+        drhoa = 2*drhoa
+        drhob = 2*drhob
       else
-        do j = 1, 3
-          drhoa(j) = dot_product(self%aoG1(:,i,j), self%moVA(:,i))
+        drhoa = 0
+        do n = 1, ubound(self%moVA,1)
+          do j = 1, 3
+            drhoa(j) = drhoa(j) + self%aoG1(n,i,j)*self%moVA(n,i)
+          end do
         end do
         drhob = drhoa
       end if
@@ -1168,22 +1210,30 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j, noa, nob
+    integer :: i, j, n, noa, nob
     real(kind=fp) :: drhoa(3), drhob(3)
 
     noa = self%numOccAlpha
     nob = self%numOccBeta
 
     do i = 1, self%numPts
+      ! One pass over the moV columns instead of three dot products
+      drhoa = 0
+      do n = 1, noa
+        do j = 1, 3
+          drhoa(j) = drhoa(j) + self%moG1A(n,i,j)*self%moVA(n,i)
+        end do
+      end do
+      drhoa = 2*drhoa
       if (self%hasBeta) then
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%moG1A(:noa,i,j), self%moVA(:noa,i))
-          drhob(j) = 2*dot_product(self%moG1B(:nob,i,j), self%moVB(:nob,i))
+        drhob = 0
+        do n = 1, nob
+          do j = 1, 3
+            drhob(j) = drhob(j) + self%moG1B(n,i,j)*self%moVB(n,i)
+          end do
         end do
+        drhob = 2*drhob
       else
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%moG1A(:noa,i,j), self%moVA(:noa,i))
-        end do
         drhob = drhoa
       end if
       drho(1:3,i) = drhoa
@@ -2120,7 +2170,10 @@ contains
 
   subroutine run_xc(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
-!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
+    use blas_thread, only: blas_thread_count, blas_thread_set
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
+!$                     omp_get_max_threads, omp_get_num_procs
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2148,7 +2201,23 @@ contains
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
 
+    integer(c_int64_t) :: nBlasThreads
 
+
+!   The slice loop below issues many small BLAS calls from inside the
+!   OpenMP parallel region.  A BLAS-internal thread pool (e.g. pthread
+!   builds of OpenBLAS) is unaware of the surrounding parallelism, so
+!   when all cores are already busy with OpenMP threads it oversubscribes
+!   the machine and serializes on its pool lock.  Cap the BLAS threads
+!   such that OpenMP x BLAS does not exceed the core count.
+    nBlasThreads = -1
+!$  if (omp_get_max_threads() > 1) then
+!$    nBlasThreads = blas_thread_count()
+!$    if (nBlasThreads > 0) then
+!$      call blas_thread_set(int(max(1, &
+!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$    end if
+!$  end if
 
     next = -1
     myjob = -1
@@ -2240,6 +2309,8 @@ contains
     deallocate (xce)
 !$omp end parallel
 
+    call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
+
     call xc_dat%parallel_stop()
     call xc_dat%pe%allreduce(exc, 1)
     call xc_dat%pe%allreduce(totele, 1)
@@ -2264,7 +2335,10 @@ contains
 !> xce%xyzw (absolute point coordinates) for the pruned points.
   subroutine run_grid_aos(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
-!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
+    use blas_thread, only: blas_thread_count, blas_thread_set
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
+!$                     omp_get_max_threads, omp_get_num_procs
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2278,6 +2352,17 @@ contains
     integer :: iSlice, iAtom, npt, i, numNzPts
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
+    integer(c_int64_t) :: nBlasThreads
+
+!   Cap BLAS threads inside the slice-parallel region, see run_xc
+    nBlasThreads = -1
+!$  if (omp_get_max_threads() > 1) then
+!$    nBlasThreads = blas_thread_count()
+!$    if (nBlasThreads > 0) then
+!$      call blas_thread_set(int(max(1, &
+!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$    end if
+!$  end if
 
     npt = xc_opts%molGrid%nMolPts
     dftthr = 1.0d-04/npt
@@ -2344,6 +2429,8 @@ contains
 
     deallocate (xce)
 !$omp end parallel
+
+    call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
 
     call xc_dat%parallel_stop()
 

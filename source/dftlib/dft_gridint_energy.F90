@@ -149,16 +149,15 @@ contains
               , numPts => xce%numPts &
       )
 
-      ! LDA case
-      do i = 1, numPts
-        tmp(:, i, 1) = 0.5*d1dr(ra, i)*aoV(:, i)
-      end do
-
-      ! GGA case
-      if (xce%funTyp /= OQP_FUNTYP_LDA) then
+      if (xce%funTyp == OQP_FUNTYP_LDA) then
+        do i = 1, numPts
+          tmp(:, i, 1) = 0.5*d1dr(ra, i)*aoV(:, i)
+        end do
+      else
+        ! LDA and GGA terms in a single pass over tmp
         do i = 1, numPts
           c = 2*d1ds(ga,i)*drho(1:3,i) + d1ds(gc,i)*drho(4:6,i)
-          tmp(:,i,1) = tmp(:,i,1) &
+          tmp(:,i,1) = 0.5*d1dr(ra, i)*aoV(:, i) &
             +c(1)*aoG1(:, i, 1) &
             +c(2)*aoG1(:, i, 2) &
             +c(3)*aoG1(:, i, 3)
@@ -186,16 +185,15 @@ contains
 
       if (xce%hasBeta) then
 
-        ! LDA case
-        do i = 1, numPts
-          tmp(:, i, 1) = 0.5*d1dr(rb, i)*aoV(:, i)
-        end do
-
-        ! GGA case
-        if (xce%funTyp /= OQP_FUNTYP_LDA) then
+        if (xce%funTyp == OQP_FUNTYP_LDA) then
+          do i = 1, numPts
+            tmp(:, i, 1) = 0.5*d1dr(rb, i)*aoV(:, i)
+          end do
+        else
+          ! LDA and GGA terms in a single pass over tmp
           do i = 1, numPts
             c = 2*d1ds(gb,i)*drho(4:6,i) + d1ds(gc,i)*drho(1:3,i)
-            tmp(:,i,1) = tmp(:,i,1) &
+            tmp(:,i,1) = 0.5*d1dr(rb, i)*aoV(:, i) &
               +c(1)*aoG1(:, i, 1) &
               +c(2)*aoG1(:, i, 2) &
               +c(3)*aoG1(:, i, 3)
@@ -235,6 +233,7 @@ contains
     real(kind=fp), pointer :: focks(:,:,:)
     real(kind=fp), pointer :: fock_a(:,:)
     real(kind=fp), pointer :: fock_b(:,:)
+    integer :: i, j, jj
 
     call self%resetOrbPointers(xce, focks=focks, fock_a=fock_a, &
                                fock_b=fock_b, myThread=myThread)
@@ -243,23 +242,37 @@ contains
               , indices => xce%indices_p &
       )
 
+      ! Only the upper triangle of focks is valid (dsyr2k 'U' in update)
+      ! and only the upper triangle of fock_a/fock_b is consumed in
+      ! dmatd_blk, so accumulate just that part.  The indices are
+      ! ascending, hence the scatter keeps upper triangle upper.
       if (xce%skip_p) then
 
-         fock_a = fock_a + focks(:,:,1)
-         if (xce%hasBeta) &
-            fock_b = fock_b + focks(:,:,2)
+         do j = 1, numAOs
+           fock_a(1:j, j) = fock_a(1:j, j) + focks(1:j, j, 1)
+         end do
+         if (xce%hasBeta) then
+           do j = 1, numAOs
+             fock_b(1:j, j) = fock_b(1:j, j) + focks(1:j, j, 2)
+           end do
+         end if
 
       else
 
-         fock_a(indices(1:numAOs), &
-                indices(1:numAOs)) = fock_a(indices(1:numAOs), &
-                                            indices(1:numAOs)) &
-                                   + focks(:,:,1)
-         if (xce%hasBeta) &
-            fock_b(indices(1:numAOs), &
-                   indices(1:numAOs)) = fock_b(indices(1:numAOs), &
-                                               indices(1:numAOs)) &
-                                      + focks(:,:,2)
+         do j = 1, numAOs
+           jj = indices(j)
+           do i = 1, j
+             fock_a(indices(i), jj) = fock_a(indices(i), jj) + focks(i, j, 1)
+           end do
+         end do
+         if (xce%hasBeta) then
+           do j = 1, numAOs
+             jj = indices(j)
+             do i = 1, j
+               fock_b(indices(i), jj) = fock_b(indices(i), jj) + focks(i, j, 2)
+             end do
+           end do
+         end if
 
       end if
 
