@@ -56,7 +56,8 @@ contains
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
-    use mathlib, only: traceprod_sym_packed, matrix_invsqrt
+    use mathlib, only: traceprod_sym_packed
+    use qmat_cache, only: get_qmat_cached
     use mathlib, only: unpack_matrix
     use io_constants, only: IW
     use basis_tools, only: basis_set
@@ -403,8 +404,9 @@ contains
     !==============================================================================
     call measure_time(print_total=1, log_unit=IW)
 
-    ! Prepare orthogonalization matrix (S^-1/2)
-    call matrix_invsqrt(smat, qmat, nbf)
+    ! Prepare orthogonalization matrix (S^-1/2), reusing the
+    ! copy cached during the initial guess when available
+    call get_qmat_cached(infos, smat, qmat, nbf)
 
     ! Compute Nuclear-Nuclear energy
 !    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)

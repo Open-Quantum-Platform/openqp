@@ -26,21 +26,25 @@ contains
 !> @param[in]     huckel_basis  minimal basis set used for the Huckel step
 !> @param[in]     modified      use the energy-weighted Wolfsberg-Helmholz
 !>                              formula (default: .false.)
- subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis, modified)
+!> @param[out]    mo_energy     optional, approximate orbital energies of the
+!>                              guess: the Huckel eigenvalues for the first
+!>                              nproj (projected) orbitals, zero for the rest
+ subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis, modified, mo_energy)
 
    use constants, only: tol_int
    use types,     only: information
    use messages,  only: show_message, WITH_ABORT
-   use mathlib, only: matrix_invsqrt
+   use qmat_cache, only: get_qmat_cached
    use basis_tools, only: basis_set
    use int1, only: basis_overlap
    use guess, only: corresponding_orbital_projection
 
    implicit none
 
-   type(information), intent(in) :: infos
+   type(information), intent(inout) :: infos
    type(basis_set), intent(in) :: basis, huckel_basis
    logical, intent(in), optional :: modified
+   real(kind=dp), intent(out), optional :: mo_energy(:)
 
    real(kind=dp) :: ovl(*), orbitals(*)
    integer :: nat, i, ok, l0, l0co, nbf, nbf_co, nact, ndoc, nproj
@@ -49,6 +53,7 @@ contains
    real(kind=dp), allocatable :: q(:)
    real(kind=dp), allocatable :: vec(:,:)
    real(kind=dp), allocatable :: sco(:,:)
+   real(kind=dp), allocatable :: heig(:)
 
    nbf = basis%nbf
    nat = infos%mol_prop%natom
@@ -83,13 +88,21 @@ contains
    if (present(modified)) use_modified = modified
 
 !  Extended Huckel calculation in mini basis set
-   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int, use_modified)
+   allocate(heig(nbf_co), source=0.0_dp)
+   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int, use_modified, heig)
 
 !  Do at most 5 virtuals from the huckel
    nproj = min(l0co,ndoc+nact+5)
 
+!  The first nproj guess orbitals correspond to the Huckel MOs
+!  in order; export their energies as approximate MO energies
+   if (present(mo_energy)) then
+     mo_energy = 0.0_dp
+     mo_energy(1:min(nproj, size(mo_energy))) = heig(1:min(nproj, size(mo_energy)))
+   end if
+
 !  Get canonical orbitals in input basis space
-   call matrix_invsqrt(ovl, q, nbf, qrnk=l0)
+   call get_qmat_cached(infos, ovl, q, nbf, qrnk=l0)
    orbitals(1:nbf*nbf) = q(1:nbf*nbf)
 
 !  Project minimal basis set guess onto the input canonical orbitals
@@ -109,7 +122,7 @@ contains
 !> @param[in]  zan       nuclear charges
 !> @param[in]  tol_int   integral tolerance (powers of 10)
 !> @param[in]  modified  use the energy-weighted Wolfsberg-Helmholz formula
- subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int, modified)
+ subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int, modified, energies)
     use eigen, only: diag_symm_full
     use mathlib, only: unpack_matrix, orthogonal_transform_sym
     use messages, only: show_message, WITH_ABORT
@@ -125,6 +138,7 @@ contains
     integer, intent(in) :: nat, tol_int
     real(kind=dp), intent(in) :: zan(:)
     logical, intent(in) :: modified
+    real(kind=dp), intent(out), optional :: energies(:)
 
 !   Scale-down factor for core/core and core/valence overlaps
     real(kind=dp), parameter :: BITSY = 0.05d+00
@@ -214,6 +228,12 @@ contains
 
     call diag_symm_full(1,l0co,h2,l1co,eig,ierr)
     if (ierr /= 0) call show_message('Huckel MBS diagonalization failure', WITH_ABORT)
+
+!   export the Huckel orbital energies
+    if (present(energies)) then
+      energies = 0.0_dp
+      energies(1:min(l0co, size(energies))) = eig(1:min(l0co, size(energies)))
+    end if
 
 !   orthonormalize appropriately.
     call orthogonalize_orbitals(q,s,h2,l0co,l0co,l1co,l1co)

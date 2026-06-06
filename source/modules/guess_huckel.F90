@@ -62,8 +62,8 @@ contains
   ! tagarray
     real(kind=dp), contiguous, pointer :: &
       Smat(:), &
-      dmat_a(:), mo_a(:,:), &
-      dmat_b(:), mo_b(:,:)
+      dmat_a(:), mo_a(:,:), mo_energy_a(:), &
+      dmat_b(:), mo_b(:,:), mo_energy_b(:)
     character(len=*), parameter :: tags_alpha(3) = (/ character(len=80) :: &
       OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A /)
     character(len=*), parameter :: tags_beta(3) = (/ character(len=80) :: &
@@ -124,6 +124,7 @@ contains
     ! load alpha data
     call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
   ! UHF/ROHF
@@ -136,15 +137,20 @@ contains
       ! load beta
       call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+      call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
     end if
 
   ! Calculate Huckel MOs and the corresponding density matrix
     if (pe%rank == root) then
-      call huckel_guess(Smat, MO_A, infos, basis, huckel_basis, modified=modified)
+      call huckel_guess(Smat, MO_A, infos, basis, huckel_basis, &
+                        modified=modified, mo_energy=mo_energy_a)
 
   !   For ROHF/UHF the beta orbitals start identical to alpha
-      if (infos%control%scftype >= 2) MO_B = MO_A
+      if (infos%control%scftype >= 2) then
+        MO_B = MO_A
+        mo_energy_b = mo_energy_a
+      end if
 
       if (infos%control%scftype == 1) then
         call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=basis)
@@ -153,11 +159,13 @@ contains
       end if
     end if
 
-    ! Broadcast MO and density matrices to all processes
+    ! Broadcast MO, MO energy and density matrices to all processes
     call pe%bcast(MO_A, nbf*nbf)
+    call pe%bcast(mo_energy_a, nbf)
     call pe%bcast(Dmat_A, nbf2)
     if (infos%control%scftype >= 2) then
       call pe%bcast(MO_B, nbf*nbf)
+      call pe%bcast(mo_energy_b, nbf)
       call pe%bcast(Dmat_B, nbf2)
     end if
     call pe%barrier()

@@ -22,7 +22,8 @@ contains
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
     use guess, only: get_ab_initio_density
-    use mathlib, only: matrix_invsqrt, unpack_matrix
+    use mathlib, only: unpack_matrix
+    use qmat_cache, only: get_qmat_cached
     use eigen, only: diag_symm_full
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
@@ -151,7 +152,7 @@ contains
   ! Canonical orthogonalizer Q from matrix_invsqrt (Q = U L^{-1/2}, so that
   ! Q^T S Q = I and Q Q^T = S^{-1}), plus the full overlap S (unpacked).
     allocate(qmat(nbf,nbf), sfull(nbf,nbf))
-    call matrix_invsqrt(smat, qmat, nbf)
+    call get_qmat_cached(infos, smat, qmat, nbf)
     call unpack_matrix(smat, sfull)
 
   ! Projector pmat(target,min) = S^{-1} Scross(target,min) = Q (Q^T Scross),
