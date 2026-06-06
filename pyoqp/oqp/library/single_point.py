@@ -406,6 +406,10 @@ class SinglePoint(Calculator):
         energy = [self.mol.mol_energy.energy]
         self.mol.energies = energy
 
+        # Metadata-only MO irrep labels (no-op unless symmetry is enabled).
+        if getattr(self.mol, 'symmetry_metadata', None):
+            self.mol.label_molecular_orbitals()
+
         return energy
 
     def _run_scf(self):

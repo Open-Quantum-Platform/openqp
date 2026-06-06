@@ -18,9 +18,16 @@ Detection/labeling gates (increment 2):
 - [x] MO irrep labeling via <m|S O|m> characters with 'mixed' fallback.
 - [x] Molecule wiring: `initialize_symmetry_metadata` runs detection when enabled/auto (non-fatal, metadata-only), resolves 'auto' requests, honors `strict` mismatch as an error. Reductions remain hard-off.
 
+Run-output labeling gates (increment 3):
+- [x] Input-frame operation matrices (`matrix_input_frame = R^T O R`) in the detection payload — MO data lives in input coordinates, not the standard orientation.
+- [x] General orthogonal-operation AO representation: dense s/p/d shell blocks with Cartesian-d normalization ratios; rep property T(M1 M2)=T(M1)T(M2) and d-shell metric preservation tested.
+- [x] `Molecule.label_molecular_orbitals()`: unpacks triangular `OQP::SM`, reads shells from `get_basis()` (centers/angs), labels `VEC_MO_A` (+`_B` for uhf/rohf), stores under `symmetry_metadata['mo_labels']`; skips gracefully on f-shells/non-Cartesian/shape mismatch; never fatal.
+- [x] Hook in `SinglePoint.reference()` after converged SCF (no-op unless symmetry enabled). Covered by `tests/test_symmetry_mo_label_wiring.py`, incl. frame-invariance under random input rotation.
+
 Remaining (future increments):
-- [ ] Label MOs/states/modes in the actual run outputs (log/json) using `assign_mo_irreps`.
-- [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder.
+- [ ] Label excited states/modes in run outputs.
+- [ ] Print MO labels to the .log file alongside orbital energies.
+- [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder and labeling path.
 - [ ] Integral-side symmetry reductions behind `use_integral_symmetry` (off by default until production-ready).
 - [ ] Response-side reductions behind `use_response_symmetry`.
 

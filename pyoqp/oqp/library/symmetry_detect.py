@@ -467,6 +467,14 @@ def detect_point_group(
             principal_axis, _ = survey.principal()
             subgroup, rotation, operations = _abelian_resolution(survey, principal_axis)
 
+    # Operation matrices conjugated back to the input frame: AO/MO data
+    # produced by the backend lives in input coordinates, not the standard
+    # orientation, so O_input = R^T O_standard R (atom permutations are
+    # frame-independent).
+    for op in operations:
+        standard = np.asarray(op['matrix'])
+        op['matrix_input_frame'] = (rotation.T @ standard @ rotation).tolist()
+
     return {
         'point_group': group,
         'abelian_subgroup': subgroup,

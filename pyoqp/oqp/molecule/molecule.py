@@ -210,6 +210,69 @@ class Molecule:
                 f"detected '{self.symmetry_metadata['detected_point_group']}'"
             )
 
+    def label_molecular_orbitals(self):
+        """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
+
+        Stores the result under ``symmetry_metadata['mo_labels']``; never
+        changes SCF/integral/response behavior.
+        """
+        meta = self.symmetry_metadata
+        if not meta or meta.get('status', 'disabled') == 'disabled':
+            return None
+        if not meta.get('label_mo', True):
+            return None
+        detection = meta.get('detection')
+        if not detection:
+            return None
+
+        try:
+            from oqp.library.symmetry import assign_mo_irreps, _cartesian_shell_size
+
+            basis = self.data.get_basis()
+            if not basis:
+                meta['mo_labels'] = {'status': 'skipped_no_basis'}
+                return None
+            nbf = int(basis['nbf'])
+            shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+            if any(l > 2 for _, l in shells):
+                meta['mo_labels'] = {'status': 'skipped_unsupported_shells_beyond_d'}
+                return None
+            if sum(_cartesian_shell_size(l) for _, l in shells) != nbf:
+                meta['mo_labels'] = {'status': 'skipped_non_cartesian_basis'}
+                return None
+
+            # Unpack triangular overlap to a square symmetric matrix.
+            packed = np.asarray(self.data['OQP::SM'], dtype=float).ravel()
+            if packed.size != nbf * (nbf + 1) // 2:
+                meta['mo_labels'] = {'status': 'skipped_overlap_shape_mismatch'}
+                return None
+            smat = np.zeros((nbf, nbf))
+            rows, cols = np.tril_indices(nbf)
+            smat[rows, cols] = packed
+            smat[cols, rows] = packed
+
+            tolerance = float(meta.get('tolerance', 1.0e-5))
+            result = {'status': 'ok'}
+            spins = [('alpha', 'OQP::VEC_MO_A')]
+            if self.config.get('scf', {}).get('type', 'rhf') != 'rhf':
+                spins.append(('beta', 'OQP::VEC_MO_B'))
+            for spin, tag in spins:
+                # Fortran stores MOs column-wise; the C-order view has MOs
+                # as rows, so transpose to (n_ao, n_mo).
+                coefficients = np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
+                result[spin] = assign_mo_irreps(
+                    coefficients, smat, shells,
+                    detection['operations'], detection['character_table'],
+                    tolerance=max(tolerance, 1.0e-4),
+                    matrix_key='matrix_input_frame',
+                )
+            meta['mo_labels'] = result
+            return result
+        except Exception as exc:
+            # Labeling must never break the run in the metadata-only phase.
+            meta['mo_labels'] = {'status': 'error', 'error': str(exc)}
+            return None
+
     def get_mass(self):
         """
         Get read-only molar mass

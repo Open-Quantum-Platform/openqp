@@ -317,6 +317,75 @@ def build_symmetry_adapted_transform(
     return u, labels
 
 
+# Relative normalization of Cartesian d components (xx, yy, zz, xy, xz, yz):
+# the cross monomials carry sqrt(3) relative to the squares.
+_D_COMPONENT_NORMS = np.array([1.0, 1.0, 1.0, np.sqrt(3.0), np.sqrt(3.0), np.sqrt(3.0)])
+_D_PAIRS = [(0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2)]
+
+
+def _shell_block(l: int, op_matrix: np.ndarray) -> np.ndarray:
+    """Representation of an orthogonal 3x3 operation on one Cartesian shell.
+
+    Acts on coefficient columns: c' = block @ c. For sign-diagonal operations
+    this reduces to the diagonal of component signs.
+    """
+
+    if l == 0:
+        return np.ones((1, 1))
+    if l == 1:
+        return op_matrix.copy()
+    if l == 2:
+        mono = np.zeros((6, 6))
+        for col, (a, b) in enumerate(_D_PAIRS):
+            for row, (cc, dd) in enumerate(_D_PAIRS):
+                value = op_matrix[cc, a] * op_matrix[dd, b]
+                if cc != dd:
+                    value += op_matrix[dd, a] * op_matrix[cc, b]
+                mono[row, col] = value
+        # Rescale to normalized Cartesian components.
+        return mono * (_D_COMPONENT_NORMS[None, :] / _D_COMPONENT_NORMS[:, None])
+    raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+
+
+def _ao_operator_matrix(
+    shells: list[tuple[int, int]],
+    op: Mapping[str, Any],
+    matrix_key: str = "matrix",
+) -> np.ndarray:
+    """Dense AO representation of one (possibly input-frame) operation."""
+
+    matrix = _to_float_array(op[matrix_key])
+    if matrix.shape != (3, 3) or not np.allclose(matrix @ matrix.T, np.eye(3), atol=1.0e-10):
+        raise ValueError("operation matrices must be orthogonal 3x3 arrays")
+
+    offsets: list[int] = []
+    n_ao = 0
+    atom_shells: dict[int, list[int]] = {}
+    for idx, (atom, l) in enumerate(shells):
+        offsets.append(n_ao)
+        n_ao += _cartesian_shell_size(l)
+        atom_shells.setdefault(atom, []).append(idx)
+
+    signatures = {
+        atom: tuple(shells[idx][1] for idx in idx_list)
+        for atom, idx_list in atom_shells.items()
+    }
+
+    permutation = [int(a) for a in op["permutation"]]
+    t = np.zeros((n_ao, n_ao))
+    for idx, (atom, l) in enumerate(shells):
+        mapped_atom = permutation[atom]
+        if signatures[atom] != signatures.get(mapped_atom):
+            raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
+        shell_rank = atom_shells[atom].index(idx)
+        mapped_shell = atom_shells[mapped_atom][shell_rank]
+        block = _shell_block(l, matrix)
+        size = _cartesian_shell_size(l)
+        t[offsets[mapped_shell]:offsets[mapped_shell] + size,
+          offsets[idx]:offsets[idx] + size] = block
+    return t
+
+
 def assign_mo_irreps(
     mo_coefficients: Any,
     overlap: Any,
@@ -324,12 +393,17 @@ def assign_mo_irreps(
     operations: Iterable[Mapping[str, Any]],
     character_table: Mapping[str, Iterable[int]],
     tolerance: float = 1.0e-4,
+    matrix_key: str = "matrix",
 ) -> dict[str, Any]:
     """Assign abelian irrep labels to molecular orbitals (metadata only).
 
     For each MO ``m`` the character under operation ``O`` is
     ``chi(O) = <m|S O|m> / <m|S|m>``; the MO gets the irrep whose character
     row matches within ``tolerance``, otherwise the label 'mixed'.
+
+    ``matrix_key`` selects which operation matrix to use; pass
+    ``'matrix_input_frame'`` when the MO coefficients live in the original
+    input coordinates rather than the standard orientation.
     """
 
     if tolerance <= 0:
@@ -344,19 +418,19 @@ def assign_mo_irreps(
 
     shell_list = _normalize_shells(shells)
     op_list = list(operations)
-    n_ao, maps = _ao_operator_maps(shell_list, op_list)
+    n_ao = sum(_cartesian_shell_size(l) for _, l in shell_list)
     if n_ao != c.shape[0]:
         raise ValueError("shells do not match the AO dimension of mo_coefficients")
 
     table = {str(irrep): [int(ch) for ch in row] for irrep, row in character_table.items()}
 
     sc = s @ c
+    denominator = np.einsum('im,im->m', sc, c)
     characters = np.zeros((c.shape[1], len(op_list)))
-    for iop, (target, sign) in enumerate(maps):
-        transformed = np.zeros_like(c)
-        transformed[target, :] = sign[:, None] * c
+    for iop, op in enumerate(op_list):
+        t = _ao_operator_matrix(shell_list, op, matrix_key=matrix_key)
+        transformed = t @ c
         numerator = np.einsum('im,im->m', sc, transformed)
-        denominator = np.einsum('im,im->m', sc, c)
         characters[:, iop] = numerator / denominator
 
     labels: list[str] = []
