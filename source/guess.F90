@@ -120,7 +120,8 @@ end subroutine get_ab_initio_density
  subroutine corresponding_orbital_projection(vb, sba, va, &
                    ndoc, nact, nproj, nbf, l1co, l0)
 
-  use eigen, only: schmd, diag_symm_full
+  use eigen, only: schmd
+  use messages, only: show_message, WITH_ABORT
 
   implicit none
 
@@ -169,8 +170,11 @@ end subroutine get_ab_initio_density
     real(kind=dp) :: va(nbf,*), rhs(nbf,*)
     integer :: minmo, maxmo, l0, nbf
 
-    integer :: i, j, ok
-    integer :: nrest, nmo
+    integer :: i, j
+    integer :: nrest, nmo, nsv, lwork, info
+
+    real(kind=dp), allocatable :: sv(:), vt(:,:), wrk(:)
+    real(kind=dp) :: wrksize(1), udummy(1)
 
     nrest = l0-minmo+1
     nmo  = maxmo-minmo+1
@@ -183,18 +187,28 @@ end subroutine get_ab_initio_density
                        va(1,minmo),nbf, &
                0.0_dp, d, nbf)
 
-!   Diagonalize D^T * D
-!   Eigenvalues run 0 to 1, we want the highest ones first,
-!   that is why we use factor -1
-!   We don't need eigenvalues
-    call dsyrk('u', 't', nrest, nmo, &
-               -1.0_dp, d, nbf, &
-                0.0_dp, vaco, nbf)
-    call diag_symm_full(1, nrest, vaco, nbf, scr, ok)
+!   We need the `nmo` eigenvectors of D^T * D with the largest
+!   eigenvalues (largest overlap with the `b` set); they are the
+!   leading right singular vectors of D. The thin SVD of the
+!   (nmo x nrest) matrix D delivers them in descending-overlap order
+!   at O(nmo^2*nrest) cost, instead of the O(nrest^3) diagonalization
+!   of D^T * D. We don't need the singular values.
+    nsv = min(nmo, nrest)
+    allocate(sv(nsv), vt(nsv,nrest))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrksize, -1, info)
+    lwork = int(wrksize(1))
+    allocate(wrk(lwork))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrk, lwork, info)
+    if (info /= 0) &
+      call show_message('Corresponding orbital projection: SVD failed', WITH_ABORT)
+    vaco(1:nrest,1:nsv) = transpose(vt(1:nsv,1:nrest))
+    deallocate(sv, vt, wrk)
 
-!   The near zero overlap part of the space gets scrambled
-!   in the above diagonalization, we can get a symmetry
-!   adapted space by Gram-Schmidt instead.
+!   The near zero overlap part of the space is not determined
+!   by the SVD, we can get a symmetry adapted space by
+!   Gram-Schmidt completion instead.
     call schmd(vaco,nmo,nrest,nbf,scr)
 
 !   Rotate va to corresponding orbital set, a'=a*v,
