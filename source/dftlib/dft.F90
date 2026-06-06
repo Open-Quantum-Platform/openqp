@@ -25,13 +25,24 @@ module dft
                                max_number_of_atom_grid_types_for_DFT_grids)
     integer :: ngrids = 1
     integer, allocatable :: rad_id(:)
+    !> Per-atom-type angular override: if non-zero, the atom type is
+    !> unpruned and uses this single Lebedev sphere at ALL radii
+    !> (0 = no override, use the regular pruning regions)
+    integer :: nang_override(max_number_of_atom_grid_types_for_DFT_grids) = 0
   end type
 
+!  SG1 region boundaries (in units of the atomic radius) and Lebedev
+!  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
+!  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
+!  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
+!  the unpruned 194-point grid at all radii.  Row 4 is fully
+!  overridden via nang_override (set in dft_set_options), so its
+!  boundaries are never used.
   real(kind=dp), parameter :: sg1rads(5,4) = reshape(&
         [0.2500d0, 0.500d0, 1.0d00, 4.50d0, 9999999.9d0,   &
          0.1667d0, 0.500d0, 0.90d0, 3.50d0, 9999999.9d0,   &
          0.1000d0, 0.400d0, 0.80d0, 2.5d0,  9999999.9d0,   &
-         1.0d-30, 999999.9d0, 999999.9d0, 999999.9d0, 999999.9d0], &
+         9999999.9d0, 9999999.9d0, 9999999.9d0, 9999999.9d0, 9999999.9d0], &
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
@@ -291,11 +302,16 @@ contains
           pruned%radii(i,1:ntyps) = sg1rads(pruned%ngrids,1:ntyps)
         end do
         do iatm = 1, nat
+          ! sg1atoms are inclusive upper bounds of the period:
+          ! H-He (Z<=2), Li-Ne (Z<=10), Na-Ar (Z<=18), heavier
           do i = 1, ntyps
-            if (int(infos%atoms%zn(iatm))<sg1atoms(i)) exit
+            if (int(infos%atoms%zn(iatm))<=sg1atoms(i)) exit
           end do
-          pruned%rad_id(iatm) = i
+          pruned%rad_id(iatm) = min(i, ntyps)
         end do
+        ! SG1 is undefined above Ar: heavy atoms (type 4) are truly
+        ! unpruned, i.e. a single 194-point sphere at all radii
+        pruned%nang_override(4) = 194
       case default
         call show_message('Unknown pruned grid name', WITH_ABORT)
       end select
@@ -365,7 +381,8 @@ contains
       if (present(verbose)) verbose_ = verbose
 
       nat = ubound(infos%atoms%zn, 1)
-      max_ang_pts = maxval(pruned%nang(:pruned%ngrids))
+      max_ang_pts = max(maxval(pruned%nang(:pruned%ngrids)), &
+                        maxval(pruned%nang_override))
       maxpt_per_atom = infos%dft%grid_rad_size*max_ang_pts
       nrad = infos%dft%grid_rad_size
 
@@ -424,15 +441,23 @@ contains
       do iat = 1, nat
         grid_id = pruned%rad_id(iat)
 
-        atomic_grid%sph_npts = pruned%nang(1:pruned%ngrids)
-        atomic_grid%sph_radii = pruned%radii(:pruned%ngrids, grid_id)
-        atomic_grid%idAtm = iat
+        if (pruned%nang_override(grid_id) > 0) then
+!         Unpruned atom type: a single angular grid at all radii
+!         (add_atomic_grid extends a single region to all radial shells)
+          atomic_grid%sph_npts = [pruned%nang_override(grid_id)]
+          atomic_grid%sph_radii = [9999999.9d0]
+          call molGrid%spherical_grids%add_grid(pruned%nang_override(grid_id))
+        else
+          atomic_grid%sph_npts = pruned%nang(1:pruned%ngrids)
+          atomic_grid%sph_radii = pruned%radii(:pruned%ngrids, grid_id)
 
-!       Set angular Lebedev grid(s)
-        do igrid = 1, pruned%ngrids
-!         get the unit lebedev sphere
-          call molGrid%spherical_grids%add_grid(pruned%nang(igrid))
-        end do
+!         Set angular Lebedev grid(s)
+          do igrid = 1, pruned%ngrids
+!           get the unit lebedev sphere
+            call molGrid%spherical_grids%add_grid(pruned%nang(igrid))
+          end do
+        end if
+        atomic_grid%idAtm = iat
 
         atomic_grid%rAtm = bsrad(iat)
         call molGrid%add_atomic_grid(atomic_grid)
