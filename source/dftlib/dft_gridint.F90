@@ -117,6 +117,7 @@ module mod_dft_gridint
     integer, allocatable :: indices_p(:) !< AO significant indices
     integer, allocatable :: shells_p(:) !< shells surviving the slice-level prescreen
     integer, allocatable :: deadAOs_(:) !< AOs of prescreened-out shells
+    integer, allocatable :: liveAOs_(:) !< AOs of surviving shells
     logical, allocatable :: aoLive_(:) !< .true. for AOs of surviving shells
 
     real(KIND=fp), contiguous, pointer :: &
@@ -147,6 +148,7 @@ module mod_dft_gridint
     integer :: numAOs_p = 0 !< number of pruned AOs
     integer :: numShells_p = 0 !< number of shells in shells_p
     integer :: numDeadAOs = 0 !< number of AOs in deadAOs_
+    integer :: numLiveAOs = 0 !< number of AOs in liveAOs_
     logical :: skip_p = .true. !< skip if no pruned numAOs
     integer :: numPts = 0
     integer :: numAtoms = 0
@@ -596,11 +598,12 @@ contains
     real(kind=fp), intent(in) :: xyz(:,:)
 
     real(kind=fp) :: cmin(3), cmax(3), c(3), rad, dmr
-    integer :: i, ish, n, nd, off, nao
+    integer :: i, ish, n, nd, nl, off, nao
 
     if (.not. allocated(self%shells_p)) then
       allocate(self%shells_p(basis%nshell))
       allocate(self%deadAOs_(self%numAOs))
+      allocate(self%liveAOs_(self%numAOs))
       allocate(self%aoLive_(self%numAOs))
     end if
 
@@ -616,6 +619,7 @@ contains
 
     n = 0
     nd = 0
+    nl = 0
     do ish = 1, basis%nshell
       off = basis%ao_offset(ish)
       nao = basis%naos(ish)
@@ -624,6 +628,10 @@ contains
       if (dmr*dmr <= basis%shell_mx_dist2(ish)) then
         n = n + 1
         self%shells_p(n) = ish
+        do i = off, off+nao-1
+          nl = nl + 1
+          self%liveAOs_(nl) = i
+        end do
         self%aoLive_(off:off+nao-1) = .true.
       else
         do i = off, off+nao-1
@@ -635,6 +643,7 @@ contains
     end do
     self%numShells_p = n
     self%numDeadAOs = nd
+    self%numLiveAOs = nl
 
   end subroutine
 
@@ -706,29 +715,38 @@ contains
     class(xc_engine_t), target :: self
 
     logical :: skip
-    integer :: i, j, v, numAOs_p
-    real(kind=fp) :: aoVMax(self%numAOs)
+    integer :: i, j, l, v, numAOs_p
+    real(kind=fp) :: aoVMax(self%numLiveAOs)
+    real(kind=fp) :: aoMaxAll, thr
 
-    ! Per-AO maximum over all points, accumulated by cache-friendly
-    ! column sweeps (aoV rows are strided by numAOs).  AOs of shells
-    ! screened out at the slice level (see buildShellList) were never
-    ! evaluated: their entries hold stale values and are excluded via
-    ! aoLive_ below.
+    ! Per-AO maximum over all points, for the AOs of shells surviving
+    ! the slice-level prescreen only (entries of screened-out shells
+    ! were never evaluated and hold stale values), accumulated by
+    ! column sweeps (aoV rows are strided by numAOs)
     aoVMax = 0.0_fp
     do j = 1, self%numPts
-      do i = 1, self%numAOs
-        aoVMax(i) = max(aoVMax(i), abs(self%aoV(i, j)))
+      do l = 1, self%numLiveAOs
+        aoVMax(l) = max(aoVMax(l), abs(self%aoV(self%liveAOs_(l), j)))
       end do
     end do
 
+    ! All grid quantities are bilinear in the AOs, so an AO whose
+    ! strongest possible pair product |ao_i|*max|ao| stays below the
+    ! threshold cannot contribute above it: when the largest AO value
+    ! in the slice is < 1 this sharpens the per-AO threshold.
+    aoMaxAll = 0.0_fp
+    do l = 1, self%numLiveAOs
+      aoMaxAll = max(aoMaxAll, aoVMax(l))
+    end do
+    thr = self%ao_threshold
+    if (aoMaxAll > 0.0_fp .and. aoMaxAll < 1.0_fp) thr = thr/aoMaxAll
+
     numAOs_p = 0
     ! Save significant indices
-    do i = 1, self%numAOs
-      if (self%aoLive_(i)) then
-        if (aoVMax(i) > self%ao_threshold) then
-          numAOs_p = numAOs_p + 1
-          self%indices_p(numAOs_p) = i
-        end if
+    do l = 1, self%numLiveAOs
+      if (aoVMax(l) > thr) then
+        numAOs_p = numAOs_p + 1
+        self%indices_p(numAOs_p) = self%liveAOs_(l)
       end if
     end do
 
