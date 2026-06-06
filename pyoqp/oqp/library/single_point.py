@@ -782,6 +782,10 @@ class Hessian(Calculator):
                 self.mol.inertia = inertia
                 self._compute_vibrational_intensities(modes)
 
+                # Metadata-only mode irrep labels (no-op unless symmetry enabled).
+                if getattr(self.mol, 'symmetry_metadata', None):
+                    self.mol.label_normal_modes()
+
                 self.mol.save_freqs(self.state)
                 dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
 

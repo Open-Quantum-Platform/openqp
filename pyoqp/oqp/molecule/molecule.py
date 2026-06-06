@@ -277,6 +277,48 @@ class Molecule:
             meta['mo_labels'] = {'status': 'error', 'error': str(exc)}
             return None
 
+    def label_normal_modes(self):
+        """Assign abelian irrep labels to normal modes (metadata only, non-fatal).
+
+        Stores the result under ``symmetry_metadata['mode_labels']``.
+        """
+        meta = self.symmetry_metadata
+        if not meta or meta.get('status', 'disabled') == 'disabled':
+            return None
+        if not meta.get('label_modes', True):
+            return None
+        detection = meta.get('detection')
+        if not detection:
+            return None
+
+        try:
+            from oqp.library.symmetry import assign_mode_irreps
+
+            modes = np.asarray(self.modes, dtype=float)
+            if modes.ndim != 2 or modes.size == 0:
+                return None
+            natom = len(detection['operations'][0]['permutation'])
+            if modes.shape[1] != 3 * natom:
+                meta['mode_labels'] = {'status': 'skipped_mode_shape_mismatch'}
+                return None
+
+            tolerance = float(meta.get('tolerance', 1.0e-5))
+            result = assign_mode_irreps(
+                modes,
+                detection['operations'],
+                detection['character_table'],
+                tolerance=max(tolerance, 1.0e-2),
+                matrix_key='matrix_input_frame',
+            )
+            result = dict(result)
+            result['status'] = 'ok'
+            meta['mode_labels'] = result
+            return result
+        except Exception as exc:
+            # Labeling must never break the run in the metadata-only phase.
+            meta['mode_labels'] = {'status': 'error', 'error': str(exc)}
+            return None
+
     @mpi_dump
     def _dump_mo_labels_log(self, result):
         """Append MO irrep labels to the main log (best effort, non-fatal)."""

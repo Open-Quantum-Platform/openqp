@@ -452,3 +452,65 @@ def assign_mo_irreps(
         'max_deviation': float(np.max(deviations)) if deviations else 0.0,
         'status': 'label_only_no_reductions',
     }
+
+
+def assign_mode_irreps(
+    modes: Any,
+    operations: Iterable[Mapping[str, Any]],
+    character_table: Mapping[str, Iterable[int]],
+    tolerance: float = 1.0e-3,
+    matrix_key: str = "matrix",
+) -> dict[str, Any]:
+    """Assign abelian irrep labels to Cartesian normal modes (metadata only).
+
+    ``modes`` holds one mode per row with 3*natom displacement components.
+    Each operation acts by permuting atoms and rotating the per-atom
+    displacement vectors; the character is ``<v|T v> / <v|v>``. Use
+    ``matrix_key='matrix_input_frame'`` for modes in input coordinates.
+    """
+
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive")
+
+    v = _to_float_array(modes)
+    if v.ndim != 2 or v.shape[1] % 3 != 0:
+        raise ValueError("modes must be a 2D (n_modes, 3*natom) array")
+    natom = v.shape[1] // 3
+
+    op_list = list(operations)
+    table = {str(irrep): [int(ch) for ch in row] for irrep, row in character_table.items()}
+
+    displacements = v.reshape(v.shape[0], natom, 3)
+    norms = np.einsum('mai,mai->m', displacements, displacements)
+    characters = np.zeros((v.shape[0], len(op_list)))
+    for iop, op in enumerate(op_list):
+        matrix = _to_float_array(op[matrix_key])
+        if matrix.shape != (3, 3):
+            raise ValueError("operation matrices must be 3x3 arrays")
+        permutation = [int(a) for a in op["permutation"]]
+        if len(permutation) != natom:
+            raise ValueError("operation permutation does not match the atom count")
+        transformed = np.zeros_like(displacements)
+        for atom in range(natom):
+            transformed[:, permutation[atom], :] = displacements[:, atom, :] @ matrix.T
+        characters[:, iop] = np.einsum('mai,mai->m', displacements, transformed) / norms
+
+    labels: list[str] = []
+    deviations: list[float] = []
+    for imode in range(v.shape[0]):
+        best_label = 'mixed'
+        best_dev = np.inf
+        for irrep, row in table.items():
+            dev = float(np.max(np.abs(characters[imode] - np.asarray(row, dtype=float))))
+            if dev < best_dev:
+                best_dev = dev
+                best_label = irrep
+        labels.append(best_label if best_dev <= tolerance else 'mixed')
+        deviations.append(best_dev)
+
+    return {
+        'labels': labels,
+        'characters': characters.tolist(),
+        'max_deviation': float(np.max(deviations)) if deviations else 0.0,
+        'status': 'label_only_no_reductions',
+    }

@@ -25,7 +25,8 @@ Run-output labeling gates (increment 3):
 - [x] Hook in `SinglePoint.reference()` after converged SCF (no-op unless symmetry enabled). Covered by `tests/test_symmetry_mo_label_wiring.py`, incl. frame-invariance under random input rotation.
 
 Remaining (future increments):
-- [ ] Label excited states/modes in run outputs.
+- [x] Label normal modes in run outputs (`assign_mode_irreps` + `Molecule.label_normal_modes`, hooked before `save_freqs`; labels land in hess.json via symmetry_metadata).
+- [ ] Label excited states in run outputs (needs response-vector conventions — design decision).
 - [x] Print MO labels to the .log file alongside orbital energies (rank-0 only, best-effort).
 - [ ] Pure spherical-harmonic shells (ISPHER) in the SALC builder and labeling path.
 - [ ] Integral-side symmetry reductions behind `use_integral_symmetry` (off by default until production-ready).
