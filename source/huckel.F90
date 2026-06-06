@@ -67,14 +67,18 @@ contains
             stat=ok)
    if (ok/=0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-!  Get overlap between the minimal basis set and the input basis
+!  Step 1: overlap between the minimal (Huckel) basis set and the
+!  input basis set, S_co(i_mini, j_input). It connects the two spaces
+!  and drives the corresponding-orbital projection below.
    call basis_overlap(sco, basis, huckel_basis, tol=log(10.0d0)*tol_int)
 
+!  Apply the basis function normalization factors of both basis sets
    do i = 1, nbf
      sco(:,i) = sco(:,i)*basis%bfnrm(i) * huckel_basis%bfnrm
    end do
 
-!  Determine which orbitals should be projected
+!  Step 2: decide how many orbitals to take over from the Huckel
+!  calculation: ndoc doubly occupied + nact singly occupied (ROHF/UHF)
    ndoc = 0
    nact = 0
    if (infos%control%scftype == 1) then
@@ -87,11 +91,13 @@ contains
    use_modified = .false.
    if (present(modified)) use_modified = modified
 
-!  Extended Huckel calculation in mini basis set
+!  Step 3: extended Huckel calculation in the minimal basis set;
+!  returns the Huckel MOs (vec) and their orbital energies (heig)
    allocate(heig(nbf_co), source=0.0_dp)
    call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int, use_modified, heig)
 
-!  Do at most 5 virtuals from the huckel
+!  Project all occupied orbitals plus at most 5 Huckel virtuals;
+!  higher Huckel virtuals in a minimal basis carry no useful structure
    nproj = min(l0co,ndoc+nact+5)
 
 !  The first nproj guess orbitals correspond to the Huckel MOs
@@ -101,13 +107,20 @@ contains
      mo_energy(1:min(nproj, size(mo_energy))) = heig(1:min(nproj, size(mo_energy)))
    end if
 
-!  Get canonical orbitals in input basis space
+!  Step 4: canonical orthonormal orbitals Q = S^(-1/2) of the input
+!  basis (cached for reuse by the SCF setup); they serve both as the
+!  starting set to be rotated and as the orthogonalizer. l0 <= nbf is
+!  the number of linearly independent combinations.
    call get_qmat_cached(infos, ovl, q, nbf, qrnk=l0)
    orbitals(1:nbf*nbf) = q(1:nbf*nbf)
 
-!  Project minimal basis set guess onto the input canonical orbitals
+!  Step 5: rotate the canonical orbitals so that the first nproj of
+!  them have maximum overlap with the Huckel MOs (King-Stanton
+!  corresponding orbital transformation)
    call corresponding_orbital_projection(vec, sco, orbitals, ndoc, nact, nproj, nbf, nbf_co, l0)
 
+!  Step 6: re-orthonormalize: the first nproj orbitals are kept (QR),
+!  the remaining ones are rebuilt as their orthogonal complement
    call orthogonalize_orbitals(q, ovl, orbitals, nproj, l0, nbf, nbf)
 
  end subroutine huckel_guess
@@ -172,10 +185,14 @@ contains
 !   counting is done in terms of spherical harmonics.
     call get_atom_ao_limits(basis, llim, iulim)
 
-!   Compute the minimal basis set's overlap matrix
+!   Compute the minimal basis set's overlap matrix (packed storage)
     call overlap(s, basis, log(10.0d0)*tol_int)
 
-!   transform the overlap matrix to spherical harmonic form.
+!   Transform the overlap matrix to spherical harmonic form: the
+!   Huckel parameter tables count orbitals in spherical harmonics
+!   (5d/7f), while the basis may be Cartesian (6d/10f). tsh is the
+!   Cartesian -> spherical transformation; l0co <= l1co is the number
+!   of spherical-harmonic functions; notsp = any d/f shells present.
     call mksphar(tsh,l1co,l0co,notsp, basis)
 
     if (notsp) then
@@ -183,7 +200,9 @@ contains
       s(1:l2co) = h(1:l2co)
     end if
 
-!   obtain canonical orthonormal MOs -Q- for the minimal basis set.
+!   obtain canonical orthonormal MOs -Q- for the minimal basis set:
+!   diagonalize S and scale the eigenvectors by 1/sqrt(eigenvalue),
+!   so that Q^T S Q = 1 (used to orthonormalize the Huckel MOs below)
     call unpack_matrix(s, q)
     call diag_symm_full(1,l0co,q,l1co,eig,ierr)
 
@@ -210,9 +229,18 @@ contains
 !
 !   In view of the very large core orbital energies, all core/core and
 !   core/valence overlaps are first scaled down by BITSY, to reduce the
-!   amount of mixing of these types. Because of the large range of
-!   parameters, one could consider making BITSY a function of the two
-!   diagonal elements of H, or different for C/C versus C/V overlaps.
+!   amount of mixing of these types.
+!
+!   Note on the choice of BITSY: alternatives were benchmarked on a
+!   10-molecule HF/cc-pVDZ set (H2O, NH3, H2S, PH3, SO2, PCl3, SiCl4,
+!   CS2, HCl, ClF), counting SCF iterations to 1.0e-8 convergence:
+!     - flat BITSY in {0.0, 0.01, 0.05, 0.1, 0.2}: identical within
+!       +/-1 iteration everywhere except SiCl4 (29 -> 21 for 0.2);
+!     - energy-dependent damping, 2*sqrt(|Hii*Hjj|)/(|Hii|+|Hjj|):
+!       no gain on average, catastrophic for SiCl4 (73 iterations);
+!     - weaker core/core than core/valence damping: worse (SiCl4: 43).
+!   The guess is largely insensitive to BITSY, so the long-standing
+!   default of 0.05 is kept.
     do i = 2, l0co
       do j = 1, i-1
         if (core(i).or.core(j)) h2(j,i) = BITSY*h2(j,i)
@@ -229,16 +257,18 @@ contains
     call diag_symm_full(1,l0co,h2,l1co,eig,ierr)
     if (ierr /= 0) call show_message('Huckel MBS diagonalization failure', WITH_ABORT)
 
-!   export the Huckel orbital energies
+!   export the Huckel orbital energies (ascending); the caller maps
+!   them onto the corresponding projected guess orbitals
     if (present(energies)) then
       energies = 0.0_dp
       energies(1:min(l0co, size(energies))) = eig(1:min(l0co, size(energies)))
     end if
 
-!   orthonormalize appropriately.
+!   orthonormalize the Huckel MOs in the metric of the overlap matrix
     call orthogonalize_orbitals(q,s,h2,l0co,l0co,l1co,l1co)
 
-!   backtransform to the Cartesian MBS.
+!   backtransform from spherical harmonics to the Cartesian minimal
+!   basis, in which the inter-basis overlap sco is expressed
     if (notsp) then
        call dgemm('N', 'N', l1co, l0co, l0co,&
                    1.0d0, tsh, l1co, &

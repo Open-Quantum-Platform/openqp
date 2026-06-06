@@ -147,17 +147,21 @@ end subroutine get_ab_initio_density
            source=.false., &
            stat=ok)
 
-! Vb^T * Sba
+! Precompute Vb^T * Sba once for all nproj reference orbitals;
+! each project() call below uses its own row block of it
   call dgemm('t', 'n', nproj, nbf, l1co, &
              1.0_dp, vb, l1co, &
                      sba, l1co, &
              0.0_dp, rhs, nbf)
 
-! 1. Project core space
+! The three orbital subspaces are projected independently and in
+! order, so that each later step works in the orthogonal complement
+! of the previous ones:
+! 1. doubly occupied (core) space
   call project(va, rhs, 1, ndoc, l0, nbf)
-! 2. Project active space
+! 2. singly occupied (active) space, ROHF/UHF only
   call project(va, rhs, ndoc+1, ndoc+nact, l0, nbf)
-! 3. Project virtual space
+! 3. low virtual space
   call project(va, rhs, ndoc+nact+1, nproj, l0, nbf)
 
  contains
@@ -180,7 +184,10 @@ end subroutine get_ab_initio_density
     if (nrest <= 0) return
     if (nmo == 0) return
 
-!   D = Vb^T * Sab * Va
+!   Overlap between the nmo reference orbitals (b set) and the
+!   nrest orbitals of the active window of the a set:
+!   D = Vb^T * Sab * Va, dimension (nmo x nrest).
+!   rhs already holds Vb^T * Sab for all nproj reference orbitals.
     call dgemm('n','n', nmo, nrest, nbf, &
                1.0_dp, rhs(minmo,1), nbf, &
                        va(1,minmo),nbf, &
@@ -205,6 +212,7 @@ end subroutine get_ab_initio_density
     vaco(1:nrest,1:nsv) = transpose(vt(1:nsv,1:nrest))
     deallocate(sv, vt, wrk)
 
+!   Cannot project more orbitals than the remaining space can hold
     if (nmo > nrest) &
       call show_message('Corresponding orbital projection: nmo > nrest', WITH_ABORT)
 
@@ -234,7 +242,9 @@ end subroutine get_ab_initio_density
                        rhs(minmo,1), nbf, &
                0.0_dp, tmp, nbf)
 
-!   Permute `a'` set to maximum overlap with `b` set
+!   Pair each projected orbital with the reference orbital it
+!   overlaps most (greedy assignment), so that guess orbital i
+!   corresponds to Huckel/old MO i in order
     unused(:nmo) = .true.
     do i = 1, nmo
       j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused)

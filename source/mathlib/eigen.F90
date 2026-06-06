@@ -109,7 +109,9 @@ contains
     fatal = WITH_ABORT
     if (present(ierr)) fatal = WITHOUT_ABORT
 
-!   Divide-and-conquer driver: much faster than DSYEV for large matrices
+!   Divide-and-conquer driver: much faster than the QR-based DSYEV
+!   for large matrices (it does most of its work in blocked level-3
+!   BLAS), at the cost of a larger workspace. Same accuracy class.
     driver = 'DSYEVD'
     call dsyevd('V', 'U', n_, a, lda_, eival, rwork, -1_blas_int, &
                 irwork, -1_blas_int, info)

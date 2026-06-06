@@ -141,7 +141,10 @@ contains
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
     end if
 
-  ! Calculate Huckel MOs and the corresponding density matrix
+  ! Calculate Huckel MOs and the corresponding density matrix.
+  ! All heavy work runs on the master process only; the results are
+  ! broadcast below. mo_energy_a receives the Huckel eigenvalues for
+  ! the projected orbitals (approximate guess orbital energies).
     if (pe%rank == root) then
       call huckel_guess(Smat, MO_A, infos, basis, huckel_basis, &
                         modified=modified, mo_energy=mo_energy_a)
