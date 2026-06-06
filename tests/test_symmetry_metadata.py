@@ -260,8 +260,15 @@ class TestSymmetryMetadata(unittest.TestCase):
         molecule.data = _StubData()
         molecule.energies = np.array([-1.23])
         molecule.hessian = np.array([1.0])
+        molecule.hessian_metadata = {}
         molecule.freqs = np.array([1.0])
         molecule.modes = np.array([1.0])
+        molecule.inertia = np.array([1.0])
+        molecule.infrared_intensities = np.zeros(0)
+        molecule.raman_activities = np.zeros(0)
+        molecule.vibrational_intensity_metadata = {}
+        molecule.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+        molecule.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
 
         molecule.get_atoms = lambda: np.array([1, 1, 8], dtype=int)
         molecule.get_system = lambda: np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
