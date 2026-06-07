@@ -24,7 +24,7 @@ maxit=30
 
 [optimize]
 lib=oqp
-maxit=2
+maxit=1
 istate=1
 jstate=2
 kstate=3
