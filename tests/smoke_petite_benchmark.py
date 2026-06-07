@@ -18,34 +18,50 @@ import numpy as np
 GATE = 1.0e-9
 
 
-def naphthalene():
-    """Idealized D2h naphthalene (rings of side 1.40 A, C-H 1.09 A)."""
+def acene(n_rings):
+    """Idealized D2h linear acene (ring side 1.40 A, C-H 1.09 A).
+
+    n_rings = 1: benzene, 2: naphthalene, 3: anthracene, ...
+    Hexagon centered at cx has vertices (cx +- half, +-a/2) and (cx, +-a).
+    """
     a = 1.40
     h = 1.09
-    half = a * np.sqrt(3.0) / 2.0  # 1.2124
-    carbons = [(0.0, a / 2), (0.0, -a / 2)]
-    for sx in (1.0, -1.0):
-        carbons += [
-            (sx * half, a),
-            (sx * half, -a),
-            (sx * 2 * half, a / 2),
-            (sx * 2 * half, -a / 2),
-        ]
-    hydrogens = []
-    for sx in (1.0, -1.0):
+    half = a * np.sqrt(3.0) / 2.0
+
+    carbons = set()
+    centers = [(-(n_rings - 1) + 2 * k) * half for k in range(n_rings)]
+    for cx in centers:
+        for sx in (1.0, -1.0):
+            for sy in (1.0, -1.0):
+                carbons.add((round(cx + sx * half, 6), round(sy * a / 2, 6)))
         for sy in (1.0, -1.0):
-            hydrogens.append((sx * half, sy * (a + h)))
-            ux, uy = np.array([half, a / 2]) / a  # radial unit from ring center
-            hydrogens.append((sx * (2 * half + h * ux), sy * (a / 2 + h * uy)))
-    lines = [f'   6 {x:13.6f} {y:13.6f}   0.000000' for x, y in carbons]
+            carbons.add((round(cx, 6), round(sy * a, 6)))
+
+    hydrogens = []
+    for cx, cy in sorted(carbons):
+        # H on every carbon with only two carbon neighbours: tops/bottoms
+        # (|y| = a) and the four ring-end carbons (|x| = (n+? ) outermost).
+        if abs(abs(cy) - a) < 1e-6:
+            hydrogens.append((cx, cy + np.sign(cy) * h))
+        elif abs(abs(cx) - (n_rings * half)) < 1e-6:
+            # radial from the end-ring center
+            ccx = np.sign(cx) * (n_rings - 1) * half
+            ux, uy = (cx - ccx) / a, cy / a
+            hydrogens.append((cx + h * ux, cy + h * uy))
+
+    lines = [f'   6 {x:13.6f} {y:13.6f}   0.000000' for x, y in sorted(carbons)]
     lines += [f'   1 {x:13.6f} {y:13.6f}   0.000000' for x, y in hydrogens]
     return '\n'.join(lines)
 
 
 CASES = {
-    # name: (extra input lines, basis)
-    'naphthalene_rhf': ('', '6-31g*'),
-    'naphthalene_dft': ('functional=bhhlyp\n', '6-31g*'),
+    # name: (n_rings, extra input lines, basis)
+    'benzene_rhf': (1, '', '6-31g*'),
+    'benzene_dft': (1, 'functional=bhhlyp\n', '6-31g*'),
+    'naphthalene_rhf': (2, '', '6-31g*'),
+    'naphthalene_dft': (2, 'functional=bhhlyp\n', '6-31g*'),
+    'anthracene_rhf': (3, '', '6-31g*'),
+    'anthracene_dft': (3, 'functional=bhhlyp\n', '6-31g*'),
 }
 
 INPUT_TEMPLATE = """\
@@ -63,6 +79,7 @@ type=huckel
 [scf]
 multiplicity=1
 type=rhf
+stability=false
 
 [symmetry]
 {symmetry}
@@ -86,10 +103,10 @@ def run_case(workdir, name, content):
 
 def main():
     workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_petite_bench'
-    system = naphthalene()
     failures = []
 
-    for name, (extra, basis) in CASES.items():
+    for name, (n_rings, extra, basis) in CASES.items():
+        system = acene(n_rings)
         ref_input = INPUT_TEMPLATE.format(system=system, extra=extra,
                                           basis=basis, symmetry='enabled=false')
         sym_input = INPUT_TEMPLATE.format(
