@@ -115,11 +115,9 @@ struct control_parameters {
     int64_t   maxdiis;
     int64_t   diis_reset_mod;
     double    diis_reset_conv;
-    double    diis_method_threshold;
     int64_t   diis_type;
-    double    vdiis_cdiis_switch;
+    double    cdiis_switch;
     double    vdiis_vshift_switch;
-    double    vshift_cdiis_switch;
     double    vshift;
     bool      mom;
     bool      pfon;
@@ -138,8 +136,6 @@ struct control_parameters {
     bool      rstctmo;
     int64_t   converger_type;
     double    soscf_lvl_shift;
-    int64_t   soscf_reset_mod;
-    int64_t   soscf_mode;
     int64_t   verbose;
     bool      trh_stab;
     bool      trh_ls;

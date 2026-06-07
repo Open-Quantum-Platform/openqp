@@ -71,11 +71,9 @@ OQP_CONFIG_SCHEMA = {
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},
-        'diis_method_threshold': {'type': float, 'default': '2.0'},
         'diis_type': {'type': string, 'default': 'cdiis'},
-        'vdiis_cdiis_switch': {'type': float, 'default': '0.3'},
+        'cdiis_switch': {'type': float, 'default': '0.3'},
         'vdiis_vshift_switch': {'type': float, 'default': '0.003'},
-        'vshift_cdiis_switch': {'type': float, 'default': '0.3'},
         'vshift': {'type': float, 'default': '0.0'},
         'mom': {'type': bool, 'default': 'False'},
         'mom_switch': {'type': float, 'default': '0.003'},
@@ -96,8 +94,6 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'stability': {'type': bool, 'default': 'True'},
-        'soscf_reset_mod': {'type': int, 'default': '0'},
-        'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
         'verbose': {'type': int, 'default': '1'},
@@ -269,11 +265,9 @@ class OQPData:
             "maxdiis": "set_scf_maxdiis",
             "diis_reset_mod": "set_scf_diis_reset_mod",
             "diis_reset_conv": "set_scf_diis_reset_conv",
-            "diis_method_threshold": "set_scf_diis_method_threshold",
             "diis_type": "set_scf_diis_type",
-            "vdiis_cdiis_switch": "set_scf_vdiis_cdiis_switch",
+            "cdiis_switch": "set_scf_cdiis_switch",
             "vdiis_vshift_switch": "set_scf_vdiis_vshift_switch",
-            "vshift_cdiis_switch": "set_scf_vshift_cdiis_switch",
             "ft": "set_scf_vshift",
             "vshift": "set_scf_vshift",
             "mom": "set_scf_mom",
@@ -288,8 +282,6 @@ class OQPData:
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "converger_type": "set_scf_converger_type",
-            "soscf_reset_mod": "set_scf_soscf_reset_mod",
-            "soscf_mode": "set_scf_soscf_mode",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
             "trh_stab": "set_trah_stability",
@@ -509,25 +501,17 @@ class OQPData:
         """Set reset DIIS Equations for every diis_reset_mod"""
         self._data.control.diis_reset_conv = diis_reset_conv
 
-    def set_scf_diis_method_threshold(self, diis_method_threshold):
-        """Set DIIS threshold to switch DIIS method"""
-        self._data.control.diis_method_threshold = diis_method_threshold
-
     def set_scf_diis_type(self, diistype):
         """Set DIIS method"""
         self._data.control.diis_type = OQPData._diis_types[diistype]
 
-    def set_scf_vdiis_cdiis_switch(self, vdiis_cdiis_switch):
-        """Set vdiis_cdiis_switch size for better SCF convergence"""
-        self._data.control.vdiis_cdiis_switch = vdiis_cdiis_switch
+    def set_scf_cdiis_switch(self, cdiis_switch):
+        """DIIS error below which the DIIS cascade switches to C-DIIS"""
+        self._data.control.cdiis_switch = cdiis_switch
 
     def set_scf_vdiis_vshift_switch(self, vdiis_vshift_switch):
-        """Set vdiis_vshift_switch size for better SCF convergence"""
+        """DIIS error below which the level shift is turned off (vDIIS)"""
         self._data.control.vdiis_vshift_switch = vdiis_vshift_switch
-
-    def set_scf_vshift_cdiis_switch(self, vshift_cdiis_switch):
-        """Set vshift_cdiis_switch size for better SCF convergence"""
-        self._data.control.vshift_cdiis_switch = vshift_cdiis_switch
 
     def set_scf_vshift(self, vshift):
         """Set Vshift size for better SCF convergency"""
@@ -589,28 +573,8 @@ class OQPData:
             self._data.control.converger_type = 2
 
     def set_soscf_lvl_shift(self, soscf_lvl_shift):
-        """Reset the orbital Hessian. If it is zero, we don't reset by default.
-        """
+        """SOSCF level-shift parameter."""
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
-
-    def set_scf_soscf_mode(self, soscf_mode):
-        """Set the SOSCF mode
-        Parameters:
-            soscf_mode (int):
-                0   : Plane 
-                1   : Stability Improved
-                2   : Stability + Performance
-        """
-        self._data.control.soscf_mode = soscf_mode
-
-    def set_scf_soscf_reset_mod(self, soscf_reset_mod):
-        """Set the SOSCF Hessian reset mode.
-        Parameters:
-            soscf_reset_mod (int):
-                0      – Disable Hessian reset.
-                >0     – Reset the Hessian at the specified SCF iteration.
-        """
-        self._data.control.soscf_reset_mod = soscf_reset_mod
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""

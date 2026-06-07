@@ -106,11 +106,9 @@ module types
     integer(c_int64_t) :: maxdiis  = 7               !< The maximum number of diis equations
     integer(c_int64_t) :: diis_reset_mod = 10        !< The maximum number of diis iteration before resetting
     real(c_double) :: diis_reset_conv = 0.005_dp     !< Convergency criteria of DIIS reset
-    real(c_double) :: diis_method_threshold = 2.0_dp !< DIIS threshold for switching DIIS method
     integer(c_int64_t) :: diis_type = 5              !< 1: none, 2: cdiis, 3: ediis, 4: adiis, 5: vdiis
-    real(c_double) :: vdiis_cdiis_switch = 0.3_dp    !< The threshold for selecting cdiis
-    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< The threshold for setting vshift = 0
-    real(c_double) :: vshift_cdiis_switch = 0.3_dp   !< The threshold for selecting cdiis for vshift
+    real(c_double) :: cdiis_switch = 0.3_dp          !< DIIS error below which the cascade switches to C-DIIS
+    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< DIIS error below which the level shift is turned off
     real(c_double) :: vshift = 0.0_dp                !< Virtual orbital shift for ROHF
     logical(c_bool) :: mom = .false.                 !< Maximum Overlap Method for SCF Convergency
     logical(c_bool) :: pfon = .false.                !< Pseudo-Fractional Occupation Number Method (pFON) for scf
@@ -127,11 +125,9 @@ module types
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
     real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
     logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
-    ! SOSCF Parameters
-    integer(c_int64_t) :: converger_type = 0       !< SOSCF type: 0=off, 1=SOSCF only, 2=SOSCF+DIIS
+    ! SCF converger selection
+    integer(c_int64_t) :: converger_type = 0   !< SCF converger: 0=DIIS, 1=SOSCF, 2=TRAH
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
-    integer(c_int64_t) :: soscf_reset_mod = 0  !< Reset the orbital Hessian. If it is zero, we don't reset by default.
-    integer(c_int64_t) :: soscf_mode = 0       !0: plane, 1: Stability, 2: Stability+Performance
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
     ! Opentrustregion Parameter
     logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence

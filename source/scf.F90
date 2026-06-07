@@ -455,13 +455,13 @@ contains
     !   ├── diis_type = 5 (V-DIIS):
     !   │   ├── vshift unset (0.0): Sets vshift = 0.1
     !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
-    !   │       Thresholds: [2.0, 1.0, vdiis_cdiis_switch]
+    !   │       Thresholds: [2.0, 1.0, cdiis_switch]
     !   ├── vshift set (non-zero):
     !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
-    !   │       Thresholds: [2.0, 1.0, vshift_cdiis_switch]
+    !   │       Thresholds: [2.0, 1.0, cdiis_switch]
     !   └── Otherwise:
     !       └── Uses: diis_type method (1=C-DIIS, 2=E-DIIS, 3=A-DIIS)
-    !           Threshold: diis_method_threshold
+    !           Threshold: 2.0
     !
     ! converger_type = 1 (Pure SOSCF):
     !   └── Uses: SOSCF
@@ -513,10 +513,10 @@ contains
                    infos%control%diis_reset_mod, infos%control%diis_reset_conv
       if (infos%control%diis_type == 5) &
         write(IW,'(5X,"vDIIS switch: cDIIS = ",F6.3,"  vshift = ",F7.4)') &
-                   infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch
+                   infos%control%cdiis_switch, infos%control%vdiis_vshift_switch
       if (infos%control%vshift /= 0.0_dp) &
         write(IW,'(5X,"Level shift = ",F6.3,"  (cDIIS switch = ",F6.3,")")') &
-                   infos%control%vshift, infos%control%vshift_cdiis_switch
+                   infos%control%vshift, infos%control%cdiis_switch
     end if
     if (infos%control%mom) &
       write(IW,'(5X,"MOM enabled (switch = ",ES9.2,")")') infos%control%mom_switch
@@ -541,10 +541,12 @@ contains
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
       if (infos%control%trh_impl == 1) then
-        write(IW,"(/,5x,'TRAH via the native trust-region augmented-Hessian solver')")
+        write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
+              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
       else
-        write(IW,"(/,5x,'TRAH via the external OpenTrustRegion library', &
-              &/,5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
+        write(IW,"(/,5x,'OpenTRAH (external OpenTrustRegion library)', &
+              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021);', &
+              &/,5x,' https://github.com/eriksen-lab/opentrustregion]')")
       end if
 
     else
@@ -706,7 +708,7 @@ contains
           mo_energy_b = mo_energy_a
         end if
         call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-        ! Native TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
+        ! TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
         ! the converged Fock so post-SCF properties and analytic gradients receive
         ! canonical MOs and orbital energies (same density/energy at the stationary
         ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
@@ -1282,7 +1284,7 @@ contains
                        maxvec=maxdiis, &
                        subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
                        thresholds   =[ethr_cdiis_big, ethr_ediis, &
-                                      infos%control%vdiis_cdiis_switch], &
+                                      infos%control%cdiis_switch], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
@@ -1298,7 +1300,7 @@ contains
                        maxvec=maxdiis, &
                        subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
                        thresholds   =[ethr_cdiis_big, ethr_ediis, &
-                                      infos%control%vshift_cdiis_switch], &
+                                      infos%control%cdiis_switch], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
@@ -1308,7 +1310,7 @@ contains
         call conv%init(ldim=nbf, &
                        maxvec=maxdiis, &
                        subconvergers=[infos%control%diis_type], &
-                       thresholds   =[infos%control%diis_method_threshold], &
+                       thresholds   =[ethr_cdiis_big], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
@@ -1369,18 +1371,7 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (soscf_converger)
           sc%level_shift = infos%control%soscf_lvl_shift
-          sc%soscf_reset_mod = infos%control%soscf_reset_mod
-      ! SOSCF_mode
-          select case (infos%control%soscf_mode)
-          case (0)
-            sc%variant = SOSCF_VARIANT_ORIGINAL          ! original behavior
-          case (1)
-            sc%variant = SOSCF_VARIANT_STABLE_ONLY       ! curvature-safe L-BFGS only
-          case (2)
-            sc%variant = SOSCF_VARIANT_QUAD_LS           ! + quadratic line search (no extra J/K)
-          case default
-            sc%variant = SOSCF_VARIANT_ORIGINAL
-          end select
+          sc%variant = SOSCF_VARIANT_ORIGINAL
 
       class default
       ! not an SOSCF converger; nothing to do
