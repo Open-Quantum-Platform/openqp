@@ -500,6 +500,90 @@ def assign_mo_irreps(
     }
 
 
+def build_reduction_maps(
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Shell/AO symmetry maps for integral reductions (Gate A, metadata only).
+
+    Valid in the standard orientation, where every abelian operation is a
+    signed shell permutation: requires sign-diagonal operation matrices
+    (the ``matrix`` payload of ``symmetry_detect``).
+
+    Returns per-operation shell permutations and per-AO sign vectors, plus
+    shell orbit representatives and orbit sizes for petite-list iteration.
+    """
+
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+
+    offsets: list[int] = []
+    n_ao = 0
+    atom_shells: dict[int, list[int]] = {}
+    for idx, (atom, l) in enumerate(shell_list):
+        offsets.append(n_ao)
+        n_ao += _cartesian_shell_size(l)
+        atom_shells.setdefault(atom, []).append(idx)
+
+    signatures = {
+        atom: tuple(shell_list[idx][1] for idx in idx_list)
+        for atom, idx_list in atom_shells.items()
+    }
+
+    nshell = len(shell_list)
+    shell_perm = np.zeros((len(op_list), nshell), dtype=int)
+    ao_sign = np.zeros((len(op_list), n_ao), dtype=int)
+    for iop, op in enumerate(op_list):
+        matrix = _to_float_array(op['matrix'])
+        diag = np.diagonal(matrix)
+        if not np.allclose(matrix, np.diag(diag)) or not np.allclose(np.abs(diag), 1.0):
+            raise ValueError(
+                "reduction maps require sign-diagonal operations "
+                "(standard orientation); got a dense matrix"
+            )
+        signs = tuple(int(round(s)) for s in diag)
+        permutation = [int(a) for a in op['permutation']]
+        for idx, (atom, l) in enumerate(shell_list):
+            mapped_atom = permutation[atom]
+            if signatures[atom] != signatures.get(mapped_atom):
+                raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
+            shell_rank = atom_shells[atom].index(idx)
+            mapped_shell = atom_shells[mapped_atom][shell_rank]
+            shell_perm[iop, idx] = mapped_shell
+            comp_signs = _component_signs(l, signs)
+            for comp, comp_sign in enumerate(comp_signs):
+                # AO components keep their in-shell position under sign ops.
+                ao_sign[iop, offsets[idx] + comp] = comp_sign
+
+    # Shell orbits under the group: representative = lowest shell index.
+    representative = np.arange(nshell)
+    for idx in range(nshell):
+        orbit = sorted(set(int(shell_perm[iop, idx]) for iop in range(len(op_list))))
+        representative[idx] = orbit[0]
+    orbit_size = np.array([
+        int(np.sum(representative == representative[idx])) if representative[idx] == idx else 0
+        for idx in range(nshell)
+    ])
+
+    return {
+        'n_operations': len(op_list),
+        'operation_names': [str(op.get('name', '?')) for op in op_list],
+        'shell_permutation': shell_perm.tolist(),
+        'ao_sign': ao_sign.tolist(),
+        'ao_target': [
+            [int(offsets[shell_perm[iop, idx]] + comp)
+             for idx, (_, l) in enumerate(shell_list)
+             for comp in range(_cartesian_shell_size(l))]
+            for iop in range(len(op_list))
+        ],
+        'shell_orbit_representative': representative.tolist(),
+        'shell_orbit_size': orbit_size.tolist(),
+        'n_shells': nshell,
+        'n_ao': n_ao,
+        'status': 'metadata_only_no_reductions',
+    }
+
+
 def product_irrep(labels: Iterable[str], character_table: Mapping[str, Iterable[int]]) -> str:
     """Direct product of abelian irreps, e.g. b1 x b2 -> a2 in C2v.
 

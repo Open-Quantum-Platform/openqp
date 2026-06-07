@@ -26,13 +26,13 @@ moves the molecule. Reductions want the opposite: in the standard
 orientation every abelian operation is a signed shell permutation (cheap,
 exact); in a general frame p/d/f/g blocks are dense.
 
-DECISION REQUIRED: when `use_integral_symmetry=on`, reorient the input
-geometry to the detection's standard orientation at load time (GAMESS
-does this). Gradients/modes are rotated back on output. When the flag is
-off (default), geometry is never touched — labeling continues to use the
-input-frame machinery. This keeps "off == today" exactly.
+DECIDED (2026-06-07, CHC): when `use_integral_symmetry=on`, reorient the
+input geometry to the detection's standard orientation at load time
+(GAMESS-style). Gradients/modes are rotated back on output. When the
+flag is off (default), geometry is never touched — labeling continues to
+use the input-frame machinery. This keeps "off == today" exactly.
 
-## 2. Prerequisite metadata (Gate A — Python side, small)
+## 2. Prerequisite metadata (Gate A — Python side, small) [DONE: build_reduction_maps + tests, stored under symmetry_metadata['reduction_maps']]
 
 From the existing detection payload, build and pass to Fortran (tagarray):
 

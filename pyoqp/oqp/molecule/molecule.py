@@ -284,6 +284,14 @@ class Molecule:
             if state is not None:
                 result['scf_state'] = state
             meta['mo_labels'] = result
+            # Gate A of the reductions plan: shell/AO symmetry maps
+            # (metadata only; consumed by future petite-list code).
+            try:
+                from oqp.library.symmetry import build_reduction_maps
+                meta['reduction_maps'] = build_reduction_maps(
+                    shells, detection['operations'])
+            except Exception as exc:
+                meta['reduction_maps'] = {'status': 'error', 'error': str(exc)}
             try:
                 self._dump_mo_labels_log(result)
             except Exception:
