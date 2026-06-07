@@ -9,6 +9,101 @@ import sys
 import time
 import argparse
 from signal import signal, SIGINT, SIG_DFL
+
+
+def _apply_omp_threads_from_input(argv):
+    """Honour an OpenMP thread-count request from the input file or CLI BEFORE
+    the native OpenMP runtime initialises (it caches OMP_NUM_THREADS when liboqp
+    loads, so this must run before `import oqp`).
+
+    Sources, highest precedence first:
+      * CLI:   --omp N   (or --omp=N)
+      * input: a line  `omp_threads = N`  (typically in the [input] section)
+
+    The value sets OMP_NUM_THREADS (threads per process / MPI rank).  If neither
+    is given, the existing environment / built-in default is left untouched.
+    """
+    import re
+    n = None
+    for i, a in enumerate(argv):
+        if a in ("--omp", "--omp-threads") and i + 1 < len(argv):
+            n = argv[i + 1]
+            break
+        if a.startswith("--omp="):
+            n = a.split("=", 1)[1]
+            break
+    if n is None:
+        inp = next((a for a in argv[1:]
+                    if not a.startswith("-") and os.path.isfile(a)), None)
+        if inp:
+            try:
+                with open(inp, encoding="utf-8", errors="ignore") as fh:
+                    m = re.search(r"(?mi)^[ \t]*omp_threads[ \t]*=[ \t]*(\d+)",
+                                  fh.read())
+                if m:
+                    n = m.group(1)
+            except OSError:
+                pass
+    if n is not None:
+        try:
+            ni = int(n)
+        except (TypeError, ValueError):
+            return
+        if ni >= 1:
+            os.environ["OMP_NUM_THREADS"] = str(ni)
+
+
+def _set_threading_defaults():
+    """Set conservative nested-threading defaults before native libraries load.
+
+    OpenQP parallelizes the native integral and response kernels with OpenMP.
+    BLAS must NOT spawn a second worker-thread layer inside those OMP regions,
+    or it oversubscribes the cores (OMP_threads x BLAS_threads) and stalls --
+    measured 1.53x faster on caffeine/6-31G(d,p) at 24 threads with sequential
+    BLAS (31.1s -> 20.3s).  GNU libgomp worker stacks also need headroom for the
+    integral kernels on macOS/arm64 (otherwise a startup segfault).  All values
+    are setdefault, so an explicit user environment still wins.
+    """
+    defaults = {
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "BLIS_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "OMP_STACKSIZE": "256M",
+        "GOMP_STACKSIZE": "256M",
+    }
+    if sys.platform == "darwin":
+        # macOS default: use the PERFORMANCE-core count, not all logical cores.
+        # On Apple Silicon spilling onto the efficiency cores oversubscribes and
+        # slows the integral build; on Intel Macs all cores are equal.  Derive it
+        # per-host (hw.perflevel0.physicalcpu = P-cores on Apple Silicon, falling
+        # back to hw.physicalcpu / os.cpu_count()) instead of a fixed cap, so we
+        # never over- or under-subscribe a given machine.  setdefault, so an
+        # explicit OMP_NUM_THREADS still wins.
+        import subprocess
+        ncore = None
+        for key in ("hw.perflevel0.physicalcpu", "hw.physicalcpu"):
+            try:
+                ncore = int(subprocess.check_output(
+                    ["sysctl", "-n", key], stderr=subprocess.DEVNULL).strip())
+            except Exception:
+                ncore = None
+            if ncore and ncore > 0:
+                break
+        if not ncore or ncore < 1:
+            ncore = os.cpu_count() or 1
+        defaults["OMP_NUM_THREADS"] = str(ncore)
+
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
+
+
+# Establish conservative BLAS/OMP defaults first (setdefault, so they never
+# override an explicit environment), then honour an explicit per-rank thread
+# request from --omp / omp_threads, which hard-sets OMP_NUM_THREADS and wins.
+_set_threading_defaults()
+_apply_omp_threads_from_input(sys.argv)
+
 import oqp
 from oqp.utils.file_utils import dump_log
 from oqp.utils.input_checker import check_input_values
@@ -96,6 +191,20 @@ class Runner:
             log = self.mol.log
 
         self.mol.data["OQP::log_filename"] = log
+
+        # Apply the parsed `omp_threads` at runtime. The pre-import hook only sees
+        # a CLI flag or an input *file*, so this also covers the programmatic
+        # Runner(input_dict=...) path. omp_set_num_threads takes effect for the
+        # subsequent SCF parallel regions; we also export OMP_NUM_THREADS so the
+        # input checker / any later BLAS sizing see a consistent value.
+        _omp = self.mol.config.get("input", {}).get("omp_threads", 0)
+        if _omp and _omp > 0:
+            if oqp.lib.oqp_have_openmp():
+                oqp.lib.oqp_omp_set_num_threads(int(_omp))
+                os.environ["OMP_NUM_THREADS"] = str(int(_omp))
+            elif not self.mol.silent:
+                print(f"PyOQP WARNING: omp_threads={_omp} requested but this "
+                      "OpenQP build has no OpenMP support; running serially.")
         # check input values set default omp_num_threads
         _input_file = getattr(self.mol, "input_file", None)
         check_input_values(
@@ -188,10 +297,30 @@ class Runner:
             diff = None
         return message, diff
 
+def _warn_if_no_openmp():
+    """Warn when threads were requested but liboqp was built without OpenMP, so
+    the request (input omp_threads / --omp / OMP_NUM_THREADS) has no effect."""
+    try:
+        want = int(os.environ.get("OMP_NUM_THREADS", "1"))
+    except ValueError:
+        want = 1
+    if want <= 1:
+        return
+    try:
+        have = bool(oqp.lib.oqp_have_openmp())
+    except Exception:
+        return
+    if not have:
+        print(f"PyOQP WARNING: {want} OpenMP threads were requested "
+              "(omp_threads/--omp/OMP_NUM_THREADS) but this OpenQP build has no "
+              "OpenMP support; the calculation will run serially.")
+
+
 def main():
     """
     Main function to handle command-line arguments and run OQP.
     """
+    _warn_if_no_openmp()
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
@@ -203,6 +332,10 @@ def main():
                              '  other  - Run tests in examples/other')
     parser.add_argument('--silent', action='store_true', help='run silently')
     parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
+    parser.add_argument('--omp', metavar='N', type=int,
+                        help='OpenMP threads per process/MPI rank (overrides the\n'
+                             "input's omp_threads and OMP_NUM_THREADS; applied\n"
+                             'before the OpenMP runtime loads)')
     args = parser.parse_args()
 
     if args.run_tests:

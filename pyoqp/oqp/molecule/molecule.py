@@ -75,7 +75,12 @@ class Molecule:
             'OQP::dc_matrix', 'OQP::nac_matrix',
             'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges',
             'OQP::namd_coef', 'OQP::namd_velocity', 'OQP::namd_params', 'OQP::namd_results',
-            'OQP::namd_tdc'
+            'OQP::namd_tdc',
+            'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
+            'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::soc_eval',
+            'OQP::soc_evec_re', 'OQP::soc_evec_im',
+            'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],
@@ -1101,10 +1106,12 @@ class Molecule:
 
     def get_soc(self):
         """
-        Get spin-orbit coupling in cm-1
+        Get spin-orbit coupling eigenvalues in cm-1
         """
-
-        return []
+        try:
+            return np.array(self.data['OQP::soc_eval']).tolist()
+        except AttributeError:
+            return []
 
     def get_hess(self):
         """
@@ -1563,6 +1570,8 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
             'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
+            'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::soc_evec_re', 'OQP::soc_evec_im', 'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
             'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
             'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
@@ -1582,7 +1591,7 @@ class Molecule:
         if runtype in ['grad', 'optimize', 'meci', 'mep']:
             skip_keys.append('hess')
 
-        if runtype in ['hess', 'nacme', 'nac']:
+        if runtype in ['hess', 'nacme', 'nac', 'soc']:
             skip_keys.append('grad')
 
         message = ''

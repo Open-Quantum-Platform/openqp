@@ -73,6 +73,14 @@ OQP_CONFIG_SCHEMA = {
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
         'qmmm_flag': {'type': bool, 'default': 'False'},
+        # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
+        # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
+        'soc_2e': {'type': int, 'default': '1'},
+        # OpenMP threads per process / MPI rank. 0 = leave OMP_NUM_THREADS / the
+        # built-in default untouched. Applied before the OpenMP runtime loads
+        # (see pyoqp._apply_omp_threads_from_input); a build without OpenMP
+        # ignores it with a warning.
+        'omp_threads': {'type': int, 'default': '0'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -134,6 +142,7 @@ OQP_CONFIG_SCHEMA = {
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
+        'scal_rel': {'type': int, 'default': '0'},
         'stability': {'type': bool, 'default': 'True'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_mode': {'type': int, 'default': '0'},
@@ -202,7 +211,6 @@ OQP_CONFIG_SCHEMA = {
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
         'nac': {'type': str, 'default': ''},
-        'soc': {'type': str, 'default': ''},
         'export': {'type': bool, 'default': 'False'},
         'title': {'type': str, 'default': ''},
         'back_door': {'type': bool, 'default': False}
@@ -336,6 +344,7 @@ class OQPData:
             "system": "set_system",
             "system2": "set_system2",
             "qmmm_flag": "set_qmmm_flag",
+            "soc_2e":     "set_soc_2e",
         },
         "guess": {
         },
@@ -367,6 +376,7 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
+            "scal_rel": "set_scf_scal_rel",
             "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_mode": "set_scf_soscf_mode",
@@ -657,6 +667,10 @@ class OQPData:
     def set_scf_conv(self, conv):
         """Set SCF convergence threshold"""
         self._data.control.conv = conv
+
+    def set_scf_scal_rel(self, scal_rel):
+        """Set SCF convergence threshold"""
+        self._data.control.scal_rel = scal_rel
 
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
@@ -1002,6 +1016,9 @@ class OQPData:
         if system.strip():
             num_atoms, x, y, z, q, mass = read_system(system)
             self.mol2 = np.array(x + y + z).reshape((3, num_atoms)).T.reshape(-1)
+
+    def set_soc_2e(self, soc_2e):
+        self._data.control.soc_2e = soc_2e
 
     def parse_section(self, config, section):
         cfg_input = config[section]

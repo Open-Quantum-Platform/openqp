@@ -33,6 +33,8 @@ module physical_constants
   real(real64), public, parameter :: K_BOLTZMANN = 1.380649d-23
   real(real64), public, parameter :: N_AVOGADRO = 6.02214076d+23
 
+  real(real64), public, parameter :: FINE_STRUCTURE = 7.2973525693d-3
+
 !   Internal default units are atomic units (length: Bohr, energy: Hartree)
 !   Units of length
   real(real64), public, parameter :: UNITS_BOHR = 1.0d0
@@ -44,6 +46,7 @@ module physical_constants
   real(real64), public, parameter :: UNITS_EV = ELECTRONVOLT/HARTREE
   real(real64), public, parameter :: UNITS_KCALMOL = (1000*CALORIE/N_AVOGADRO)/HARTREE
   real(real64), public, parameter :: UNITS_KJMOL = (1000*JOULE/N_AVOGADRO)/HARTREE
+  real(real64), public, parameter :: HA_TO_WAVENUM = 219474.6313708d0
 
 !   Common conversion constants
   real(real64), public, parameter :: BOHR_TO_ANGSTROM = UNITS_BOHR/UNITS_ANGSTROM
