@@ -237,6 +237,17 @@ contains
             call int2_rys_compute_ordered_am(eri0, gdat, int2_driver%ppairs, ids, am0, zero_shq)
             if (zero_shq) cycle
             p0(1:nl,1:nk,1:nj,1:ni) => eri0(1:nl*nk*nj*ni)
+            ! The raised-bra quartet depends only on (ids, am0 + 1 on the bra);
+            ! it is identical for all three axes and all (ii,jj,kk,ll), so
+            ! compute it ONCE per shell quartet.  (It was previously recomputed
+            ! 3*ni*nj*nk*nl times inside the loops below, which made d/f-basis
+            ! GIAO NMR intractable.)  Only the Cartesian component index mapr
+            ! depends on (ii, axis).
+            amr = am0
+            amr(1) = amr(1) + 1
+            erir = 0.0_dp
+            call int2_rys_compute_ordered_am(erir, gdat, int2_driver%ppairs, ids, amr, zero_shq)
+            pr(1:nl,1:nk,1:nj,1:num_cart_bf(amr(1))) => erir(1:nl*nk*nj*num_cart_bf(amr(1)))
             do ii = 1, ni
               mu = basis%ao_offset(si) + ii - 1
               do jj = 1, nj
@@ -248,14 +259,8 @@ contains
                     norm4 = basis%bfnrm(mu)*basis%bfnrm(nu)*basis%bfnrm(kap)*basis%bfnrm(lam)
                     base_val = p0(ll,kk,jj,ii)
                     do axis = 1, 3
-                      amr = am0
-                      amr(1) = amr(1) + 1
-                      erir = 0.0_dp
-                      call int2_rys_compute_ordered_am(erir, gdat, int2_driver%ppairs, ids, amr, zero_shq)
-                      pr(1:nl,1:nk,1:nj,1:num_cart_bf(amr(1))) => erir(1:nl*nk*nj*num_cart_bf(amr(1)))
                       mapr = raised_cart_index(ii, am0(1), axis)
                       d(axis) = (pr(ll,kk,jj,mapr) + basis%shell_centers(si,axis)*base_val) * norm4
-                      nullify(pr)
                     end do
                     g(1) = -0.5_dp*(rij(2)*d(3) - rij(3)*d(2))
                     g(2) = -0.5_dp*(rij(3)*d(1) - rij(1)*d(3))
@@ -275,6 +280,7 @@ contains
               end do
             end do
             nullify(p0)
+            nullify(pr)
           end do
         end do
       end do
