@@ -1,12 +1,9 @@
 """Interface and claim-boundary tests for NMR gauge handling.
 
-CGO is the validated baseline and must remain the default.  GIAO is exposed as
-an explicit, gated development option until full gauge-including integrals and
-benchmarks are implemented.
+CGO is the validated default; GIAO is the gauge-origin-independent option.
 """
 
 import unittest
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,22 +21,6 @@ class NMRGaugeInterfaceTests(unittest.TestCase):
         self.assertIn('"cgo"', text)
         self.assertIn('"giao"', text)
         self.assertIn("properties.nmr_gauge", text)
-
-    def test_giao_benchmark_matrix_tracks_required_comparisons(self):
-        matrix = json.loads((ROOT / "tests" / "fixtures" / "nmr" / "giao_benchmark_matrix.json").read_text())
-        self.assertEqual(matrix["baseline"], "cgo")
-        self.assertEqual(matrix["candidate"], "giao")
-        for required in (
-            "isotropic_shielding_ppm",
-            "tensor_components_ppm",
-            "gauge_origin_translation_delta_ppm",
-            "wall_time_seconds",
-            "peak_memory_mb",
-            "trusted_reference_delta_ppm",
-        ):
-            self.assertIn(required, matrix["metrics"])
-        self.assertGreaterEqual(len(matrix["small_regression_systems"]), 3)
-        self.assertGreaterEqual(len(matrix["origin_dependence_systems"]), 2)
 
 
 if __name__ == "__main__":

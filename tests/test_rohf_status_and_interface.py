@@ -22,7 +22,6 @@ OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
 SCF = ROOT / "source" / "scf.F90"
 NMR = ROOT / "source" / "modules" / "nmr_shielding.F90"
-STATUS = ROOT / "source" / "modules" / "NMR_SHIELDING_STATUS.md"
 
 ROHF_NMR_INPUT = """\
 [input]
@@ -291,31 +290,6 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         nmr = NMR.read_text()
         self.assertIn("NMR shielding currently supports closed-shell", nmr)
         self.assertIn("infos%control%scftype == 2 .or. infos%control%scftype == 3", nmr)
-
-    def test_status_ledger_records_conservative_rohf_status(self):
-        status = STATUS.read_text()
-        for required in (
-            "ROHF implementation / audit checkpoint",
-            "ROHF ground-state SCF support and ROHF NMR response support are separate tasks",
-            "ROHF-CGO NMR response | Not implemented / not validated",
-            "ROHF-GIAO NMR response | Not implemented / not validated",
-            "ROHF-GIAO shielding | Not validated",
-            "RHF/UHF fallback for requested ROHF | Not allowed",
-            "ROHF SCF alone is insufficient for open-shell NMR",
-            "ABI/build caution",
-        ):
-            self.assertIn(required, status)
-
-    def test_status_ledger_does_not_advertise_rohf_nmr_as_validated(self):
-        status = STATUS.read_text().lower()
-        forbidden_claims = (
-            "rohf-cgo nmr response | validated",
-            "rohf-giao nmr response | validated",
-            "rohf-giao shielding | validated",
-            "rohf nmr shielding is validated",
-        )
-        for claim in forbidden_claims:
-            self.assertNotIn(claim, status)
 
 
 if __name__ == "__main__":

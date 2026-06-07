@@ -24,7 +24,6 @@ module int1
         comp_amom_int1_prim, &
         comp_giao_overlap_deriv_prim, &
         comp_giao_h10_core_prim, &
-        comp_giao_h10_terms_prim, &
         comp_nmr_dia_int1_prim, &
         comp_pso_int1_prim, &
         MAX_EL_MOM, &
@@ -55,7 +54,6 @@ module int1
     public angular_momentum_integrals
     public giao_overlap_derivative
     public giao_h10_core
-    public giao_h10_core_terms_full
     public nmr_dia_shielding
     public giao_a11part_corr
     public giao_a01gp_contract
@@ -1953,86 +1951,9 @@ contains
 
 !--------------------------------------------------------------------------------
 
-!> @brief Diagnostic full AO matrices for current native GIAO h10 term construction.
- SUBROUTINE giao_h10_core_terms_full(basis, coord, zq, nat, ints, tol)
-
-    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: ints(:,:,:,:)
-    TYPE(basis_set), INTENT(IN) :: basis
-    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
-    integer, intent(in) :: nat
-    REAL(REAL64), INTENT(IN) :: tol
-
-    INTEGER :: ii, jj, m, t, p, q, nbf
-    REAL(REAL64) :: tmp
-    REAL(REAL64), DIMENSION(BLOCKSIZE,3,8) :: blk
-!dir$ attributes align : 64 :: blk
-    TYPE(shell_t) :: shi, shj
-    TYPE(shpair_t) :: cntp
-
-    nbf = basis%nbf
-    ints = 0.0_real64
-
-!$omp parallel &
-!$omp   private(ii, jj, m, t, p, q, tmp, blk, shi, shj, cntp)
-    CALL cntp%alloc(basis)
-!$omp do schedule(dynamic)
-    DO ii = 1, basis%nshell
-        CALL shi%fetch_by_id(basis,ii)
-        DO jj = 1, basis%nshell
-            CALL shj%fetch_by_id(basis,jj)
-            CALL cntp%shell_pair(basis,shi, shj, tol)
-            IF (cntp%numpairs==0) CYCLE
-            blk = 0.0_real64
-            CALL int1_giao_h10_terms(cntp, coord, zq, nat, blk)
-            do t = 1, 8
-              do m = 1, 3
-                CALL update_rectangular_matrix(shi, shj, blk(:,m,t), ints(:,:,m,t))
-              end do
-            end do
-        END DO
-    END DO
-!$omp end do
-!$omp end parallel
-
-    do t = 1, 8
-      do m = 1, 3
-        do q = 1, nbf
-          do p = 1, nbf
-            ints(p,q,m,t) = ints(p,q,m,t)*basis%bfnrm(p)*basis%bfnrm(q)
-          end do
-        end do
-        ! update_rectangular_matrix stores ints(ket,bra).  The debug records
-        ! are compared to libcint in the usual (bra,ket) AO convention.
-        do q = 1, nbf
-          do p = 1, q - 1
-            tmp = ints(p,q,m,t)
-            ints(p,q,m,t) = ints(q,p,m,t)
-            ints(q,p,m,t) = tmp
-          end do
-        end do
-      end do
-    end do
-
- END SUBROUTINE
 
 !--------------------------------------------------------------------------------
 
-!> @brief Compute contracted diagnostic GIAO h10 terms for one shell pair.
- SUBROUTINE int1_giao_h10_terms(cntp, coord, zq, nat, blk)
-!dir$ attributes inline :: int1_giao_h10_terms
-    type(shpair_t), intent(in) :: cntp
-    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
-    integer, intent(in) :: nat
-    real(real64), contiguous, intent(inout) :: blk(:,:,:)
-
-    integer :: ig
-!dir$ assume_aligned blk : 64
-
-    do ig = 1, cntp%numpairs
-        call comp_giao_h10_terms_prim(cntp, ig, coord, zq, nat, blk)
-    end do
-
- end subroutine
 
 !--------------------------------------------------------------------------------
 
