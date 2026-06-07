@@ -64,7 +64,16 @@ CASES = {
     'naphthalene_dft': (2, 'functional=bhhlyp\n', '6-31g*'),
     'anthracene_rhf': (3, '', '6-31g*'),
     'anthracene_dft': (3, 'functional=bhhlyp\n', '6-31g*'),
+    'naphthalene_tz_rhf': (2, '', 'cc-pvtz'),
+    # Full point-group tier (use_integral_symmetry=full): benzene gets all
+    # 24 D6h operations instead of the 8 abelian ones. ~1e-7 accuracy.
+    'benzene_full_rhf': (1, '', '6-31g*'),
+    'benzene_full_dft': (1, 'functional=bhhlyp\n', '6-31g*'),
+    'benzene_full_tz_rhf': (1, '', 'cc-pvtz'),
 }
+FULL_TIER = {'benzene_full_rhf', 'benzene_full_dft', 'benzene_full_tz_rhf'}
+# Full-tier accuracy is ~1e-7 (documented); the abelian tier is exact.
+FULL_GATE = 5.0e-7
 
 INPUT_TEMPLATE = """\
 [input]
@@ -111,9 +120,10 @@ def main():
         system = acene(n_rings)
         ref_input = INPUT_TEMPLATE.format(system=system, extra=extra,
                                           basis=basis, symmetry='enabled=false')
+        tier = 'full' if name in FULL_TIER else 'true'
         sym_input = INPUT_TEMPLATE.format(
             system=system, extra=extra, basis=basis,
-            symmetry='enabled=true\nuse_integral_symmetry=true')
+            symmetry=f'enabled=true\nuse_integral_symmetry={tier}')
 
         mol_ref, t_ref = run_case(workdir, f'{name}_c1', ref_input)
         e_ref = float(mol_ref.energies[0])
@@ -123,7 +133,8 @@ def main():
         active = mol_sym.symmetry_metadata.get('integral_symmetry', {})
         diff = abs(e_sym - e_ref)
         speedup = t_ref / t_sym if t_sym > 0 else float('nan')
-        ok = diff <= GATE and active.get('status') == 'active'
+        gate = FULL_GATE if name in FULL_TIER else GATE
+        ok = diff <= gate and active.get('status') == 'active'
         status = 'ok  ' if ok else 'FAIL'
         print(f'[{status}] {name:18s} nops={active.get("n_operations")} '
               f'E_C1={e_ref:.9f} dE={diff:.2e} '
