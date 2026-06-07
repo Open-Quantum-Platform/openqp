@@ -57,6 +57,7 @@ class Molecule:
         self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
         self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
         self.symmetry_metadata = {}
+        self.mrsf_ekt_results_by_kind = {}
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -1122,37 +1123,63 @@ class Molecule:
         }
         return self.hessian
 
-    def get_mrsf_ekt_results(self):
-        """Collect MRSF-EKT root results for the final JSON file."""
+    def _read_mrsf_ekt_records(self):
+        """Read the MRSF-EKT root records (eigenvalues, Dyson orbitals, pole
+        strengths) from the tagarray, or None when no EKT data is present."""
         if self.data is None:
-            return {}
-
+            return None
         try:
             eigenvalues = np.array(self.data['OQP::mrsf_ekt_eigenvalues'])
             strengths = np.array(self.data['OQP::mrsf_ekt_strengths'])
             orbitals = np.array(self.data['OQP::mrsf_ekt_orbitals_mo'])
         except AttributeError:
-            return {}
+            return None
 
         hartree_to_ev = 27.211386245988
-        ebe_ev = (-eigenvalues * hartree_to_ev).tolist()
+        return {
+            'eigenvalues_hartree': eigenvalues.tolist(),
+            'ebe_ev': (-eigenvalues * hartree_to_ev).tolist(),
+            'pole_strengths': strengths.tolist(),
+            'dyson_orbitals_mo': orbitals.tolist(),
+        }
+
+    def snapshot_mrsf_ekt_results(self, kind):
+        """Snapshot MRSF-EKT root results ('ip' or 'ea') right after the call.
+
+        The Fortran EKT driver reuses the same OQP::mrsf_ekt_* records for IP
+        and EA, so when both are requested in one runtype=ekt job the second
+        call overwrites the first.  Snapshotting after each call keeps the
+        Dyson orbitals and pole strengths of both kinds for the final JSON.
+        """
+        records = self._read_mrsf_ekt_records()
+        if records is not None:
+            self.mrsf_ekt_results_by_kind[kind] = records
+
+    def get_mrsf_ekt_results(self):
+        """Collect MRSF-EKT root results for the final JSON file."""
+        records = self._read_mrsf_ekt_records()
+        if records is None:
+            return {}
+
         ekt_type = self.config.get('tdhf', {}).get('type')
         if self.config.get('input', {}).get('runtype') == 'ekt':
-            if self.config.get('ekt', {}).get('ip'):
-                ekt_type = 'mrsf_ekt_ip'
-            elif self.config.get('ekt', {}).get('ea'):
+            # The records reflect the most recent EKT call (EA runs after IP).
+            if self.config.get('ekt', {}).get('ea'):
                 ekt_type = 'mrsf_ekt_ea'
+            elif self.config.get('ekt', {}).get('ip'):
+                ekt_type = 'mrsf_ekt_ip'
 
-        return {
-            'mrsf_ekt': {
-                'tdhf_type': ekt_type,
-                'target_state': self.config.get('tdhf', {}).get('target'),
-                'eigenvalues_hartree': eigenvalues.tolist(),
-                'ebe_ev': ebe_ev,
-                'pole_strengths': strengths.tolist(),
-                'orbitals_mo': orbitals.tolist(),
-            }
+        result = {
+            'tdhf_type': ekt_type,
+            'target_state': self.config.get('tdhf', {}).get('target'),
+            **records,
+            # legacy key kept for backward compatibility
+            'orbitals_mo': records['dyson_orbitals_mo'],
         }
+        # Per-kind snapshots preserve both IP and EA Dyson orbitals and pole
+        # strengths when a single runtype=ekt job requests both.
+        result.update(self.mrsf_ekt_results_by_kind)
+        return {'mrsf_ekt': result}
 
     def get_data(self):
         """

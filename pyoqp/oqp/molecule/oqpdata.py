@@ -735,8 +735,9 @@ class OQPData:
 
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
-        if td_type.lower() == 'tda':
-            self._data.tddft.tda = True
+        td_type = td_type.lower()
+        self._data.tddft.tda = td_type == 'tda'
+        self._data.tddft.umrsf = td_type == 'umrsf'
 
     def set_tdhf_nstate(self, nstate):
         """Set number of states in tdhf calculation"""

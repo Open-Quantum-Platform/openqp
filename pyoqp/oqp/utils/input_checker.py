@@ -872,7 +872,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.type",
-            "UMRSF requires a UHF reference.",
+            "UMRSF-TDDFT requires a UHF reference.",
             value=scf_type,
             expected="uhf",
             action="Set [scf] type=uhf.",
@@ -1094,6 +1094,25 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 action="Enable [ekt] ip, ea, or both for EKT analysis.",
                 wiki=WIKI_HELP["tdhf.type"],
             )
+        return
+
+    # UMRSF-TDDFT only implements the energy path. Every other runtype
+    # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
+    # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
+    # which exist for UMRSF yet. Reject them here at the single choke point
+    # so validation fails early instead of dying at runtime.
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if method == "tdhf" and td_type == "umrsf" and runtype != "energy":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT only supports runtype=energy; "
+            "gradients, Hessians, and Z-vectors are not implemented.",
+            value=f"{td_type}/{runtype}",
+            expected="energy",
+            action="Use runtype=energy for UMRSF-TDDFT until UMRSF-TDDFT gradients/Z-vectors are implemented.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
         return
 
     if runtype == "grad":
@@ -1386,7 +1405,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "mrsf":
             return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "umrsf":
-            return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
+            return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if td_type in {"tda", "rpa"}:
