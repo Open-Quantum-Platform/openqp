@@ -161,6 +161,30 @@ class NAMD:
         return np.array(self.mol.data["OQP::td_states_overlap"])
 
     # ------------------------------------------------------------------ #
+    # time-derivative couplings
+    # ------------------------------------------------------------------ #
+    def _compute_tdc(self, s):
+        """Time-derivative coupling matrix from the phase-corrected state
+        overlap s(i,j)=<i(t-dt)|j(t)>.
+
+        'fd'  : Hammes-Schiffer/Tully finite difference  (s - s^T)/(2 dt)
+        'npi' : norm-preserving interpolation (Meek & Levine, JPCL 5, 2351
+                (2014)) in its rigorous matrix form -- the real antisymmetric
+                logarithm of the Loewdin-orthonormalised step overlap,
+                T = logm(s (s^T s)^{-1/2}) / dt, which reduces to the exact
+                two-state identity T*dt = arcsin(s_10) and to the finite
+                difference in the weak-coupling limit.
+        """
+        if self.tdc_scheme == 1:
+            from scipy.linalg import logm, sqrtm
+            m = s.T @ s
+            u = s @ np.linalg.inv(np.real(sqrtm(m)))     # nearest orthogonal (Loewdin)
+            t = np.real(logm(u))
+            t = 0.5 * (t - t.T)                          # enforce antisymmetry
+            return t / self.dt
+        return (s - s.T) / (2.0 * self.dt)
+
+    # ------------------------------------------------------------------ #
     # Fortran FSSH hop
     # ------------------------------------------------------------------ #
     def _hop(self):
@@ -188,6 +212,12 @@ class NAMD:
         params[_P_TRIV] = float(self.trivial)
         params[_P_TRIV_THR] = self.trivial_thresh
         mol.data["OQP::namd_params"] = params
+
+        # time-derivative couplings from the phase-corrected state overlap,
+        # passed to the Fortran hop as a flat row-major (n x n) matrix.
+        s = np.array(mol.data["OQP::td_states_overlap"]).reshape((n, n))
+        tdc = self._compute_tdc(s)
+        mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
 
         oqp.mrsf_namd_hop(mol)
 

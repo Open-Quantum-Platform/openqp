@@ -456,7 +456,7 @@ contains
 
     ! tagarray records
     real(kind=dp), contiguous, pointer :: stas(:,:), omega(:), coef(:), velf(:), &
-                                          params(:), results(:)
+                                          params(:), results(:), tdc_in(:)
     real(kind=dp), contiguous, pointer :: mass(:)
 
     ! 1 atomic mass unit (Dalton) in electron masses
@@ -465,7 +465,7 @@ contains
     character(len=*), parameter :: subroutine_name = "namd_hop"
     character(len=*), parameter :: tags_req(*) = (/ character(len=80) :: &
         OQP_td_states_overlap, OQP_td_energies, OQP_namd_coef, &
-        OQP_namd_velocity, OQP_namd_params /)
+        OQP_namd_velocity, OQP_namd_params, OQP_namd_tdc /)
     character(len=*), parameter :: tags_out(*) = (/ character(len=80) :: &
         OQP_namd_results /)
 
@@ -483,6 +483,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_namd_coef, coef)
     call tagarray_get_data(infos%dat, OQP_namd_velocity, velf)
     call tagarray_get_data(infos%dat, OQP_namd_params, params)
+    call tagarray_get_data(infos%dat, OQP_namd_tdc, tdc_in)
 
     ! (re)allocate the results record
     call infos%dat%remove_records(tags_out)
@@ -522,8 +523,16 @@ contains
     swapped = .false.
     if (trivial_en == 1) call namd_trivial_crossing(stas, triv_thr, active, swapped)
 
-    ! 2) time-derivative couplings from the phase-corrected state overlap
-    call namd_state_tdc(stas, dt_au, tdc)
+    ! 2) time-derivative couplings: supplied by the Python driver as a flat
+    !    row-major (n x n) matrix (finite difference or norm-preserving
+    !    interpolation). tdc(i,j) = tdc_in((i-1)*n + j). Fall back to the
+    !    in-Fortran finite difference if a degenerate (all-zero) matrix is passed.
+    do i = 1, n
+      do a = 1, n
+        tdc(i,a) = tdc_in((i-1)*n + a)
+      end do
+    end do
+    if (all(abs(tdc) < 1.0e-30_dp)) call namd_state_tdc(stas, dt_au, tdc)
 
     ! 3) propagate amplitudes over electronic sub-steps; accumulate hop flux
     do isub = 1, nsub

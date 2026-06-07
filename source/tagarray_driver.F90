@@ -72,6 +72,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_velocity = OQP_prefix // "namd_velocity"
   character(len=*), parameter, public :: OQP_namd_params   = OQP_prefix // "namd_params"
   character(len=*), parameter, public :: OQP_namd_results  = OQP_prefix // "namd_results"
+  character(len=*), parameter, public :: OQP_namd_tdc      = OQP_prefix // "namd_tdc"
 
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
   ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
@@ -126,6 +127,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_velocity_comment = OQP_prefix // "NAMD nuclear velocities (3 x natom, a.u.)"
   character(len=*), parameter, public :: OQP_namd_params_comment = OQP_prefix // "NAMD packed scalar parameters/state"
   character(len=*), parameter, public :: OQP_namd_results_comment = OQP_prefix // "NAMD per-step diagnostics (hop prob + flags)"
+  character(len=*), parameter, public :: OQP_namd_tdc_comment = OQP_prefix // "NAMD time-derivative coupling matrix (nstate x nstate)"
   character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
@@ -138,7 +140,8 @@ module oqp_tagarray_driver
     OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
     OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
     OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
-    OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results /)
+    OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &
+    OQP_namd_tdc /)
 
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
