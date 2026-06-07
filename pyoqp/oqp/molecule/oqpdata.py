@@ -169,6 +169,10 @@ OQP_CONFIG_SCHEMA = {
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
+        # NMR shielding gauge formulation.  CGO is the validated default;
+        # GIAO is recognized explicitly but gated until the integral/response
+        # implementation and benchmarks are complete.
+        'nmr_gauge': {'type': string, 'default': 'cgo'},
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
         'nac': {'type': str, 'default': ''},

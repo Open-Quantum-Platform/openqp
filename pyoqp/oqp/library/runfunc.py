@@ -32,6 +32,11 @@ def compute_energy(mol):
     # compute properties
     compute_scf_prop(mol)
 
+    # re-save mol data so property results (e.g. OQP::nmr_shielding) reach the
+    # JSON; the save inside SinglePoint.energy() runs before properties exist
+    if mol.config['guess']['save_mol']:
+        mol.save_data()
+
 
 def compute_scf_prop(mol):
     # compute HF/DFT properties
@@ -45,6 +50,27 @@ def compute_scf_prop(mol):
             oqp.lowdin(mol)
         elif prop == 'resp':
             oqp.resp_charges(mol)
+        elif prop == 'nmr':
+            scf_type = mol.config.get("scf", {}).get("type", "rhf")
+            if isinstance(scf_type, str):
+                scf_type = scf_type.lower()
+
+            nmr_gauge = mol.config.get("properties", {}).get("nmr_gauge", "cgo")
+            if isinstance(nmr_gauge, str):
+                nmr_gauge = nmr_gauge.lower()
+            if nmr_gauge == "cgo":
+                if scf_type in ("uhf", "rohf"):
+                    raise NotImplementedError(
+                        "CGO NMR shielding supports closed-shell RHF references only. "
+                        "Use properties.nmr_gauge=giao for open-shell (UHF/ROHF) NMR."
+                    )
+                oqp.nmr_shielding(mol)
+            elif nmr_gauge == "giao":
+                oqp.nmr_giao_shielding(mol)
+            else:
+                raise ValueError(
+                    f"Unknown NMR gauge formulation {nmr_gauge!r}; expected 'cgo' or 'giao'"
+                )
         else:
             raise ValueError(f'Unknown property: {prop}')
 

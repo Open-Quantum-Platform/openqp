@@ -26,7 +26,8 @@ DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
-SCF_PROPS = {"el_mom", "mulliken"}
+SCF_PROPS = {"el_mom", "mulliken", "nmr"}
+NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
@@ -771,6 +772,8 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     grad_states = _as_list(_get(config, "properties", "grad", []))
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
+    nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
 
     for prop in scf_prop:
         if prop not in SCF_PROPS:
@@ -783,6 +786,46 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 action="Remove the keyword or confirm that downstream code can ignore it.",
             )
 
+    if "nmr" in scf_prop:
+        if nmr_gauge not in NMR_GAUGES:
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "Unknown NMR shielding gauge formulation.",
+                value=nmr_gauge,
+                expected=", ".join(sorted(NMR_GAUGES)),
+                action="Use nmr_gauge=giao (gauge-origin independent; RHF/UHF/ROHF) "
+                       "or nmr_gauge=cgo (common gauge origin; closed-shell RHF).",
+            )
+        elif nmr_gauge == "cgo" and scf_type in ("uhf", "rohf"):
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "CGO NMR shielding supports closed-shell RHF references only.",
+                value=f"{nmr_gauge} with scf.type={scf_type}",
+                action="Use nmr_gauge=giao for open-shell (UHF/ROHF) NMR shielding.",
+            )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        # Pre-flight mirror of the Fortran guards (the runtime also aborts):
+        # the NMR response implements global hybrids only. Name-based, so it
+        # cannot be exhaustive; unknown functionals are caught at runtime.
+        if functional.startswith(("cam-", "dtcam-", "lc-", "lrc-", "wb97", "hse")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with range-separated (CAM/LC) functionals is not implemented.",
+                value=functional,
+                action="Use HF, a pure functional, or a global hybrid (e.g. pbe0, b3lyp, bhhlyp).",
+            )
+        elif functional.startswith(("m06", "m08", "m11", "mn12", "mn15", "tpss",
+                                    "scan", "rscan", "r2scan", "b97m", "revm06")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with meta-GGA (tau-dependent) functionals is not implemented.",
+                value=functional,
+                action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
+            )
     if td_prop:
         report.add(
             "WARNING",
