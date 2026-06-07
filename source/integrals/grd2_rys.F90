@@ -3,7 +3,6 @@ module grd2_rys
     use basis_tools, only: basis_set
     use constants, only: bas_mxang, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z
 
-    integer, private :: iii
     integer, parameter :: MAXCONTR = 120
 
     logical, parameter :: skips(4,16) = reshape([&
@@ -662,7 +661,16 @@ contains
     real(kind=dp) ::   dkl(3,*) ! dkl(ng)
     integer :: ng,nr,nmax,mmax,nimax,njmax,nkmax,nlmax
 
-    integer :: ni, nk, nl, ig, m1, n1, xyz
+    integer :: ni, nk, nl, ig, m1, n1, xyz, n, m, ir
+    real(kind=dp) :: dt(ng,3)
+
+!   Transposed pair-distance coefficients: contiguous along the batch index,
+!   so the recursions below run on stride-1 vectors of length ng.
+    do ig = 1, ng
+      dt(ig,1) = dkl(1,ig)
+      dt(ig,2) = dkl(2,ig)
+      dt(ig,3) = dkl(3,ig)
+    end do
 
 !   g(n,k,l)
     do nk=1, nkmax
@@ -671,12 +679,24 @@ contains
       end do
       if(nk == nkmax) cycle
       m1 = mmax-nk
-      do xyz = 1, 3
-        do ig = 1, ng
-          gnm(ig,:,xyz,:,1:m1) = dkl(xyz,ig)*gnm(ig,:,xyz,:,1:m1) &
-                               +             gnm(ig,:,xyz,:,2:m1+1)
+!     m ascending: iteration m reads column m+1 before it is overwritten,
+!     reproducing the whole-array statement semantics.
+      do m = 1, m1
+        do n = 1, nmax
+          do xyz = 1, 3
+            do ir = 1, nr
+              gnm(:,ir,xyz,n,m) = dt(:,xyz)*gnm(:,ir,xyz,n,m) &
+                                +           gnm(:,ir,xyz,n,m+1)
+            end do
+          end do
         end do
       end do
+    end do
+
+    do ig = 1, ng
+      dt(ig,1) = dij(1,ig)
+      dt(ig,2) = dij(2,ig)
+      dt(ig,3) = dij(3,ig)
     end do
 
 !   g(i,j,k,l)
@@ -684,10 +704,16 @@ contains
       ijkl(:,:,:,:,:,1:njmax,ni) = gnkl(:,:,:,:,:,1:njmax)
       if (ni == nimax) cycle
       n1 = nmax-ni
-      do xyz = 1, 3
-        do ig = 1, ng
-          gnkl(ig,:,xyz,:,:,1:n1) = dij(xyz,ig)*gnkl(ig,:,xyz,:,:,1:n1) &
-                                  +             gnkl(ig,:,xyz,:,:,2:n1+1)
+      do n = 1, n1
+        do nk = 1, nkmax
+          do nl = 1, nlmax
+            do xyz = 1, 3
+              do ir = 1, nr
+                gnkl(:,ir,xyz,nl,nk,n) = dt(:,xyz)*gnkl(:,ir,xyz,nl,nk,n) &
+                                       +           gnkl(:,ir,xyz,nl,nk,n+1)
+              end do
+            end do
+          end do
         end do
       end do
     end do
@@ -701,17 +727,13 @@ contains
 
       type(grd2_int_data_t) :: gdat
       integer :: ng, nr3, nimax, njmax, nkmax, nlmax
-      real(kind=dp) :: g(ng,nr3,nlmax,nkmax,njmax,*)
+      real(kind=dp) :: g(*)
       real(kind=dp) ::  aai(*) !   aai(ng)
       real(kind=dp) ::  aaj(*) !   aaj(ng)
       real(kind=dp) ::  aak(*) !   aak(ng)
       real(kind=dp) ::  aal(*) !   aal(ng)
-      real(kind=dp) :: fi(ng,nr3,nlmax,nkmax,njmax,*) ! fi(ng,nlmax,nkmax,njmax,nimax)
-      real(kind=dp) :: fj(ng,nr3,nlmax,nkmax,njmax,*) ! fj(ng,nlmax,nkmax,njmax,nimax)
-      real(kind=dp) :: fk(ng,nr3,nlmax,nkmax,njmax,*) ! fk(ng,nlmax,nkmax,njmax,nimax)
-      real(kind=dp) :: fl(ng,nr3,nlmax,nkmax,njmax,*) ! fl(ng,nlmax,nkmax,njmax,nimax)
+      real(kind=dp) :: fi(*), fj(*), fk(*), fl(*)
 
-      integer :: i, j, k, l, n
       integer :: ni, nj, nk, nl
 
       ni = gdat%am(1) + 1
@@ -719,94 +741,58 @@ contains
       nk = gdat%am(3) + 1
       nl = gdat%am(4) + 1
 
-!     First derivatives only
-      if (.not.gdat%skip(1)) then
+!     Apply the first-derivative operator
+!         d/d(center) = 2*alpha * raise - power * lower
+!     along each center's 1D-integral index. The shared kernel views the
+!     (ng,nr3,nlmax,nkmax,njmax,nimax) arrays as (ng, mid, axis, post) so all
+!     updates run on contiguous stride-1 vectors of length ng.
 
-!       FI only
-        do n = 1, ng
-          fi(n,:,:,:,:,1) = g(n,:,:,:,:,2)*aai(n)
-        end do
+      if (.not.gdat%skip(1)) &  ! FI: axis = i (outermost)
+        call deriv_axis_1d(g, fi, ng, nr3*nlmax*nkmax*njmax, nimax, 1, &
+                           ni, aai)
 
-        if (ni/=1) then
-          do i = 2, ni
-            do n = 1, ng
-              fi(n,:,:,:,:,i)= g(n,:,:,:,:,i+1)*aai(n) &
-                             - g(n,:,:,:,:,i-1)*(i-1)
-             end do
-          end do
-        end if
+      if (.not.gdat%skip(2)) &  ! FJ: axis = j
+        call deriv_axis_1d(g, fj, ng, nr3*nlmax*nkmax, njmax, nimax, &
+                           nj, aaj)
 
-      end if
+      if (.not.gdat%skip(3)) &  ! FK: axis = k
+        call deriv_axis_1d(g, fk, ng, nr3*nlmax, nkmax, njmax*nimax, &
+                           nk, aak)
 
-      if (.not.gdat%skip(2)) then
-
-!       FJ only
-        do i = 1, nimax
-          do n = 1, ng
-            fj(n,:,:,:,1,i) = g(n,:,:,:,2,i)*aaj(n)
-          end do
-        end do
-
-        if (nj/=1) then
-
-          do i = 1, nimax
-            do j = 2, nj
-              do n = 1, ng
-                fj(n,:,:,:,j,i)= g(n,:,:,:,j+1,i)*aaj(n) &
-                               - g(n,:,:,:,j-1,i)*(j-1)
-              end do
-            end do
-          end do
-        end if
-
-      end if
-
-      if (.not.gdat%skip(3)) then
-
-!       FK only
-        do i = 1, nimax
-          do n = 1, ng
-            fk(n,:,:,1,:,i) = g(n,:,:,2,:,i)*aak(n)
-          end do
-        end do
-
-        if (nk/=1) then
-
-          do i = 1, nimax
-            do k = 2, nk
-              do n = 1, ng
-                fk(n,:,:,k,:,i) = g(n,:,:,k+1,:,i)*aak(n) &
-                                - g(n,:,:,k-1,:,i)*(k-1)
-              end do
-            end do
-          end do
-        end if
-
-      end if
-
-      if (.not.gdat%skip(4)) then
-
-!       FL and SLL
-        do i = 1, nimax
-          do n = 1, ng
-            fl(n,:,1,:,:,i) = g(n,:,2,:,:,i)*aal(n)
-          end do
-        end do
-
-        if (nl/=1) then
-        do i = 1, nimax
-          do l = 2, nl
-            do n = 1, ng
-              fl(n,:,l,:,:,i) = g(n,:,l+1,:,:,i)*aal(n) &
-                              - g(n,:,l-1,:,:,i)*(l-1)
-            end do
-          end do
-        end do
-        end if
-
-      end if
+      if (.not.gdat%skip(4)) &  ! FL: axis = l (innermost after nr3)
+        call deriv_axis_1d(g, fl, ng, nr3, nlmax, nkmax*njmax*nimax, &
+                           nl, aal)
 
   end subroutine compute_der_xyz_ijkl
+
+!> @brief Apply the single-center first-derivative operator along one axis of
+!>        a 4-center 1D-integral array, vectorized over the contiguous
+!>        primitive-batch index.
+!> @details g and f are interpreted as (ng, mid, nax, npost), where `mid` and
+!>        `npost` are the products of the extents below/above the derivative
+!>        axis. f(:,m,a,p) = g(:,m,a+1,p)*aa - (a-1)*g(:,m,a-1,p) for
+!>        a = 1..nphys (the a=1 lowering term vanishes).
+  subroutine deriv_axis_1d(g, f, ng, mid, nax, npost, nphys, aa)
+      implicit none
+      integer, intent(in) :: ng, mid, nax, npost, nphys
+      real(kind=dp), intent(in)  :: g(ng, mid, nax, npost)
+      real(kind=dp), intent(out) :: f(ng, mid, nax, npost)
+      real(kind=dp), intent(in)  :: aa(ng)
+
+      integer :: m, a, p
+
+      do p = 1, npost
+        do m = 1, mid
+          f(:,m,1,p) = g(:,m,2,p)*aa
+        end do
+        do a = 2, nphys
+          do m = 1, mid
+            f(:,m,a,p) = g(:,m,a+1,p)*aa - g(:,m,a-1,p)*(a-1)
+          end do
+        end do
+      end do
+
+  end subroutine deriv_axis_1d
 
   subroutine compute_der_ijkl(gdat,ngnr,&
                   ijklxyz,g0,fi,fj,fk,fl,den,fd)
@@ -825,6 +811,7 @@ contains
     integer :: i, j, k, l
     integer :: nx, ny, nz
     real(kind=dp), pointer :: pd(:,:,:,:)
+    real(kind=dp) :: yz(ngnr), xz(ngnr), xy(ngnr)
 
     pd(1:gdat%nbf(4), 1:gdat%nbf(3), 1:gdat%nbf(2), 1:gdat%nbf(1)) => den(1:product(gdat%nbf))
 
@@ -842,25 +829,30 @@ contains
                       , df => pd(l,k,j,i) &
                       )
 
+!             Hoist the pair products: they are shared by all four centers.
+              yz = y*z
+              xz = x*z
+              xy = x*y
+
               if (.not.gdat%skip(1)) then
-                fd(1,1) = fd(1,1) + df * sum(fi(:,1,nx)*y*z)
-                fd(2,1) = fd(2,1) + df * sum(fi(:,2,ny)*x*z)
-                fd(3,1) = fd(3,1) + df * sum(fi(:,3,nz)*x*y)
+                fd(1,1) = fd(1,1) + df * sum(fi(:,1,nx)*yz)
+                fd(2,1) = fd(2,1) + df * sum(fi(:,2,ny)*xz)
+                fd(3,1) = fd(3,1) + df * sum(fi(:,3,nz)*xy)
               end if
               if (.not.gdat%skip(2)) then
-                fd(1,2) = fd(1,2) + df * sum(fj(:,1,nx)*y*z)
-                fd(2,2) = fd(2,2) + df * sum(fj(:,2,ny)*x*z)
-                fd(3,2) = fd(3,2) + df * sum(fj(:,3,nz)*x*y)
+                fd(1,2) = fd(1,2) + df * sum(fj(:,1,nx)*yz)
+                fd(2,2) = fd(2,2) + df * sum(fj(:,2,ny)*xz)
+                fd(3,2) = fd(3,2) + df * sum(fj(:,3,nz)*xy)
               end if
               if (.not.gdat%skip(3)) then
-                fd(1,3) = fd(1,3) + df * sum(fk(:,1,nx)*y*z)
-                fd(2,3) = fd(2,3) + df * sum(fk(:,2,ny)*x*z)
-                fd(3,3) = fd(3,3) + df * sum(fk(:,3,nz)*x*y)
+                fd(1,3) = fd(1,3) + df * sum(fk(:,1,nx)*yz)
+                fd(2,3) = fd(2,3) + df * sum(fk(:,2,ny)*xz)
+                fd(3,3) = fd(3,3) + df * sum(fk(:,3,nz)*xy)
               end if
               if (.not.gdat%skip(4)) then
-                fd(1,4) = fd(1,4) + df * sum(fl(:,1,nx)*y*z)
-                fd(2,4) = fd(2,4) + df * sum(fl(:,2,ny)*x*z)
-                fd(3,4) = fd(3,4) + df * sum(fl(:,3,nz)*x*y)
+                fd(1,4) = fd(1,4) + df * sum(fl(:,1,nx)*yz)
+                fd(2,4) = fd(2,4) + df * sum(fl(:,2,ny)*xz)
+                fd(3,4) = fd(3,4) + df * sum(fl(:,3,nz)*xy)
               end if
             end associate
 
