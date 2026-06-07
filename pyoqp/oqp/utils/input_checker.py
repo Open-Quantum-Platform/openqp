@@ -23,6 +23,13 @@ GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
+PCM_BACKENDS = {"ddx", "pcmsolver"}
+PCM_MODES = {"reference_scf", "reference_scf_plus_post_state", "post_state_correction"}
+PCM_MODELS = {"ddcosmo", "ddpcm", "ddlpb", "iefpcm", "cpcm"}
+PCM_BACKEND_MODELS = {
+    "ddx": {"ddcosmo", "ddpcm", "ddlpb"},
+    "pcmsolver": {"iefpcm", "cpcm"},
+}
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
@@ -39,6 +46,9 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
+    "pcm.enabled": "PCM input is reserved for the planned energy-only solvent backend. Initial scope is RHF/ROHF reference_scf single-point energy; gradients and state-specific MRSF PCM are out of scope.",
+    "pcm.backend": "Use backend=ddx for the preferred active ddCOSMO/ddPCM library candidate, or backend=pcmsolver for the classic PCM API candidate.",
+    "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
     "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
@@ -565,6 +575,130 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
                     expected="index pairs",
                     action="Provide pairs like i,j,k,l.",
                 )
+
+
+def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
+    pcm = config.get("pcm", {})
+    if not pcm:
+        return
+
+    enabled = bool(_get(config, "pcm", "enabled", False))
+    backend = _as_lower(_get(config, "pcm", "backend", "ddx"))
+    mode = _as_lower(_get(config, "pcm", "mode", "reference_scf"))
+    model = _as_lower(_get(config, "pcm", "model", "ddpcm"))
+    epsilon = _get(config, "pcm", "epsilon", 78.3553)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+
+    if backend not in PCM_BACKENDS:
+        report.add(
+            "ERROR",
+            "pcm.backend",
+            "Unknown PCM backend.",
+            value=backend,
+            expected=", ".join(sorted(PCM_BACKENDS)),
+            action="Choose ddx or pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
+        )
+
+    if mode not in PCM_MODES:
+        report.add(
+            "ERROR",
+            "pcm.mode",
+            "Unknown PCM coupling mode.",
+            value=mode,
+            expected=", ".join(sorted(PCM_MODES)),
+            action="Use reference_scf for the first MRSF-compatible solvent mode.",
+            wiki=WIKI_HELP["pcm.mode"],
+        )
+    elif mode != "reference_scf":
+        report.add(
+            "ERROR",
+            "pcm.mode",
+            "Only reference_scf PCM is in the first implementation scope.",
+            value=mode,
+            expected="reference_scf",
+            action="Do not request post-state or nonequilibrium PCM modes until those separate runtime paths are implemented and validated.",
+            wiki=WIKI_HELP["pcm.mode"],
+        )
+
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+
+    if model not in PCM_MODELS:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            "Unknown PCM model.",
+            value=model,
+            expected=", ".join(sorted(PCM_MODELS)),
+            action="Use ddpcm/ddcosmo with backend=ddx or iefpcm/cpcm with backend=pcmsolver.",
+        )
+
+    if backend in PCM_BACKEND_MODELS and model in PCM_MODELS and model not in PCM_BACKEND_MODELS[backend]:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            f"PCM model {model} is not supported by backend {backend}.",
+            value=model,
+            expected=", ".join(sorted(PCM_BACKEND_MODELS[backend])),
+            action="Use a ddCOSMO/ddPCM/ddLPB model with backend=ddx, or an IEFPCM/CPCM model with backend=pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
+        )
+
+    try:
+        epsilon_value = float(epsilon)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            "pcm.epsilon",
+            "PCM dielectric constant must be numeric and greater than 1.",
+            value=epsilon,
+            action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+        )
+    else:
+        if epsilon_value <= 1.0:
+            report.add(
+                "ERROR",
+                "pcm.epsilon",
+                "PCM dielectric constant must be greater than 1.",
+                value=epsilon,
+                action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+            )
+
+    if enabled:
+        if scf_type not in {"rhf", "rohf"}:
+            report.add(
+                "ERROR",
+                "scf.type",
+                "PCM first scope supports RHF/ROHF reference SCF only.",
+                value=scf_type,
+                expected="rhf or rohf",
+                action="Use RHF for closed-shell singlets or ROHF for the high-spin MRSF reference; UHF PCM is a separate future validation target.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
+
+        # The reference_scf RHF/ROHF energy path is implemented for the ddX
+        # backend only. The pcmsolver backend remains a planned candidate.
+        if backend != "ddx":
+            report.add(
+                "ERROR",
+                "pcm.backend",
+                "Only the ddx PCM backend has an implemented runtime energy path.",
+                value=backend,
+                expected="ddx",
+                action="Use backend=ddx; the pcmsolver runtime coupling is not implemented yet.",
+                wiki=WIKI_HELP["pcm.backend"],
+            )
+
+        if runtype != "energy":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "The first PCM implementation is scoped to single-point energies only.",
+                value=runtype,
+                expected="energy",
+                action="Use runtype=energy; gradients/optimizations require a separate analytic-gradient implementation.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
 
 
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
@@ -1558,6 +1692,7 @@ def check_input_values(
     _check_system(config, report)
     _check_basis(config, report)
     _check_guess(config, report)
+    _check_pcm(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

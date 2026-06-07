@@ -5,6 +5,8 @@
 *.i
 *.a
 *.x
+*.pyc
+__pycache__/
 *.sw?
 *.un~
 *.log

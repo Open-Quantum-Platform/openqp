@@ -151,6 +151,8 @@ struct control_parameters {
     double    trh_gred;
     double    trh_lred;
     bool      sd_scf;
+    bool      pcm_enabled;
+    double    pcm_epsilon;
 };
 
 struct mpi_communicator {

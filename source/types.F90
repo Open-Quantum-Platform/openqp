@@ -145,6 +145,9 @@ module types
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
+    ! PCM implicit solvent (energy-only, ddX backend; off by default)
+    logical(c_bool) :: pcm_enabled = .false.     !< Enable PCM reaction-field contribution to SCF
+    real(c_double)  :: pcm_epsilon = 78.3553_dp  !< Solvent dielectric constant (water default)
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

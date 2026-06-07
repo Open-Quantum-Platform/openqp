@@ -9,6 +9,7 @@ set(CMAKE_Fortran_STANDARD 2003)
 include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
+option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)
@@ -160,6 +161,24 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(oqp_functions)
 
+if(ENABLE_DDX)
+  # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
+  # (never vendored into the OpenQP tree). Two ways to provide it:
+  #   * DDX_ROOT given -> use that prebuilt install (find_package).
+  #   * otherwise      -> CMake builds ddX v0.8.0 from source as ILP64 to match
+  #                       OpenQP's mandatory 64-bit-integer BLAS (see external/).
+  # The ILP64 build is required: a stock LP64 ddX exports an unsuffixed dgemm_
+  # that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
+  if(DEFINED DDX_ROOT OR DEFINED ENV{DDX_ROOT})
+    find_package(DDX REQUIRED)
+    set(OQP_DDX_AUTOBUILD OFF)
+    message(STATUS "ddX continuum-solvation backend (prebuilt): ${DDX_LIBRARY}")
+  else()
+    set(OQP_DDX_AUTOBUILD ON)
+    message(STATUS "ddX continuum-solvation backend: building ILP64 from source (v0.8.0)")
+  endif()
+endif()
+
 # Fix possible issues with DYLD_LIBRARY_PATH
 if(APPLE)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -183,6 +202,27 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  if(ENABLE_DDX)
+    add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
+    target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
+    add_test(NAME oqp_ddx_link_smoke COMMAND oqp_ddx_link_smoke)
+
+    add_executable(oqp_ddx_adapter_smoke
+      tests/ddx_adapter_smoke.c
+      source/solvent_ddx_adapter.c
+    )
+    target_compile_definitions(oqp_ddx_adapter_smoke PRIVATE OQP_ENABLE_DDX)
+    target_include_directories(oqp_ddx_adapter_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
+    target_link_libraries(oqp_ddx_adapter_smoke PRIVATE DDX::ddx m)
+    add_test(NAME oqp_ddx_adapter_smoke COMMAND oqp_ddx_adapter_smoke)
+
+    # When ddX is built from source, the imported DDX::ddx target wraps a future
+    # build byproduct; make the smoke executables wait for the ExternalProject.
+    if(OQP_DDX_AUTOBUILD)
+      add_dependencies(oqp_ddx_link_smoke ddx)
+      add_dependencies(oqp_ddx_adapter_smoke ddx)
+    endif()
+  endif()
 endif()
 
 if(USE_LIBINT)
