@@ -81,16 +81,21 @@ class NEB:
             g = self.gradients[i]
             g_par = np.dot(g, tau) * tau
             g_perp = g - g_par
-            fmax = max(fmax, float(np.max(np.abs(g_perp))))
 
             if climb_on and i == climb_idx:
-                # Climbing image: invert the parallel force, no spring.
+                # Climbing image: invert the parallel force, no spring.  Its
+                # convergence must be judged by the full climbing force, which
+                # vanishes only at the saddle -- using g_perp alone would report
+                # convergence while a large parallel gradient still pushes the
+                # image off the saddle (e.g. a symmetric path with g_perp == 0).
                 forces[i] = -g + 2.0 * g_par
+                fmax = max(fmax, float(np.max(np.abs(forces[i]))))
             else:
                 seg_p = np.linalg.norm(xp - xi)
                 seg_m = np.linalg.norm(xi - xm)
                 f_spring = self.k * (seg_p - seg_m) * tau
                 forces[i] = -g_perp + f_spring
+                fmax = max(fmax, float(np.max(np.abs(g_perp))))
         return forces, fmax
 
     # -- driver ------------------------------------------------------------- #

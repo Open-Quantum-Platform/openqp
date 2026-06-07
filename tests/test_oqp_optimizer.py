@@ -398,6 +398,29 @@ class TestOQPNEB(unittest.TestCase):
         moved = np.linalg.norm(neb.images[1] - x_before)
         self.assertLessEqual(moved, 0.2 + 1e-9)
 
+    def test_climbing_convergence_uses_climbing_force(self):
+        # Straight symmetric double-well path (g_perp == 0 everywhere) with an
+        # EVEN number of images: no image starts on the saddle.  Convergence must
+        # NOT be declared until the climbing image actually reaches the saddle --
+        # judging it by g_perp alone would converge immediately off-saddle.
+        a = 1.0
+
+        def eg(xf):
+            x, y, z = xf
+            return (x * x - a * a) ** 2 + y * y + z * z, \
+                np.array([4 * x * (x * x - a * a), 2 * y, 2 * z])
+
+        M = 8  # even -> highest image is off the saddle (x = -+1/7)
+        images = [np.array([-a + i * (2 * a) / (M - 1), 0.0, 0.0])
+                  for i in range(M)]
+        neb = NEB(images, k_spring=0.5, climbing=True, climb_fmax=1.0)
+        res = neb.run(eg, fmax_tol=1e-3, maxiter=600, dt=0.05, dt_max=0.2)
+        top = int(np.argmax(res["energies"]))
+        self.assertTrue(res["converged"])
+        # the climbing image must have climbed to the saddle (x = 0, E = a**4)
+        self.assertLess(abs(neb.images[top][0]), 0.05)
+        self.assertLess(abs(res["energies"][top] - a ** 4), 0.02)
+
 
 class TestOQPIRC(unittest.TestCase):
     """Gonzalez-Schlegel IRC on V=(x^2-1)^2 + y^2 + z^2 (1 atom).
