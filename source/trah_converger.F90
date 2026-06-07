@@ -49,7 +49,10 @@ contains
     integer  :: n, macro, nmac, nmic, micro_used, irst, nrst
     real(dp) :: delta, dmax, conv_tol, gnorm, e0, etrial, rho, pred, snorm, e_best
     real(dp), allocatable :: g(:), hdiag(:), p(:), mo0_a(:,:), mo0_b(:,:), mob_a(:,:), mob_b(:,:)
+    real(dp), allocatable :: vmin(:)
+    real(dp) :: lam
     logical  :: accepted, conv_ok, have_best
+    real(dp), parameter :: stab_eig_tol = 1.0e-4_dp   ! Hessian eigenvalue below -this = unstable
     ! near-convergence guards: once the model can no longer predict a meaningful
     ! energy reduction (pred below FP noise) or the trust radius collapses while
     ! the gradient is already small, the energy is converged even if |g| has not
@@ -67,7 +70,7 @@ contains
     delta    = real(infos%control%trh_r0, dp)
     dmax     = max(4.0_dp, 8.0_dp*delta)
 
-    allocate(g(n), hdiag(n), p(n))
+    allocate(g(n), hdiag(n), p(n), vmin(n))
     conv%f_old = 0.0_dp
     conv%d_old = 0.0_dp
 
@@ -120,10 +123,23 @@ contains
       end if
       snorm = sqrt(dot_product(p, p))
 
-      ! converged only at a genuine minimum: small gradient AND no escape step. A large
-      ! step at small |g| means the eigensolver found a downhill (negative-curvature)
-      ! direction, so keep going to leave the saddle.
+      ! converged only at a genuine minimum: small gradient AND no escape step.
       if (gnorm < conv_tol .and. snorm < stab_step) then
+        ! Stability check (skip under MOM, which must stay on the targeted state):
+        ! find the lowest eigenvalue of the orbital Hessian H. If it is negative the
+        ! point is a saddle/unstable solution -- kick along that mode and keep going
+        ! to descend into the lower (symmetry-broken) minimum.
+        if (.not. infos%control%mom) then
+          call lowest_hessian_eig(infos, conv, hdiag, n, nmic, lam, vmin)
+          if (lam < -stab_eig_tol) then
+            write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"unstable (Hess eig ",es10.2,") - escaping")') &
+                  macro, e0, gnorm, lam
+            call apply_step(conv, infos%control%scftype, 0.1_dp*vmin)
+            call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
+            delta = real(infos%control%trh_r0, dp)
+            cycle
+          end if
+        end if
         write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') macro-1, e0, gnorm
         res%error = gnorm
         exit
@@ -232,7 +248,7 @@ contains
       res%iter = macro
     end select
 
-    deallocate(g, hdiag, p, mo0_a, mo0_b, mob_a, mob_b)
+    deallocate(g, hdiag, p, vmin, mo0_a, mo0_b, mob_a, mob_b)
   end subroutine trah_native_run
 
   !> @brief Build density+Fock from the given orbitals and return the (scaled)
@@ -550,5 +566,64 @@ contains
     pred = -(dot_product(g, p) + 0.5_dp*php)
     deallocate(V, W, u, au, r, tc, eig, work, hx)
   end subroutine aughess_step
+
+  !> @brief Lowest eigenpair of the orbital Hessian H (n x n, NOT bordered), by
+  !>        Davidson with several random starts (so it reliably finds a negative
+  !>        symmetry-breaking mode at a converged point, where the gradient is ~0
+  !>        and the bordered form degenerates). Matrix-free: H.x = 2*calc_h_op.
+  subroutine lowest_hessian_eig(infos, conv, hdiag, n, nmic, lam, vmin)
+    type(information),    intent(inout), target :: infos
+    type(trah_converger), intent(inout)         :: conv
+    real(dp), intent(in)  :: hdiag(:)
+    integer,  intent(in)  :: n, nmic
+    real(dp), intent(out) :: lam, vmin(:)
+    integer :: mmax, m, i, k, info, lwork, mw, ssz
+    real(dp) :: rnorm, di, nv, theta
+    real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), r(:), tc(:), eig(:), work(:), hx(:)
+    integer,  allocatable :: seed(:)
+
+    mmax = min(max(int(nmic), 8), 40)
+    allocate(V(n,mmax), W(n,mmax), u(n), r(n), tc(n), hx(n))
+    allocate(eig(mmax), work(8*mmax + 2*mmax*mmax)); lwork = size(work)
+
+    call random_seed(size=ssz); allocate(seed(ssz)); seed = 987654321; call random_seed(put=seed)
+    m = 0
+    do i = 1, min(4, mmax)                 ! a few random trial vectors
+      call random_number(tc); tc = 2.0_dp*tc - 1.0_dp
+      do k = 1, m; tc = tc - dot_product(V(:,k), tc)*V(:,k); end do
+      nv = norm2(tc); if (nv > 1.0e-8_dp) then; m = m + 1; V(:,m) = tc/nv; end if
+    end do
+    deallocate(seed)
+
+    theta = 0.0_dp; mw = 0
+    do k = 1, mmax
+      do while (mw < m)
+        mw = mw + 1
+        call conv%calc_h_op(infos, V(:,mw), hx); W(:,mw) = 2.0_dp*hx
+      end do
+      allocate(Tm(m,m))
+      do i = 1, m; Tm(i,:m) = matmul(V(:,i), W(:,:m)); end do
+      call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+      theta = eig(1)
+      u = matmul(V(:,:m), Tm(:,1))
+      r = matmul(W(:,:m), Tm(:,1)) - theta*u
+      deallocate(Tm)
+      rnorm = norm2(r)
+      if (rnorm < 1.0e-5_dp .or. m == mmax) exit
+      do i = 1, n
+        di = hdiag(i) - theta
+        if (abs(di) < 1.0e-6_dp) di = sign(1.0e-6_dp, di)
+        tc(i) = r(i)/di
+      end do
+      do i = 1, m; tc = tc - dot_product(V(:,i), tc)*V(:,i); end do
+      nv = norm2(tc); if (nv < 1.0e-8_dp) exit
+      m = m + 1; V(:,m) = tc/nv
+    end do
+
+    lam = theta
+    nv = norm2(u); if (nv > 0.0_dp) u = u/nv
+    vmin = u
+    deallocate(V, W, u, r, tc, hx, eig, work)
+  end subroutine lowest_hessian_eig
 
 end module trah_native
