@@ -15,12 +15,8 @@ module hf_gradient_mod
     real(kind=dp), pointer :: da(:) => null()
     real(kind=dp), pointer :: db(:) => null()
     real(kind=dp), allocatable :: d2a(:,:), d2b(:,:)
-    !> Basis normalization factors; folded into d2a/d2b by init() so that
-    !> get_density needs no per-quartet normalization work.
-    real(kind=dp), allocatable :: bfnrm(:)
     integer :: nbf = 0
   contains
-    procedure :: normalize => grd2_hf_compute_data_t_normalize
   end type
 
 !###############################################################################
@@ -268,7 +264,6 @@ contains
                                , db = dmat_b &
                                , hfscale = hfscale &
                                , nbf = basis%nbf &
-                               , bfnrm = basis%bfnrm &
         )
     else
 
@@ -279,7 +274,6 @@ contains
         grd2_rhf_compute_data_t( da = dmat_a &
                                , hfscale = hfscale &
                                , nbf = basis%nbf &
-                               , bfnrm = basis%bfnrm &
         )
     end if
 
@@ -306,7 +300,6 @@ contains
     allocate(this%d2a(this%nbf,this%nbf), stat=iok, source=0.0d0)
     if (iok/=0) call show_message('cannot allocate memory', WITH_ABORT)
     call unpack_matrix(this%da, this%d2a)
-    call this%normalize(this%d2a)
 
   end subroutine
 
@@ -327,30 +320,7 @@ contains
     call unpack_matrix(this%db, this%d2b)
     this%d2a = this%d2a + this%d2b
     this%d2b = this%d2a - 2*this%d2b
-    call this%normalize(this%d2a)
-    call this%normalize(this%d2b)
 
-  end subroutine
-
-!###############################################################################
-
-!> @brief Fold the basis normalization factors into a square density-like
-!>        matrix: d(i,j) <- d(i,j) * bfnrm(i) * bfnrm(j). Doing this once at
-!>        init() time removes all normalization work from the innermost loop
-!>        of get_density.
-  subroutine grd2_hf_compute_data_t_normalize(this, d)
-    use messages, only: show_message, WITH_ABORT
-    implicit none
-    class(grd2_hf_compute_data_t), intent(in) :: this
-    real(kind=dp), intent(inout) :: d(:,:)
-    integer :: j
-
-    if (.not.allocated(this%bfnrm)) &
-      call show_message('grd2 compute data: bfnrm not set', WITH_ABORT)
-
-    do j = 1, this%nbf
-      d(:,j) = d(:,j) * (this%bfnrm(j)*this%bfnrm)
-    end do
   end subroutine
 
 !###############################################################################
@@ -375,8 +345,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
-!> @note  Basis normalization is already folded into d2a by init(), so the
-!>        density products below carry all four bfnrm factors implicitly.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_rhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -387,7 +359,7 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, cfij, daik, dajk
+    real(kind=dp) :: coulfact, xcfact, df1, cfij, daik, dajk, nrmij, nrmijk
     logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
@@ -407,19 +379,21 @@ contains
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
 !   d2a is symmetric, so the innermost (l) accesses are written with l1 as the
-!   first index to run contiguously down a column; loop-invariant elements are
-!   hoisted out of the inner loops.
+!   first index to run contiguously down a column; loop-invariant density
+!   elements and normalization factors are hoisted out of the inner loops.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
         cfij = coulfact*this%d2a(i1,j1)
+        nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
           daik = this%d2a(i1,k1)
           dajk = this%d2a(j1,k1)
+          nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
@@ -429,7 +403,7 @@ contains
                                  + this%d2a(l1,i1)*dajk )
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1
+            ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
           end do
         end do
       end do
@@ -441,8 +415,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
-!> @note  Basis normalization is already folded into d2a/d2b by init(), so the
-!>        density products below carry all four bfnrm factors implicitly.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_uhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -453,7 +429,7 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1, cfij
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, cfij, nrmij, nrmijk
     real(kind=dp) :: daik, dajk, dbik, dbjk
     logical :: do_exchange
     integer :: i, j, k, l
@@ -475,13 +451,15 @@ contains
 
 !   d2a/d2b are symmetric, so the innermost (l) accesses are written with l1
 !   as the first index to run contiguously down a column; loop-invariant
-!   elements are hoisted out of the inner loops.
+!   density elements and normalization factors are hoisted out of the inner
+!   loops.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
         cfij = coulfact*this%d2a(i1,j1)
+        nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
@@ -489,6 +467,7 @@ contains
           dajk = this%d2a(j1,k1)
           dbik = this%d2b(i1,k1)
           dbjk = this%d2b(j1,k1)
+          nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
@@ -501,7 +480,7 @@ contains
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1
+            ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
           end do
         end do
       end do

@@ -504,8 +504,7 @@ contains
       use grd2, only: grd2_hess_driver, grd2_compute_data_t
       use hf_gradient_mod, only: grd2_rhf_compute_data_t
       class(grd2_compute_data_t), allocatable :: gcomp
-      gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = hfscale, nbf = nbf, &
-                                       bfnrm = basis%bfnrm )
+      gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = hfscale, nbf = nbf )
       call gcomp%init()
       call grd2_hess_driver(infos, basis, hess_native, gcomp)
       call gcomp%clean()
@@ -1069,8 +1068,7 @@ contains
       use grd2, only: grd2_hess_driver, grd2_compute_data_t
       use hf_gradient_mod, only: grd2_uhf_compute_data_t
       class(grd2_compute_data_t), allocatable :: gcomp
-      gcomp = grd2_uhf_compute_data_t( da = dma, db = dmb, hfscale = hfscale, nbf = nbf, &
-                                       bfnrm = basis%bfnrm )
+      gcomp = grd2_uhf_compute_data_t( da = dma, db = dmb, hfscale = hfscale, nbf = nbf )
       call gcomp%init()
       call grd2_hess_driver(infos, basis, hess_native, gcomp)
       call gcomp%clean()
@@ -1595,8 +1593,7 @@ contains
         use ecp_tool, only: add_ecpder
         call add_ecpder(basis, basis%atoms%xyz, ptP_tri, gout)
       end block
-      gc = grd2_uhf_compute_data_t( da = paP_tri, db = pbP_tri, hfscale = hfscale, nbf = nbf, &
-                                    bfnrm = basis%bfnrm )
+      gc = grd2_uhf_compute_data_t( da = paP_tri, db = pbP_tri, hfscale = hfscale, nbf = nbf )
       call gc%init()
       call grd2_driver(infos, basis, gout, gc)
       call gc%clean()
