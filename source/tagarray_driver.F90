@@ -67,6 +67,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_POTMM = OQP_prefix // "POTMM"
   character(len=*), parameter, public :: OQP_ESPF_GRAD = OQP_prefix // "ESPF_GRAD"
 
+  ! NAMD (Tully FSSH) state exchanged with the Python trajectory driver
+  character(len=*), parameter, public :: OQP_namd_coef     = OQP_prefix // "namd_coef"
+  character(len=*), parameter, public :: OQP_namd_velocity = OQP_prefix // "namd_velocity"
+  character(len=*), parameter, public :: OQP_namd_params   = OQP_prefix // "namd_params"
+  character(len=*), parameter, public :: OQP_namd_results  = OQP_prefix // "namd_results"
+
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
   ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
   character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
@@ -116,7 +122,11 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
-  character(len=*), parameter, public :: all_tags(39) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: OQP_namd_coef_comment = OQP_prefix // "NAMD electronic amplitudes (2 x nstate: re,im)"
+  character(len=*), parameter, public :: OQP_namd_velocity_comment = OQP_prefix // "NAMD nuclear velocities (3 x natom, a.u.)"
+  character(len=*), parameter, public :: OQP_namd_params_comment = OQP_prefix // "NAMD packed scalar parameters/state"
+  character(len=*), parameter, public :: OQP_namd_results_comment = OQP_prefix // "NAMD per-step diagnostics (hop prob + flags)"
+  character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
@@ -127,7 +137,8 @@ module oqp_tagarray_driver
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
     OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
     OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
-    OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM /)
+    OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
+    OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results /)
 
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d

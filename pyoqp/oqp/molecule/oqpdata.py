@@ -280,6 +280,22 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
+    'md': {
+        'nstep': {'type': int, 'default': '100'},
+        'dt': {'type': float, 'default': '0.5'},            # fs
+        'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
+        'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
+        'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
+        'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
+        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off
+        'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
+        'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
+        'trivial_thresh': {'type': float, 'default': '0.5'},
+        'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
+        'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
+        'seed': {'type': int, 'default': '1'},
+        'restart': {'type': bool, 'default': 'False'},
+    },
     'json': {
             'scf_type': {'type': string, 'default': ''},
             'basis': {'type': string, 'default': ''},

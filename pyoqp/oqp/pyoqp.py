@@ -15,7 +15,8 @@ from oqp.utils.input_checker import check_input_values
 from oqp.molecule import Molecule
 from oqp.library.runfunc import (
    compute_energy, compute_grad, compute_nac, compute_soc, compute_geom, compute_md,
-   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo
+   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo,
+   compute_namd
 )
 from oqp.utils.mpi_utils import MPIManager
 
@@ -63,6 +64,7 @@ class Runner:
             'mecp': compute_geom,
             'mep': compute_geom,
             'md': compute_md,
+            'namd': compute_namd,
             'ts': compute_geom,
             'tci': compute_geom,
             'irc': compute_geom,
@@ -230,9 +232,17 @@ def main():
 
     silent = 1 if args.silent else 0
 
-    from oqp.library.qmmm_md import parse_ini_to_config
-    config = parse_ini_to_config(input_file)
-    if config.get("input.qmmm_flag") == "true":
+    # Detect the OpenMM-based QM/MM-MD mode without importing OpenMM-dependent
+    # modules (so plain energy/grad/NAMD runs work without OpenMM installed).
+    qmmm_flag = False
+    try:
+        import configparser
+        _cfg = configparser.ConfigParser()
+        _cfg.read(input_file)
+        qmmm_flag = _cfg.getboolean('input', 'qmmm_flag', fallback=False)
+    except Exception:
+        qmmm_flag = False
+    if qmmm_flag:
         from oqp.library.qmmm_md import QMMM_MD
         md = QMMM_MD(oqp_cfg=input_file)
         md.run()

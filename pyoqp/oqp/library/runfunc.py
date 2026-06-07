@@ -21,7 +21,13 @@ from oqp.library.liboqp import (
     OQPNEBOpt, OQPIRCOpt, OQPMEPOpt,
 )
 from oqp.library.libdlfind import DLFindMin, DLFindTS, DLFindMECI, DLFindQMMM
+from oqp.library.namd import NAMD
 #from oqp.library.libopenmm import QMMM_MD
+
+
+def compute_namd(mol):
+    # Tully fewest-switches surface-hopping nonadiabatic molecular dynamics
+    NAMD(mol).run()
 
 
 def compute_energy(mol):

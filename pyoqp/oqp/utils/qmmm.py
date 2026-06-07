@@ -1,6 +1,13 @@
-import openmm as mm
-import openmm.app as app
-import openmm.unit as unit
+# OpenMM is only needed for QM/MM runs. Import it lazily so the rest of OpenQP
+# (energy/grad/NAMD gas-phase, etc.) works without OpenMM installed.
+try:
+    import openmm as mm
+    import openmm.app as app
+    import openmm.unit as unit
+    _HAVE_OPENMM = True
+except ModuleNotFoundError:
+    mm = app = unit = None
+    _HAVE_OPENMM = False
 import os
 import numpy as np
 import math
@@ -54,11 +61,14 @@ covalent_radii = [
 kj_per_mol_to_hartree = 0.000380879  # 1 kJ/mol = 0.000380879 Hartree
 bohr_to_nm = 0.052917721092  # 1 bohr = 0.052917721092 nm
 
-# Define unit charge and zero charge
-unit_charge = 1.0 * unit.elementary_charge
-zero_charge = 0.0 * unit.elementary_charge
-zero_sigma = 0.0 * unit.nanometer
-zero_epsilon = 0.0 * unit.kilojoule_per_mole
+# Define unit charge and zero charge (only meaningful when OpenMM is present)
+if _HAVE_OPENMM:
+    unit_charge = 1.0 * unit.elementary_charge
+    zero_charge = 0.0 * unit.elementary_charge
+    zero_sigma = 0.0 * unit.nanometer
+    zero_epsilon = 0.0 * unit.kilojoule_per_mole
+else:
+    unit_charge = zero_charge = zero_sigma = zero_epsilon = None
 
 #!----------------------------------------------------------------------
 

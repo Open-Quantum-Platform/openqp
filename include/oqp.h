@@ -249,6 +249,7 @@ void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
+void mrsf_namd_hop(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);

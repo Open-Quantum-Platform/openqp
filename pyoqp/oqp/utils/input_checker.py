@@ -13,6 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
+    "namd",
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
@@ -1093,6 +1094,31 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 expected="[ekt] ip=True and/or ea=True",
                 action="Enable [ekt] ip, ea, or both for EKT analysis.",
                 wiki=WIKI_HELP["tdhf.type"],
+            )
+        return
+
+    if runtype == "namd":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "NAMD (surface hopping) currently supports only MRSF-TDDFT.",
+                value=f"{method}/{td_type}",
+                expected="input.method=tdhf and tdhf.type=mrsf",
+                action="Set [input] method=tdhf and [tdhf] type=mrsf for NAMD.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        nstate = int(_get(config, "tdhf", "nstate", 1))
+        active = int(_get(config, "md", "active", 1))
+        if active < 1 or active > nstate:
+            report.add(
+                "ERROR",
+                "md.active",
+                "Initial active state must be a valid excited state.",
+                value=active,
+                expected=f"1 <= md.active <= tdhf.nstate ({nstate})",
+                action="Set [md] active within the number of excited states, and raise [tdhf] nstate if needed.",
             )
         return
 

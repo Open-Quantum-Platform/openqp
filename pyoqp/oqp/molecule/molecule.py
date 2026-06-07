@@ -73,7 +73,8 @@ class Molecule:
             'OQP::hf_hessian',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
-            'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges'
+            'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges',
+            'OQP::namd_coef', 'OQP::namd_velocity', 'OQP::namd_params', 'OQP::namd_results'
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],
