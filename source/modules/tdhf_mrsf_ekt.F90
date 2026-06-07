@@ -264,13 +264,8 @@ contains
     end do
     write(iw,'(2x,"--------------------------------------")')
 
-    if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = EA roots)")')
-    else
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = IP roots)")')
-    end if
-    call print_dyson_orbitals(orbitals, eig, strengths, nbf, min(nroot, nactive), &
-                              hartree_to_ev)
+    call print_ekt_dyson_orbitals(iw, basis, nbf, min(nroot, nactive), orbitals, &
+         mo_a, eig, strengths, electron_affinity)
     call flush(iw)
 
     call measure_time(print_total=1, log_unit=iw)
@@ -278,35 +273,62 @@ contains
 
   end subroutine tdhf_mrsf_ekt
 
-  !> @brief Print Dyson orbitals to the log in root blocks
-  !> @detail Each block of up to 5 roots shows the root index, the electron
-  !>         binding energy eBE = -eig (eV), and the Dyson pole strength,
-  !>         followed by the MO-basis Dyson orbital coefficients of each root.
-  subroutine print_dyson_orbitals(dyson_mo, eig, strengths, nbf, nroot, h2ev)
+  !> @brief Print EKT Dyson-like orbitals in a GAMESS-like AO table.
+  !> @details The EKT solver stores Dyson vectors in the parent ROHF alpha-MO
+  !>          basis.  For human-readable logs, transform them back to AO/basis-
+  !>          function coefficients and print blocks matching the normal OpenQP
+  !>          orbital table and the GAMESS "EKT DYSON ORBITALS" layout.
+  subroutine print_ekt_dyson_orbitals(iw, basis, nbf, nout, dyson_mo, mo_a, &
+       eig, strengths, electron_affinity)
     use precision, only: dp
-    use io_constants, only: iw
-
+    use basis_tools, only: basis_set
     implicit none
+    integer, intent(in) :: iw, nbf, nout
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: dyson_mo(nbf,*), mo_a(nbf,nbf)
+    real(kind=dp), intent(in) :: eig(*), strengths(*)
+    logical, intent(in) :: electron_affinity
+    integer, parameter :: ncol = 5
+    integer :: i, j, j0, j1, ok
+    real(kind=dp), allocatable :: dyson_ao(:,:)
+    character(len=1) :: spin_label
 
-    integer, intent(in) :: nbf, nroot
-    real(kind=dp), intent(in) :: dyson_mo(nbf,*), eig(*), strengths(*)
-    real(kind=dp), intent(in) :: h2ev
+    allocate(dyson_ao(nbf,nout), source=0.0_dp, stat=ok)
+    if (ok /= 0) then
+      write(iw,'(/,2x,"WARNING: unable to allocate AO Dyson-orbital print buffer.")')
+      return
+    end if
 
-    integer, parameter :: mxlen = 5
-    integer :: i, j, i0, i1
+    ! Convert parent-MO Dyson vectors to AO/basis-function coefficients:
+    !   d_AO(mu,root) = sum_i C_AO(mu,i) d_MO(i,root)
+    dyson_ao = matmul(mo_a(:,1:nbf), dyson_mo(1:nbf,1:nout))
 
-    do i0 = 1, nroot, mxlen
-      i1 = min(nroot, i0+mxlen-1)
-      write(iw,'(/,2x,"root",7x,*(i7,4x))') (i, i=i0, i1)
-      write(iw,'(2x,"eBE (eV)",3x,*(f11.4))') (-eig(i)*h2ev, i=i0, i1)
-      write(iw,'(2x,"strength",3x,*(f11.6))') (strengths(i), i=i0, i1)
-      write(iw,*)
-      do j = 1, nbf
-        write(iw,'(2x,i5,4x,*(f11.6))') j, (dyson_mo(j,i), i=i0, i1)
+    if (electron_affinity) then
+      write(iw,'(/,2x,"Extended Koopmans'' Theorem for Electron Affinities")')
+    else
+      write(iw,'(/,2x,"Extended Koopmans'' Theorem for Ionization Energies")')
+    end if
+    write(iw,'(/,2x,"==> EKT: there are ",I3," Dyson orbitals with non-zero strengths")') nout
+    write(iw,'(/,10x,"----------------------------------------------")')
+    write(iw,'(12x,"EKT DYSON ORBITALS, ENERGIES AND NORMS")')
+    write(iw,'(10x,"----------------------------------------------")')
+    write(iw,'(2x,"AO/basis-function coefficients; roots are in columns, as in the normal OpenQP orbital print.")')
+
+    spin_label = 'A'
+    do j0 = 1, nout, ncol
+      j1 = min(j0+ncol-1, nout)
+      write(iw,'(/,15x,5I11)') (j, j=j0,j1)
+      write(iw,'(5x,A8,2x,5F11.6)') 'ENERGY', (eig(j), j=j0,j1)
+      write(iw,'(5x,A8,2x,5F11.6)') 'STRENGTH', (strengths(j), j=j0,j1)
+      write(iw,'(15x,5(5x,A1,5x))') (spin_label, j=j0,j1)
+      do i = 1, nbf
+        write(iw,'(I5,2x,A8,2x,5F11.6)') i, basis%bf_label(i), dyson_ao(i,j0:j1)
       end do
     end do
+    write(iw,'(2x,"END of EKT Dyson orbitals")')
 
-  end subroutine print_dyson_orbitals
+    deallocate(dyson_ao)
+  end subroutine print_ekt_dyson_orbitals
 
   !> @brief Fetch the packed AO overlap matrix S (OQP_SM) into smat(nbf2).
   subroutine get_overlap_matrix(infos, nbf, smat)
@@ -576,6 +598,49 @@ contains
 
     deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys)
   end subroutine solve_ekt_no_deflation
+
+  !> @brief Print the EKT Dyson-like orbital coefficients in the parent MO basis.
+  !> @details The compact EKT summary gives the root energies and pole strengths;
+  !>          this block exposes the actual Dyson vector components so IP/EA logs
+  !>          can be inspected without opening the JSON/tagarray output.
+  subroutine print_ekt_dyson_orbitals(iw, nbf, nout, dyson_mo, eig, strengths, &
+       electron_affinity, hartree_to_ev)
+    use precision, only: dp
+    implicit none
+    integer, intent(in) :: iw, nbf, nout
+    real(kind=dp), intent(in) :: dyson_mo(nbf,*), eig(*), strengths(*)
+    logical, intent(in) :: electron_affinity
+    real(kind=dp), intent(in) :: hartree_to_ev
+    real(kind=dp), parameter :: print_tol = 1.0e-6_dp
+    integer :: i, j, nprinted
+    character(len=3) :: kind_label
+
+    if (electron_affinity) then
+      kind_label = 'EA '
+    else
+      kind_label = 'IP '
+    end if
+
+    write(iw,'(/,2x,"--- EKT Dyson orbital coefficients (MO basis) ---")')
+    write(iw,'(2x,"Each root is printed as coefficients in the parent ROHF alpha-MO basis.")')
+    write(iw,'(2x,"Pole strength is the EKT Dyson norm/spectral strength; coeffs with |c| < ",es10.2," are omitted.")') print_tol
+    do j = 1, nout
+      write(iw,'(/,2x,A3," Dyson root ",I5,"   eig(ha)=",F14.6,"   eBE/eEA(eV)=",F12.4,"   pole_strength=",F12.6)') &
+            kind_label, j, eig(j), -eig(j)*hartree_to_ev, strengths(j)
+      write(iw,'(4x,"MO-index",8x,"coefficient",10x,"abs(coefficient)")')
+      nprinted = 0
+      do i = 1, nbf
+        if (abs(dyson_mo(i,j)) >= print_tol) then
+          nprinted = nprinted + 1
+          write(iw,'(4x,I8,2x,F20.10,2x,F20.10)') i, dyson_mo(i,j), abs(dyson_mo(i,j))
+        end if
+      end do
+      if (nprinted == 0) then
+        write(iw,'(4x,"No coefficients above print threshold.")')
+      end if
+    end do
+    write(iw,'(2x,"------------------------------------------------")')
+  end subroutine print_ekt_dyson_orbitals
 
   pure logical function ekt_is_spurious(ebe_ev, metric_norm, pole_strength) result(flag)
     use precision, only: dp

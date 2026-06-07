@@ -192,6 +192,9 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("ebe_ev", molecule)
         self.assertIn("call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues", fortran)
         self.assertIn("call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues", fortran)
+        self.assertIn("print_ekt_dyson_orbitals", fortran)
+        self.assertIn("EKT Dyson orbital coefficients (MO basis)", fortran)
+        self.assertIn("pole_strength", fortran)
 
     def test_run_tests_checks_structured_mrsf_ekt_values(self):
         molecule = read("pyoqp/oqp/molecule/molecule.py")
