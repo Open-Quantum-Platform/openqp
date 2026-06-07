@@ -162,8 +162,21 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(oqp_functions)
 
 if(ENABLE_DDX)
-  find_package(DDX REQUIRED)
-  message(STATUS "ddX continuum-solvation backend is enabled: ${DDX_LIBRARY}")
+  # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
+  # (never vendored into the OpenQP tree). Two ways to provide it:
+  #   * DDX_ROOT given -> use that prebuilt install (find_package).
+  #   * otherwise      -> CMake builds ddX v0.8.0 from source as ILP64 to match
+  #                       OpenQP's mandatory 64-bit-integer BLAS (see external/).
+  # The ILP64 build is required: a stock LP64 ddX exports an unsuffixed dgemm_
+  # that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
+  if(DEFINED DDX_ROOT OR DEFINED ENV{DDX_ROOT})
+    find_package(DDX REQUIRED)
+    set(OQP_DDX_AUTOBUILD OFF)
+    message(STATUS "ddX continuum-solvation backend (prebuilt): ${DDX_LIBRARY}")
+  else()
+    set(OQP_DDX_AUTOBUILD ON)
+    message(STATUS "ddX continuum-solvation backend: building ILP64 from source (v0.8.0)")
+  endif()
 endif()
 
 # Fix possible issues with DYLD_LIBRARY_PATH
@@ -202,6 +215,13 @@ if(BUILD_TESTING)
     target_include_directories(oqp_ddx_adapter_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
     target_link_libraries(oqp_ddx_adapter_smoke PRIVATE DDX::ddx m)
     add_test(NAME oqp_ddx_adapter_smoke COMMAND oqp_ddx_adapter_smoke)
+
+    # When ddX is built from source, the imported DDX::ddx target wraps a future
+    # build byproduct; make the smoke executables wait for the ExternalProject.
+    if(OQP_DDX_AUTOBUILD)
+      add_dependencies(oqp_ddx_link_smoke ddx)
+      add_dependencies(oqp_ddx_adapter_smoke ddx)
+    endif()
   endif()
 endif()
 
