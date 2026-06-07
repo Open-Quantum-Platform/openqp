@@ -154,9 +154,100 @@ class Dihedral:
         return out
 
 
+# --------------------------------------------------------------------------- #
+# Translation-rotation coordinates (TRIC, Wang & Song, JCP 144, 214108 (2016)) #
+# --------------------------------------------------------------------------- #
+def _rotmat_to_expmap(R):
+    """Exponential-map vector v = theta * axis of a 3x3 rotation matrix."""
+    cos = float(np.clip((np.trace(R) - 1.0) / 2.0, -1.0, 1.0))
+    theta = np.arccos(cos)
+    skew = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+    if theta < 1.0e-8:
+        return 0.5 * skew                      # small-angle limit
+    if abs(theta - np.pi) < 1.0e-6:
+        # 180 deg: axis from the eigenvector of R with eigenvalue +1 (rare).
+        w, v = np.linalg.eig(R)
+        axis = np.real(v[:, int(np.argmin(np.abs(w - 1.0)))])
+        axis = axis / (np.linalg.norm(axis) + 1.0e-12)
+        return theta * axis
+    return theta * skew / (2.0 * np.sin(theta))
+
+
+def _rotation_vector(X, X0):
+    """Exp-map vector of the rotation best aligning reference ``X0`` onto ``X``.
+
+    ``X``/``X0`` are (N,3) fragment coordinates (any units).  Uses the Kabsch
+    superposition; returns a 3-vector that is zero when X and X0 share an
+    orientation.
+    """
+    Xc = X - X.mean(axis=0)
+    X0c = X0 - X0.mean(axis=0)
+    h = X0c.T @ Xc
+    u, _, vt = np.linalg.svd(h)
+    d = np.sign(np.linalg.det(vt.T @ u.T))
+    rot = vt.T @ np.diag([1.0, 1.0, d]) @ u.T
+    return _rotmat_to_expmap(rot)
+
+
+class TranslationComponent:
+    """One Cartesian centroid component of a fragment (analytic, constant B)."""
+
+    kind = "translation"
+
+    def __init__(self, atoms, axis):
+        self.frag = list(atoms)
+        self.axis = int(axis)
+        self.n = len(self.frag)
+
+    def value(self, x):
+        return float(np.mean(np.asarray(x)[self.frag, self.axis]))
+
+    def derivatives(self, x):
+        d = np.zeros(3)
+        d[self.axis] = 1.0 / self.n
+        return [(a, d.copy()) for a in self.frag]
+
+
+class RotationComponent:
+    """One exp-map rotation component of a fragment relative to a reference.
+
+    The value is evaluated analytically (Kabsch); the B-matrix row is taken by a
+    central finite difference of that value -- exact to ~1e-9 and free of the
+    intricate quaternion-derivative algebra, at negligible cost for the small
+    systems these optimizations target.
+    """
+
+    kind = "rotation"
+
+    def __init__(self, atoms, axis, reference_xyz):
+        self.frag = list(atoms)
+        self.axis = int(axis)
+        self.ref = np.asarray(reference_xyz, dtype=float).reshape(-1, 3)[self.frag].copy()
+
+    def value(self, x):
+        sub = np.asarray(x, dtype=float).reshape(-1, 3)[self.frag]
+        return float(_rotation_vector(sub, self.ref)[self.axis])
+
+    def derivatives(self, x, h=1.0e-5):
+        x = np.asarray(x, dtype=float).reshape(-1, 3)
+        out = []
+        for a in self.frag:
+            d = np.zeros(3)
+            for c in range(3):
+                xp = x.copy()
+                xm = x.copy()
+                xp[a, c] += h
+                xm[a, c] -= h
+                d[c] = (self.value(xp) - self.value(xm)) / (2.0 * h)
+            out.append((a, d))
+        return out
+
+
 # Diagonal model force constants (Hartree / Bohr**2 or / rad**2), following the
-# diagonal guess used by geomeTRIC (Schlegel-type values).
-_GUESS_FC = {"bond": 0.35, "angle": 0.20, "dihedral": 0.023}
+# diagonal guess used by geomeTRIC (Schlegel-type values).  Translation and
+# rotation use the small geomeTRIC trans/rot value.
+_GUESS_FC = {"bond": 0.35, "angle": 0.20, "dihedral": 0.023,
+             "translation": 0.05, "rotation": 0.05}
 
 
 class RedundantInternalCoordinates:
@@ -315,6 +406,118 @@ class RedundantInternalCoordinates:
         return float(np.sqrt(np.mean((a - b) ** 2)))
 
 
+class DelocalizedInternalCoordinates:
+    """Delocalized internal coordinates (Baker, JCP 105, 192 (1996)).
+
+    Non-redundant linear combinations of a redundant primitive set: the active
+    subspace ``U`` is the eigenvectors of G = B B^T with non-zero eigenvalue,
+    fixed at construction.  Coordinates are measured as displacements from the
+    construction geometry, so G_dlc is well conditioned and the transforms use a
+    plain solve instead of a pseudo-inverse.
+    """
+
+    def __init__(self, ric, u, q_ref):
+        self.ric = ric
+        self.U = u
+        self.q_ref = q_ref
+        self.natom = ric.natom
+        self.ndim = ric.ndim
+        self.primitives = ric.primitives
+
+    @classmethod
+    def from_ric(cls, ric, x, eig_tol=1.0e-6):
+        b = ric.b_matrix(x)
+        g = b @ b.T
+        w, v = np.linalg.eigh(0.5 * (g + g.T))
+        u = v[:, w > eig_tol]
+        return cls(ric, u, ric.q(x))
+
+    def _disp_prim(self, x):
+        return self.ric.q_displacement(self.ric.q(x), self.q_ref)
+
+    def q(self, x):
+        return self.U.T @ self._disp_prim(x)
+
+    def b_matrix(self, x):
+        return self.U.T @ self.ric.b_matrix(x)
+
+    def _g_inverse(self, b, eig_tol=1.0e-8):
+        g = b @ b.T
+        w, v = np.linalg.eigh(0.5 * (g + g.T))
+        keep = w > eig_tol
+        inv = (v[:, keep] / w[keep]) @ v[:, keep].T
+        return inv, int(np.count_nonzero(keep))
+
+    def grad_to_q(self, x, gx):
+        b = self.b_matrix(x)
+        ginv, _ = self._g_inverse(b)
+        return ginv @ (b @ np.asarray(gx, dtype=float).reshape(-1))
+
+    def guess_hessian(self, x):
+        diag = np.array([_GUESS_FC[p.kind] for p in self.ric.primitives])
+        return self.U.T @ (diag[:, None] * self.U)
+
+    def q_displacement(self, q2, q1):
+        return np.asarray(q2, dtype=float) - np.asarray(q1, dtype=float)
+
+    def back_transform(self, x, dq, tol=1.0e-6, maxiter=50):
+        x = np.asarray(x, dtype=float).reshape(-1, 3)
+        s_target = self.q(x) + dq
+        x_cur = x.copy()
+        prev = None
+        best = x_cur.copy()
+        for _ in range(maxiter):
+            b = self.b_matrix(x_cur)
+            ginv, _ = self._g_inverse(b)
+            ds = s_target - self.q(x_cur)
+            err = np.linalg.norm(ds)
+            if prev is not None and err > prev * 1.0001 + 1.0e-10:
+                return best.reshape(-1), False
+            prev = err
+            best = x_cur.copy()
+            if err < tol:
+                return x_cur.reshape(-1), True
+            x_cur = x_cur + (b.T @ (ginv @ ds)).reshape(-1, 3)
+        return best.reshape(-1), prev is not None and prev < 1.0e-3
+
+    def cart_rmsd(self, x, x_new):
+        a = np.asarray(x, dtype=float).reshape(-1)
+        b = np.asarray(x_new, dtype=float).reshape(-1)
+        return float(np.sqrt(np.mean((a - b) ** 2)))
+
+
+def _build_tric(atoms, x, bond_factor=1.3):
+    """TRIC: bonded internals + per-fragment translation/rotation coordinates."""
+    atoms = np.asarray(atoms, dtype=int).reshape(-1)
+    x = np.asarray(x, dtype=float).reshape(-1, 3)
+    natom = len(atoms)
+    if natom < 2:
+        return None
+
+    bonds, neighbours, fragments = _covalent_graph(atoms, x, bond_factor)
+    primitives = _make_internals(bonds, neighbours, x)
+
+    for frag in fragments:
+        for axis in range(3):
+            primitives.append(TranslationComponent(frag, axis))
+        if len(frag) >= 3:
+            sub = x[frag] - x[frag].mean(axis=0)
+            sv = np.linalg.svd(sub, compute_uv=False)
+            if len(sv) >= 2 and sv[1] > 1.0e-3:        # non-collinear fragment
+                for axis in range(3):
+                    primitives.append(RotationComponent(frag, axis, x))
+
+    coords = RedundantInternalCoordinates(primitives, natom)
+    # TRIC must span the FULL 3N space (6 external + 3N-6 internal per the
+    # connected fragments).  Requiring only 3N-6 would let the padded
+    # translations mask a missing internal mode (e.g. the bend of a linear
+    # molecule), so demand full rank and otherwise fall back.
+    _, rank = coords._g_inverse(coords.b_matrix(x))
+    if rank < 3 * natom:
+        return None
+    return coords
+
+
 class CartesianCoordinates:
     """Trivial Cartesian coordinate system (identity B-matrix)."""
 
@@ -396,14 +599,85 @@ def _components(neighbours, natom):
     return comps
 
 
-def build_coordinates(atoms, x):
-    """Return the best available coordinate system for ``atoms``/``x``.
+def _covalent_graph(atoms, x, bond_factor=1.3):
+    """Covalent bonds, neighbour map, and connected fragments (no auxiliaries)."""
+    atoms = np.asarray(atoms, dtype=int).reshape(-1)
+    x = np.asarray(x, dtype=float).reshape(-1, 3)
+    natom = len(atoms)
+    radii = np.array([covalent_radius_bohr(z) for z in atoms])
+    neighbours = {a: set() for a in range(natom)}
+    bonds = []
+    for a in range(natom):
+        for b in range(a + 1, natom):
+            if np.linalg.norm(x[a] - x[b]) < bond_factor * (radii[a] + radii[b]):
+                bonds.append((a, b))
+                neighbours[a].add(b)
+                neighbours[b].add(a)
+    return bonds, neighbours, _components(neighbours, natom)
 
-    Tries redundant internals first and falls back to Cartesians when the
-    internal set is unavailable or rank-deficient.
+
+def _make_internals(bonds, neighbours, x):
+    """Bond/angle/dihedral primitives for a given covalent graph."""
+    x = np.asarray(x, dtype=float).reshape(-1, 3)
+    primitives = [Bond(a, b) for (a, b) in bonds]
+    for j in neighbours:
+        nb = sorted(neighbours[j])
+        for ii in range(len(nb)):
+            for kk in range(ii + 1, len(nb)):
+                ang = Angle(nb[ii], j, nb[kk])
+                if 0.26 < ang.value(x) < (np.pi - 0.26):
+                    primitives.append(ang)
+    seen = set()
+    for (j, k) in bonds:
+        for i in sorted(neighbours[j]):
+            if i == k or not _well_defined_angle(x, i, j, k):
+                continue
+            for l in sorted(neighbours[k]):
+                if l == j or l == i or not _well_defined_angle(x, j, k, l):
+                    continue
+                key = (i, j, k, l) if (i, j) < (l, k) else (l, k, j, i)
+                if key in seen:
+                    continue
+                seen.add(key)
+                primitives.append(Dihedral(i, j, k, l))
+    return primitives
+
+
+def build_coordinates(atoms, x, coordsys="tric"):
+    """Return a coordinate system for ``atoms``/``x``.
+
+    ``coordsys`` selects the working coordinates:
+
+    * ``tric`` (default) / ``auto`` -- translation-rotation internal coordinates;
+    * ``dlc`` -- delocalized internal coordinates;
+    * ``ric`` / ``internal`` -- redundant internal coordinates;
+    * ``cart`` / ``cartesian`` -- Cartesians.
+
+    All internal systems fall back to redundant internals and then Cartesians
+    when their set is unavailable or rank-deficient (e.g. linear species), so the
+    optimizer always has a usable coordinate system.
     """
     natom = len(np.asarray(atoms, dtype=int).reshape(-1))
-    coords = RedundantInternalCoordinates.from_geometry(atoms, x)
-    if coords is None:
+    cs = (coordsys or "tric").lower()
+
+    if cs in ("cart", "cartesian"):
         return CartesianCoordinates(natom)
-    return coords
+
+    ric = RedundantInternalCoordinates.from_geometry(atoms, x)
+
+    if cs in ("ric", "internal"):
+        return ric if ric is not None else CartesianCoordinates(natom)
+
+    if cs == "dlc":
+        if ric is None:
+            return CartesianCoordinates(natom)
+        try:
+            return DelocalizedInternalCoordinates.from_ric(ric, x)
+        except Exception:
+            return ric
+
+    # tric / auto / anything else
+    tric = _build_tric(atoms, x)
+    if tric is not None:
+        return tric
+    return ric if ric is not None else CartesianCoordinates(natom)

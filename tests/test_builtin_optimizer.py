@@ -94,10 +94,100 @@ class TestInternalCoordinates(unittest.TestCase):
             self.assertLess(np.max(np.abs(B - Bn)), 1e-6)
 
     def test_linear_molecule_falls_back_to_cartesian(self):
-        co2 = NC.build_coordinates([6, 8, 8],
-                                   np.array([[0, 0, 0], [0, 0, 2.2],
-                                             [0, 0, -2.2]], float))
-        self.assertIsInstance(co2, NC.CartesianCoordinates)
+        # CO2 is linear: neither RIC nor (full-rank) TRIC can span it.
+        for cs in ("ric", "tric", "dlc"):
+            co2 = NC.build_coordinates([6, 8, 8],
+                                       np.array([[0, 0, 0], [0, 0, 2.2],
+                                                 [0, 0, -2.2]], float), coordsys=cs)
+            self.assertIsInstance(co2, NC.CartesianCoordinates)
+
+
+class TestTRICandDLC(unittest.TestCase):
+    WATER_AT = [8, 1, 1]
+    WATER_X = np.array([[0, 0, 0.12], [0, 1.43, -0.96], [0, -1.43, -0.96]], float)
+
+    def _bmatrix_fd(self, ic, x):
+        B = ic.b_matrix(x)
+        Bn = np.zeros_like(B)
+        xf = x.reshape(-1)
+        h = 1.0e-6
+        for k in range(len(xf)):
+            xp = xf.copy(); xp[k] += h
+            xm = xf.copy(); xm[k] -= h
+            Bn[:, k] = ic.q_displacement(ic.q(xp.reshape(-1, 3)),
+                                         ic.q(xm.reshape(-1, 3))) / (2.0 * h)
+        return np.max(np.abs(B - Bn))
+
+    def test_rotation_primitive_bmatrix(self):
+        rng = np.random.default_rng(0)
+        ref = rng.normal(size=(4, 3))
+        rot = NC.RotationComponent([0, 1, 2, 3], 1, ref)
+        x = rng.normal(size=(4, 3))
+        ana = np.zeros((4, 3))
+        for a, d in rot.derivatives(x):
+            ana[a] = d
+        num = np.zeros((4, 3))
+        h = 1.0e-6
+        for a in range(4):
+            for c in range(3):
+                xp = x.copy(); xp[a, c] += h
+                xm = x.copy(); xm[a, c] -= h
+                num[a, c] = (rot.value(xp) - rot.value(xm)) / (2.0 * h)
+        self.assertLess(np.max(np.abs(ana - num)), 1e-6)
+
+    def test_tric_full_rank_and_bmatrix(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="tric")
+        self.assertIsInstance(ic, NC.RedundantInternalCoordinates)
+        # 2 bonds + 1 angle + 3 translations + 3 rotations
+        self.assertEqual(len(ic.primitives), 9)
+        self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
+
+    def test_dlc_nonredundant_and_bmatrix(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
+        self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
+        self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
+
+    def test_multifragment_tric(self):
+        # Two well-separated triangular C3 fragments (each non-collinear, so
+        # rotation is well defined): TRIC must span the full 3N = 18.
+        tri = np.array([[0, 0, 0], [2.0, 0, 0], [1.0, 1.6, 0.0]], float)
+        x = np.vstack([tri, tri + np.array([0.0, 0.0, 12.0])])
+        ic = NC.build_coordinates([6, 6, 6, 6, 6, 6], x, coordsys="tric")
+        self.assertIsInstance(ic, NC.RedundantInternalCoordinates)
+        _, rank = ic._g_inverse(ic.b_matrix(x))
+        self.assertEqual(rank, 18)
+
+    def test_convergence_each_coordsys(self):
+        def eg(xflat):
+            x = xflat.reshape(-1, 3)
+            pairs = [(0, 1), (0, 2), (1, 2)]
+            E = 0.0
+            g = np.zeros_like(x)
+            for (i, j) in pairs:
+                d = x[i] - x[j]
+                r = np.linalg.norm(d)
+                ex = np.exp(-(r - 2.0))
+                E += 0.15 * (1 - ex) ** 2
+                u = d / r
+                f = 2 * 0.15 * (1 - ex) * ex
+                g[i] += f * u
+                g[j] -= f * u
+            return E, g.reshape(-1)
+        rng = np.random.default_rng(1)
+        x0 = np.array([[0, 0, 0], [2.3, 0, 0], [1.0, 1.6, 0.0]], float) \
+            + rng.normal(scale=0.1, size=(3, 3))
+        for cs in ("ric", "dlc", "tric"):
+            eng = NE.BuiltinEngine([6, 6, 6], x0.copy(), mode="min",
+                                   maxiter=100, coordsys=cs)
+
+            def stop():
+                _, g = eg(eng.x)
+                if np.max(np.abs(g)) < 1e-5:
+                    raise StopIteration
+            eng.run(eg, on_converged=stop)
+            _, g = eg(eng.x)
+            self.assertLess(np.max(np.abs(g)), 1e-5, f"coordsys={cs} failed")
 
 
 # --------------------------------------------------------------------------- #

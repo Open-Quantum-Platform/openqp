@@ -19,5 +19,5 @@ istate=0
 maxit=10
 
 [builtin]
-coordsys=auto
+coordsys=tric
 trust=0.2

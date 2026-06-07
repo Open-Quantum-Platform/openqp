@@ -202,7 +202,7 @@ OQP_CONFIG_SCHEMA = {
         'conmethod': {'type': int, 'default': '0'},
     },
     'builtin': {
-        'coordsys': {'type': str, 'default': 'auto'},
+        'coordsys': {'type': str, 'default': 'tric'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
         'follow': {'type': int, 'default': '0'},

@@ -57,10 +57,7 @@ class BuiltinEngine:
         self.follow_mode = int(follow_mode)
         self.logger = logger
 
-        if coordsys in ("cart", "cartesian"):
-            self.coords = CartesianCoordinates(len(self.atoms))
-        else:
-            self.coords = build_coordinates(self.atoms, self.x)
+        self.coords = build_coordinates(self.atoms, self.x, coordsys=coordsys)
         self.coordsys = type(self.coords).__name__
         self.H = self.coords.guess_hessian(self.x)
         self._prev = None
