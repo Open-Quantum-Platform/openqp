@@ -201,7 +201,7 @@ OQP_CONFIG_SCHEMA = {
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
     },
-    'native': {
+    'builtin': {
         'coordsys': {'type': str, 'default': 'auto'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
@@ -216,6 +216,7 @@ OQP_CONFIG_SCHEMA = {
         'end_fmax': {'type': float, 'default': '1e-3'},
         'irc_step': {'type': float, 'default': '0.1'},
         'irc_direction': {'type': str, 'default': 'forward'},
+        'mep_step': {'type': float, 'default': '0.1'},
     },
     'neb': {
         'product': {'type': str, 'default': ''},

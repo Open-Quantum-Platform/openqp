@@ -1,12 +1,12 @@
-"""Step-determination engine for the native OpenQP optimizer.
+"""Step-determination engine for the builtin OpenQP optimizer.
 
-Backend-agnostic (NumPy only).  The :class:`NativeEngine` owns the optimization
+Backend-agnostic (NumPy only).  The :class:`BuiltinEngine` owns the optimization
 loop and drives an energy/gradient callback supplied by the caller, so it can be
 exercised on analytic test potentials without the compiled OQP core.
 
 Algorithm (v1):
 
-* working coordinates from :mod:`oqp.library.native_coords` (redundant internals
+* working coordinates from :mod:`oqp.library.builtin_coords` (redundant internals
   with Cartesian fall-back);
 * restricted-step Rational Function Optimization (RFO) for minima and
   partitioned-RFO (P-RFO, eigenvector following) for transition states;
@@ -25,7 +25,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.linalg as sla
 
-from oqp.library.native_coords import build_coordinates, CartesianCoordinates
+from oqp.library.builtin_coords import build_coordinates, CartesianCoordinates
 
 # All dense linear algebra in this module is routed through LAPACK
 # (scipy.linalg / numpy.linalg) and BLAS-3 GEMM (the ``@`` operators on the
@@ -43,7 +43,7 @@ class ConvergenceSignal(Exception):
     """Raised by the convergence callback to stop the loop cleanly."""
 
 
-class NativeEngine:
+class BuiltinEngine:
     def __init__(self, atoms, x0, mode="min", trust=0.2, trust_min=5.0e-3,
                  trust_max=0.5, maxiter=100, follow_mode=0, coordsys="auto",
                  logger=None):

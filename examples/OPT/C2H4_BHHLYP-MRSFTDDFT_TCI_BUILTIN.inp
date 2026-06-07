@@ -23,7 +23,7 @@ nstate=5
 maxit=30
 
 [optimize]
-lib=native
+lib=builtin
 maxit=2
 istate=1
 jstate=2
@@ -36,6 +36,6 @@ max_grad=4e-3
 rmsd_step=4e-3
 max_step=8e-3
 
-[native]
+[builtin]
 coordsys=auto
 trust=0.15

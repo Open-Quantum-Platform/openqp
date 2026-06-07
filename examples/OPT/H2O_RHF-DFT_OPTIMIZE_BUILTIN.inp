@@ -14,10 +14,10 @@ type=rhf
 multiplicity=1
 
 [optimize]
-lib=native
+lib=builtin
 istate=0
 maxit=10
 
-[native]
+[builtin]
 coordsys=auto
 trust=0.2

@@ -23,7 +23,7 @@ GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
-OPT_LIBS = {"scipy", "geometric", "native"}
+OPT_LIBS = {"scipy", "geometric", "builtin"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken"}
@@ -38,7 +38,7 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
-    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep. native is the built-in NumPy/SciPy optimizer (redundant internals + restricted-step RFO) and supports optimize, ts, meci, mecp, and tci (three-state CI).",
+    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep. builtin is the built-in NumPy/SciPy optimizer (redundant internals + restricted-step RFO) and supports optimize, ts, meci, mecp, tci, neb, irc, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
 
@@ -871,14 +871,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [optimize] lib=geometric for runtype=ts/irc.",
         )
 
-    if runtype == "neb" and lib not in {"geometric", "native"}:
+    if runtype == "neb" and lib not in {"geometric", "builtin"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is wired through geomeTRIC and the native optimizer.",
+            "NEB is wired through geomeTRIC and the builtin optimizer.",
             value=lib,
-            expected="geometric or native",
-            action="Set [optimize] lib=geometric or lib=native for runtype=neb.",
+            expected="geometric or builtin",
+            action="Set [optimize] lib=geometric or lib=builtin for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -891,14 +891,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
-    if lib == "native" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb", "irc"}:
+    if lib == "builtin" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb", "irc", "mep"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "The native optimizer currently supports optimize, ts, meci, mecp, tci, neb, and irc.",
+            "The builtin optimizer currently supports optimize, ts, meci, mecp, tci, neb, irc, and mep.",
             value=f"{lib}/{runtype}",
-            expected="optimize, ts, meci, mecp, tci, neb, or irc",
-            action="Choose a supported native runtype.",
+            expected="optimize, ts, meci, mecp, tci, neb, irc, or mep",
+            action="Choose a supported builtin runtype.",
         )
 
     if runtype == "tci":
@@ -917,12 +917,12 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected="istate < jstate < kstate",
                 action="Set three increasing state indices (e.g. 1/2/3).",
             )
-        if lib != "native":
+        if lib != "builtin":
             report.add(
                 "ERROR", "optimize.lib",
-                "Three-state CI (tci) is currently wired only through the native optimizer.",
-                value=lib, expected="native",
-                action="Set [optimize] lib=native for runtype=tci.",
+                "Three-state CI (tci) is currently wired only through the builtin optimizer.",
+                value=lib, expected="builtin",
+                action="Set [optimize] lib=builtin for runtype=tci.",
             )
 
 
