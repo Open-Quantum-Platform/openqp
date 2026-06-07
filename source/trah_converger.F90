@@ -373,12 +373,13 @@ contains
     integer,              intent(in)    :: n, nmic
     real(dp),             intent(out)   :: p(:), pred
     integer,              intent(out)   :: used
-    real(dp), allocatable :: r(:), y(:), d(:), hd(:), hx(:)
+    real(dp), allocatable :: r(:), y(:), d(:), hd(:), hx(:), hp(:)
     real(dp) :: ry, ry_new, curv, alpha, beta, tau, pd, dd, pp, gp, php, rnorm0, rnorm
     integer  :: k
 
-    allocate(r(n), y(n), d(n), hd(n), hx(n))
+    allocate(r(n), y(n), d(n), hd(n), hx(n), hp(n))
     p = 0.0_dp
+    hp = 0.0_dp                    ! hp accumulates H.p alongside p (hd=2*calc_h_op is H.d),
     r = g                          ! residual of (H p + g); at p=0, r=g
     call precond(hdiag, r, y)      ! y = M^-1 r
     d = -y
@@ -394,6 +395,7 @@ contains
       if (curv <= 0.0_dp) then       ! negative curvature -> go to trust boundary
         call to_boundary(p, d, delta, tau)
         p = p + tau*d
+        hp = hp + tau*hd
         exit
       end if
       alpha = ry / curv
@@ -402,9 +404,11 @@ contains
       if (pp + 2.0_dp*alpha*pd + alpha*alpha*dd >= delta*delta) then
         call to_boundary(p, d, delta, tau)
         p = p + tau*d
+        hp = hp + tau*hd
         exit
       end if
       p = p + alpha*d
+      hp = hp + alpha*hd
       r = r + alpha*hd
       rnorm = sqrt(dot_product(r, r))
       if (rnorm <= min(0.1_dp, sqrt(rnorm0))*rnorm0 .or. rnorm < 1.0e-10_dp) exit
@@ -415,12 +419,12 @@ contains
       ry = ry_new
     end do
 
-    ! predicted reduction = -(g.p + 1/2 p.H p)
-    call conv%calc_h_op(infos, p, hx)
+    ! predicted reduction = -(g.p + 1/2 p.H p); hp already holds H.p, so the
+    ! curvature term p.H.p = p.hp -- no extra Hessian-vector (Fock) build needed.
     gp  = dot_product(g, p)
-    php = 2.0_dp * dot_product(p, hx)
+    php = dot_product(p, hp)
     pred = -(gp + 0.5_dp*php)
-    deallocate(r, y, d, hd, hx)
+    deallocate(r, y, d, hd, hx, hp)
   end subroutine steihaug_cg
 
   !> @brief y = M^-1 r with M = diag(hdiag), small/negative diagonal floored.
