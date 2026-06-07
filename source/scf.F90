@@ -1372,6 +1372,7 @@ contains
         type is (soscf_converger)
           sc%level_shift = infos%control%soscf_lvl_shift
           sc%variant = SOSCF_VARIANT_ORIGINAL
+          sc%soscf_reset_mod = 0   ! no orbital-Hessian reset (preserved default)
 
       class default
       ! not an SOSCF converger; nothing to do
