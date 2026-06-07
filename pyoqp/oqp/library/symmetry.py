@@ -202,19 +202,28 @@ def _component_signs(l: int, signs: tuple[int, int, int]) -> list[int]:
     return [(sx ** a) * (sy ** b) * (sz ** c) for a, b, c in _CART_MONOMIALS[l]]
 
 
-def _normalize_shells(shells: Iterable[Any]) -> list[tuple[int, int]]:
-    """Normalize shell specs to (atom_index, l) tuples."""
+def _normalize_shells(shells: Iterable[Any]) -> list[tuple[int, int, bool]]:
+    """Normalize shell specs to (atom_index, l, pure) triples.
 
-    normalized: list[tuple[int, int]] = []
+    Accepts (atom, l) / (atom, l, pure) sequences or mappings with an
+    optional 'pure' key (spherical-harmonic shell, CCA order m=-l..+l).
+    """
+
+    normalized: list[tuple[int, int, bool]] = []
     for shell in shells:
+        pure = False
         if isinstance(shell, Mapping):
             atom = int(shell["atom"])
             l = int(shell["l"])
+            pure = bool(shell.get("pure", False))
+        elif len(tuple(shell)) == 3:
+            atom, l, pure_raw = tuple(shell)
+            atom, l, pure = int(atom), int(l), bool(pure_raw)
         else:
             atom, l = (int(x) for x in shell)
         if atom < 0:
             raise ValueError("shell atom index must be non-negative")
-        normalized.append((atom, l))
+        normalized.append((atom, l, pure))
     return normalized
 
 
@@ -233,13 +242,13 @@ def _ao_operator_maps(
     offsets: list[int] = []
     n_ao = 0
     atom_shells: dict[int, list[int]] = {}
-    for idx, (atom, l) in enumerate(shells):
+    for idx, (atom, l, pure) in enumerate(shells):
         offsets.append(n_ao)
-        n_ao += _cartesian_shell_size(l)
+        n_ao += _shell_size(l, pure)
         atom_shells.setdefault(atom, []).append(idx)
 
     signatures = {
-        atom: tuple(shells[idx][1] for idx in idx_list)
+        atom: tuple(shells[idx][1:] for idx in idx_list)
         for atom, idx_list in atom_shells.items()
     }
 
@@ -254,13 +263,13 @@ def _ao_operator_maps(
         permutation = [int(a) for a in op["permutation"]]
         target = np.zeros(n_ao, dtype=int)
         sign = np.zeros(n_ao, dtype=float)
-        for idx, (atom, l) in enumerate(shells):
+        for idx, (atom, l, pure) in enumerate(shells):
             mapped_atom = permutation[atom]
             if signatures[atom] != signatures.get(mapped_atom):
                 raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
             shell_rank = atom_shells[atom].index(idx)
             mapped_shell = atom_shells[mapped_atom][shell_rank]
-            comp_signs = _component_signs(l, signs)
+            comp_signs = _component_signs_any(l, pure, signs)
             for comp, comp_sign in enumerate(comp_signs):
                 target[offsets[idx] + comp] = offsets[mapped_shell] + comp
                 sign[offsets[idx] + comp] = float(comp_sign)
@@ -348,6 +357,128 @@ def _monomial_norms(l: int) -> np.ndarray:
     ])
 
 
+def _binom(n: int, k: int) -> int:
+    if k < 0 or k > n:
+        return 0
+    result = 1
+    for i in range(k):
+        result = result * (n - i) // (i + 1)
+    return result
+
+
+def _solid_harmonic_coefficients(l: int) -> np.ndarray:
+    """Real solid harmonics in the normalized-Cartesian monomial basis.
+
+    Returns B with shape (2l+1, ncart(l)), rows ordered m = -l..+l (the
+    CCA/libint convention), orthonormal against the intra-shell overlap
+    metric of normalized Cartesian components: B S B^T = 1.
+
+    Built from the closed-form monomial expansion of the real solid
+    harmonics (Helgaker et al., eq. 6.4.47); each row is normalized
+    against the Gaussian metric, which fixes the radial normalization
+    without touching the angular convention.
+    """
+
+    if l not in _CART_MONOMIALS:
+        raise ValueError("only s/p/d/f/g shells are supported in this metadata-only scaffold")
+
+    monomials = _CART_MONOMIALS[l]
+    index = {mono: i for i, mono in enumerate(monomials)}
+    norms = _monomial_norms(l)
+
+    # Intra-shell metric of the normalized Cartesian components.
+    size = len(monomials)
+    metric = np.zeros((size, size))
+    for i, (a, b, c) in enumerate(monomials):
+        for j, (d, e, f) in enumerate(monomials):
+            if (a + d) % 2 or (b + e) % 2 or (c + f) % 2:
+                continue
+            metric[i, j] = (
+                _double_factorial(a + d - 1)
+                * _double_factorial(b + e - 1)
+                * _double_factorial(c + f - 1)
+            ) * norms[i] * norms[j]
+
+    rows = []
+    for m in range(-l, l + 1):
+        am = abs(m)
+        coeff_mono = np.zeros(size)
+        for t in range((l - am) // 2 + 1):
+            for u in range(t + 1):
+                # k = 2v: even for m >= 0 (cosine series), odd for m < 0 (sine).
+                k_start = 0 if m >= 0 else 1
+                for k in range(k_start, am + 1, 2):
+                    sign_pow = t + (k - k_start) // 2
+                    coeff = ((-1) ** sign_pow) * (0.25 ** t)                         * _binom(l, t) * _binom(l - t, am + t)                         * _binom(t, u) * _binom(am, k)
+                    if coeff == 0:
+                        continue
+                    ax = 2 * t + am - 2 * u - k
+                    ay = 2 * u + k
+                    az = l - 2 * t - am
+                    if ax < 0 or ay < 0 or az < 0:
+                        continue
+                    coeff_mono[index[(ax, ay, az)]] += coeff
+        # Convert from monomial coefficients to normalized-component
+        # coefficients: f = sum c_i m_i = sum (c_i / n_i) g_i.
+        row = coeff_mono / norms
+        norm2 = float(row @ metric @ row)
+        if norm2 <= 0.0:
+            raise ValueError(f"degenerate solid harmonic l={l} m={m}")
+        rows.append(row / np.sqrt(norm2))
+
+    return np.array(rows)
+
+
+_SPHERICAL_B_CACHE: dict[int, np.ndarray] = {}
+_SPHERICAL_METRIC_CACHE: dict[int, np.ndarray] = {}
+
+
+def _spherical_basis(l: int) -> tuple[np.ndarray, np.ndarray]:
+    if l not in _SPHERICAL_B_CACHE:
+        monomials = _CART_MONOMIALS[l]
+        norms = _monomial_norms(l)
+        size = len(monomials)
+        metric = np.zeros((size, size))
+        for i, (a, b, c) in enumerate(monomials):
+            for j, (d, e, f) in enumerate(monomials):
+                if (a + d) % 2 or (b + e) % 2 or (c + f) % 2:
+                    continue
+                metric[i, j] = (
+                    _double_factorial(a + d - 1)
+                    * _double_factorial(b + e - 1)
+                    * _double_factorial(c + f - 1)
+                ) * norms[i] * norms[j]
+        _SPHERICAL_METRIC_CACHE[l] = metric
+        _SPHERICAL_B_CACHE[l] = _solid_harmonic_coefficients(l)
+    return _SPHERICAL_B_CACHE[l], _SPHERICAL_METRIC_CACHE[l]
+
+
+def _spherical_shell_size(l: int) -> int:
+    if l < 0 or l not in _CART_MONOMIALS:
+        raise ValueError("only s/p/d/f/g shells are supported in this metadata-only scaffold")
+    return 2 * l + 1
+
+
+def _shell_block_spherical(l: int, op_matrix: np.ndarray) -> np.ndarray:
+    """Operation block on a pure spherical shell (CCA order m=-l..+l).
+
+    T_sph = B S T_cart B^T with B the metric-orthonormal solid-harmonic
+    coefficients; orthogonal for any orthogonal operation.
+    """
+
+    if l <= 1:
+        # s is trivial; spherical p == Cartesian p up to ordering (y,z,x).
+        if l == 0:
+            return np.ones((1, 1))
+        cart = _shell_block(1, op_matrix)
+        # CCA spherical p order: m=-1,0,1 -> (y, z, x)
+        perm = [1, 2, 0]
+        return cart[np.ix_(perm, perm)]
+    b, metric = _spherical_basis(l)
+    t_cart = _shell_block(l, op_matrix)
+    return b @ metric @ t_cart @ b.T
+
+
 def _shell_block(l: int, op_matrix: np.ndarray) -> np.ndarray:
     """Representation of an orthogonal 3x3 operation on one Cartesian shell.
 
@@ -393,6 +524,30 @@ def _shell_block(l: int, op_matrix: np.ndarray) -> np.ndarray:
     return mono_rep * (norms[None, :] / norms[:, None])
 
 
+def _shell_size(l: int, pure: bool) -> int:
+    return _spherical_shell_size(l) if pure else _cartesian_shell_size(l)
+
+
+def _shell_block_any(l: int, pure: bool, op_matrix: np.ndarray) -> np.ndarray:
+    return _shell_block_spherical(l, op_matrix) if pure else _shell_block(l, op_matrix)
+
+
+def _component_signs_any(l: int, pure: bool, signs: tuple[int, int, int]) -> list[int]:
+    """Per-component characters under diag(sx, sy, sz) for either shell type.
+
+    Real solid harmonics are diagonal under all sign operations, so pure
+    shells have well-defined component characters too.
+    """
+
+    if not pure:
+        return _component_signs(l, signs)
+    block = _shell_block_spherical(l, np.diag(signs).astype(float))
+    diagonal = np.diagonal(block)
+    if not np.allclose(np.abs(diagonal), 1.0, atol=1.0e-10):
+        raise ValueError("spherical component signs are not +-1; non-sign operation?")
+    return [int(round(d)) for d in diagonal]
+
+
 def _ao_operator_matrix(
     shells: list[tuple[int, int]],
     op: Mapping[str, Any],
@@ -407,26 +562,26 @@ def _ao_operator_matrix(
     offsets: list[int] = []
     n_ao = 0
     atom_shells: dict[int, list[int]] = {}
-    for idx, (atom, l) in enumerate(shells):
+    for idx, (atom, l, pure) in enumerate(shells):
         offsets.append(n_ao)
-        n_ao += _cartesian_shell_size(l)
+        n_ao += _shell_size(l, pure)
         atom_shells.setdefault(atom, []).append(idx)
 
     signatures = {
-        atom: tuple(shells[idx][1] for idx in idx_list)
+        atom: tuple(shells[idx][1:] for idx in idx_list)
         for atom, idx_list in atom_shells.items()
     }
 
     permutation = [int(a) for a in op["permutation"]]
     t = np.zeros((n_ao, n_ao))
-    for idx, (atom, l) in enumerate(shells):
+    for idx, (atom, l, pure) in enumerate(shells):
         mapped_atom = permutation[atom]
         if signatures[atom] != signatures.get(mapped_atom):
             raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
         shell_rank = atom_shells[atom].index(idx)
         mapped_shell = atom_shells[mapped_atom][shell_rank]
-        block = _shell_block(l, matrix)
-        size = _cartesian_shell_size(l)
+        block = _shell_block_any(l, pure, matrix)
+        size = _shell_size(l, pure)
         t[offsets[mapped_shell]:offsets[mapped_shell] + size,
           offsets[idx]:offsets[idx] + size] = block
     return t
@@ -464,7 +619,7 @@ def assign_mo_irreps(
 
     shell_list = _normalize_shells(shells)
     op_list = list(operations)
-    n_ao = sum(_cartesian_shell_size(l) for _, l in shell_list)
+    n_ao = sum(_shell_size(l, pure) for _, l, pure in shell_list)
     if n_ao != c.shape[0]:
         raise ValueError("shells do not match the AO dimension of mo_coefficients")
 
@@ -520,13 +675,13 @@ def build_reduction_maps(
     offsets: list[int] = []
     n_ao = 0
     atom_shells: dict[int, list[int]] = {}
-    for idx, (atom, l) in enumerate(shell_list):
+    for idx, (atom, l, pure) in enumerate(shell_list):
         offsets.append(n_ao)
-        n_ao += _cartesian_shell_size(l)
+        n_ao += _shell_size(l, pure)
         atom_shells.setdefault(atom, []).append(idx)
 
     signatures = {
-        atom: tuple(shell_list[idx][1] for idx in idx_list)
+        atom: tuple(shell_list[idx][1:] for idx in idx_list)
         for atom, idx_list in atom_shells.items()
     }
 
@@ -543,14 +698,14 @@ def build_reduction_maps(
             )
         signs = tuple(int(round(s)) for s in diag)
         permutation = [int(a) for a in op['permutation']]
-        for idx, (atom, l) in enumerate(shell_list):
+        for idx, (atom, l, pure) in enumerate(shell_list):
             mapped_atom = permutation[atom]
             if signatures[atom] != signatures.get(mapped_atom):
                 raise ValueError("symmetry-equivalent atoms must carry identical shell lists")
             shell_rank = atom_shells[atom].index(idx)
             mapped_shell = atom_shells[mapped_atom][shell_rank]
             shell_perm[iop, idx] = mapped_shell
-            comp_signs = _component_signs(l, signs)
+            comp_signs = _component_signs_any(l, pure, signs)
             for comp, comp_sign in enumerate(comp_signs):
                 # AO components keep their in-shell position under sign ops.
                 ao_sign[iop, offsets[idx] + comp] = comp_sign
@@ -572,8 +727,8 @@ def build_reduction_maps(
         'ao_sign': ao_sign.tolist(),
         'ao_target': [
             [int(offsets[shell_perm[iop, idx]] + comp)
-             for idx, (_, l) in enumerate(shell_list)
-             for comp in range(_cartesian_shell_size(l))]
+             for idx, (_, l, pure) in enumerate(shell_list)
+             for comp in range(_shell_size(l, pure))]
             for iop in range(len(op_list))
         ],
         'shell_orbit_representative': representative.tolist(),

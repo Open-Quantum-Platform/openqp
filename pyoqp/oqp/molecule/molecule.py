@@ -216,17 +216,26 @@ class Molecule:
         Returns (shells, smat, nbf, None) on success or
         (None, None, 0, reason) when labeling must be skipped.
         """
-        from oqp.library.symmetry import _cartesian_shell_size
+        from oqp.library.symmetry import _cartesian_shell_size, _spherical_shell_size
 
         basis = self.data.get_basis()
         if not basis:
             return None, None, 0, 'skipped_no_basis'
         nbf = int(basis['nbf'])
-        shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
-        if any(l > 4 for _, l in shells):
+        pairs = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+        if any(l > 4 for _, l in pairs):
             return None, None, 0, 'skipped_unsupported_shells_beyond_g'
-        if sum(_cartesian_shell_size(l) for _, l in shells) != nbf:
-            return None, None, 0, 'skipped_non_cartesian_basis'
+        if sum(_cartesian_shell_size(l) for _, l in pairs) == nbf:
+            shells = [(at, l, False) for at, l in pairs]
+        elif sum(_spherical_shell_size(l) for _, l in pairs) == nbf:
+            # Pure spherical-harmonic basis (ISPHER=1). The component order
+            # is assumed to be CCA/libint (m = -l..+l); record the
+            # assumption so runs are auditable until the runtime spherical
+            # path is validated end-to-end.
+            shells = [(at, l, True) for at, l in pairs]
+            self.symmetry_metadata['spherical_order_assumed'] = 'cca_m_ascending'
+        else:
+            return None, None, 0, 'skipped_unrecognized_basis_dimension'
 
         # Unpack triangular overlap to a square symmetric matrix.
         packed = np.asarray(self.data['OQP::SM'], dtype=float).ravel()
