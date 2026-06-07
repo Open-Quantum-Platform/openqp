@@ -19,7 +19,11 @@ requires-python = ">=3.9"
 license = { text = "GPLv3" }
 
 dependencies = [
-  "numpy>=1.20.0",
+  # Upper bound: numpy>=2.2 collects ffi.from_buffer temporaries more
+  # aggressively, exposing a dangling-pointer bug (zeroed nuclear repulsion on
+  # SCF reload / test_mod second pass). Cap until the from_buffer lifetimes are
+  # fixed. See memory openqp-1bna-ecp-dangling-buffer.
+  "numpy>=1.20.0,<2.2",
   "scipy>=1.10.0",
   "geometric>=1.0",
   "cffi>=1.16.0",

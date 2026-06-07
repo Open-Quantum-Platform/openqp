@@ -406,8 +406,13 @@ contains
     ! Prepare orthogonalization matrix (S^-1/2)
     call matrix_invsqrt(smat, qmat, nbf)
 
-    ! Compute Nuclear-Nuclear energy
-!    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
+    ! Compute Nuclear-Nuclear repulsion energy on EVERY SCF entry, directly from
+    ! the (Fortran-owned) atom data. Do not rely on it being set by a later
+    ! energy-components pass: the robust-driver escalation / stability-following
+    ! TRAH pass re-enters SCF with a fresh energy object and would otherwise read
+    ! an uninitialised nenergy (garbage ~0) -> total = electronic only, which then
+    ! overwrites the correct mol_energy. (ecp_zn_num is 0 for non-ECP atoms.)
+    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     ! During guess, the Hcore, Q nd Overlap matrices were formed.
     ! Using these, the initial orbitals (VEC) and density (Dmat) were subsequently computed.
