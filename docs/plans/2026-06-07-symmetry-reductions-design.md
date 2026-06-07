@@ -28,9 +28,14 @@ exact); in a general frame p/d/f/g blocks are dense.
 
 DECIDED (2026-06-07, CHC): when `use_integral_symmetry=on`, reorient the
 input geometry to the detection's standard orientation at load time
-(GAMESS-style). Gradients/modes are rotated back on output. When the
-flag is off (default), geometry is never touched — labeling continues to
-use the input-frame machinery. This keeps "off == today" exactly.
+(GAMESS-style). All outputs -- geometry, gradients, and MO coefficients
+-- are then consistently in the standard orientation (also GAMESS-style;
+rotating only some quantities back would desynchronize them). The total
+input->standard transform (rotation + origin) is recorded under
+symmetry_metadata['integral_symmetry']['input_to_standard'] so users can
+map results to the input axes: v_input = v_std @ rotation. When the flag
+is off (default), geometry is never touched -- labeling continues to use
+the input-frame machinery. This keeps "off == today" exactly.
 
 ## 2. Prerequisite metadata (Gate A — Python side, small) [DONE: build_reduction_maps + tests, stored under symmetry_metadata['reduction_maps']]
 

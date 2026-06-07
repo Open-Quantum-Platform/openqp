@@ -399,6 +399,9 @@ class Molecule:
             # frame -- only then are the stored operations valid as-is.
             atoms = np.asarray(self.get_atoms(), dtype=float).ravel()
             coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+            input_coords = coords.copy()
+            total_rotation = np.eye(3)
+            total_origin = np.zeros(3)
             converged = False
             for _ in range(4):
                 attach_detection_metadata(meta, atoms, coords)
@@ -409,13 +412,26 @@ class Molecule:
                         and np.max(np.abs(origin)) < 1.0e-10):
                     converged = True
                     break
+                total_origin = total_origin + total_rotation.T @ origin
+                total_rotation = rotation @ total_rotation
                 coords = (coords - origin) @ rotation.T
                 self.update_system(coords.ravel())
             if not converged:
                 meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
                 return False
 
-            meta['integral_symmetry'] = {'status': 'reoriented'}
+            # GAMESS-style contract: ALL outputs (geometry, gradients, MOs)
+            # are consistently in the standard orientation. The transform
+            # below maps user input axes to it:
+            #   r_std = (r_input - origin) @ rotation^T
+            # so input-frame vectors are recovered via v_input = v_std @ R.
+            meta['integral_symmetry'] = {
+                'status': 'reoriented',
+                'input_to_standard': {
+                    'rotation': total_rotation.tolist(),
+                    'origin': total_origin.tolist(),
+                },
+            }
             return True
         except Exception as exc:
             meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
@@ -563,6 +579,7 @@ class Molecule:
             self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
 
             meta['reduction_maps'] = maps
+            input_to_standard = meta.get('integral_symmetry', {}).get('input_to_standard')
             meta['integral_symmetry'] = {
                 'status': 'active',
                 'group': meta.get('subgroup'),
@@ -570,6 +587,7 @@ class Molecule:
                                  if full_group else maps['n_operations']),
                 'full_group': full_group,
                 'reoriented': True,
+                'input_to_standard': input_to_standard,
             }
             try:
                 self._dump_symmetry_log()
