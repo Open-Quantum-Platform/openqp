@@ -56,6 +56,7 @@ contains
     allocate(eri0(maxcart**4), erir(maxcart**4), source=0.0_dp)
 
     call int2_driver%init(basis, infos)
+    int2_driver%rys_only = .true.   ! NMR is Rys-only by construction
     ! The magnetic derivative is ordered/antisymmetric in the bra pair.  Rebuild
     ! pair data without angular-momentum reordering so the Rys recurrence sees
     ! PA/PB vectors in the same shell order as the explicit ids below.

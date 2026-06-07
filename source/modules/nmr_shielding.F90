@@ -443,6 +443,8 @@ contains
     end do
 
     call int2_driver%init(basis, infos)
+    ! NMR uses the native Rys ERI path only; never route through libint.
+    int2_driver%rys_only = .true.
     call int2_driver%set_screening()
 
     ! Coupled iteration (skipped for pure functionals, c_x = 0)

@@ -519,6 +519,9 @@ contains
              prev(nmo,nocc), gao(nbf,nbf), source=0.0d0)
 
     call int2_driver%init(basis, infos)
+    ! NMR uses the native Rys ERI path only (the GIAO two-electron derivative
+    ! and the reference data are Rys-based); never route through libint.
+    int2_driver%rys_only = .true.
     call int2_driver%set_screening()
     kdat = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
                           tamm_dancoff=.false., scale_exchange=scale_exch)
