@@ -64,7 +64,15 @@ OQP_CONFIG_SCHEMA = {
         'continue_geom': {'type': bool, 'default': 'False'},
         'swapmo': {'type': string, 'default': ''},
     },
-    # "symmetry": {
+    'pcm': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'backend': {'type': string, 'default': 'ddx'},
+        'mode': {'type': string, 'default': 'reference_scf'},
+        'model': {'type': string, 'default': 'ddpcm'},
+        'solvent': {'type': string, 'default': 'water'},
+        'epsilon': {'type': float, 'default': '78.3553'},
+        'radii': {'type': string, 'default': 'uff'},
+    },
     'symmetry': {
         'enabled': {'type': string, 'default': 'false'},
         'point_group': {'type': string, 'default': 'auto'},
@@ -292,6 +300,10 @@ class OQPData:
             "system2": "set_system2",
         },
         "guess": {
+        },
+        "pcm": {
+            "enabled": "set_pcm_enabled",
+            "epsilon": "set_pcm_epsilon",
         },
         "scf": {
             "type": "set_scf_type",
@@ -697,10 +709,19 @@ class OQPData:
         """prevent running the first SD-SCF calculation"""
         self._data.control.sd_scf = sd_scf
 
+    def set_pcm_enabled(self, enabled):
+        """Enable the PCM reaction-field contribution to the SCF (ddX backend)"""
+        self._data.control.pcm_enabled = enabled
+
+    def set_pcm_epsilon(self, epsilon):
+        """Set the PCM solvent dielectric constant"""
+        self._data.control.pcm_epsilon = epsilon
+
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
-        if td_type.lower() == 'tda':
-            self._data.tddft.tda = True
+        td_type = td_type.lower()
+        self._data.tddft.tda = td_type == 'tda'
+        self._data.tddft.umrsf = td_type == 'umrsf'
 
     def set_tdhf_nstate(self, nstate):
         """Set number of states in tdhf calculation"""

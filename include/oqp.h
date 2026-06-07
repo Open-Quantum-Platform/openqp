@@ -148,6 +148,8 @@ struct control_parameters {
     double    trh_lred;
     int64_t   trh_impl;
     bool      sd_scf;
+    bool      pcm_enabled;
+    double    pcm_epsilon;
 };
 
 struct mpi_communicator {

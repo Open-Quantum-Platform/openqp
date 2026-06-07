@@ -59,6 +59,8 @@ module int1
     public giao_a01gp_contract
     public pso_integrals
     public electrostatic_potential
+    public electrostatic_potential_unweighted
+    public external_charge_potential
     public basis_overlap
     public overlap
 
@@ -767,6 +769,92 @@ contains
 
  end subroutine
 
+!-------------------------------------------------------------------------------
+
+!> @brief Compute unweighted electronic electrostatic potential on arbitrary points.
+!
+!> @details This is the safe public wrapper around the internal `int1_el_pot`
+!> kernel. Unlike `electrostatic_potential`, this routine does not multiply by
+!> quadrature weights. ddX expects `phi_cav` to be the unweighted electric
+!> potential at cavity points, so this is the intended OpenQP entry point for
+!> building ddX primal RHS data from an AO density.
+!>
+!> @param[inout] basis basis with SP-shells separated
+!> @param[in]    x     x coordinates of evaluation points, in Bohr
+!> @param[in]    y     y coordinates of evaluation points, in Bohr
+!> @param[in]    z     z coordinates of evaluation points, in Bohr
+!> @param[inout] d     packed AO density matrix; restored to input normalization
+!> @param[out]   pot   unweighted electronic potential on points
+!> @param[in]    logtol optional 1-e exponential prefactor tolerance
+!>
+ subroutine electrostatic_potential_unweighted(basis, x, y, z, d, pot, logtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(in)             :: basis
+    real(real64), contiguous, intent(in)    :: x(:), y(:), z(:)
+    real(real64), contiguous, intent(inout) :: d(:)
+    real(real64), contiguous, intent(out)   :: pot(:)
+    real(real64), optional, intent(in)      :: logtol
+    real(real64) :: tol
+    real(real64), allocatable :: invnrm(:)
+
+    call bas_norm_matrix(d, basis%bfnrm, basis%nbf)
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    pot = 0.0_real64
+    call int1_el_pot(basis, x, y, z, d, pot, tol)
+
+    ! Restore the input normalization of d. Use a local inverse of the basis
+    ! norms rather than bas_denorm_matrix, which would transiently mutate
+    ! basis%bfnrm and so force an intent(inout) basis on this otherwise
+    ! read-only routine (it is called from the intent(in) SCF Fock build).
+    invnrm = 1.0_real64 / basis%bfnrm
+    call bas_norm_matrix(d, invnrm, basis%nbf)
+
+ end subroutine electrostatic_potential_unweighted
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute packed one-electron Coulomb potential from external point charges.
+!
+!> @details This is the normalized public wrapper around the internal
+!> `int1_coul_ext_chg` kernel. It is intended for environment/solvent reaction
+!> fields such as ddX apparent charges: given point charges q_k at coordinates
+!> r_k, return the packed AO matrix sum_k q_k <mu|1/|r-r_k||nu>.
+!>
+!> @param[in]     basis  basis with SP-shells separated
+!> @param[out]    v      packed normalized AO potential matrix
+!> @param[in]     x      x coordinates of point charges, in Bohr
+!> @param[in]     y      y coordinates of point charges, in Bohr
+!> @param[in]     z      z coordinates of point charges, in Bohr
+!> @param[in]     chg    point charges
+!> @param[in]     logtol optional 1-e exponential prefactor tolerance
+!> @param[in]     chgtol optional charge screening threshold
+!>
+ subroutine external_charge_potential(basis, v, x, y, z, chg, logtol, chgtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(in)              :: basis
+    real(real64), contiguous, intent(out)    :: v(:)
+    real(real64), contiguous, intent(in)     :: x(:), y(:), z(:), chg(:)
+    real(real64), optional, intent(in)       :: logtol, chgtol
+    real(real64) :: tol, qtol
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    qtol = 1.0d-12
+    if (present(chgtol)) qtol = chgtol
+
+    v = 0.0_real64
+    call int1_coul_ext_chg(v, basis, size(chg), x, y, z, chg, tol, qtol)
+    call bas_norm_matrix(v, basis%bfnrm, basis%nbf)
+
+ end subroutine external_charge_potential
 
 !-------------------------------------------------------------------------------
 
