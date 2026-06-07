@@ -54,6 +54,13 @@ OQP_CONFIG_SCHEMA = {
         'nsteps': {'type': int, 'default': '1'},
         'timestep': {'type': int, 'default': '1'},
         'istate': {'type': int, 'default': '0'},
+        # NAMD-QMMM (Runner runtype=namd) keys
+        'pdb_file': {'type': str, 'default': ''},
+        'forcefield_files': {'type': str, 'default': ''},
+        'qm_atoms': {'type': str, 'default': ''},
+        'cutoff': {'type': str, 'default': 'NoCutoff'},
+        'embedding': {'type': str, 'default': 'electrostatic'},
+        'temperature': {'type': float, 'default': '300.0'},
     },
     'input': {
         'charge': {'type': int, 'default': '0'},

@@ -42,6 +42,12 @@ FS_TO_AU = 41.341374575751
 KB_HARTREE = 3.166811563e-6
 # 1 atomic mass unit (Dalton) in electron masses
 AMU_TO_AU = 1822.888486209
+# unit conversions for the QM/MM (OpenMM <-> atomic units) coupling
+BOHR_TO_NM = 0.052917721090
+NM_TO_BOHR = 1.0 / BOHR_TO_NM
+# 1 Hartree/bohr in kJ/mol/nm  (2625.499639 kJ/mol per Ha / 0.0529177 nm per bohr)
+HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
+KJMOL_TO_HARTREE = 1.0 / 2625.499639
 
 # OQP::namd_params packed-scalar indices (0-based here; 1-based in the contract)
 _P_DT_FS = 0
@@ -252,6 +258,215 @@ class NAMD:
         dump_log(
             mol,
             title=(f'NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+                   f'active={self.active}  E_tot={ekin+epot:.8f}  '
+                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'hop={hopped}  pop={np.array2string(pops, precision=4)}'),
+        )
+
+
+def _parse_int_list(spec):
+    """Parse '0-2,5,7-8' into [0,1,2,5,7,8]."""
+    out = []
+    for tok in str(spec).replace(',', ' ').split():
+        if '-' in tok:
+            a, b = tok.split('-')
+            out.extend(range(int(a), int(b) + 1))
+        else:
+            out.append(int(tok))
+    return out
+
+
+class NAMD_QMMM(NAMD):
+    """FSSH NAMD with electrostatic ESPF QM/MM embedding (non-periodic).
+
+    The QM region is the OpenQP Molecule; the MM region + QM/MM coupling are
+    handled by OpenMM via the OpenQpQMMM driver.  Per step:
+      * sync positions (QM Molecule + OpenMM context),
+      * MM electrostatic potential at QM atoms (POTMM),
+      * embedded SCF + MRSF excitation (all states),
+      * active-state embedded gradient = Gradient + grad_esp_qmmm_excited,
+      * ESPF QM charges -> MM forces (forces_mm),
+      * full-system velocity Verlet (QM+MM, atomic units),
+      * QM-only FSSH hop (rescale only QM velocities, as in GAMESS RESCALV).
+    """
+
+    def __init__(self, mol):
+        super().__init__(mol)
+        import openmm.app as app
+        import openmm.unit as u
+        from oqp.library.qmmm_driver import OpenQpQMMM
+        self._app = app
+        self._u = u
+
+        q = mol.config['qmmm']
+        pdb_file = q['pdb_file']
+        ff_files = [s for s in str(q['forcefield_files']).replace(',', ' ').split() if s]
+        self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
+        cutoff = str(q['cutoff']).strip()
+        if cutoff not in ('NoCutoff', 'nocutoff', 'none', ''):
+            raise NotImplementedError(
+                f"NAMD-QMMM currently supports cutoff=NoCutoff only (got '{cutoff}'); "
+                "periodic embedding is Phase 3.")
+        embedding = str(q['embedding']).strip()
+
+        self.pdb = app.PDBFile(pdb_file)
+        self.forcefield = app.ForceField(*ff_files)
+        self.driver = OpenQpQMMM(
+            positions=self.pdb.positions,
+            topology=self.pdb.topology,
+            forcefield=self.forcefield,
+            qm_atoms=self.qm_atoms,
+            mol=mol,
+            Cutoff=app.NoCutoff,
+            Embedding=embedding,
+        )
+        self.mm = self.driver.mm_systems
+
+        # full-system state (atomic units)
+        self.natom_all = self.pdb.topology.getNumAtoms()
+        pos_nm = np.array(self.pdb.positions.value_in_unit(u.nanometer))
+        self.r_all = pos_nm * NM_TO_BOHR                       # (natom_all, 3) bohr
+        sys0 = self.mm["sys0"]
+        self.m_all = np.array([
+            sys0.getParticleMass(i).value_in_unit(u.dalton) for i in range(self.natom_all)
+        ]) * AMU_TO_AU                                          # electron masses
+
+        # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
+        sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
+        self.v_all = self.rng.normal(0.0, 1.0, size=(self.natom_all, 3)) * sig[:, None]
+        p = (self.m_all[:, None] * self.v_all).sum(axis=0)
+        self.v_all -= p / self.m_all.sum()
+
+        # sync the QM Molecule geometry from the pdb QM atoms
+        self._sync_positions()
+        # QM-region masses for the hop (already set by super from mol.get_mass())
+        self.qm_mass = self.mass.copy()
+
+    # ------------------------------------------------------------------ #
+    def _sync_positions(self):
+        """Push the current full-system positions into OpenMM + the QM Molecule."""
+        u = self._u
+        pos_q = (self.r_all * BOHR_TO_NM) * u.nanometer
+        self.driver.positions = pos_q
+        self.mm["sim0"].context.setPositions(pos_q)
+        # QM Molecule coords (bohr) from the pdb-indexed positions
+        self.mol.update_system(self.r_all[self.qm_atoms].reshape(-1))
+
+    def _electronic_qmmm(self, with_overlap):
+        """Embedded SCF + MRSF excitation; returns (potmm, potqm)."""
+        from oqp.library.qmmm_driver import (
+            unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
+        mol = self.mol
+        potmm, potqm = self.driver.electrostatic_potential()
+
+        sp = SinglePoint(mol)
+        sp._prep_guess()
+        nat = mol.data["natom"]
+        nbf = mol.data.get_basis()["nbf"]
+        mol.data["OQP::POTMM"] = potmm
+        mol.data["OQP::POTQM"] = potqm if potqm is not None else np.zeros((nat, nat))
+        oqp.espf_op_corr(mol)
+        espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+        hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+        hcore += np.einsum("ijk,i->jk", espf, potmm)
+        mol.set_hcore(pack_lower_tri_single(hcore))
+        sp.scf()
+        ref = [mol.get_scf_energy()]
+        if with_overlap:
+            mol.back_door = (self.prev_xyz, self.prev_data)
+            BasisOverlap(mol).overlap()
+        sp.excitation(ref)
+        LastStep(mol).compute(mol)
+        return potmm, potqm
+
+    def _qm_gradient(self):
+        """Embedded active-state gradient (Hartree/bohr) incl. ESPF force."""
+        mol = self.mol
+        mol.config['properties']['grad'] = [self.active]
+        Gradient(mol).gradient()
+        g = np.array(mol.grads[self.active]).reshape(-1, 3)
+        oqp.grad_esp_qmmm_excited(mol)
+        g = g + np.array(mol.data["OQP::ESPF_GRAD"]).reshape(-1, 3)
+        return g
+
+    def _total_force(self, potmm):
+        """Assemble full-system force (a.u.) and total potential energy (Ha)."""
+        mol = self.mol
+        u = self._u
+        # active-state embedded QM gradient (Ha/bohr). The z-vector step inside
+        # the gradient already forms the excited-state ESPF charges, so
+        # OQP::partial_charges holds the active state's QM charges afterwards.
+        gqm = self._qm_gradient()
+        pchg = np.array(mol.data["OQP::partial_charges"])
+        # MM forces with embedded QM charges (OpenMM units)
+        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
+        emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
+
+        # total force = MM forces; on QM atoms subtract the QM gradient
+        f_all = gmm.copy()
+        for k, i in enumerate(self.qm_atoms):
+            f_all[i] = f_all[i] - gqm[k]
+        # remove net (COM) force
+        f_all -= f_all.mean(axis=0)
+
+        # total potential energy (matches compute_force bookkeeping)
+        eqm = float(mol.energies[self.active])
+        znuc = np.array(mol.get_atoms2("charge"))
+        eqm -= np.dot(pchg - znuc, potmm)
+        epot = eqm + emm
+        return f_all, epot
+
+    # ------------------------------------------------------------------ #
+    def run(self):
+        mol = self.mol
+        dump_log(mol, title='PyOQP: QM/MM Tully FSSH Nonadiabatic Molecular Dynamics')
+
+        # initial electronic structure + force
+        self._sync_positions()
+        potmm0, _ = self._electronic_qmmm(with_overlap=False)
+        f_all, epot = self._total_force(potmm0)
+        accel = f_all / self.m_all[:, None]
+        self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
+        self.prev_data = copy.deepcopy(mol.get_data())
+        self._log_qmmm(0, epot)
+
+        for istep in range(1, self.nstep + 1):
+            # velocity-Verlet position update (all atoms)
+            self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
+            self._sync_positions()
+
+            # embedded electronic structure at the new geometry
+            potmm, _ = self._electronic_qmmm(with_overlap=True)
+            f_all, epot = self._total_force(potmm)
+            accel_new = f_all / self.m_all[:, None]
+
+            # velocity-Verlet velocity update (all atoms)
+            self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt
+
+            # couplings + QM-only FSSH hop
+            self._state_overlap()
+            self.vel = self.v_all[self.qm_atoms].copy()       # hop sees QM velocities
+            new_active, hopped = self._hop()
+            self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
+            if hopped:
+                self.active = new_active
+                f_all, epot = self._total_force(potmm)
+                accel_new = f_all / self.m_all[:, None]
+
+            accel = accel_new
+            self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
+            self.prev_data = copy.deepcopy(mol.get_data())
+            self._log_qmmm(istep, epot, hopped=hopped)
+
+        dump_log(mol, title='PyOQP: QM/MM NAMD trajectory complete')
+
+    def _log_qmmm(self, istep, epot, hopped=False):
+        ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        pops = np.abs(self.coef) ** 2
+        dump_log(
+            self.mol,
+            title=(f'QMMM-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
                    f'hop={hopped}  pop={np.array2string(pops, precision=4)}'),
