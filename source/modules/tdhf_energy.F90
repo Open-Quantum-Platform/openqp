@@ -53,7 +53,8 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_lib, only: int2_td_data_t
+    use tdhf_lib, only: sym_response_project, &
+      int2_td_data_t
     use tdhf_lib, only: &
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
       rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
@@ -282,6 +283,9 @@ contains
 !     Residual vectors W
 !     Get perturbed vectors Q if required
       call rparesvec(scr3,abp_r,abm_l,vlo,vro,eex,xm,ndsr,errors,cnvtol,imax,tamm_dancoff)
+
+!     Response-space symmetry blocking (no-op unless staged by pyoqp).
+      call sym_response_project(infos, vro, scr3, ndsr)
 
       if (imax < ndsr) then
         if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then

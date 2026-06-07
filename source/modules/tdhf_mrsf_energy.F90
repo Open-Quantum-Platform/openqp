@@ -68,7 +68,8 @@ contains
     use precision, only: dp
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
-    use tdhf_lib, only: int2_td_data_t
+    use tdhf_lib, only: sym_response_project, &
+      int2_td_data_t
     use tdhf_lib, only: &
       iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
       rpaechk, rpanewb, &
@@ -97,6 +98,7 @@ contains
 
     real(kind=dp), allocatable :: scr2(:),scr3(:)
     real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
+    real(kind=dp), allocatable :: sym_ritz(:,:)
     real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
     real(kind=dp), allocatable :: squared_S(:)
     real(kind=dp), allocatable :: amb(:,:), apb(:,:), smat_full(:,:)
@@ -604,6 +606,11 @@ contains
       for_trnsf_b_vec = vr_p
       call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nstates)
       call sfqvec(qvec,xm,eex,nstates)
+
+!     Response-space symmetry blocking (no-op unless staged by pyoqp):
+!     confine each root's update to the dominant irrep of its Ritz vector.
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
+      call sym_response_project(infos, sym_ritz, qvec, nstates)
       call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 
       mxerr = maxval(rnorm)

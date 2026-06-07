@@ -601,6 +601,12 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
+        # Response-space symmetry blocking (no-op unless
+        # [symmetry] use_response_symmetry is enabled).
+        if getattr(self.mol, 'symmetry_metadata', None) and \
+                self.mol.symmetry_metadata.get('use_response_symmetry'):
+            self.mol.stage_response_symmetry()
+
         self.tddft()
         energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 

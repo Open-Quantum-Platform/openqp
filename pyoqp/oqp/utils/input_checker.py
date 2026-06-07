@@ -295,7 +295,11 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
         section.get("use_response_symmetry", "False"),
         "symmetry.use_response_symmetry",
         report,
-        strict_false_only=True,
+        allow_true=True,
+        experimental_warning=(
+            "Experimental: irrep-blocked Davidson updates for the response "
+            "solver. Validate excitation energies against an unblocked run."
+        ),
     )
     _parse_bool_like(section.get("strict", False), "symmetry.strict", report)
 

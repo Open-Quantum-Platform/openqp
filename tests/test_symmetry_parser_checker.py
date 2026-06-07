@@ -107,7 +107,7 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertNotIn("symmetry.use_response_symmetry", "\n".join(item.path for item in report.errors))
 
     def test_reduction_flag_policy(self):
-        """Integral reduction is experimental (warn); response stays rejected."""
+        """Both reduction flags are experimental opt-ins (warn, not error)."""
         report = self.input_checker.CheckReport()
         config = {
             "symmetry": {
@@ -126,9 +126,10 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
 
         errors = "\n".join(item.path for item in report.errors)
         self.assertNotIn("symmetry.use_integral_symmetry", errors)
-        self.assertIn("symmetry.use_response_symmetry", errors)
+        self.assertNotIn("symmetry.use_response_symmetry", errors)
         warnings = "\n".join(item.path for item in report.warnings)
         self.assertIn("symmetry.use_integral_symmetry", warnings)
+        self.assertIn("symmetry.use_response_symmetry", warnings)
 
     def test_symmetry_metadata_files_stay_backend_free(self):
         root = ROOT

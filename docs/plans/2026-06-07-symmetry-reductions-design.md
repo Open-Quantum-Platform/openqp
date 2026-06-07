@@ -142,7 +142,20 @@ Gate: XC energy match to <= 1e-10 on the Phase-I molecule set; interacts
 with the slice infrastructure touched by perf/xc-numerical-kernel, so
 rebase on whichever lands first.
 
-## 6. Phase IV: response-space blocking
+## 6. Phase IV: response-space blocking [VALIDATED 2026-06-07]
+
+Implemented: sym_response_project in tdhf_lib confines each Davidson
+root's preconditioned residual to the dominant irrep of its current Ritz
+vector (the response matrix is block-diagonal for a totally symmetric
+reference); pair irreps staged as OQP::sym_pair_irrep by pyoqp from the
+converged MO labels ('mixed' orbitals bail to the unblocked solver).
+Wired into the MRSF, SF, and TDA/RPA Davidson loops behind
+use_response_symmetry (experimental warning, off by default). The MRSF
+spin-pairing rows are ordinary (i,a) pairs index-wise, so their irreps
+follow from the SOMO labels automatically. Validated: water MRSF
+(nstate 3/5), TDA(5), RPA(4) -- excitation energies bit-identical to the
+unblocked solver; engagement proven by a garbage-map probe (Davidson
+fails to converge).
 
 - The MO irrep labels already exist. Excitation pairs (i,a) partition by
   irrep product; the A/B matrices are block-diagonal across irreps.

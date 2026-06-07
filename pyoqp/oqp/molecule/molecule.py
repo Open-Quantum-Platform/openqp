@@ -501,6 +501,79 @@ class Molecule:
                 pass
             return False
 
+    def stage_response_symmetry(self):
+        """Stage per-pair irrep indices for response-space blocking.
+
+        Builds OQP::sym_pair_irrep (1-based irrep index per excitation
+        pair, occupied index fastest) from the converged MO labels. Only
+        acts when ``use_response_symmetry`` is enabled; bails to the
+        unblocked solver on any 'mixed' orbital or inconsistency.
+        """
+        meta = self.symmetry_metadata
+        if not meta or not meta.get('use_response_symmetry'):
+            return False
+        detection = meta.get('detection')
+        if not detection:
+            return False
+
+        td_type = str(self.config.get('tdhf', {}).get('type', '')).lower()
+        if td_type not in ('tda', 'rpa', 'sf', 'mrsf'):
+            if td_type:
+                meta['response_symmetry'] = {
+                    'status': f'skipped_unsupported_td_type_{td_type}'}
+            return False
+
+        try:
+            from oqp.library.symmetry import product_irrep
+
+            mo_labels = meta.get('mo_labels')
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                mo_labels = self.label_molecular_orbitals()
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                meta['response_symmetry'] = {'status': 'skipped_no_mo_labels'}
+                return False
+
+            na = int(np.asarray(self.data['nelec_A']).ravel()[0])
+            nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
+            nbf = len(mo_labels['alpha']['labels'])
+
+            if td_type in ('sf', 'mrsf'):
+                occ_labels = mo_labels['alpha']['labels'][:na]
+                vir_labels = mo_labels.get('beta', mo_labels['alpha'])['labels'][nb:]
+            else:
+                occ_labels = mo_labels['alpha']['labels'][:na]
+                vir_labels = mo_labels['alpha']['labels'][na:]
+
+            if 'mixed' in occ_labels or 'mixed' in vir_labels:
+                meta['response_symmetry'] = {'status': 'skipped_mixed_orbitals'}
+                return False
+
+            table = detection['character_table']
+            irreps = list(table.keys())
+            # Fortran xvec layout: occupied index fastest within each virtual.
+            pair_irrep = np.zeros(len(occ_labels)*len(vir_labels), dtype=np.int64)
+            idx = 0
+            for vir in vir_labels:
+                for occ in occ_labels:
+                    label = product_irrep([occ, vir], table)
+                    if label == 'mixed':
+                        meta['response_symmetry'] = {'status': 'skipped_mixed_pair'}
+                        return False
+                    pair_irrep[idx] = irreps.index(label) + 1
+                    idx += 1
+
+            self.data['OQP::sym_pair_irrep'] = pair_irrep
+            meta['response_symmetry'] = {
+                'status': 'active',
+                'td_type': td_type,
+                'n_pairs': int(pair_irrep.size),
+                'irreps': irreps,
+            }
+            return True
+        except Exception as exc:
+            meta['response_symmetry'] = {'status': 'error', 'error': str(exc)}
+            return False
+
     def label_excited_states(self):
         """Assign abelian irrep labels to TD excited states (metadata only).
 
