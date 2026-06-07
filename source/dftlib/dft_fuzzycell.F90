@@ -218,12 +218,13 @@ contains
       ntp => molGrid%nTotPts(iSlice), &
       isInner => molGrid%isInner(iSlice), &
       curAt => molGrid%idOrigin(iSlice), &
+      iTyp => molGrid%radTypeId(molGrid%idOrigin(iSlice)), &
       rad => molGrid%rAtm(iSlice))
 
       ntp = 0
 
       isInner = 0
-      if (molGrid%rad_pts(iRadStart+nRadPts-1)*rad < rInner(curAt)) then
+      if (molGrid%rad_pts(iRadStart+nRadPts-1, iTyp)*rad < rInner(curAt)) then
 !           Weights of the whole slice are unchanged
         isInner = 1
         ntp = nAngPts*nRadPts
@@ -241,8 +242,8 @@ contains
         do iAng = 1, nAngPts
           rloop: do iRad = 1, nRadPts
 
-            r1 = rad*molGrid%rad_pts(iRadStart+iRad-1)
-            radWt = rad*rad*rad*molGrid%rad_wts(iRadStart+iRad-1)
+            r1 = rad*molGrid%rad_pts(iRadStart+iRad-1, iTyp)
+            radWt = rad*rad*rad*molGrid%rad_wts(iRadStart+iRad-1, iTyp)
             wtAngRad = FOUR_PI*radWt*wAng(iAng)
 
             iPt = (iAng-1)*nRadPts+iRad

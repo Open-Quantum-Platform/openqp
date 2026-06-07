@@ -76,11 +76,18 @@ module mod_dft_molgrid
     !< .TRUE. for dummy atoms
     logical, allocatable :: dummyAtom(:)
 
-    ! The following arrays contains information about the radial grid
-    !< Radial grid points
-    real(KIND=fp), allocatable :: rad_pts(:)
-    !< Radial grid weights
-    real(KIND=fp), allocatable :: rad_wts(:)
+    ! The following arrays contains information about the radial grid(s).
+    ! Several radial grids ("radial types") may coexist: column iTyp of
+    ! rad_pts/rad_wts is the radial grid of type iTyp, and radTypeId(iAtm)
+    ! selects the column used by atom iAtm.  Type 1 is the standard grid;
+    ! per-element grids (e.g. the SG-2/SG-3 double-exponential grids) are
+    ! stored in additional columns.
+    !< Radial grid points: (radial point, radial type)
+    real(KIND=fp), allocatable :: rad_pts(:,:)
+    !< Radial grid weights: (radial point, radial type)
+    real(KIND=fp), allocatable :: rad_wts(:,:)
+    !< radial grid type (column of rad_pts/rad_wts) of each atom
+    integer, allocatable :: radTypeId(:)
 
     !< array to store grid point weights
     real(KIND=fp), allocatable :: totWts(:, :)
@@ -233,7 +240,7 @@ contains
         idrad0 = idrad1+1
         idrad1 = nextRad
         depth = depth0
-        if (grid%rad_pts(idrad0) < 2.0 .and. depth == -1) then
+        if (grid%rad_pts(idrad0, grid%radTypeId(idAtm)) < 2.0 .and. depth == -1) then
           if (curAng%npts*(idrad1-idrad0+1) >= 10*32) then
             depth = 1
           else if (curAng%npts*(idrad1-idrad0+1) >= 10*8) then
@@ -329,6 +336,7 @@ contains
     integer :: i, nLayers, nGrids, iSpl, iRMin, iRMax, iRNext, nRad!, k
     integer :: idAtm
     real(KIND=fp) :: rAtm, rMin, rMax, rNext
+    logical :: by_index
 
     integer :: layers(3, MAXGRID*5)
 
@@ -336,6 +344,10 @@ contains
     nRad = ubound(atomic_grid%rad_pts, 1)
     nGrids = ubound(atomic_grid%sph_npts, 1)
     rAtm = atomic_grid%rAtm
+!   Index-based pruning sectors (e.g. SG-2/SG-3): region i spans the
+!   next sph_nrad(i) radial shells instead of all shells up to radius
+!   sph_radii(i)
+    by_index = allocated(atomic_grid%sph_nrad)
 
     limits = [1.0, 2.0, 8.0, 12.0, 20.0]
     if (grid%rInner(idAtm) /= 0.0_fp) then
@@ -350,7 +362,11 @@ contains
       ! No radial points left for this and the following regions
       ! (e.g. pruned-grid region boundaries beyond the radial grid)
       if (iRMin > nRad) exit
-      iRMax = findl(atomic_grid%sph_radii(i), atomic_grid%rad_pts, iRMin)
+      if (by_index) then
+        iRMax = min(nRad, iRMin+atomic_grid%sph_nrad(i)-1)
+      else
+        iRMax = findl(atomic_grid%sph_radii(i), atomic_grid%rad_pts, iRMin)
+      end if
 
       if (nGrids == 1) iRMax = nRad
       if (i == nGrids) iRMax = nRad
@@ -562,11 +578,13 @@ contains
 !> @param[in]   nAt         number of atoms in a system
 !> @param[in]   maxPtPerAt  maximum number of points per atom
 !> @param[in]   nRad        size of the radial grid
+!> @param[in]   nRadTypes   number of distinct radial grids (default 1)
 !> @author Vladimir Mironov
-  subroutine reset_dft_grid_t(grid, nAt, maxPtPerAt, nRad)
+  subroutine reset_dft_grid_t(grid, nAt, maxPtPerAt, nRad, nRadTypes)
     class(dft_grid_t), intent(INOUT) :: grid
     integer, intent(IN) :: nAt, maxPtPerAt, nRad
-    integer :: maxSlices
+    integer, intent(IN), optional :: nRadTypes
+    integer :: maxSlices, nRadTypes_
 
     maxSlices = DEFAULT_NSLICES_PER_ATOM * nAt
 
@@ -600,10 +618,14 @@ contains
     call grid%spherical_grids%init()
 
 !   Initialize radial grids storage
+    nRadTypes_ = 1
+    if (present(nRadTypes)) nRadTypes_ = max(1, nRadTypes)
     if (allocated(grid%rad_pts)) deallocate(grid%rad_pts)
     if (allocated(grid%rad_wts)) deallocate(grid%rad_wts)
-    allocate(grid%rad_pts(nRad), source=0.0_fp)
-    allocate(grid%rad_wts(nRad), source=0.0_fp)
+    if (allocated(grid%radTypeId)) deallocate(grid%radTypeId)
+    allocate(grid%rad_pts(nRad, nRadTypes_), source=0.0_fp)
+    allocate(grid%rad_wts(nRad, nRadTypes_), source=0.0_fp)
+    allocate(grid%radTypeId(nAt), source=1)
 
     if (allocated(grid%totWts)) deallocate (grid%totWts)
     if (allocated(grid%wt_top)) deallocate (grid%wt_top)
@@ -750,6 +772,7 @@ contains
       isInner => grid%isInner(iSlice), &
       wtStart => grid%wtStart(iSlice)-1, &
       curAt => grid%idOrigin(iSlice), &
+      iTyp => grid%radTypeId(grid%idOrigin(iSlice)), &
       iAngStart => grid%iAngStart(iSlice), &
       iRadStart => grid%iRadStart(iSlice), &
       nAngPts => grid%nAngPts(iSlice), &
@@ -763,7 +786,7 @@ contains
 
         do iAng = 1, nAngPts
         do iRad = 1, nRadPts
-          r1 = rad*grid%rad_pts(iRadStart+iRad-1)
+          r1 = rad*grid%rad_pts(iRadStart+iRad-1, iTyp)
           iPt = (iAng-1)*nRadPts+iRad
           xyzw(iPt, 1) = r1*xAng(iAng)
           xyzw(iPt, 2) = r1*yAng(iAng)
@@ -772,7 +795,7 @@ contains
             xyzw(iPt, 4) = grid%totWts(wtStart+iPt, curAt)
           else
             xyzw(iPt, 4) = FOUR_PI*rad*rad*rad* &
-                           grid%rad_wts(iRadStart+iRad-1)*wAng(iAng)
+                           grid%rad_wts(iRadStart+iRad-1, iTyp)*wAng(iAng)
           end if
         end do
         end do
@@ -865,6 +888,7 @@ contains
       wtStart => grid%wtStart(iSlice)-1, &
       totWts => grid%totWts, &
       curAt => grid%idOrigin(iSlice), &
+      iTyp => grid%radTypeId(grid%idOrigin(iSlice)), &
       iAngStart => grid%iAngStart(iSlice), &
       iRadStart => grid%iRadStart(iSlice), &
       nAngPts => grid%nAngPts(iSlice), &
@@ -883,12 +907,12 @@ contains
             wtCur = totWts(wtStart+iPt, curAt)
           else
             wtCur = FOUR_PI*rad*rad*rad* &
-                    grid%rad_wts(iRadStart+iRad-1)*wAng(iAng)
+                    grid%rad_wts(iRadStart+iRad-1, iTyp)*wAng(iAng)
           end if
           if (wtCur == 0.0_fp) exit
           if (wtCur < cutoff) cycle
           nPt = nPt+1
-          r1 = rad*grid%rad_pts(iRadStart+iRad-1)
+          r1 = rad*grid%rad_pts(iRadStart+iRad-1, iTyp)
           xyzw(nPt, 1) = r1*xAng(iAng)
           xyzw(nPt, 2) = r1*yAng(iAng)
           xyzw(nPt, 3) = r1*zAng(iAng)
