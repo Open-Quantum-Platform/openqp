@@ -448,11 +448,28 @@ class SinglePoint(Calculator):
             dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
 
         # --- Stage 2: escalate the converger on non-convergence ---
-        if not converged and fallback and fallback != primary:
+        # Escalation ladder of progressively more robust (and costlier) methods.
+        # Default: SOSCF (cheap second-order, fixes most DIIS stalls) BEFORE TRAH
+        # (globally convergent trust region). 'scf.escalation' overrides the
+        # comma-separated chain; 'scf.alternative_scf' (back-compat) sets the
+        # final method. Each stage warm-starts from the previous orbitals.
+        escalation = scf_config.get('escalation', None)
+        if escalation:
+            chain = [c.strip().lower() for c in str(escalation).split(',') if c.strip()]
+        else:
+            chain = ['soscf']
+            if fallback:
+                chain.append(fallback)
+        # Drop the primary and de-duplicate while preserving order.
+        _seen = set()
+        chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
+        for conv in chain:
+            if converged:
+                break
             dump_log(self.mol,
-                     title='PyOQP: SCF not converged with %s; escalating to %s' % (primary, fallback),
+                     title='PyOQP: SCF not converged; escalating to %s' % conv,
                      section='input')
-            data.set_scf_converger_type(fallback)
+            data.set_scf_converger_type(conv)
             data.set_sd_scf(False)
             self.scf()
             converged = self.mol.mol_energy.SCF_converged
