@@ -31,9 +31,26 @@ def _set_threading_defaults():
         "GOMP_STACKSIZE": "256M",
     }
     if sys.platform == "darwin":
-        # Apple Silicon: cap to performance cores; spilling onto efficiency
-        # cores oversubscribes and slows the integral build (32T was 2x slower).
-        defaults["OMP_NUM_THREADS"] = "16"
+        # macOS default: use the PERFORMANCE-core count, not all logical cores.
+        # On Apple Silicon spilling onto the efficiency cores oversubscribes and
+        # slows the integral build; on Intel Macs all cores are equal.  Derive it
+        # per-host (hw.perflevel0.physicalcpu = P-cores on Apple Silicon, falling
+        # back to hw.physicalcpu / os.cpu_count()) instead of a fixed cap, so we
+        # never over- or under-subscribe a given machine.  setdefault, so an
+        # explicit OMP_NUM_THREADS still wins.
+        import subprocess
+        ncore = None
+        for key in ("hw.perflevel0.physicalcpu", "hw.physicalcpu"):
+            try:
+                ncore = int(subprocess.check_output(
+                    ["sysctl", "-n", key], stderr=subprocess.DEVNULL).strip())
+            except Exception:
+                ncore = None
+            if ncore and ncore > 0:
+                break
+        if not ncore or ncore < 1:
+            ncore = os.cpu_count() or 1
+        defaults["OMP_NUM_THREADS"] = str(ncore)
 
     for key, value in defaults.items():
         os.environ.setdefault(key, value)
