@@ -249,6 +249,14 @@ class NativeNEBOpt(StateSpecificOpt):
         self.k_spring = float(nat_cfg.get("spring", 0.05))
         self.climbing = bool(nat_cfg.get("climb", True))
         self.neb_fmax = float(nat_cfg.get("fmax", 2.0e-3))
+        # Relax-then-climb threshold, FIRE step, and per-image step cap.
+        self.climb_fmax = float(nat_cfg.get("climb_fmax", 0.05))
+        self.neb_dt = float(nat_cfg.get("neb_dt", 0.5))
+        self.maxmove = float(nat_cfg.get("maxmove", 0.2))
+        # Pre-optimize the endpoints to minima before building the band
+        # (a relaxed reactant/product makes the climbing image far more stable).
+        self.opt_ends = bool(nat_cfg.get("opt_ends", True))
+        self.end_fmax = float(nat_cfg.get("end_fmax", 1.0e-3))
 
     def _resolve_product(self):
         if os.path.isabs(self.product):
@@ -273,9 +281,30 @@ class NativeNEBOpt(StateSpecificOpt):
         energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
         return float(energies[self.istate]), grads[self.istate].reshape(-1)
 
+    def _relax_endpoint(self, x0, label):
+        """Minimize an endpoint to a nearby minimum with the native engine."""
+        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        engine = NativeEngine(atoms, x0, mode="min", maxiter=self.maxit)
+        last = {"g": None}
+
+        def eg(x):
+            e, g = self._energy_gradient(x)
+            last["g"] = g
+            return e, g
+
+        def conv():
+            if last["g"] is not None and np.max(np.abs(last["g"])) < self.end_fmax:
+                raise StopIteration
+
+        engine.run(eg, on_converged=conv)
+        gmax = float(np.max(np.abs(last["g"]))) if last["g"] is not None else float("nan")
+        dump_log(self.mol, title="PyOQP: NEB endpoint '%s' relaxed (gmax=%.3e)"
+                 % (label, gmax))
+        return engine.x
+
     def optimize(self):
-        dump_log(self.mol, title="PyOQP: Native NEB [%d images, climbing=%s, k=%.3f]"
-                 % (self.nimage, self.climbing, self.k_spring))
+        dump_log(self.mol, title="PyOQP: Native NEB [%d images, climbing=%s, k=%.3f, opt_ends=%s]"
+                 % (self.nimage, self.climbing, self.k_spring, self.opt_ends))
 
         # Endpoints: reactant from the molecule (Bohr), product from XYZ (Ang).
         reactant = np.asarray(self.pre_coord, dtype=float).reshape(-1)
@@ -285,11 +314,16 @@ class NativeNEBOpt(StateSpecificOpt):
         if product.shape != reactant.shape:
             raise ValueError("NEB product endpoint atom count must match the reactant")
 
+        if self.opt_ends:
+            reactant = self._relax_endpoint(reactant, "reactant")
+            product = self._relax_endpoint(product, "product")
+
         # Linear interpolation of all images (Bohr).
         fractions = np.linspace(0.0, 1.0, self.nimage)
         images = [reactant + f * (product - reactant) for f in fractions]
 
-        neb = NEB(images, k_spring=self.k_spring, climbing=self.climbing)
+        neb = NEB(images, k_spring=self.k_spring, climbing=self.climbing,
+                  climb_fmax=self.climb_fmax)
 
         def log_iter(it, fmax, energies):
             rel = np.array(energies) - energies[0]
@@ -300,7 +334,8 @@ class NativeNEBOpt(StateSpecificOpt):
                      % (it + 1, fmax, float(np.max(rel))))
 
         result = neb.run(self._energy_gradient, fmax_tol=self.neb_fmax,
-                         maxiter=self.maxit, on_iteration=log_iter)
+                         maxiter=self.maxit, dt=self.neb_dt,
+                         maxmove=self.maxmove, on_iteration=log_iter)
 
         # Report and dump the final path.
         e0 = result["energies"][0]
