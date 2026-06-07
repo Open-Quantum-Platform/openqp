@@ -479,7 +479,11 @@ class OpenQpQMMM:
            potmm[i]=e_pbc_qm_charge-e_pbc_no_qm_charge
            nonbonded.setParticleParameters(self.qm_atoms[i], 0.0*unit.elementary_charge, sigma, epsilon)
 
-       if self.Cutoff == app.NoCutoff: return potmm,None
+       # Non-periodic embedding has no Ewald QM-QM self-interaction, so the
+       # QM-QM correction potential is identically zero. Return a zero matrix
+       # (not None) so the Fortran add_potqm_contributions has a valid record.
+       if self.Cutoff == app.NoCutoff:
+           return potmm, np.zeros((len(self.qm_atoms), len(self.qm_atoms)))
 
     #######################################################################
     #                 2. Compute QM pair potential                        #
