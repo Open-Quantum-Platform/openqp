@@ -99,6 +99,11 @@ module mod_dft_gridint
     type(dft_grid_t), pointer :: molGrid => null()
     type(functional_t), pointer :: functional
 
+    !< Per-atom symmetry-reduction weights (orbit size for unique atoms,
+    !< zero for their images); null => no reduction. Set only by the SCF
+    !< XC path; response/gradient consumers never set it.
+    real(KIND=fp), contiguous, pointer :: symAtomWeight(:) => null()
+
   end type
 
 !###############################################################################
@@ -2299,6 +2304,7 @@ contains
     integer :: next
     integer :: iSlice
     integer :: iAtom
+    real(KIND=fp) :: symw
     integer :: npt
 
     integer :: i
@@ -2350,7 +2356,7 @@ contains
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
-!$omp   private(iAtom), &
+!$omp   private(iAtom, symw), &
 !$omp   private(skip), &
 !$omp   reduction(+:exc, totele, totgradxyz, totkin)
 
@@ -2378,10 +2384,20 @@ contains
 !$omp do schedule(dynamic)
       slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
 
+        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+
+        ! Symmetry reduction: integrate only unique atoms' slices, with
+        ! quadrature weights scaled by the atom-orbit size.
+        symw = 1.0_fp
+        if (associated(xc_opts%symAtomWeight)) then
+          symw = xc_opts%symAtomWeight(iAtom)
+          if (symw == 0.0_fp) CYCLE
+        end if
+
         call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
         if (numNzPts==0) CYCLE
 
-        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+        if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
 
         call xce%resetPointers(numNzPts)
 
@@ -2458,6 +2474,7 @@ contains
     logical :: skip
     real(KIND=fp) :: dftthr, wcutoff
     integer :: iSlice, iAtom, npt, i, numNzPts
+    real(KIND=fp) :: symw
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
     integer(c_int64_t) :: nBlasThreads
@@ -2484,7 +2501,7 @@ contains
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
-!$omp   private(iAtom), &
+!$omp   private(iAtom, symw), &
 !$omp   private(skip)
 
     numThreads = 1
@@ -2509,10 +2526,20 @@ contains
 !$omp do schedule(dynamic)
       slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
 
+        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+
+        ! Symmetry reduction: integrate only unique atoms' slices, with
+        ! quadrature weights scaled by the atom-orbit size.
+        symw = 1.0_fp
+        if (associated(xc_opts%symAtomWeight)) then
+          symw = xc_opts%symAtomWeight(iAtom)
+          if (symw == 0.0_fp) CYCLE
+        end if
+
         call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
         if (numNzPts==0) CYCLE
 
-        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+        if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
 
         call xce%resetPointers(numNzPts)
 

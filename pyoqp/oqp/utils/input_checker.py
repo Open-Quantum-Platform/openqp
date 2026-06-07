@@ -43,6 +43,9 @@ WIKI_HELP = {
 }
 
 
+_FALSE_BOOL = {"false", "0", "f", ".false.", "off", "no"}
+_TRUE_BOOL = {"true", "1", "t", ".true.", "on", "yes"}
+
 @dataclass
 class Diagnostic:
     severity: str
@@ -148,6 +151,188 @@ def _norm_path(raw_path: str, system_text: str) -> str:
     if first_line and os.path.splitext(first_line)[1].lower() == ".xyz":
         parent = os.path.dirname(os.path.abspath(first_line))
     return os.path.abspath(os.path.join(parent, raw_path))
+
+
+
+def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: bool = True, allow_auto: bool = False, strict_false_only: bool = False, experimental_warning=None) -> bool | str | None:
+    """Validate boolean-like values used by Python-only symmetry gates."""
+    if isinstance(value, bool):
+        if strict_false_only and value:
+            report.add(
+                "ERROR",
+                path,
+                "Symmetry reduction flags are intentionally disabled by default.",
+                value=value,
+                expected="False",
+                action="Keep symmetry reduction off until dedicated kernels are production-ready.",
+            )
+            return None
+        return value
+
+    if isinstance(value, (int, float)):
+        if value in (0, 1):
+            parsed = bool(int(value))
+            if strict_false_only and parsed:
+                report.add(
+                    "ERROR",
+                    path,
+                    "Symmetry reduction flags are intentionally disabled by default.",
+                    value=value,
+                    expected="False",
+                    action="Use 0 or false for disabled symmetry reductions.",
+                )
+                return None
+            return parsed
+        report.add(
+            "ERROR",
+            path,
+            "Boolean option expects false-like or true-like values.",
+            value=value,
+            expected="False-like or True-like value",
+            action="Use false/true, 0/1, or accepted string tokens.",
+        )
+        return None
+
+    if not isinstance(value, str):
+        report.add(
+            "ERROR",
+            path,
+            "Boolean option expects a boolean-like value.",
+            value=value,
+            expected="False-like or True-like value",
+            action="Use false/true, 0/1, or accepted string tokens.",
+        )
+        return None
+
+    lowered = value.strip().lower()
+    if lowered in _FALSE_BOOL:
+        return False
+    if lowered == "full" and experimental_warning:
+        report.add(
+            "WARNING", path,
+            experimental_warning + " ('full' additionally enables the "
+            "non-abelian full point group, ~1e-7 accuracy)",
+            value=value, expected="False (default)",
+            action="Validate results against a C1 reference run.",
+        )
+        return True
+    if lowered in _TRUE_BOOL:
+        if strict_false_only:
+            report.add(
+                "ERROR",
+                path,
+                "Symmetry reduction flags are intentionally disabled by default.",
+                value=value,
+                expected="False",
+                action="Keep symmetry reductions off until validation and production kernels are in place.",
+            )
+            return None
+        if experimental_warning:
+            report.add(
+                "WARNING",
+                path,
+                experimental_warning,
+                value=value,
+                expected="False (default)",
+                action="Validate results against a C1 reference run.",
+            )
+        return True if allow_true else False
+    if allow_auto and lowered == "auto":
+        return "auto"
+
+    report.add(
+        "ERROR",
+        path,
+        "Boolean option expects false/true-like values.",
+        value=value,
+        expected="false/true, 0/1, or auto",
+        action="Use recognized tokens like false, true, 0, 1, yes, no, or auto where supported.",
+    )
+    return None
+
+
+def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
+    """Validate the new symmetry metadata block without enabling reductions by default."""
+    section = config.get("symmetry")
+    if not section:
+        return
+    if not isinstance(section, dict):
+        report.add(
+            "ERROR",
+            "symmetry",
+            "[symmetry] must be a mapping.",
+            value=section,
+            expected="[symmetry] block",
+            action="Pass symmetry options as a mapping.",
+        )
+        return
+
+    _parse_bool_like(section.get("enabled", "false"), "symmetry.enabled", report, allow_auto=True)
+    if "point_group" in section and not isinstance(section.get("point_group"), str):
+        report.add(
+            "ERROR",
+            "symmetry.point_group",
+            "point_group must be a string label.",
+            value=section.get("point_group"),
+            expected="auto or point-group label",
+            action="Use auto or a valid point-group abbreviation.",
+        )
+    if "subgroup" in section and not isinstance(section.get("subgroup"), str):
+        report.add(
+            "ERROR",
+            "symmetry.subgroup",
+            "subgroup must be a string label.",
+            value=section.get("subgroup"),
+            expected="auto or subgroup label",
+            action="Use auto or a valid subgroup abbreviation.",
+        )
+
+    _parse_bool_like(section.get("label_mo", True), "symmetry.label_mo", report)
+    _parse_bool_like(section.get("label_states", True), "symmetry.label_states", report)
+    _parse_bool_like(section.get("label_modes", True), "symmetry.label_modes", report)
+    _parse_bool_like(
+        section.get("use_integral_symmetry", "False"),
+        "symmetry.use_integral_symmetry",
+        report,
+        allow_true=True,
+        experimental_warning=(
+            "Experimental: petite-list/skeleton-Fock reduction. The molecule "
+            "is reoriented to the symmetry standard orientation at load time."
+        ),
+    )
+    _parse_bool_like(
+        section.get("use_response_symmetry", "False"),
+        "symmetry.use_response_symmetry",
+        report,
+        allow_true=True,
+        experimental_warning=(
+            "Experimental: irrep-blocked Davidson updates for the response "
+            "solver. Validate excitation energies against an unblocked run."
+        ),
+    )
+    _parse_bool_like(section.get("strict", False), "symmetry.strict", report)
+
+    try:
+        tolerance = float(section.get("tolerance", 1.0e-5))
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            "symmetry.tolerance",
+            "symmetry.tolerance must be numeric.",
+            value=section.get("tolerance"),
+            expected="positive float",
+            action="Set tolerance to a positive float such as 1.0e-5.",
+        )
+    else:
+        if tolerance <= 0.0:
+            report.add(
+                "ERROR",
+                "symmetry.tolerance",
+                "symmetry.tolerance must be positive.",
+                value=tolerance,
+                expected="> 0.0",
+                action="Use positive tolerance with stricter or looser default (e.g., 1.0e-5).",
+            )
 
 
 def _iter_coordinate_lines(system: str) -> tuple[list[str], str | None]:
@@ -1277,6 +1462,7 @@ def check_input_values(
     _check_basis(config, report)
     _check_guess(config, report)
     _check_scf(config, report)
+    _check_symmetry(config, report)
     _check_tdhf(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)

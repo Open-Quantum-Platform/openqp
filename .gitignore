@@ -38,3 +38,6 @@ scratch_hess/
 run_compare_hess.py
 fort.6
 *.analytic_hess.pyscf
+.venv-symmetry/
+build_dev/
+openqp_test_tmp_*/
