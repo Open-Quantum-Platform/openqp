@@ -938,3 +938,217 @@ class NAMD_SOC(NAMD):
                    f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+
+
+class NAMD_SOC_QMMM(NAMD_QMMM):
+    """SOC-NAMD (intersystem crossing) with electrostatic ESPF QM/MM embedding.
+
+    Union of the SHARC spin-adiabatic SOC-NAMD machinery (NAMD_SOC) and the
+    ESPF/OpenMM embedding (NAMD_QMMM).  Per step:
+      * sync positions (QM Molecule + OpenMM context),
+      * embedded SCF + singlet MRSF + triplet MRSF + soc_mrsf -> (E_diag, U),
+      * spin-adiabatic MCH overlap -> U-phase tracking -> overlap T,
+      * active-surface force = weighted-MCH diagonal gradient, each MCH
+        component carrying its own ESPF embedding gradient,
+      * ESPF QM charges (of the dominant MCH component) -> MM forces,
+      * full-system velocity Verlet (QM+MM, atomic units),
+      * local-diabatization propagation + spin-adiabatic fewest-switches hop,
+        rescaling QM velocities only (as in GAMESS RESCALV).
+
+    The SOC electronic/hopping kernels are borrowed from NAMD_SOC via explicit
+    NAMD_SOC.<method>(self, ...) calls so this class can inherit the QM/MM
+    embedding plumbing from NAMD_QMMM.
+    """
+
+    def __init__(self, mol):
+        super().__init__(mol)                                  # NAMD_QMMM: OpenMM + QM masses + v_all
+        # spin-adiabatic electronic state space (ns singlets + 3 nt triplet Ms)
+        self.nstate_mrsf = int(mol.config['tdhf']['nstate'])
+        self.ns = self.nstate_mrsf
+        self.nt = self.nstate_mrsf
+        self.nstate_soc = self.ns + 3 * self.nt
+        self.active = int(mol.config['md']['active'])
+        self.coef = np.zeros(self.nstate_soc, dtype=complex)
+        self.coef[self.active - 1] = 1.0 + 0.0j
+        self.e_ref = 0.0
+        self.e0 = 0.0
+        try:
+            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
+        except Exception:
+            self.grad_wthr = 0.05
+
+    # ------------------------------------------------------------------ #
+    def _electronic_soc_qmmm(self, with_overlap):
+        """Embedded SCF + singlet MRSF + triplet MRSF + soc_mrsf.
+        Returns (eval_ha rel e0, U, potmm, potqm)."""
+        from oqp.library.qmmm_driver import (
+            unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
+        mol = self.mol
+        potmm, potqm = self.driver.electrostatic_potential()
+
+        sp = SinglePoint(mol)
+        sp._prep_guess()
+        nat = mol.data["natom"]
+        nbf = mol.data.get_basis()["nbf"]
+        mol.data["OQP::POTMM"] = potmm
+        mol.data["OQP::POTQM"] = potqm if potqm is not None else np.zeros((nat, nat))
+        oqp.espf_op_corr(mol)
+        espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+        hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+        hcore += np.einsum("ijk,i->jk", espf, potmm)
+        mol.set_hcore(pack_lower_tri_single(hcore))
+        sp.scf()
+        ref = [mol.get_scf_energy()]
+        self.e_ref = float(ref[0])
+
+        if with_overlap:
+            mol.back_door = (self.prev_xyz, self.prev_data)
+            BasisOverlap(mol).overlap()
+
+        mol.data.set_tdhf_multiplicity(1)
+        sing = sp.excitation(ref)
+        self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
+        mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
+
+        mol.data.set_tdhf_multiplicity(3)
+        trip = sp.excitation(ref)
+        self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
+        mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
+
+        oqp.soc_mrsf(mol)
+
+        eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)            # cm^-1 rel e0
+        u = (np.array(mol.data['OQP::soc_evec_re'])
+             + 1j * np.array(mol.data['OQP::soc_evec_im'])).reshape(self.nstate_soc, self.nstate_soc)
+        self.e0 = float(min(np.array(sing[1:]).min() - self.e_ref,
+                            np.array(trip[1:]).min() - self.e_ref)) if len(sing) > 1 else 0.0
+        eval_ha = eval_wn / HA_TO_WAVENUM                                    # Hartree rel e0
+        return eval_ha, u, potmm, potqm
+
+    # ------------------------------------------------------------------ #
+    def _soc_gradient_qmmm(self, u, active, eval_ha):
+        """Weighted-MCH diagonal gradient with ESPF embedding force per MCH
+        component, plus the dominant component's ESPF QM charges for the MM
+        forces.  Returns (grad_qm[natom,3], E_diag, dom_mult, dom_state,
+        dom_w, pchg_dominant)."""
+        mol = self.mol
+        col = np.abs(u[:, active - 1]) ** 2
+
+        wmap = {}
+        for k in range(self.nstate_soc):
+            if col[k] < self.grad_wthr:
+                continue
+            key = (1, k + 1) if k < self.ns else (3, (k - self.ns) // 3 + 1)
+            wmap[key] = wmap.get(key, 0.0) + col[k]
+
+        dom_mult, dom_state, dom_w = NAMD_SOC._dominant_component(self, u, active)
+        dom_key = (dom_mult, dom_state)
+        if not wmap:                                          # safety: dominant only
+            wmap[dom_key] = float(col.max())
+
+        wtot = sum(wmap.values())
+        g = np.zeros((self.natom, 3))
+        pchg_dom = None
+        for (mult, state), w in wmap.items():
+            mol.data.set_tdhf_multiplicity(mult)
+            SinglePoint(mol).excitation([self.e_ref])
+            mol.config['properties']['grad'] = [state]
+            Gradient(mol).gradient()
+            gi = np.array(mol.grads[state]).reshape((self.natom, 3))
+            oqp.grad_esp_qmmm_excited(mol)
+            gi = gi + np.array(mol.data["OQP::ESPF_GRAD"]).reshape((self.natom, 3))
+            g += (w / wtot) * gi
+            if (mult, state) == dom_key:
+                pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
+
+        if pchg_dom is None:                                  # dominant below threshold: take last
+            pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
+
+        e_diag = self.e_ref + self.e0 + float(eval_ha[active - 1])
+        return g, e_diag, dom_mult, dom_state, dom_w, pchg_dom
+
+    # ------------------------------------------------------------------ #
+    def _total_force_soc(self, potmm, g_qm, e_diag, pchg):
+        """Assemble full-system force (a.u.) and total potential energy (Ha)."""
+        mol = self.mol
+        u = self._u
+        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
+        emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
+
+        f_all = gmm.copy()
+        for k, i in enumerate(self.qm_atoms):
+            f_all[i] = f_all[i] - g_qm[k]
+        if self.periodic:
+            f_all = f_all + self._potqm_force(pchg, sign=1.0)
+        f_all -= f_all.mean(axis=0)
+
+        eqm = float(e_diag)
+        znuc = np.array(mol.get_atoms2("charge"))
+        eqm -= np.dot(pchg - znuc, potmm)
+        epot = eqm + emm
+        return f_all, epot
+
+    # ------------------------------------------------------------------ #
+    def run(self):
+        mol = self.mol
+        dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, SHARC spin-adiabatic FSSH + ESPF embedding)')
+
+        self._sync_positions()
+        eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
+        g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
+        f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
+        accel = f_all / self.m_all[:, None]
+        self._ulog = u
+        r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+        NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
+        self._log_soc_qmmm(0, epot, mult, state, w, False)
+
+        for istep in range(1, self.nstep + 1):
+            # velocity-Verlet position update (all atoms)
+            self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
+            self._sync_positions()
+
+            # embedded spin-adiabatic electronic structure (+ MO overlap)
+            eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=True)
+            s_mch = NAMD_SOC._mch_overlap(self)
+            u, t = NAMD_SOC._phase_track(u, self.prev_u, s_mch, eval_ha)
+
+            # active-surface force (weighted-MCH diagonal gradient + ESPF) + vel update
+            g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
+            f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
+            accel_new = f_all / self.m_all[:, None]
+            self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt
+
+            # local-diabatization propagation + spin-adiabatic hop (QM velocities only)
+            self.vel = self.v_all[self.qm_atoms].copy()
+            hopped = NAMD_SOC._propagate_and_hop(self, self.prev_eval, eval_ha, t)
+            self.v_all[self.qm_atoms] = self.vel
+            if hopped:
+                g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
+                f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
+                accel_new = f_all / self.m_all[:, None]
+
+            accel = accel_new
+            self._ulog = u
+            NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
+            self._log_soc_qmmm(istep, epot, mult, state, w, hopped)
+
+        dump_log(mol, title='PyOQP: SOC-NAMD QM/MM trajectory complete')
+
+    def _log_soc_qmmm(self, istep, epot, mult, state, w, hopped):
+        ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        mch = self._ulog @ self.coef
+        pmch = np.abs(mch) ** 2
+        pop_s = float(pmch[:self.ns].sum())
+        pop_t = float(pmch[self.ns:].sum())
+        dump_log(
+            self.mol,
+            title=(f'SOC-QMMM-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+                   f'active={self.active}  E_tot={ekin+epot:.8f}  '
+                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
+                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})  '
+                   f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
+        )

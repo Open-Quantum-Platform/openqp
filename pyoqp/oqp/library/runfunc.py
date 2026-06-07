@@ -28,10 +28,15 @@ from oqp.library.namd import NAMD
 def compute_namd(mol):
     # Tully fewest-switches surface-hopping nonadiabatic molecular dynamics.
     # Gas-phase or QM/MM (electrostatic ESPF embedding + OpenMM MM region).
-    if mol.config['input'].get('qmmm_flag'):
+    qmmm = mol.config['input'].get('qmmm_flag')
+    soc = mol.config['md'].get('soc')
+    if qmmm and soc:
+        from oqp.library.namd import NAMD_SOC_QMMM
+        NAMD_SOC_QMMM(mol).run()
+    elif qmmm:
         from oqp.library.namd import NAMD_QMMM
         NAMD_QMMM(mol).run()
-    elif mol.config['md'].get('soc'):
+    elif soc:
         from oqp.library.namd import NAMD_SOC
         NAMD_SOC(mol).run()
     else:
