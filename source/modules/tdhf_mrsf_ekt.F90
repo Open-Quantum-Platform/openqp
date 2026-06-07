@@ -263,12 +263,50 @@ contains
             ekt_is_spurious(-eig(i)*hartree_to_ev, metric_norms(i), strengths(i))
     end do
     write(iw,'(2x,"--------------------------------------")')
+
+    if (electron_affinity) then
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = EA roots)")')
+    else
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = IP roots)")')
+    end if
+    call print_dyson_orbitals(orbitals, eig, strengths, nbf, min(nroot, nactive), &
+                              hartree_to_ev)
     call flush(iw)
 
     call measure_time(print_total=1, log_unit=iw)
     close(iw)
 
   end subroutine tdhf_mrsf_ekt
+
+  !> @brief Print Dyson orbitals to the log in root blocks
+  !> @detail Each block of up to 5 roots shows the root index, the electron
+  !>         binding energy eBE = -eig (eV), and the Dyson pole strength,
+  !>         followed by the MO-basis Dyson orbital coefficients of each root.
+  subroutine print_dyson_orbitals(dyson_mo, eig, strengths, nbf, nroot, h2ev)
+    use precision, only: dp
+    use io_constants, only: iw
+
+    implicit none
+
+    integer, intent(in) :: nbf, nroot
+    real(kind=dp), intent(in) :: dyson_mo(nbf,*), eig(*), strengths(*)
+    real(kind=dp), intent(in) :: h2ev
+
+    integer, parameter :: mxlen = 5
+    integer :: i, j, i0, i1
+
+    do i0 = 1, nroot, mxlen
+      i1 = min(nroot, i0+mxlen-1)
+      write(iw,'(/,2x,"root",7x,*(i7,4x))') (i, i=i0, i1)
+      write(iw,'(2x,"eBE (eV)",3x,*(f11.4))') (-eig(i)*h2ev, i=i0, i1)
+      write(iw,'(2x,"strength",3x,*(f11.6))') (strengths(i), i=i0, i1)
+      write(iw,*)
+      do j = 1, nbf
+        write(iw,'(2x,i5,4x,*(f11.6))') j, (dyson_mo(j,i), i=i0, i1)
+      end do
+    end do
+
+  end subroutine print_dyson_orbitals
 
   !> @brief Fetch the packed AO overlap matrix S (OQP_SM) into smat(nbf2).
   subroutine get_overlap_matrix(infos, nbf, smat)

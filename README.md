@@ -2,18 +2,32 @@
 
 Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
-### Current Functionality
+### Capabilities
 
-| Area | What OpenQP can do now | Notes |
-| --- | --- | --- |
-| Electronic structure | <small>HF, DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and MRSF-EKT ground- and excited-state calculations</small> | <small>MRSF-TDDFT includes DTCAM-series exchange-correlation functionals; MRSF-EKT supports IP/EA analysis.</small> |
-| Derivative properties | <small>Energies, analytic gradients, numerical Hessians, and native HF/DFT analytic Hessians</small> | <small>Native CPHF/CPKS response, integral-derivative kernels, and final Hessian assembly are implemented for supported closed-shell HF/DFT paths.</small> |
-| Vibrational analysis | <small>Frequencies, normal-mode eigenvector printout, thermochemistry, and native IR/Raman intensity assembly</small> | <small>IR/Raman intensities use native OpenQP dipole, CPHF polarizability, and vibrational-intensity kernels.</small> |
-| Nonadiabatic dynamics data | <small>MRSF-TDDFT nonadiabatic couplings and NACME-oriented workflows</small> | <small>NAC support uses the TLF-based MRSF-TDDFT machinery.</small> |
-| Geometry/path optimization | <small>Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB-style workflows</small> | <small>SciPy and geomeTRIC backends are available depending on the requested job.</small> |
-| Initial guesses and SCF stability | <small>Native initial guesses (`hcore`, `huckel`, `modhuckel`, `minao`, `sap`), JSON restart/auto guesses, and OpenTrustRegion SCF stabilization</small> | <small>Native guess paths avoid external runtime dependencies and are suitable for MPI execution.</small> |
-| Integrations | <small>LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and OpenqpView</small> | <small>External viewers and workflow integrations are available around the native OpenQP electronic-structure engines.</small> |
-| Performance and deployment | <small>OpenMP/MPI execution, BLAS/LAPACK optimization, source builds, pip installs, and Docker images</small> | <small>MPI requires an MPI implementation such as OpenMPI.</small> |
+**Electronic structure**
+- HF and DFT (LibXC functionals) with RHF, ROHF, and UHF references
+- TDHF/TDDFT, SF-TDDFT, and **MRSF-TDDFT** including the DTCAM-series functionals
+- **UMRSF-TDDFT** excitation energies from a UHF reference (energy-only)
+- **MRSF-EKT** ionization potentials and electron affinities with Dyson orbitals and pole strengths
+
+**Properties & spectroscopy**
+- Analytic gradients; native analytic HF/DFT Hessians covering open-shell (UHF/ROHF) references, ECPs, and range-separated (CAM/LRC) functionals
+- Vibrational frequencies, thermochemistry, and native **IR and Raman intensities**
+- **NMR chemical shieldings** with CGO and GIAO (London-orbital) gauge treatments
+- MRSF-TDDFT **nonadiabatic couplings** (NACME) for dynamics workflows
+
+**Geometry & reaction paths**
+- Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB
+- Built-in native optimizer (`lib=oqp`, TRIC/DLC + restricted-step RFO), plus geomeTRIC and SciPy backends
+
+**Reliability & performance**
+- Point-group **symmetry**: detection, MO/state/mode labels, and petite-list reductions accelerating integrals, XC, gradients, and response
+- DFT grids: Lebedev plus SG-0/SG-1/SG-2/SG-3 pruned grids with per-element DE2 radial quadrature; OpenMP-parallel XC kernels
+- Native initial guesses (`hcore`, `huckel`, `modhuckel`, `minao`, `sap`), JSON restart, OpenTrustRegion (TRAH) SCF stabilization, Davidson auto-restart, and MINRES/AUTO Z-vector fallbacks
+- OpenMP/MPI parallelism, ILP64 BLAS/LAPACK, pip installs, and Docker images
+
+**Ecosystem**
+- LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and the browser-based [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) viewer
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
