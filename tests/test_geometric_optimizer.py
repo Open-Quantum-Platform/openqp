@@ -84,6 +84,12 @@ def install_runfunc_stubs():
     setattr(libgeometric, "GeometricNEBOpt", GeometricNEBOpt)
     sys.modules["oqp.library.libgeometric"] = libgeometric
 
+    # runfunc also imports the native optimizer backend; stub it too.
+    libnative = types.ModuleType("oqp.library.libnative")
+    libnative.NativeOpt = type("NativeOpt", (), {})
+    libnative.NativeTSOpt = type("NativeTSOpt", (), {})
+    sys.modules["oqp.library.libnative"] = libnative
+
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
 

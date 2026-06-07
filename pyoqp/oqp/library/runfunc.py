@@ -16,6 +16,7 @@ from oqp.library.libgeometric import (
     GeometricOpt,
     GeometricTSOpt,
 )
+from oqp.library.libnative import NativeOpt, NativeTSOpt
 
 
 def compute_energy(mol):
@@ -196,6 +197,15 @@ def get_optimizer(mol):
             'ts': GeometricTSOpt,
             'irc': GeometricIRCOpt,
             'neb': GeometricNEBOpt,
+        },
+        'native': {
+            'optimize': NativeOpt,
+            'meci': None,
+            'mecp': None,
+            'mep': None,
+            'ts': NativeTSOpt,
+            'irc': None,
+            'neb': None,
         },
     }
 

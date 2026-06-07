@@ -50,7 +50,7 @@ class Optimizer:
             self.optimizer = mol.config['optimize']['lib']
 
         # check optimizer
-        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'geometric']:
+        if self.optimizer not in ['cg', 'bfgs', 'l-bfgs-b', 'newton-cg', 'geometric', 'native']:
             raise ValueError(f'Unknown optimizer {self.optimizer}')
 
         self.metrics = {

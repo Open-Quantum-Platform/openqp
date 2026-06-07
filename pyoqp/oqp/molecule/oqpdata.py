@@ -201,6 +201,12 @@ OQP_CONFIG_SCHEMA = {
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
     },
+    'native': {
+        'coordsys': {'type': str, 'default': 'auto'},
+        'trust': {'type': float, 'default': '0.2'},
+        'trust_max': {'type': float, 'default': '0.5'},
+        'follow': {'type': int, 'default': '0'},
+    },
     'neb': {
         'product': {'type': str, 'default': ''},
         'nimage': {'type': int, 'default': '5'},
