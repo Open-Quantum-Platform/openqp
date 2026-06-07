@@ -891,14 +891,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
-    if lib == "native" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb"}:
+    if lib == "native" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb", "irc"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "The native optimizer currently supports optimize, ts, meci, mecp, tci, and neb.",
+            "The native optimizer currently supports optimize, ts, meci, mecp, tci, neb, and irc.",
             value=f"{lib}/{runtype}",
-            expected="optimize, ts, meci, mecp, tci, or neb",
-            action="Use [optimize] lib=geometric for IRC, or set a supported native runtype.",
+            expected="optimize, ts, meci, mecp, tci, neb, or irc",
+            action="Choose a supported native runtype.",
         )
 
     if runtype == "tci":

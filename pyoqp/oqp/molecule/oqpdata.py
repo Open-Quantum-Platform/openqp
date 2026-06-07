@@ -209,6 +209,8 @@ OQP_CONFIG_SCHEMA = {
         'spring': {'type': float, 'default': '0.05'},
         'climb': {'type': bool, 'default': 'True'},
         'fmax': {'type': float, 'default': '2e-3'},
+        'irc_step': {'type': float, 'default': '0.1'},
+        'irc_direction': {'type': str, 'default': 'forward'},
     },
     'neb': {
         'product': {'type': str, 'default': ''},

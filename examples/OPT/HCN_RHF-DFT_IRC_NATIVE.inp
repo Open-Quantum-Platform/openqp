@@ -1,0 +1,27 @@
+[input]
+system=
+   C          -0.3295125493       0.0000000000      -0.0904659977
+   N           0.2100347542       0.0000000000       0.9558614135
+   H           0.8194777951       0.0000000000      -0.3153954159
+charge=0
+functional=bhhlyp
+basis=6-31g*
+runtype=irc
+method=hf
+
+[scf]
+type=rhf
+multiplicity=1
+
+[hess]
+type=analytical
+state=0
+
+[optimize]
+lib=native
+istate=0
+maxit=10
+
+[native]
+irc_step=0.15
+irc_direction=forward

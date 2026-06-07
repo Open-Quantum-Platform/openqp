@@ -35,11 +35,13 @@ def _load_native_modules():
     nc = _load("oqp.library.native_coords", LIB / "native_coords.py")
     ne = _load("oqp.library.native_engine", LIB / "native_engine.py")
     nb = _load("oqp.library.native_neb", LIB / "native_neb.py")
-    return nc, ne, nb
+    ni = _load("oqp.library.native_irc", LIB / "native_irc.py")
+    return nc, ne, nb, ni
 
 
-NC, NE, NB = _load_native_modules()
+NC, NE, NB, NI = _load_native_modules()
 NEB = NB.NEB
+IRC = NI.IRC
 
 
 # --------------------------------------------------------------------------- #
@@ -186,9 +188,9 @@ class TestDispatchAndValidation(unittest.TestCase):
         self.assertEqual(report.errors, [],
                          "native/optimize should validate clean")
 
-        # meci is supported on native; irc is not.
+        # meci/irc are supported on native; mep is not.
         report2 = ic.CheckReport()
-        cfg2 = {"input": {"runtype": "irc", "method": "hf"},
+        cfg2 = {"input": {"runtype": "mep", "method": "hf"},
                 "optimize": {"lib": "native", "istate": 0}}
         ic._check_optimize(cfg2, report2)
         msgs = " ".join(d.message for d in report2.diagnostics)
@@ -279,6 +281,36 @@ class TestNativeNEB(unittest.TestCase):
         neb.run(eg, fmax_tol=0.0, maxiter=1, dt=0.5, maxmove=0.2)
         moved = np.linalg.norm(neb.images[1] - x_before)
         self.assertLessEqual(moved, 0.2 + 1e-9)
+
+
+class TestNativeIRC(unittest.TestCase):
+    """Gonzalez-Schlegel IRC on V=(x^2-1)^2 + y^2 + z^2 (1 atom).
+
+    Saddle at the origin (imaginary mode along x); IRC forward/backward must
+    descend monotonically into the +/-x minima.
+    """
+
+    def _eg(self, xf):
+        x, y, z = xf
+        return (x * x - 1) ** 2 + y * y + z * z, \
+            np.array([4 * x * (x * x - 1), 2 * y, 2 * z])
+
+    def test_imaginary_mode(self):
+        mode, curv = NI.imaginary_mode([1.0], np.diag([-4.0, 2.0, 2.0]))
+        self.assertLess(curv, 0.0)
+        self.assertAlmostEqual(abs(mode[0]), 1.0, places=6)
+
+    def test_irc_descends_both_directions(self):
+        mode, _ = NI.imaginary_mode([1.0], np.diag([-4.0, 2.0, 2.0]))
+        for sign, target in ((+1, 1.0), (-1, -1.0)):
+            res = IRC([1.0], [0, 0, 0.0], mode, step=0.08, sign=sign).run(
+                self._eg, max_points=80, gtol=1e-4)
+            self.assertTrue(res["converged"])
+            self.assertLess(abs(res["points"][-1]["x"][0] - target), 0.1)
+            es = [p["energy"] for p in res["points"]]
+            # monotonic descent up to the final basin-overshoot point
+            self.assertTrue(all(es[i] >= es[i + 1] - 1e-9
+                                for i in range(len(es) - 2)))
 
 
 class TestNativeExample(unittest.TestCase):

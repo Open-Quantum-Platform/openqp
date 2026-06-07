@@ -315,3 +315,77 @@ class NativeNEBOpt(StateSpecificOpt):
             dump_log(self.mol, title="PyOQP: NEB Reached Max Iterations (fmax=%.3e)"
                      % result["fmax"])
         self.neb_result = result
+
+
+class NativeIRCOpt(StateSpecificOpt):
+    """Intrinsic reaction coordinate by the native Gonzalez-Schlegel IRC.
+
+    Computes the Hessian at the starting transition state, takes the
+    imaginary-frequency mode as the initial (mass-weighted) direction, and
+    traces the mass-weighted steepest-descent path forward or backward (see
+    :mod:`oqp.library.native_irc`).
+    """
+
+    def __init__(self, mol):
+        StateSpecificOpt.__init__(self, mol)
+        nat_cfg = mol.config.get("native", {})
+        geo_cfg = mol.config.get("geometric", {})
+        self.irc_step = float(nat_cfg.get("irc_step", 0.10))
+        direction = nat_cfg.get("irc_direction",
+                                geo_cfg.get("irc_direction", "forward"))
+        self.irc_sign = -1 if str(direction).lower().startswith("back") else 1
+
+    def _energy_gradient(self, coords):
+        self.mol.update_system(coords)
+        energies = self.sp.energy(do_init_scf=True)
+        self.grad.grads = [self.istate]
+        grads = self.grad.gradient()
+        self.mol.energies = energies
+        self.mol.grads = grads
+        energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
+        return float(energies[self.istate]), grads[self.istate].reshape(-1)
+
+    def optimize(self):
+        from oqp.library.single_point import Hessian
+        from oqp.library.native_irc import IRC, imaginary_mode
+
+        dump_log(self.mol, title="PyOQP: Native IRC [direction=%s, step=%.3f]"
+                 % ("backward" if self.irc_sign < 0 else "forward", self.irc_step))
+
+        # Hessian at the transition state -> imaginary mode.  The Hessian class
+        # reads mol.energies, so converge the SCF/reference at the TS first.
+        self.mol.update_system(np.asarray(self.pre_coord, dtype=float).reshape(-1))
+        self.mol.energies = self.sp.energy(do_init_scf=True)
+        self.mol.config["hess"]["state"] = self.istate
+        Hessian(self.mol).hessian()
+        hess = np.asarray(self.mol.hessian, dtype=float)
+        mass = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        mode, curv = imaginary_mode(mass, hess)
+        if curv >= 0.0:
+            dump_log(self.mol, title="PyOQP: WARNING IRC start has no negative "
+                     "Hessian eigenvalue (curvature=%.4e); not a transition state"
+                     % curv)
+
+        x_ts = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        irc = IRC(mass, x_ts, mode, step=self.irc_step, sign=self.irc_sign)
+
+        def log_point(k, energy, gmax):
+            dump_log(self.mol, title="IRC Point %d  E=%.8f  gmax=%.3e"
+                     % (k + 1, energy, gmax))
+
+        result = irc.run(self._energy_gradient, max_points=self.maxit,
+                         on_point=log_point)
+
+        e0 = result["points"][0]["energy"]
+        for idx, p in enumerate(result["points"]):
+            dump_data(self.mol,
+                      (idx, self.atoms, p["x"].reshape(-1, 3),
+                       p["energy"], p["energy"] - e0),
+                      title="IRC", fpath=self.mol.log_path)
+        if result["converged"]:
+            dump_log(self.mol, title="PyOQP: IRC Reached A Minimum (%s, %d points)"
+                     % (result.get("reason", ""), result["npoint"]))
+        else:
+            dump_log(self.mol, title="PyOQP: IRC Stopped At Max Points (%d)"
+                     % result["npoint"])
+        self.irc_result = result
