@@ -24,6 +24,9 @@ Run-output labeling gates (increment 3):
 - [x] `Molecule.label_molecular_orbitals()`: unpacks triangular `OQP::SM`, reads shells from `get_basis()` (centers/angs), labels `VEC_MO_A` (+`_B` for uhf/rohf), stores under `symmetry_metadata['mo_labels']`; skips gracefully on f-shells/non-Cartesian/shape mismatch; never fatal.
 - [x] Hook in `SinglePoint.reference()` after converged SCF (no-op unless symmetry enabled). Covered by `tests/test_symmetry_mo_label_wiring.py`, incl. frame-invariance under random input rotation.
 
+Real-backend validation gate:
+- [x] `tests/smoke_symmetry_real_backend.py` (run with a built-oqp venv): grafts branch modules onto an installed oqp, runs real RHF and MRSF-BHHLYP/6-31G* water in a diagonal input orientation. Validates get_basis layout, triangular OQP::SM, VEC_MO orientation, td_bvec_mo layout, d shells, and input-frame conjugation on real data. Results: occupied [a1 a1 b2 a1 b1], ground state 1A1; MRSF singlets [1A1, 1B1, 1A2] with SOMO reference [b1, a1]; character deviations ~1e-16. PASSED 2026-06-07.
+
 Remaining (future increments):
 - [x] Label normal modes in run outputs (`assign_mode_irreps` + `Molecule.label_normal_modes`, hooked before `save_freqs`; labels land in hess.json via symmetry_metadata).
 - [x] SCF ground-state term symbol (product of occupied MO irreps; RHF/UHF/ROHF, e.g. 1A1/2B1) in mo_labels payload and log.
