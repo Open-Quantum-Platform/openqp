@@ -130,6 +130,20 @@ class Runner:
         else:
             self.mol.load_config(input_file)
 
+        # Apply the parsed `omp_threads` at runtime. The pre-import hook only sees
+        # a CLI flag or an input *file*, so this also covers the programmatic
+        # Runner(input_dict=...) path. omp_set_num_threads takes effect for the
+        # subsequent SCF parallel regions; we also export OMP_NUM_THREADS so the
+        # input checker / any later BLAS sizing see a consistent value.
+        _omp = self.mol.config.get("input", {}).get("omp_threads", 0)
+        if _omp and _omp > 0:
+            if oqp.lib.oqp_have_openmp():
+                oqp.lib.oqp_omp_set_num_threads(int(_omp))
+                os.environ["OMP_NUM_THREADS"] = str(int(_omp))
+            elif not self.mol.silent:
+                print(f"PyOQP WARNING: omp_threads={_omp} requested but this "
+                      "OpenQP build has no OpenMP support; running serially.")
+
         # check input values set default omp_num_threads
         _input_file = getattr(self.mol, "input_file", None)
         check_input_values(
