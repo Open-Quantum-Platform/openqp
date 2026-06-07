@@ -4,7 +4,10 @@ module libecp_result
 
     type, bind(c) :: ecp_result
         type(c_ptr) :: data
-        integer(c_int) :: size
+        ! 64-bit: the second-derivative payload is 3N(3N+1)/2 * nbf^2 doubles,
+        ! which overflows a 32-bit count already around ~50 atoms / 500 basis
+        ! functions. (Mirrors int64_t in source/wrapper/libecpint_wrapper.cpp.)
+        integer(c_int64_t) :: size
     end type ecp_result
 end module libecp_result
 

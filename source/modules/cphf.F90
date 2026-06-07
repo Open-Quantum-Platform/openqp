@@ -104,6 +104,8 @@ module cphf_mod
   public :: rohf_pack_trial, rohf_unpack_trial
   public :: cphf_static_polarizability
   public :: cphf_static_polarizability_C
+  public :: cphf_uhf_static_polarizability
+  public :: cphf_rohf_static_polarizability
   public :: cphf_polarizability_selftest
   public :: cphf_polarizability_selftest_C
   public :: cphf_uhf_polarizability_selftest
@@ -175,7 +177,9 @@ contains
         pxm(j,i) = mo_energy_a(nocc+i) - mo_energy_a(j)
       end do
     end do
-    xminv = 1.0_dp/xm
+    ! clamp near-degenerate occ-vir gaps so the diagonal preconditioner
+    ! stays finite (same guard as the ROHF solver)
+    xminv = 1.0_dp/sign(max(abs(xm), 1.0d-8), xm)
 
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
@@ -316,7 +320,17 @@ contains
     real(c_double), intent(out) :: alpha(3,3)
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call cphf_static_polarizability(inf, alpha)
+    ! Dispatch on the SCF reference so every caller (in particular the
+    ! vibrational Raman-activity path) gets the correct response kernel:
+    ! 1 = RHF/RKS, 2 = UHF/UKS, 3 = ROHF/ROKS.
+    select case (inf%control%scftype)
+    case (2)
+      call cphf_uhf_static_polarizability(inf, alpha)
+    case (3)
+      call cphf_rohf_static_polarizability(inf, alpha)
+    case default
+      call cphf_static_polarizability(inf, alpha)
+    end select
   end subroutine cphf_static_polarizability_C
 
 !> @brief Compute native closed-shell static dipole polarizability.
@@ -491,7 +505,9 @@ contains
         end do
       end do
     end if
-    xminv = 1.0_dp/xm
+    ! clamp near-degenerate occ-vir gaps so the diagonal preconditioner
+    ! stays finite (same guard as the ROHF solver)
+    xminv = 1.0_dp/sign(max(abs(xm), 1.0d-8), xm)
 
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
@@ -620,26 +636,26 @@ contains
     call cphf_uhf_polarizability_selftest(inf)
   end subroutine cphf_uhf_polarizability_selftest_C
 
-!> @brief Validate the open-shell CPHF solver via the static dipole
-!>   polarizability.  Built per spin: B^sigma_ia = -<i|q|a>^sigma, solve
+!> @brief Compute the native open-shell (UHF) static dipole polarizability.
+!>   Built per spin: B^sigma_ia = -<i|q|a>^sigma, solve
 !>   M U^q = B^q, and alpha_pq = -2 sum_sigma sum_ia mu^p,sigma_ia U^q,sigma_ia.
 !>   For a closed-shell system run as UHF (multiplicity 1) the tensor must equal
 !>   the closed-shell (RHF) cphf_static_polarizability, which is the unambiguous
-!>   correctness check for the spin coupling and normalization.  Written to
-!>   /tmp/cphf_uhf_polar.out.
-  subroutine cphf_uhf_polarizability_selftest(infos)
+!>   correctness check for the spin coupling and normalization.
+  subroutine cphf_uhf_static_polarizability(infos, alpha)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_VEC_MO_B
     use int1, only: multipole_integrals
     use mathlib, only: unpack_matrix
     type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(out) :: alpha(3,3)
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:)
     real(kind=dp), allocatable :: mints(:,:), dipfull(:,:), dmo(:,:), scr(:,:)
     real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), mua(:,:), mub(:,:)
-    real(kind=dp) :: origin(3), alpha(3,3)
+    real(kind=dp) :: origin(3)
     integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, la, lb, ltot
-    integer :: q, i, a, ia, pq, uu
+    integer :: q, i, a, ia, pq
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -700,6 +716,19 @@ contains
       end do
     end do
 
+    deallocate(mints, dipfull, dmo, scr, bvec, uvec, mua, mub)
+  end subroutine cphf_uhf_static_polarizability
+
+!> @brief Validate the open-shell (UHF) CPHF solver via the static dipole
+!>   polarizability.  Written to /tmp/cphf_uhf_polar.out.
+  subroutine cphf_uhf_polarizability_selftest(infos)
+    type(information), target, intent(inout) :: infos
+
+    real(kind=dp) :: alpha(3,3)
+    integer :: i, uu
+
+    call cphf_uhf_static_polarizability(infos, alpha)
+
     open(newunit=uu, file='/tmp/cphf_uhf_polar.out', status='replace', action='write')
     write(uu,'(a)') 'open-shell (UHF) CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
@@ -707,8 +736,6 @@ contains
     end do
     write(uu,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
     close(uu)
-
-    deallocate(mints, dipfull, dmo, scr, bvec, uvec, mua, mub)
   end subroutine cphf_uhf_polarizability_selftest
 
 !###############################################################################
@@ -1029,26 +1056,26 @@ contains
     call cphf_rohf_polarizability_selftest(inf)
   end subroutine cphf_rohf_polarizability_selftest_C
 
-!> @brief Validate the ROHF CPHF solver via the static dipole polarizability.
+!> @brief Compute the native ROHF static dipole polarizability.
 !>   For a closed-shell molecule run as ROHF (multiplicity 1, offset=0) the
 !>   rotation space reduces to the virt-docc block and the ROHF orbital Hessian
 !>   reduces to (twice) the RHF one; the resulting static polarizability must
 !>   equal the validated closed-shell cphf_static_polarizability.  This is the
 !>   unambiguous check for the solver plumbing, the operator and the packing.
-!>   Written to /tmp/cphf_rohf_polar.out.
-  subroutine cphf_rohf_polarizability_selftest(infos)
+  subroutine cphf_rohf_static_polarizability(infos, alpha)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use int1, only: multipole_integrals
     use mathlib, only: unpack_matrix
     type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(out) :: alpha(3,3)
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: mo(:,:)
     real(kind=dp), allocatable :: mints(:,:), dipfull(:,:), dmo(:,:), scr(:,:)
     real(kind=dp), allocatable :: xa(:,:), xb(:,:), bvec(:,:), uvec(:,:)
-    real(kind=dp) :: origin(3), alpha(3,3)
+    real(kind=dp) :: origin(3)
     integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, ltot
-    integer :: q, pq, i, a, uu
+    integer :: q, pq, i, a
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1099,6 +1126,19 @@ contains
       end do
     end do
 
+    deallocate(mints, dipfull, dmo, scr, xa, xb, bvec, uvec)
+  end subroutine cphf_rohf_static_polarizability
+
+!> @brief Validate the ROHF CPHF solver via the static dipole polarizability.
+!>   Written to /tmp/cphf_rohf_polar.out.
+  subroutine cphf_rohf_polarizability_selftest(infos)
+    type(information), target, intent(inout) :: infos
+
+    real(kind=dp) :: alpha(3,3)
+    integer :: i, uu
+
+    call cphf_rohf_static_polarizability(infos, alpha)
+
     open(newunit=uu, file='/tmp/cphf_rohf_polar.out', status='replace', action='write')
     write(uu,'(a)') 'open-shell (ROHF) CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
@@ -1106,8 +1146,6 @@ contains
     end do
     write(uu,'(a,f16.8)') 'isotropic = ', (alpha(1,1)+alpha(2,2)+alpha(3,3))/3.0_dp
     close(uu)
-
-    deallocate(mints, dipfull, dmo, scr, xa, xb, bvec, uvec)
   end subroutine cphf_rohf_polarizability_selftest
 
 end module cphf_mod
