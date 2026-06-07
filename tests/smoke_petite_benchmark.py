@@ -35,9 +35,9 @@ def acene(n_rings):
     for cx in centers:
         for sx in (1.0, -1.0):
             for sy in (1.0, -1.0):
-                carbons.add((round(cx + sx * half, 6), round(sy * a / 2, 6)))
+                carbons.add((round(cx + sx * half, 12), round(sy * a / 2, 12)))
         for sy in (1.0, -1.0):
-            carbons.add((round(cx, 6), round(sy * a, 6)))
+            carbons.add((round(cx, 12), round(sy * a, 12)))
 
     hydrogens = []
     for cx, cy in sorted(carbons):
@@ -51,8 +51,8 @@ def acene(n_rings):
             ux, uy = (cx - ccx) / a, cy / a
             hydrogens.append((cx + h * ux, cy + h * uy))
 
-    lines = [f'   6 {x:13.6f} {y:13.6f}   0.000000' for x, y in sorted(carbons)]
-    lines += [f'   1 {x:13.6f} {y:13.6f}   0.000000' for x, y in hydrogens]
+    lines = [f'   6 {x:19.12f} {y:19.12f}   0.0' for x, y in sorted(carbons)]
+    lines += [f'   1 {x:19.12f} {y:19.12f}   0.0' for x, y in hydrogens]
     return '\n'.join(lines)
 
 

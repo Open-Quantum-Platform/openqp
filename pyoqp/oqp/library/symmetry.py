@@ -739,6 +739,65 @@ def build_reduction_maps(
     }
 
 
+def build_full_group_blocks(
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Shell map and dense per-shell operation blocks for the full group.
+
+    Generalizes the petite-list staging beyond sign-diagonal (abelian)
+    operations: every operation contributes its shell permutation plus a
+    dense (size x size) component-mixing block per shell, flattened
+    column-major (Fortran order), concatenated shell-by-shell then
+    op-by-op.
+    """
+
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+
+    offsets: list[int] = []
+    n_ao = 0
+    atom_shells: dict[int, list[int]] = {}
+    for idx, (atom, l, pure) in enumerate(shell_list):
+        offsets.append(n_ao)
+        n_ao += _shell_size(l, pure)
+        atom_shells.setdefault(atom, []).append(idx)
+
+    signatures = {
+        atom: tuple(shell_list[idx][1:] for idx in idx_list)
+        for atom, idx_list in atom_shells.items()
+    }
+
+    nshell = len(shell_list)
+    shell_perm = np.zeros((len(op_list), nshell), dtype=int)
+    block_chunks: list[np.ndarray] = []
+    for iop, op in enumerate(op_list):
+        matrix = _to_float_array(op['matrix'])
+        if matrix.shape != (3, 3) or not np.allclose(
+                matrix @ matrix.T, np.eye(3), atol=1.0e-10):
+            raise ValueError("operation matrices must be orthogonal 3x3 arrays")
+        permutation = [int(a) for a in op['permutation']]
+        for idx, (atom, l, pure) in enumerate(shell_list):
+            mapped_atom = permutation[atom]
+            if signatures[atom] != signatures.get(mapped_atom):
+                raise ValueError(
+                    "symmetry-equivalent atoms must carry identical shell lists")
+            shell_rank = atom_shells[atom].index(idx)
+            shell_perm[iop, idx] = atom_shells[mapped_atom][shell_rank]
+            block = _shell_block_any(l, pure, matrix)
+            # Fortran column-major flattening.
+            block_chunks.append(np.asarray(block, dtype=float).ravel(order='F'))
+
+    return {
+        'n_operations': len(op_list),
+        'n_shells': nshell,
+        'n_ao': n_ao,
+        'shell_permutation': shell_perm.tolist(),
+        'blocks': np.concatenate(block_chunks) if block_chunks else np.zeros(0),
+        'status': 'metadata_only_no_reductions',
+    }
+
+
 def product_irrep(labels: Iterable[str], character_table: Mapping[str, Iterable[int]]) -> str:
     """Direct product of abelian irreps, e.g. b1 x b2 -> a2 in C2v.
 

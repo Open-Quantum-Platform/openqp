@@ -46,7 +46,7 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertIn("'label_mo': {'type': bool, 'default': 'True'}", text)
         self.assertIn("'label_states': {'type': bool, 'default': 'True'}", text)
         self.assertIn("'label_modes': {'type': bool, 'default': 'True'}", text)
-        self.assertIn("'use_integral_symmetry': {'type': bool, 'default': 'False'}", text)
+        self.assertIn("'use_integral_symmetry': {'type': string, 'default': 'False'}", text)
         self.assertIn("'use_response_symmetry': {'type': bool, 'default': 'False'}", text)
         self.assertIn("'tolerance': {'type': float, 'default': '1.0e-5'}", text)
         self.assertIn("'strict': {'type': bool, 'default': 'False'}", text)

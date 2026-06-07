@@ -62,6 +62,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
   character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
   character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"

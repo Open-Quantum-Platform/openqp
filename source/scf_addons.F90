@@ -1139,7 +1139,7 @@ contains
 
     ! Petite-list runs produce a skeleton matrix; project onto the
     ! totally symmetric component: F <- (1/|G|) sum_op T_op F T_op^T.
-    if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis%nbf, f)
+    if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis, f)
 
     call int2_driver%clean()
 
@@ -1152,7 +1152,150 @@ contains
 !>   signed AO permutation of each abelian symmetry operation (standard
 !>   orientation), using the maps written by pyoqp. No-op if the maps are
 !>   missing.
-  subroutine symmetrize_skeleton_fock(infos, nbf, f)
+  subroutine symmetrize_skeleton_fock(infos, basis, f)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: f(:,:)
+
+    real(kind=dp), contiguous, pointer :: blocks(:)
+    integer(4) :: status
+    integer :: nbf
+
+    nbf = basis%nbf
+    call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+    if (status == TA_OK) then
+      call symmetrize_skeleton_blocked(infos, basis, f, blocks)
+    else
+      call symmetrize_skeleton_signed(infos, nbf, f)
+    end if
+
+  end subroutine symmetrize_skeleton_fock
+
+!--------------------------------------------------------------------------------
+
+!> @brief Full-group skeleton symmetrization with dense per-shell blocks.
+!> @detail F <- (1/|G|) sum_op T_op F T_op^T where T_op permutes shells and
+!>   mixes components within each shell (non-abelian operations such as the
+!>   C6 rotations of D6h). Blocks staged by pyoqp, column-major per shell,
+!>   concatenated shell-by-shell then op-by-op.
+  subroutine symmetrize_skeleton_blocked(infos, basis, f, blocks)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: f(:,:)
+    real(kind=dp), contiguous, intent(in) :: blocks(:)
+
+    integer(8), contiguous, pointer :: shell_map(:)
+    integer(4) :: status
+    integer :: nbf, nshell, nops, iop, nf, k, j, s, off_k, off_j
+    integer :: mu, nu, idx, blk0, blk_per_op
+    real(kind=dp), allocatable :: fsq(:,:), y(:,:), acc(:,:)
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, shell_map, status=status)
+    if (status /= TA_OK) return
+
+    nbf = basis%nbf
+    nshell = basis%nshell
+    if (mod(size(shell_map), nshell) /= 0) return
+    nops = int(size(shell_map)/nshell)
+    if (nops < 2) return
+
+    blk_per_op = 0
+    do k = 1, nshell
+      s = shell_size(basis, k, nbf)
+      blk_per_op = blk_per_op + s*s
+    end do
+    if (size(blocks) /= nops*blk_per_op) return
+
+    allocate(fsq(nbf, nbf), y(nbf, nbf), acc(nbf, nbf))
+
+    do nf = 1, ubound(f, 2)
+      ! unpack the packed lower triangle
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          fsq(mu, nu) = f(idx, nf)
+          fsq(nu, mu) = f(idx, nf)
+        end do
+      end do
+
+      acc = 0.0_dp
+      do iop = 1, nops
+        ! Operator transform: F <- T^T F T (T maps shell k to shell j with
+        ! block B_k; T is metric-orthogonal, not orthogonal, so the
+        ! transpose side matters once d shells mix under rotations).
+        ! Y = T^T F : rows of source shell k get B_k^T @ rows of shell j.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            y(off_k+1:off_k+s, :) = matmul(transpose(b), fsq(off_j+1:off_j+s, :))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+        ! acc += Y T : columns of source shell k get Y cols j @ B_k.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            acc(:, off_k+1:off_k+s) = acc(:, off_k+1:off_k+s) &
+                + matmul(y(:, off_j+1:off_j+s), b)
+          end associate
+          blk0 = blk0 + s*s
+        end do
+      end do
+
+      acc = acc/real(nops, dp)
+
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          f(idx, nf) = acc(mu, nu)
+        end do
+      end do
+    end do
+
+  contains
+
+    integer function shell_size(basis, k, nbf) result(s)
+      type(basis_set), intent(in) :: basis
+      integer, intent(in) :: k, nbf
+      if (k < basis%nshell) then
+        s = basis%ao_offset(k+1) - basis%ao_offset(k)
+      else
+        s = nbf - basis%ao_offset(k) + 1
+      end if
+    end function shell_size
+
+  end subroutine symmetrize_skeleton_blocked
+
+!--------------------------------------------------------------------------------
+
+!> @brief Abelian (signed-permutation) skeleton symmetrization.
+  subroutine symmetrize_skeleton_signed(infos, nbf, f)
     use precision, only: dp
     use types, only: information
     use oqp_tagarray_driver
@@ -1204,7 +1347,7 @@ contains
       f(:, nf) = acc/real(nops, dp)
     end do
 
-  end subroutine symmetrize_skeleton_fock
+  end subroutine symmetrize_skeleton_signed
   !> @brief Builds AO-space linear response vector(s) in packed (triangular) form.
   !> @detail Forms the Coulomb/exchange response and, when using DFT, the
   !>         exchange–correlation kernel contribution in AO space.
@@ -1395,7 +1538,7 @@ contains
       end if
       ! The reduced-grid XC matrix is a skeleton: project onto the totally
       ! symmetric component (the XC energy/electron count are already exact).
-      call symmetrize_skeleton_fock(infos, nbf, pfxc)
+      call symmetrize_skeleton_fock(infos, basis, pfxc)
     else if (scf_type == scf_rhf) then
       ! Restricted calculation - same matrix for alpha and beta
       call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &

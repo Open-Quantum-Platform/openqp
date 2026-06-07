@@ -47,6 +47,10 @@ module int2_compute
     real(kind=dp) :: mu2 = 1.0d99
     ! Petite-list orbit weight (q4); 1 unless symmetry reduction is active.
     real(kind=dp) :: weight = 1.0d0
+    ! Weighted screening thresholds: needed by the non-abelian full-group
+    ! tier (orbit members have unequal magnitudes); the abelian tier keeps
+    ! the C1-identical unweighted cutoff for exact cancellation.
+    logical :: weighted_cutoff = .false.
     real(kind=dp), pointer :: pints(:,:,:,:)
     type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t), allocatable :: gdat
@@ -145,6 +149,7 @@ module int2_compute
     ! use_integral_symmetry). The shell map is 1-based, stored flat with
     ! shell index fastest: map(shell, op) = sym_shell_map((op-1)*nshell+shell).
     logical :: petite = .false.
+    logical :: sym_full = .false.
     integer :: sym_nops = 0
     integer(8), contiguous, pointer :: sym_shell_map(:) => null()
 
@@ -300,6 +305,12 @@ contains
 
     this%sym_nops = int(size(this%sym_shell_map)/this%basis%nshell)
     this%petite = this%sym_nops > 1
+
+    block
+      real(kind=dp), contiguous, pointer :: blocks(:)
+      call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+      this%sym_full = status == TA_OK
+    end block
 
   end subroutine int2_compute_t_enable_petite
 
@@ -639,6 +650,11 @@ contains
 
         if (this%schwarz) then
           test = int2_consumer%screen_ij(this%schwarz_ints, i, j)
+          ! With the petite list active the surviving representative carries
+          ! up to |G| weight, so the pair-level skip must be conservative by
+          ! the same factor (orbit members of non-abelian operations live in
+          ! different shell pairs with different bounds).
+          if (this%petite .and. this%sym_full) test = test*real(this%sym_nops, dp)
           if (test < this%cutoffs%integral_cutoff) then
             nschwz = nschwz + i*(i-1)/2+j
             cycle
@@ -653,13 +669,6 @@ contains
           do l = 1, jork
 
 !$          if (oflag) tim1 = omp_get_wtime()
-            if (this%schwarz) then
-              test = int2_consumer%screen_ijkl(this%schwarz_ints, i, j, k, l)
-              if (test < this%cutoffs%integral_cutoff) then
-                nschwz = nschwz+1
-                cycle
-              end if
-            end if
             ! Petite list: keep only the orbit representative, weighted by
             ! the orbit size; the skeleton Fock is symmetrized afterwards.
             if (this%petite) then
@@ -667,8 +676,22 @@ contains
                                          nshell, i, j, k, l)
               if (q4 == 0) cycle
               eri_data%weight = real(q4, dp)
+              eri_data%weighted_cutoff = this%sym_full
             else
               eri_data%weight = 1.0d0
+              eri_data%weighted_cutoff = .false.
+            end if
+
+            if (this%schwarz) then
+              test = int2_consumer%screen_ijkl(this%schwarz_ints, i, j, k, l)
+              ! Screen the weighted contribution: non-abelian orbit members
+              ! have unequal element magnitudes, so the unweighted threshold
+              ! would leak a systematic cutoff-level error into the skeleton.
+              if (eri_data%weighted_cutoff) test = test*eri_data%weight
+              if (test < this%cutoffs%integral_cutoff) then
+                nschwz = nschwz+1
+                cycle
+              end if
             end if
 
             thr_nshq = thr_nshq + 1
@@ -1408,12 +1431,17 @@ jc:   do j = 1, maxj
 
           do l = 1, maxl
 
-            ! Cutoff on the unweighted value keeps the screening set
-            ! identical to the C1 path; the petite orbit weight is applied
-            ! after.
+            ! Element cutoff on the weighted magnitude: the stored value
+            ! carries the orbit weight, so the effective threshold matches
+            ! the C1 path even when non-abelian orbit members have unequal
+            ! element magnitudes.
             val = eri_data%pints(l,k,j,i)
-
-            if (abs(val)<cutoff) cycle
+            if (eri_data%weighted_cutoff) then
+              if (abs(val)*eri_data%weight < cutoff) cycle
+            else
+              ! Abelian tier: C1-identical element set (exact cancellation).
+              if (abs(val) < cutoff) cycle
+            end if
             val = val*eri_data%weight
             nint = nint + 1
 

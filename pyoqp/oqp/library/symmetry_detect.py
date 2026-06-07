@@ -498,6 +498,125 @@ def detect_point_group(
     }
 
 
+def enumerate_full_group(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+    max_order: int = 120,
+) -> list[dict[str, Any]]:
+    """All point-group operations of a geometry (non-abelian included).
+
+    Seeds the set with every verified rotation power, reflection, and the
+    inversion found by the element survey, then closes it under
+    multiplication (products of symmetry operations are symmetry
+    operations). Returns operation payloads with dense 3x3 matrices and
+    atom permutations, in the frame of the given coordinates.
+    """
+
+    charges = np.asarray(atomic_numbers, dtype=float).ravel()
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
+    center = np.einsum('i,ij->j', charges, coords) / float(np.sum(charges))
+    coords -= center
+
+    seeds: list[np.ndarray] = [np.eye(3)]
+    if coords.shape[0] == 1:
+        # Single atom: report the D2h-family generators only (Kh is infinite).
+        for signs in SIGN_OPERATIONS.values():
+            seeds.append(np.diag(signs).astype(float))
+    else:
+        linear_axis = _is_linear(coords, tolerance)
+        if linear_axis is not None:
+            # Infinite group: fall back to the abelian-subgroup operations.
+            frame = _orthonormal_frame(linear_axis)
+            for signs in SIGN_OPERATIONS.values():
+                d = np.diag(signs).astype(float)
+                seeds.append(frame.T @ d @ frame)
+        else:
+            survey = _ElementSurvey(charges, coords, tolerance)
+            for axis, order in survey.proper_axes:
+                for k in range(1, order):
+                    seeds.append(_rotation_matrix(axis, 2.0 * np.pi * k / order))
+            for normal in survey.mirror_normals:
+                seeds.append(_reflection_matrix(normal))
+            if survey.has_inversion:
+                seeds.append(-np.eye(3))
+
+    def polish(matrix):
+        """Snap an approximate operation to machine precision.
+
+        The atom permutation is exact (integers); the best orthogonal
+        matrix mapping coords onto coords[perm] is the orthogonal
+        Procrustes solution. Input files often carry only ~6 decimals, so
+        unpolished operations breed near-duplicates under closure.
+        """
+        permutation = _match_permutation(charges, coords, coords @ matrix.T, tolerance)
+        if permutation is None:
+            return None
+        u, _, vt = np.linalg.svd(coords.T @ coords[permutation])
+        # Det-constrained Procrustes: planar/linear geometries leave one
+        # direction undetermined (zero singular value), so enforce the
+        # original operation's proper/improper character explicitly.
+        target_det = 1.0 if np.linalg.det(matrix) > 0 else -1.0
+        d = np.ones(3)
+        d[-1] = target_det * np.linalg.det(u @ vt)
+        polished = (u @ np.diag(d) @ vt).T
+        return polished
+
+    verified = []
+    for m in seeds:
+        polished = polish(m)
+        if polished is not None:
+            verified.append(polished)
+
+    def key(matrix):
+        return tuple(np.round(matrix, 8).ravel())
+
+    group = {key(m): m for m in verified}
+    changed = True
+    while changed and len(group) <= max_order:
+        changed = False
+        mats = list(group.values())
+        for a in mats:
+            for b in mats:
+                product = polish(a @ b)
+                if product is None:
+                    continue
+                k = key(product)
+                if k not in group:
+                    group[k] = product
+                    changed = True
+            if len(group) > max_order:
+                break
+
+    if len(group) > max_order:
+        # Tolerance artifacts can produce runaway closure; bail to seeds.
+        group = {key(m): m for m in verified}
+
+    operations: list[dict[str, Any]] = []
+    for matrix in group.values():
+        permutation = _match_permutation(charges, coords, coords @ matrix.T, tolerance)
+        if permutation is None:
+            continue
+        if np.allclose(matrix, np.eye(3), atol=1.0e-9):
+            name = 'E'
+        elif np.allclose(matrix, -np.eye(3), atol=1.0e-9):
+            name = 'i'
+        elif np.linalg.det(matrix) > 0:
+            name = 'proper'
+        else:
+            name = 'improper'
+        operations.append({
+            'name': name,
+            'matrix': matrix.tolist(),
+            'permutation': permutation,
+        })
+
+    # Identity first, deterministic order after.
+    operations.sort(key=lambda op: (op['name'] != 'E',
+                                    tuple(np.round(op['matrix'], 6).ravel())))
+    return operations
+
+
 def attach_detection_metadata(
     symmetry_metadata: MutableMapping[str, Any],
     atomic_numbers: Any,

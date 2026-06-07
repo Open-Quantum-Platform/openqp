@@ -284,15 +284,6 @@ contains
 
             if (all(gdat%skip(:))) cycle
 
-!           Obtain 2 body density for this shell block
-            call gcomp%get_density(basis,gdat%id,dab,dabmax)
-
-!           Fine screening, on integral value times density factor
-            if (dabmax*gmax<cutoff2) then
-               skip2 = skip2+1
-               cycle
-            end if
-
 !           Petite list: keep only the orbit representative; the skeleton
 !           gradient is symmetrized (projected) afterwards in pyoqp.
             if (sym_nops > 1) then
@@ -301,6 +292,16 @@ contains
             else
               q4 = 1
             end if
+
+!           Obtain 2 body density for this shell block
+            call gcomp%get_density(basis,gdat%id,dab,dabmax)
+
+!           Fine screening on the weighted contribution (see int2_twoei).
+            if (dabmax*gmax*real(q4, dp)<cutoff2) then
+               skip2 = skip2+1
+               cycle
+            end if
+
 
 !           Evaluate derivative integral, and add to the gradient
             numint = numint+1

@@ -108,7 +108,7 @@ class Molecule:
             return bool(value)
         if isinstance(value, str):
             lower = value.strip().lower()
-            if lower in ['.true.', 'true', 'on', '1', 'yes', 'y', 't']:
+            if lower in ['.true.', 'true', 'on', '1', 'yes', 'y', 't', 'full']:
                 return True
             if lower in ['.false.', 'false', 'off', '0', 'no', 'n', 'f', '']:
                 return False
@@ -490,6 +490,75 @@ class Molecule:
                 if representative[atom] == atom:
                     atom_weight[atom] = float(np.count_nonzero(representative == atom))
             self.data['OQP::sym_atom_weight'] = atom_weight
+            self._sym_atom_weight_ops = detection['operations']
+
+            # Non-abelian upgrade: if the FULL point group is larger than
+            # the abelian subgroup, stage its shell map and dense per-shell
+            # operation blocks instead -- the petite filter then keeps
+            # 1/|G_full| of the quartets and the skeleton is symmetrized
+            # with the block transforms (e.g. benzene: 24 ops vs 8).
+            # Tier selection: 'true' = abelian subgroup (machine-exact,
+            # validated to ~1e-12); 'full' = full point group (up to |G|
+            # quartet reduction, e.g. 24 for D6h benzene, accurate to
+            # ~1e-7 -- a residual kernel-threshold asymmetry between
+            # non-abelian orbit members is still under investigation).
+            want_full = str(self.config.get('symmetry', {})
+                            .get('use_integral_symmetry', '')).strip().lower() == 'full'
+            full_group = False
+            full_ops = None
+            try:
+                if not want_full:
+                    raise StopIteration  # stay on the exact abelian tier
+                from oqp.library.symmetry import build_full_group_blocks
+                from oqp.library.symmetry import _ao_operator_matrix, _normalize_shells
+                from oqp.library.symmetry_detect import enumerate_full_group
+
+                atoms_arr = np.asarray(self.get_atoms(), dtype=float).ravel()
+                coords_arr = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+                tolerance = float(meta.get('tolerance', 1.0e-5))
+                full_ops = enumerate_full_group(atoms_arr, coords_arr,
+                                                tolerance=tolerance)
+                if len(full_ops) > maps['n_operations']:
+                    full = build_full_group_blocks(shells, full_ops)
+                    # Same defense-in-depth as the abelian path: every
+                    # operation must leave the real overlap invariant.
+                    ok = True
+                    if smat is not None:
+                        norm_shells = _normalize_shells(shells)
+                        for op in full_ops:
+                            transform = _ao_operator_matrix(norm_shells, op)
+                            # Operator-transform side: functions transform
+                            # with T as columns, so S-invariance is
+                            # T^T S T = S (T is metric-orthogonal, not
+                            # orthogonal, once d shells mix under rotations).
+                            deviation = float(np.max(np.abs(
+                                transform.T @ smat @ transform - smat)))
+                            # Tight gate: ~1e-7 overlap residuals (geometry
+                            # symmetric only to input precision) become
+                            # 1e-5-level Fock errors that SCF amplifies, so
+                            # fall back to the exact abelian path instead.
+                            if deviation > 1.0e-8:
+                                ok = False
+                                break
+                    if ok:
+                        self.data['OQP::sym_shell_map'] = \
+                            (np.asarray(full['shell_permutation'],
+                                        dtype=np.int64) + 1).ravel()
+                        self.data['OQP::sym_op_blocks'] = \
+                            np.asarray(full['blocks'], dtype=np.float64)
+                        # NOTE: XC atom weights intentionally stay with the
+                        # abelian (sign-operation) group: Lebedev angular
+                        # grids are invariant under the axis-aligned
+                        # octahedral operations but NOT under C3/C6
+                        # rotations, so full-group grid reduction would be
+                        # inexact.
+                        full_group = True
+                        meta['reduction_maps_full'] = {
+                            'n_operations': full['n_operations'],
+                            'operations': full_ops,
+                        }
+            except Exception:
+                full_group = False
 
             self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
 
@@ -497,9 +566,15 @@ class Molecule:
             meta['integral_symmetry'] = {
                 'status': 'active',
                 'group': meta.get('subgroup'),
-                'n_operations': maps['n_operations'],
+                'n_operations': (meta['reduction_maps_full']['n_operations']
+                                 if full_group else maps['n_operations']),
+                'full_group': full_group,
                 'reoriented': True,
             }
+            try:
+                self._dump_symmetry_log()
+            except Exception:
+                pass
             return True
         except Exception as exc:
             # Fail safe to the C1 path.
@@ -715,6 +790,9 @@ class Molecule:
 
         try:
             operations = detection['operations']
+            full = meta.get('reduction_maps_full')
+            if meta.get('integral_symmetry', {}).get('full_group') and full:
+                operations = full['operations']
             arr = np.asarray(grads, dtype=float)
             shape = arr.shape
             natom = len(operations[0]['permutation'])
@@ -772,6 +850,40 @@ class Molecule:
             # Labeling must never break the run in the metadata-only phase.
             meta['mode_labels'] = {'status': 'error', 'error': str(exc)}
             return None
+
+    @mpi_dump
+    def _dump_symmetry_log(self):
+        """Append a symmetry summary block to the main log (best effort)."""
+        try:
+            meta = self.symmetry_metadata
+            active = meta.get('integral_symmetry', {})
+            full = meta.get('reduction_maps_full')
+            lines = [
+                '',
+                '   ==============================================',
+                '   PyOQP: molecular symmetry',
+                '   ==============================================',
+                f"   detected point group : {meta.get('detected_point_group', '?')}",
+                f"   abelian subgroup     : {meta.get('detected_subgroup', '?')}",
+            ]
+            if full:
+                lines.append(f"   full group order     : {full.get('n_operations')}")
+            if active:
+                lines.append(f"   integral reduction   : {active.get('status')}"
+                             + (f" (|G| = {active.get('n_operations')}"
+                                + (', full group' if active.get('full_group')
+                                   else ', abelian subgroup') + ')'
+                                if active.get('status') == 'active' else ''))
+                if active.get('reoriented'):
+                    lines.append('   geometry reoriented to the symmetry standard orientation')
+            response = meta.get('response_symmetry')
+            if response:
+                lines.append(f"   response blocking    : {response.get('status')}")
+            lines.append('')
+            with open(self.log, 'a', encoding='utf-8') as fout:
+                fout.write('\n'.join(lines))
+        except Exception:
+            pass
 
     @mpi_dump
     def _dump_mo_labels_log(self, result):

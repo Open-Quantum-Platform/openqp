@@ -195,6 +195,28 @@ choice now prefers candidates closest to the identity, since degenerate
 axis assignments (e.g. naphthalene's three D2h axes) otherwise let the
 reorientation iteration ping-pong between equivalent frames and bail.
 
+## 6c. Non-abelian full-group tier (2026-06-07)
+
+use_integral_symmetry accepts a third value 'full': the petite list and
+skeleton symmetrization then use the FULL point group (e.g. benzene D6h:
+24 operations vs the 8 of the abelian d2h subgroup). Machinery:
+Procrustes-polished group enumeration by closure (exact operations even
+from ~6-decimal inputs), dense per-shell operation blocks staged as
+OQP::sym_op_blocks, block-sparse Fortran symmetrization F <- (1/|G|)
+sum T^T F T (the transpose side matters: d-blocks are metric-orthogonal,
+not orthogonal), and weighted screening thresholds (non-abelian orbit
+members have unequal element magnitudes).
+
+Accuracy tiers (benzene): 'true' (abelian) is machine-exact
+(dE ~ 1e-12); 'full' carries a systematic ~1e-7 residual (kernel-level
+threshold asymmetries between orbit members, under investigation) --
+hence opt-in and documented. Measured: benzene cc-pVTZ RHF 6.1x
+(abelian tier: 3.2x), 6-31G* BHHLYP 1.8x. XC atom weights deliberately
+stay abelian: Lebedev grids are octahedral-invariant but not C3/C6-
+invariant. The symmetry summary (group, |G|, tier, reorientation) is
+printed to the log and persists in the results json via
+symmetry_metadata.
+
 ## 7. Failure-mode policy
 
 Any inconsistency detected at runtime (orbit map mismatch, 'mixed'

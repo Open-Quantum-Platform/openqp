@@ -207,6 +207,15 @@ def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: 
     lowered = value.strip().lower()
     if lowered in _FALSE_BOOL:
         return False
+    if lowered == "full" and experimental_warning:
+        report.add(
+            "WARNING", path,
+            experimental_warning + " ('full' additionally enables the "
+            "non-abelian full point group, ~1e-7 accuracy)",
+            value=value, expected="False (default)",
+            action="Validate results against a C1 reference run.",
+        )
+        return True
     if lowered in _TRUE_BOOL:
         if strict_false_only:
             report.add(
