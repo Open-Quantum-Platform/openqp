@@ -145,8 +145,28 @@ contains
         exit
       end if
 
-      ! model can no longer predict a meaningful reduction -> energy converged
+      ! model can no longer predict a meaningful ENERGY reduction (pred ~ FP noise).
+      ! The energy is converged, but the orbital GRADIENT may still be loose -- near a
+      ! minimum pred ~ 0.5*g.p ~ gnorm^2, so it underflows the floor while gnorm is
+      ! still ~1e-7. Post-SCF consumers (ROHF canonicalisation for MRSF, analytic
+      ! gradients) need accurate orbitals, so take the (descent) Newton/CG step once to
+      ! tighten the gradient quadratically before exiting (OTR likewise steps on to
+      ! ~1e-8). The energy ratio is FP-noise-dominated here, so accept unconditionally.
       if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
+        do while (gnorm > conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor)
+          call apply_step(conv, infos%control%scftype, p)
+          call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
+          gnorm = sqrt(dot_product(g, g) / real(n, dp))
+          if (infos%control%trh_sub_solver == 2 .or. infos%control%mom) then
+            call steihaug_cg(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+          else
+            call aughess_step(infos, conv, g, hdiag, delta, n, nmic, p, pred, micro_used)
+          end if
+          snorm = sqrt(dot_product(p, p))
+        end do
+        ! If a step revived the model (pred > floor) without reaching conv_tol, resume
+        ! the normal trust-region loop; otherwise the orbitals are as tight as FP allows.
+        if (pred > pred_floor .and. gnorm >= conv_tol) cycle
         write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision)")') macro, e0, gnorm
         ! report error below conv_tol so the SCF driver recognises convergence and
         ! does NOT re-diagonalise the raw Fock (which would corrupt ROHF orbitals)
@@ -233,9 +253,14 @@ contains
       if (nrst > 1) write(IW,'(5X,"restart ",I0,": E =",F20.10,"  converged=",L1)') irst, e0, conv_ok
     end do   ! restart
 
-    ! adopt the lowest converged solution and refresh the Fock/gradient at it
+    ! adopt the lowest converged solution and refresh the Fock/gradient at it.
+    ! Reset the incremental-Fock history so the FINAL Fock is built fresh from the
+    ! converged density: an incrementally-accumulated Fock drifts from the exact one,
+    ! and post-SCF consumers (ROHF canonicalisation for MRSF, analytic gradients)
+    ! diagonalise this Fock -- a drifted Fock yields wrong canonical orbitals/energies.
     if (have_best) then
       conv%mo_a = mob_a; conv%mo_b = mob_b
+      conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
       call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
       res%error = min(sqrt(dot_product(g, g)/real(n, dp)), 0.99_dp*conv_tol)
       res%ierr  = 0
