@@ -154,7 +154,7 @@ def _norm_path(raw_path: str, system_text: str) -> str:
 
 
 
-def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: bool = True, allow_auto: bool = False, strict_false_only: bool = False) -> bool | str | None:
+def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: bool = True, allow_auto: bool = False, strict_false_only: bool = False, experimental_warning=None) -> bool | str | None:
     """Validate boolean-like values used by Python-only symmetry gates."""
     if isinstance(value, bool):
         if strict_false_only and value:
@@ -218,6 +218,15 @@ def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: 
                 action="Keep symmetry reductions off until validation and production kernels are in place.",
             )
             return None
+        if experimental_warning:
+            report.add(
+                "WARNING",
+                path,
+                experimental_warning,
+                value=value,
+                expected="False (default)",
+                action="Validate results against a C1 reference run.",
+            )
         return True if allow_true else False
     if allow_auto and lowered == "auto":
         return "auto"
@@ -276,7 +285,11 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
         section.get("use_integral_symmetry", "False"),
         "symmetry.use_integral_symmetry",
         report,
-        strict_false_only=True,
+        allow_true=True,
+        experimental_warning=(
+            "Experimental: petite-list/skeleton-Fock reduction. The molecule "
+            "is reoriented to the symmetry standard orientation at load time."
+        ),
     )
     _parse_bool_like(
         section.get("use_response_symmetry", "False"),

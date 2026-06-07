@@ -520,8 +520,9 @@ def attach_detection_metadata(
         and requested_subgroup in ('auto', detection['abelian_subgroup'])
     )
 
-    # Reductions stay off in the metadata-only phase.
-    symmetry_metadata['use_integral_symmetry'] = False
-    symmetry_metadata['use_response_symmetry'] = False
+    # Reduction flags are policy-controlled by the input checker (integral:
+    # experimental opt-in; response: rejected); detection only defaults them.
+    symmetry_metadata.setdefault('use_integral_symmetry', False)
+    symmetry_metadata.setdefault('use_response_symmetry', False)
 
     return symmetry_metadata

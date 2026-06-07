@@ -1056,7 +1056,7 @@ contains
   !> @param[inout] f Fock matrices to be updated (triangular format).
   !> @param[in] scalefactor Optional scaling factor for exchange (default = 1.0).
   !> @param[inout] infos System information.
-  subroutine fock_jk(basis, d, f, infos, scale_exch, nschwz, f_old, scale_coul)
+  subroutine fock_jk(basis, d, f, infos, scale_exch, nschwz, f_old, scale_coul, petite)
     use precision, only: dp
     use io_constants, only: iw
     use util, only: measure_time
@@ -1075,6 +1075,10 @@ contains
     real(kind=dp), target, intent(in) :: d(:,:)
     real(kind=dp), intent(inout) :: f(:,:)
     real(kind=dp), optional ,intent(inout) :: f_old(:,:)
+    !> Opt into the symmetry petite-list reduction. Only valid for totally
+    !> symmetric densities (SCF Fock); response/CPHF/Hessian callers with
+    !> perturbed densities must not set this.
+    logical, optional, intent(in) :: petite
 
 
     integer :: i, ii, nf
@@ -1093,6 +1097,11 @@ contains
 
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
+    if (present(petite)) then
+      ! Petite-list reduction: only valid for totally symmetric densities
+      ! (SCF Fock); the skeleton matrix is symmetrized below.
+      if (petite) call int2_driver%enable_petite(infos)
+    end if
     call int2_driver%set_screening()
 
     select case (infos%control%scftype)
@@ -1128,9 +1137,74 @@ contains
       end do
     end do
 
+    ! Petite-list runs produce a skeleton matrix; project onto the
+    ! totally symmetric component: F <- (1/|G|) sum_op T_op F T_op^T.
+    if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis%nbf, f)
+
     call int2_driver%clean()
 
   end subroutine fock_jk
+
+!--------------------------------------------------------------------------------
+
+!> @brief Symmetrize a packed-triangular skeleton Fock matrix.
+!> @detail Applies F <- (1/|G|) sum_op T_op F T_op^T where T_op is the
+!>   signed AO permutation of each abelian symmetry operation (standard
+!>   orientation), using the maps written by pyoqp. No-op if the maps are
+!>   missing.
+  subroutine symmetrize_skeleton_fock(infos, nbf, f)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nbf
+    real(kind=dp), intent(inout) :: f(:,:)
+
+    integer(8), contiguous, pointer :: target_map(:)
+    real(kind=dp), contiguous, pointer :: sign_map(:)
+    real(kind=dp), allocatable :: acc(:)
+    integer(4) :: status
+    integer :: nops, iop, nf, mu, nu, tm, tn, a, b, idx, tidx, base
+
+    call tagarray_get_data(infos%dat, OQP_sym_ao_target, target_map, status=status)
+    if (status /= TA_OK) return
+    call tagarray_get_data(infos%dat, OQP_sym_ao_sign, sign_map, status=status)
+    if (status /= TA_OK) return
+    if (size(sign_map) /= size(target_map)) return
+    if (mod(size(target_map), nbf) /= 0) return
+
+    ! Flat layout, AO index fastest: target(mu, op) = target_map((op-1)*nbf+mu).
+    nops = int(size(target_map)/nbf)
+    if (nops < 2) return
+
+    allocate(acc(nbf*(nbf+1)/2))
+
+    do nf = 1, ubound(f, 2)
+      acc = 0.0_dp
+      do iop = 1, nops
+        base = (iop-1)*nbf
+        idx = 0
+        do mu = 1, nbf
+          tm = int(target_map(base + mu))
+          do nu = 1, mu
+            idx = idx + 1
+            tn = int(target_map(base + nu))
+            a = max(tm, tn)
+            b = min(tm, tn)
+            tidx = a*(a-1)/2 + b
+            acc(tidx) = acc(tidx) &
+                    + sign_map(base + mu)*sign_map(base + nu)*f(idx, nf)
+          end do
+        end do
+      end do
+      f(:, nf) = acc/real(nops, dp)
+    end do
+
+  end subroutine symmetrize_skeleton_fock
   !> @brief Builds AO-space linear response vector(s) in packed (triangular) form.
   !> @detail Forms the Coulomb/exchange response and, when using DFT, the
   !>         exchange–correlation kernel contribution in AO space.
@@ -1367,11 +1441,11 @@ contains
     nbf      = basis%nbf
     if(present(d_old) .and. present(f_old)) then
       d = d - d_old
-      call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old)
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old, petite=.true.)
       d = d + d_old
       d_old = d
     else
-      call fock_jk(basis, d, f, infos, scale_factor, nschwz)
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz, petite=.true.)
     end if
     ii = 0
     do ii = 1, nfocks

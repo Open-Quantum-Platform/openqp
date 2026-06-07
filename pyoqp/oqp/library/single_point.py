@@ -382,6 +382,14 @@ class SinglePoint(Calculator):
     def reference(self, do_init_scf=True):
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
+        # Experimental petite-list reduction (no-op unless
+        # [symmetry] use_integral_symmetry is enabled): reorient before the
+        # guess/basis stage; stage the maps once the basis exists.
+        symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
+                           self.mol.symmetry_metadata.get('use_integral_symmetry'))
+        if symmetry_on:
+            self.mol.reorient_for_integral_symmetry()
+
         if self.init_scf != 'no' and do_init_scf:
             # do initial scf iteration to help convergence
             self._init_convergence()
@@ -389,6 +397,9 @@ class SinglePoint(Calculator):
             self._prep_guess()
 
         self.swapmo()
+
+        if symmetry_on:
+            self.mol.stage_integral_symmetry_maps()
 
         scf_flag = self._run_scf()
 

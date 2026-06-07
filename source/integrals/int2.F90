@@ -43,6 +43,8 @@ module int2_compute
     integer :: am(4)
     integer :: nbf(4)
     real(kind=dp) :: mu2 = 1.0d99
+    ! Petite-list orbit weight (q4); 1 unless symmetry reduction is active.
+    real(kind=dp) :: weight = 1.0d0
     real(kind=dp), pointer :: pints(:,:,:,:)
     type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t), allocatable :: gdat
@@ -137,12 +139,20 @@ module int2_compute
     logical :: attenuated = .false.
     real(kind=dp) :: mu = 1.0d99
 
+    ! Symmetry petite list (loaded from tagarray when pyoqp enables
+    ! use_integral_symmetry). The shell map is 1-based, stored flat with
+    ! shell index fastest: map(shell, op) = sym_shell_map((op-1)*nshell+shell).
+    logical :: petite = .false.
+    integer :: sym_nops = 0
+    integer(8), contiguous, pointer :: sym_shell_map(:) => null()
+
     type(par_env_t) :: pe
   contains
 
     private
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure, public, pass :: init => int2_compute_t_init
+    procedure, public, pass :: enable_petite => int2_compute_t_enable_petite
     procedure, public, pass :: set_screening => int2_compute_t_set_screening
     procedure, public, pass :: clean => int2_compute_t_clean
     procedure, public, pass :: run => int2_run
@@ -243,7 +253,113 @@ contains
     call this%ppairs%alloc(basis, this%cutoffs)
     call this%ppairs%compute(basis, this%cutoffs)
 
+    ! Note: the petite-list reduction is NOT loaded here. It is only valid
+    ! for totally symmetric densities (SCF Fock), so the SCF caller opts in
+    ! explicitly via enable_petite(); response/CPHF builders must not.
+    this%petite = .false.
+    this%sym_nops = 0
+    this%sym_shell_map => null()
+
   end subroutine int2_compute_t_init
+
+!###############################################################################
+
+!> @brief Opt into the symmetry petite-list reduction (skeleton Fock).
+!> @detail Loads the shell map written by pyoqp when use_integral_symmetry
+!>   is enabled. Only valid when the contracted density is totally
+!>   symmetric and the caller symmetrizes the resulting skeleton matrix.
+  subroutine int2_compute_t_enable_petite(this, infos)
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    class(int2_compute_t), intent(inout) :: this
+    type(information), target, intent(inout) :: infos
+
+    integer(8), contiguous, pointer :: petite_flag(:)
+    integer(4) :: status
+
+    call tagarray_get_data(infos%dat, OQP_sym_petite, petite_flag, status=status)
+    if (status /= TA_OK) return
+    if (petite_flag(1) == 0) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, this%sym_shell_map, status=status)
+    if (status /= TA_OK) then
+      this%sym_shell_map => null()
+      return
+    end if
+    if (mod(size(this%sym_shell_map), this%basis%nshell) /= 0) then
+      ! Stale map from a different basis: ignore (fail-safe to C1).
+      this%sym_shell_map => null()
+      return
+    end if
+
+    this%sym_nops = int(size(this%sym_shell_map)/this%basis%nshell)
+    this%petite = this%sym_nops > 1
+
+  end subroutine int2_compute_t_enable_petite
+
+!###############################################################################
+
+!> @brief Petite-list weight of a canonical shell quartet.
+!> @detail Returns 0 if (i,j,k,l) is not the lexicographically largest
+!>   member of its orbit under the abelian group (the caller skips it),
+!>   otherwise the orbit size |G|/|stabilizer|. The quartet must be in
+!>   canonical order (i>=j, (i,j)>=(k,l), k>=l), which the int2_twoei
+!>   loop guarantees.
+  integer function petite_quartet_weight(map, nops, nshell, i, j, k, l) result(q4)
+    implicit none
+    integer(8), intent(in) :: map(:)
+    integer, intent(in) :: nops, nshell, i, j, k, l
+
+    integer :: iop, nstab, t, base
+    integer :: pi, pj, pk, pl, a1, a2, b1, b2
+
+    nstab = 0
+    do iop = 1, nops
+      base = (iop-1)*nshell
+      pi = int(map(base + i))
+      pj = int(map(base + j))
+      pk = int(map(base + k))
+      pl = int(map(base + l))
+
+      a1 = max(pi, pj); a2 = min(pi, pj)
+      b1 = max(pk, pl); b2 = min(pk, pl)
+      if (a1 < b1 .or. (a1 == b1 .and. a2 < b2)) then
+        t = a1; a1 = b1; b1 = t
+        t = a2; a2 = b2; b2 = t
+      end if
+
+      if (a1 /= i) then
+        if (a1 > i) then
+          q4 = 0
+          return
+        end if
+      else if (a2 /= j) then
+        if (a2 > j) then
+          q4 = 0
+          return
+        end if
+      else if (b1 /= k) then
+        if (b1 > k) then
+          q4 = 0
+          return
+        end if
+      else if (b2 /= l) then
+        if (b2 > l) then
+          q4 = 0
+          return
+        end if
+      else
+        nstab = nstab + 1
+      end if
+    end do
+
+    q4 = nops / nstab
+
+  end function petite_quartet_weight
 
 !###############################################################################
 
@@ -361,6 +477,7 @@ contains
     integer, allocatable :: pair_i(:), pair_j(:)
     integer :: lmax
     integer :: nint
+    integer :: q4
     real(kind=dp) :: test
 
     integer :: nshell
@@ -412,7 +529,7 @@ contains
 
 !$omp parallel &
 !$omp   private( &
-!$omp   i, j, k, l, ij_pair, jork, &
+!$omp   i, j, k, l, ij_pair, jork, q4, &
 !$omp   tim0, tim1, tim2, tim3, tim4, ithread,   &
 !$omp   test, &
 !$omp   int2_storage, &
@@ -497,6 +614,17 @@ contains
                 cycle
               end if
             end if
+            ! Petite list: keep only the orbit representative, weighted by
+            ! the orbit size; the skeleton Fock is symmetrized afterwards.
+            if (this%petite) then
+              q4 = petite_quartet_weight(this%sym_shell_map, this%sym_nops, &
+                                         nshell, i, j, k, l)
+              if (q4 == 0) cycle
+              eri_data%weight = real(q4, dp)
+            else
+              eri_data%weight = 1.0d0
+            end if
+
             thr_nshq = thr_nshq + 1
 !$          if (oflag) tim2 = tim2 + omp_get_wtime() - tim1
 
@@ -1234,7 +1362,7 @@ jc:   do j = 1, maxj
 
           do l = 1, maxl
 
-            val = eri_data%pints(l,k,j,i)
+            val = eri_data%pints(l,k,j,i)*eri_data%weight
 
             if (abs(val)<cutoff) cycle
             nint = nint + 1

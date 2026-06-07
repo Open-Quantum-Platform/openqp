@@ -340,6 +340,97 @@ class Molecule:
         except Exception:
             return None
 
+    def reorient_for_integral_symmetry(self):
+        """GAMESS-style reorientation to the standard frame (geometry only).
+
+        Call before the guess/basis stage; ``stage_integral_symmetry_maps``
+        completes the activation once the basis is available. No-op unless
+        ``[symmetry] use_integral_symmetry`` is enabled.
+        """
+        meta = self.symmetry_metadata
+        if not meta or not meta.get('use_integral_symmetry'):
+            return False
+        detection = meta.get('detection')
+        if not detection:
+            return False
+
+        try:
+            from oqp.library.symmetry_detect import attach_detection_metadata
+
+            # Reorient: design decision recorded in
+            # docs/plans/2026-06-07-symmetry-reductions-design.md.
+            origin = np.asarray(detection['origin'], dtype=float)
+            rotation = np.asarray(detection['orientation'], dtype=float)
+            coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+            standard = (coords - origin) @ rotation.T
+            self.update_system(standard.ravel())
+
+            # Re-detect in the standard frame so the stored operations are
+            # exactly sign-diagonal for the staged maps.
+            atoms = np.asarray(self.get_atoms(), dtype=float).ravel()
+            attach_detection_metadata(meta, atoms, standard)
+            meta['integral_symmetry'] = {'status': 'reoriented'}
+            return True
+        except Exception as exc:
+            meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
+            return False
+
+    def stage_integral_symmetry_maps(self):
+        """Stage petite-list maps for the Fortran SCF (requires the basis).
+
+        Fail-safe: any inconsistency leaves the run on the C1 path with the
+        reason recorded in the metadata.
+        """
+        meta = self.symmetry_metadata
+        if not meta or not meta.get('use_integral_symmetry'):
+            return False
+        detection = meta.get('detection')
+        if not detection:
+            return False
+        if meta.get('integral_symmetry', {}).get('status') != 'reoriented':
+            return False
+
+        try:
+            from oqp.library.symmetry import build_reduction_maps
+
+            basis = self.data.get_basis()
+            if not basis:
+                meta['integral_symmetry'] = {'status': 'skipped_no_basis'}
+                return False
+            shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+            maps = build_reduction_maps(shells, detection['operations'])
+            if maps['n_ao'] != int(basis['nbf']):
+                meta['integral_symmetry'] = {'status': 'skipped_basis_mismatch'}
+                return False
+
+            # 1-based flat maps for the Fortran consumers (op-major,
+            # shell/AO index fastest -- see load_petite_list /
+            # symmetrize_skeleton_fock).
+            self.data['OQP::sym_shell_map'] = \
+                (np.asarray(maps['shell_permutation'], dtype=np.int64) + 1).ravel()
+            self.data['OQP::sym_ao_target'] = \
+                (np.asarray(maps['ao_target'], dtype=np.int64) + 1).ravel()
+            self.data['OQP::sym_ao_sign'] = \
+                np.asarray(maps['ao_sign'], dtype=np.float64).ravel()
+            self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
+
+            meta['reduction_maps'] = maps
+            meta['integral_symmetry'] = {
+                'status': 'active',
+                'group': meta.get('subgroup'),
+                'n_operations': maps['n_operations'],
+                'reoriented': True,
+            }
+            return True
+        except Exception as exc:
+            # Fail safe to the C1 path.
+            meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
+            try:
+                self.data['OQP::sym_petite_enable'] = np.array([0], dtype=np.int64)
+            except Exception:
+                pass
+            return False
+
     def label_excited_states(self):
         """Assign abelian irrep labels to TD excited states (metadata only).
 
